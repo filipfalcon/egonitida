@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import * as Interpolate from '#src/Interpolate.ts';
 
 const between = <Value>(schema: Schema.Codec<Value, unknown>, a: Value, b: Value, t: number) =>
@@ -71,5 +71,36 @@ describe('Interpolate', () => {
 
   it('is the earlier value at the start', () => {
     expect(between(Schema.Finite, 0, 10, 0)).toEqual(0);
+  });
+});
+
+describe('Interpolate, over states', () => {
+  const Fuse = Schema.Union([
+    Schema.TaggedStruct('Standing', {}),
+    Schema.TaggedStruct('Burning', { left: Schema.Finite }),
+    Schema.TaggedStruct('Smouldering', { left: Schema.Finite }),
+  ]);
+
+  it('moves the fields of one state', () => {
+    expect(between(Fuse, { _tag: 'Burning', left: 1 }, { _tag: 'Burning', left: 0 }, 0.25)).toEqual(
+      { _tag: 'Burning', left: 0.75 },
+    );
+  });
+
+  it('keeps the earlier state until the later one is reached, though both have the same field', () => {
+    expect(
+      between(Fuse, { _tag: 'Burning', left: 1 }, { _tag: 'Smouldering', left: 0 }, 0.9),
+    ).toEqual({ _tag: 'Burning', left: 1 });
+    expect(between(Fuse, { _tag: 'Standing' }, { _tag: 'Burning', left: 1 }, 0.9)).toEqual({
+      _tag: 'Standing',
+    });
+  });
+
+  it('moves what an option holds, and keeps the earlier one when it comes or goes', () => {
+    const Aim = Schema.Option(Schema.Finite);
+
+    expect(between(Aim, Option.some(0), Option.some(4), 0.5)).toEqual(Option.some(2));
+    expect(between(Aim, Option.none(), Option.some(4), 0.9)).toEqual(Option.none());
+    expect(between(Aim, Option.some(4), Option.none(), 0.9)).toEqual(Option.some(4));
   });
 });

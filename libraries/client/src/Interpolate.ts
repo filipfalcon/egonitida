@@ -3,7 +3,7 @@ import { Option, Schema, SchemaAST } from 'effect';
 /**
  * Where a value is between two of its states, for drawing between two steps of the world. It is read off the value's schema, the way the editor's Details panel is: numbers move in a straight line, structs and tuples move field by field, a number annotated `interpolate: 'angle'` turns the short way round, and anything annotated `interpolate: 'step'` stays at its earlier state until the later one is reached.
  *
- * The value moves in its encoded form, and the result is decoded by the same schema, so its type is proven rather than claimed. A value that cannot lie between two others, such as a whole number, a boolean, or a choice, fails to decode in between and stays at the earlier value until the later one is reached.
+ * The value moves in its canonical JSON form, and the result is decoded by the same schema, so its type is proven rather than claimed. Two states of a tagged union, or an option and its absence, never blend: the earlier holds until the later is reached. A value that cannot lie between two others, such as a whole number, a boolean, or a choice, fails to decode in between and stays at the earlier value until the later one is reached.
  */
 
 declare module 'effect/Schema' {
@@ -40,6 +40,10 @@ const move = (ast: SchemaAST.AST | undefined, a: unknown, b: unknown, t: number)
     return earlier.map((value, index) => move(elements[index], value, later[index], t));
   }
   if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+    // Two states of a union stay apart: the earlier one holds until the later one is reached, whatever fields they share.
+    if ('_tag' in a && '_tag' in b && a._tag !== b._tag) {
+      return a;
+    }
     const fields = new Map<PropertyKey, SchemaAST.AST>(
       ast !== undefined && SchemaAST.isObjects(ast)
         ? ast.propertySignatures.map((field) => [field.name, field.type])
@@ -70,9 +74,10 @@ export const between = <Value>(
   if (t <= 0) {
     return a;
   }
-  const encode = Schema.encodeSync(schema);
+  const json = Schema.toCodecJson(schema);
+  const encode = Schema.encodeSync(json);
   return Option.getOrElse(
-    Schema.decodeUnknownOption(schema)(move(schema.ast, encode(a), encode(b), t)),
+    Schema.decodeUnknownOption(json)(move(schema.ast, encode(a), encode(b), t)),
     () => a,
   );
 };

@@ -17,6 +17,7 @@ import {
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
 import * as Rule from '#src/Rule.ts';
+import * as Snapshot from '#src/Snapshot.ts';
 import * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
 
@@ -618,5 +619,53 @@ describe('Game.schema', () => {
 
     expect(Schema.decodeOption(Json)(forged)).toEqual(Option.none());
     expect(Schema.decodeOption(Json)(foreign)).toEqual(Option.none());
+  });
+});
+
+describe('a component holding a state', () => {
+  const Mood = Component.make(
+    'Mood',
+    Schema.Struct({
+      state: Schema.Union([
+        Schema.TaggedStruct('Calm', {}),
+        Schema.TaggedStruct('Fleeing', { from: Schema.Finite }),
+      ]),
+      target: Schema.Option(Schema.Int),
+    }),
+    { owner: 'rules', network: 'server' },
+  );
+  const moody = Game.make({
+    stepRate: 10,
+    components: [Mood],
+    actions: [],
+    events: [],
+    systems: [],
+    rules: [],
+  });
+  const Json = Schema.fromJsonString(Game.schema(moody));
+  const [calm, first] = World.spawn(World.empty({ seed: 1 }), [
+    Mood.of({ state: { _tag: 'Calm' }, target: Option.none() }),
+  ]);
+  const [world, second] = World.spawn(calm, [
+    Mood.of({ state: { _tag: 'Fleeing', from: 3 }, target: Option.some(7) }),
+  ]);
+
+  it('travels as a tagged union and an option, and arrives as one', () => {
+    const back = Schema.decodeSync(Json)(Schema.encodeSync(Json)(world));
+
+    expect(World.get(back, first, Mood)).toEqual(
+      Option.some({ state: { _tag: 'Calm' }, target: Option.none() }),
+    );
+    expect(World.get(back, second, Mood)).toEqual(
+      Option.some({ state: { _tag: 'Fleeing', from: 3 }, target: Option.some(7) }),
+    );
+  });
+
+  it('travels in a snapshot too', () => {
+    const back = Option.getOrThrow(
+      Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(world, moody), moody),
+    );
+
+    expect(World.get(back, second, Mood)).toEqual(World.get(world, second, Mood));
   });
 });

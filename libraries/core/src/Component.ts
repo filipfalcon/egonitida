@@ -62,7 +62,7 @@ export interface Component<Name extends string, Value, O extends Owner> {
   remove(store: Store | undefined, entity: Entity): void;
   /** Ends a draft: from now on, nothing changes it. */
   seal(store: Store): void;
-  /** A store's values, encoded by this component's schema. */
+  /** A store's values, encoded as JSON by this component's schema. */
   encode(store: Store | undefined): ReadonlyArray<readonly [Entity, unknown]>;
   /** A store of encoded values; `None` if any of them does not decode. */
   decode(entries: ReadonlyArray<readonly [Entity, unknown]>): Option.Option<Store>;
@@ -80,6 +80,8 @@ export const make = <const Name extends string, Value, const O extends Owner>(
   schema: Schema.Codec<Value, unknown>,
   options: { readonly owner: O; readonly network: NetworkRole },
 ): Component<Name, Value, O> => {
+  // What a value travels as: its schema's canonical JSON form, so an option or anything else that is not plain data still travels.
+  const json = Schema.toCodecJson(schema);
   // Every store this component made, and the values in it. Nothing else can reach this map.
   const values = new WeakMap<Store, Map<Entity, Value>>();
   // The drafts still open to change; every other store is fixed for good.
@@ -112,7 +114,7 @@ export const make = <const Name extends string, Value, const O extends Owner>(
       component,
       into: (store, entity) => storeOf(copyOf(store).set(entity, value)),
       writeWith: (write) => write(component, value),
-      encoded: () => Schema.encodeSync(schema)(value),
+      encoded: () => Schema.encodeSync(json)(value),
     }),
     read: (store, entity) =>
       Option.fromNullishOr(store === undefined ? undefined : values.get(store)?.get(entity)),
@@ -136,14 +138,14 @@ export const make = <const Name extends string, Value, const O extends Owner>(
     },
     encode: (store) =>
       [...copyOf(store)].map(
-        ([entity, value]) => [entity, Schema.encodeSync(schema)(value)] as const,
+        ([entity, value]) => [entity, Schema.encodeSync(json)(value)] as const,
       ),
     decode: (entries) =>
       Option.map(
         Option.all(
           entries.map(([entity, encoded]) =>
             Option.map(
-              Schema.decodeUnknownOption(schema)(encoded),
+              Schema.decodeUnknownOption(json)(encoded),
               (value) => [entity, value] as const,
             ),
           ),
