@@ -156,7 +156,8 @@ The first iteration, built before the principles above: the Elm Architecture ove
 
 ## Next
 
-- Moving the rest of Border onto the engine: the undead first, which also lets the server see a wave go down; then dying, shooting, and smoking.
+- Closing the seams where Border's server still takes its client's word, while what they rest on is still the game's: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`). Each goes once what it rests on moves into the simulation.
+- Pillars and crates as shapes with height, so rounds stop at them as they do in the game.
 - Prediction, once a client plays a server across a network.
 
 Later, for the editor:
@@ -180,6 +181,8 @@ The Durable Object spike (`applications/net-spike`) answered whether Durable Obj
 - A snapshot of two players is about 210 bytes of JSON, so a datagram fits about ten players before encoding has to become binary.
 
 Border, played on a local server in a Web Worker at 60 Hz and drawn a step behind it without prediction, had no latency its player could feel. Prediction waits for play across a network, where the round trip adds to that step.
+
+Border's whole fight runs in the simulation: her body, the lab's progress and doors, the undead with their senses, chase, and blows, her shots, her knife, and every blast. The game only draws it, and keeps for itself what happens round her body once she is dead. With a wave of 22 of the undead up, a whole snapshot is 11.5 kB of JSON; applying one takes 0.18 ms and a step 0.24 ms, measured in Node, so snapshots carrying only what changed can wait.
 
 ## Open questions
 
