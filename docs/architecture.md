@@ -19,6 +19,7 @@ Six principles shape every API. Each builds on the ones before it.
   - **Simulation** owns what changes every step, such as positions. Only systems change them.
 - A system declares what it reads, what it writes, and what it emits. Writing what it does not own is a compile error, not a runtime bug. Everything is readable by everyone, so nothing is ever copied and kept in sync.
 - Events a system emits are applied by the rules at a defined point in the step, so the next step already sees their result. Nothing waits on an asynchronous queue.
+- Systems and rules spawn and despawn entities within a step, and declare it: `spawns` lists the components they may create an entity with, whoever owns them, since being born changes no one's state; `despawns` says they may remove one, which takes it out of every component at once. Either takes effect at once, so what runs later in the same step sees it; steps run in order, so nothing needs a queue of commands, as Bevy's parallel systems do. Ids come from the world's own counter, so a replay gives out the same ones, and a despawned id is never given out again.
 - What is drawn is never a source of truth: the scene is derived from the state.
 - A level is entities too: walls, obstacles, and doors are entities with components, so there is one model for everything the world holds, and an editor and a debugger see a level the way they see the rest. Stores never change in place, so a system may build something from one, such as a spatial index, and keep it for as long as the store is the same.
 

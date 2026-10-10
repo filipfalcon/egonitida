@@ -267,6 +267,103 @@ describe('actions', () => {
   });
 });
 
+describe('spawning and despawning within a step', () => {
+  /** Raises a runner at x = 0 for every entity with health and no runner of its own yet: one per step here. */
+  const raise = System.make({
+    name: 'raise',
+    reads: [Health, Velocity],
+    writes: [],
+    emits: [],
+    spawns: [Position, Velocity],
+    run: (context) => {
+      if (context.query(Velocity).length === 0) {
+        context.spawn([Position.of({ x: 0 }), Velocity.of({ x: 10 })]);
+      }
+    },
+  });
+  /** Removes anything that has run past x = 1. */
+  const remove = System.make({
+    name: 'remove',
+    reads: [Position],
+    writes: [],
+    emits: [],
+    despawns: true,
+    run: (context) => {
+      for (const [entity, position] of context.query(Position)) {
+        if (position.x > 1) {
+          context.despawn(entity);
+        }
+      }
+    },
+  });
+  const [world, keeper] = World.spawn(World.empty({ seed: 3 }), [Health.of({ current: 1 })]);
+
+  it('gives the spawned entity the next id, and later systems see it in the same step', () => {
+    const lifecycle = Game.make({ stepRate: 10, systems: [raise, move], rules: [] });
+    const after = Game.step(lifecycle, world).world;
+    const runner = keeper + 1;
+
+    // `move`, running after `raise`, already moved it by a step.
+    expect(World.get(after, runner, Position)).toEqual(Option.some({ x: 1 }));
+    expect(after.nextEntity).toBe(runner + 1);
+  });
+
+  it('takes a despawned entity out of every store at once, so later systems no longer see it', () => {
+    const lifecycle = Game.make({
+      stepRate: 10,
+      systems: [raise, move, move, remove, move],
+      rules: [],
+    });
+    const after = Game.step(lifecycle, world).world;
+    const runner = keeper + 1;
+
+    // Moved twice to x = 2, removed, and not moved a third time.
+    expect(World.get(after, runner, Position)).toEqual(Option.none());
+    expect(World.get(after, runner, Velocity)).toEqual(Option.none());
+    // Its id is never given out again.
+    expect(after.nextEntity).toBe(runner + 1);
+  });
+
+  it('lets the rules spawn and despawn in answer to an event', () => {
+    const replace = Rule.on(Died, {
+      writes: [],
+      emits: [],
+      spawns: [Health],
+      despawns: true,
+      run: (context, died) => {
+        context.despawn(died.entity);
+        context.spawn([Health.of({ current: 100 })]);
+      },
+    });
+    const replacing = Game.make({ stepRate: 10, systems: [bite], rules: [takeBite, replace] });
+    const [start, runner] = spawnRunner(10, 30);
+    const after = Game.step(replacing, start).world;
+
+    expect(World.get(after, runner, Health)).toEqual(Option.none());
+    expect(World.get(after, runner + 1, Health)).toEqual(Option.some({ current: 100 }));
+  });
+
+  it('leaves the world it was given untouched', () => {
+    const lifecycle = Game.make({ stepRate: 10, systems: [raise, move, move, remove], rules: [] });
+    Game.step(lifecycle, world);
+
+    expect(world.nextEntity).toBe(keeper + 1);
+    expect(World.query(world, Position)).toEqual([]);
+  });
+
+  it('replays to the same world, ids and all', () => {
+    const lifecycle = Game.make({ stepRate: 10, systems: [raise, move, remove], rules: [] });
+    const play = () =>
+      Array.from({ length: 12 }).reduce<World.World>(
+        (current) => Game.step(lifecycle, current).world,
+        world,
+      );
+
+    expect(contents(play())).toEqual(contents(play()));
+    expect(play().nextEntity).toBe(play().nextEntity);
+  });
+});
+
 // What the type checker refuses: each line below must stay a compile error, or `vp check` fails on the unused directive.
 export const refused = () => {
   System.make({
@@ -318,6 +415,38 @@ export const refused = () => {
     writes: [Controls],
     emits: [],
     run: () => {},
+  });
+
+  System.make({
+    name: 'spawnsUndeclared',
+    reads: [],
+    writes: [],
+    emits: [],
+    spawns: [Position],
+    run: (context) => {
+      // @ts-expect-error Health is not among what this system spawns.
+      context.spawn([Health.of({ current: 1 })]);
+    },
+  });
+
+  System.make({
+    name: 'despawnsUndeclared',
+    reads: [],
+    writes: [],
+    emits: [],
+    run: (context) => {
+      // @ts-expect-error Despawning is not declared.
+      context.despawn(0);
+    },
+  });
+
+  Rule.on(Bitten, {
+    writes: [],
+    emits: [],
+    run: (context) => {
+      // @ts-expect-error Spawning is not declared.
+      context.spawn([Health.of({ current: 1 })]);
+    },
   });
 
   // @ts-expect-error Position is not input; no player can send it.

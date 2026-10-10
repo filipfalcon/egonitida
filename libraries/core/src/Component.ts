@@ -27,11 +27,16 @@ export interface Store {
   readonly without: (entity: Entity) => Store;
 }
 
-/** A component holding a value, ready to be given to an entity. */
-export interface Instance {
-  readonly component: Any;
+/** Puts a value of a component somewhere, whatever its type: how an instance hands on the value it keeps. */
+export type Writer = <Value>(component: Component<string, Value, Owner>, value: Value) => void;
+
+/** A component holding a value, ready to be given to an entity; `C` is the component, so what may be spawned can be checked. */
+export interface Instance<C extends Any = Any> {
+  readonly component: C;
   /** `store` with `entity` holding this value. */
   readonly into: (store: Store | undefined, entity: Entity) => Store;
+  /** Hands the value to `write`, with the component it belongs to. */
+  readonly writeWith: (write: Writer) => void;
   /** This value, encoded by its component's schema. */
   readonly encoded: () => unknown;
 }
@@ -46,13 +51,15 @@ export interface Component<Name extends string, Value, O extends Owner> {
   readonly owner: O;
   readonly network: NetworkRole;
   /** The component holding `value`, to spawn an entity with. */
-  of(value: Value): Instance;
+  of(value: Value): Instance<Component<Name, Value, O>>;
   /** The value `entity` holds in `store`. */
   read(store: Store | undefined, entity: Entity): Option.Option<Value>;
   /** A copy of `store` that `set` may change in place, until it is sealed. */
   draft(store: Store | undefined): Store;
   /** Puts `value` in a draft this component made; a store that is not an unsealed draft is never changed. */
   set(store: Store | undefined, entity: Entity, value: Value): void;
+  /** Takes `entity` out of a draft this component made, under the same terms as `set`. */
+  remove(store: Store | undefined, entity: Entity): void;
   /** Ends a draft: from now on, nothing changes it. */
   seal(store: Store): void;
   /** A store's values, encoded by this component's schema. */
@@ -104,6 +111,7 @@ export const make = <const Name extends string, Value, const O extends Owner>(
     of: (value) => ({
       component,
       into: (store, entity) => storeOf(copyOf(store).set(entity, value)),
+      writeWith: (write) => write(component, value),
       encoded: () => Schema.encodeSync(schema)(value),
     }),
     read: (store, entity) =>
@@ -116,6 +124,11 @@ export const make = <const Name extends string, Value, const O extends Owner>(
     set: (store, entity, value) => {
       if (store !== undefined && open.has(store)) {
         values.get(store)?.set(entity, value);
+      }
+    },
+    remove: (store, entity) => {
+      if (store !== undefined && open.has(store)) {
+        values.get(store)?.delete(entity);
       }
     },
     seal: (store) => {

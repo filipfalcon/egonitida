@@ -18,11 +18,30 @@ export interface Time {
   readonly stepSeconds: number;
 }
 
+/** Spawning: an entity made with components declared for it, and its id at once. Being born is no change to anyone's state, so who owns a component does not limit it; the declaration does. */
+export interface Spawning<Spawns extends Component.Any> {
+  readonly spawn: (instances: ReadonlyArray<Component.Instance<Spawns>>) => World.Entity;
+}
+
+/** What `despawn` takes, by whether despawning is declared: nothing at all where it is not, so a call there does not compile. Looked up rather than decided by a conditional type, so a context that may despawn still fits where one that may not is expected. */
+interface Despawnable {
+  readonly true: World.Entity;
+  readonly false: never;
+}
+
+/** Despawning takes an entity out of every component at once, whoever owns them, so it is declared on its own. */
+export interface Despawning<Despawns extends boolean> {
+  readonly despawn: (entity: Despawnable[`${Despawns}`]) => void;
+}
+
 export interface Context<
   Reads extends Component.Any,
   Writes extends Component.Any,
   Emits extends Event.Any,
-> {
+  Spawns extends Component.Any = never,
+  Despawns extends boolean = false,
+>
+  extends Spawning<Spawns>, Despawning<Despawns> {
   readonly time: Time;
   /** A number in [0, 1) from the world's own generator. Systems take randomness from nowhere else. */
   readonly random: () => number;
@@ -43,18 +62,30 @@ export interface System {
   readonly reads: ReadonlyArray<Component.Any>;
   readonly writes: ReadonlyArray<SimulationComponent>;
   readonly emits: ReadonlyArray<Event.Any>;
+  readonly spawns: ReadonlyArray<Component.Any>;
+  readonly despawns: boolean;
   // A context that allows everything fits wherever a system declared less, so any system's `run` fits here.
-  readonly run: (context: Context<Component.Any, Component.Any, Event.Any>) => void;
+  readonly run: (
+    context: Context<Component.Any, Component.Any, Event.Any, Component.Any, true>,
+  ) => void;
 }
 
 export const make = <
   const Reads extends ReadonlyArray<Component.Any>,
   const Writes extends ReadonlyArray<SimulationComponent>,
   const Emits extends ReadonlyArray<Event.Any>,
+  const Spawns extends ReadonlyArray<Component.Any> = [],
+  const Despawns extends boolean = false,
 >(spec: {
   readonly name: string;
   readonly reads: Reads;
   readonly writes: Writes;
   readonly emits: Emits;
-  readonly run: (context: Context<Reads[number], Writes[number], Emits[number]>) => void;
-}): System => spec;
+  /** The components it may spawn entities with; none if left out. */
+  readonly spawns?: Spawns;
+  /** Whether it may despawn entities; not if left out. */
+  readonly despawns?: Despawns;
+  readonly run: (
+    context: Context<Reads[number], Writes[number], Emits[number], Spawns[number], Despawns>,
+  ) => void;
+}): System => ({ ...spec, spawns: spec.spawns ?? [], despawns: spec.despawns ?? false });

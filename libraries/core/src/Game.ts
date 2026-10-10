@@ -60,8 +60,8 @@ export const step = (
   };
 
   // Systems and rules share one context at run time; their types are what keep each to what it declared.
-  const context: System.Context<Component.Any, Component.Any, Event.Any> &
-    Rule.Context<Component.Any, Event.Any> = {
+  const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> &
+    Rule.Context<Component.Any, Event.Any, Component.Any, true> = {
     time: { tick: draft.tick, stepSeconds: 1 / game.stepRate },
     random: () => {
       const [value, state] = Random.next(draft.random);
@@ -77,6 +77,8 @@ export const step = (
     emit: (event: Event.Tagged) => {
       line.push(event);
     },
+    spawn: (instances) => World.spawnInto(draft, instances),
+    despawn: (entity) => World.despawnFrom(draft, entity),
   };
 
   // The players' actions are decided before anything moves, so the systems see what the rules made of them.

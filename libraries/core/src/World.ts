@@ -232,6 +232,30 @@ export const write = <Value>(
   component.set(copy, entity, value);
 };
 
+/** Spawns an entity into a world being stepped, with the next id, and gives the id. */
+export const spawnInto = (draft: Draft, instances: ReadonlyArray<Component.Instance>): Entity => {
+  const entity = draft.nextEntity;
+  draft.nextEntity += 1;
+  for (const instance of instances) {
+    instance.writeWith((component, value) => write(draft, entity, component, value));
+  }
+  return entity;
+};
+
+/** Takes an entity out of every store of a world being stepped. Its id is never given out again. */
+export const despawnFrom = (draft: Draft, entity: Entity): void => {
+  for (const [name, store] of draft.stores) {
+    if (!store.has(entity)) continue;
+    const copied = [...draft.copies].find(([component]) => component.name === name);
+    if (copied === undefined) {
+      draft.stores.set(name, store.without(entity));
+    } else {
+      const [component, copy] = copied;
+      component.remove(copy, entity);
+    }
+  }
+};
+
 /** The finished world; every store the step copied is sealed, so nothing can change it afterwards. */
 export const finish = (draft: Draft): World => {
   for (const [component, copy] of draft.copies) {
