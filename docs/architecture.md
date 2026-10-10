@@ -47,6 +47,7 @@ Six principles shape every API. Each builds on the ones before it.
   - interpolation, drawing slightly in the past between two worlds;
   - prediction, going back to a confirmed world to replay what the server has not confirmed;
   - presentations, such as a slowed death, a frozen frame, or a killcam, which play a moment from the timeline at their own pace while the live world goes on, then return to it.
+- What is drawn between two worlds holds the entities of the earlier one until the later one is reached: an entity appears or leaves when its world does, never at a guessed place in between. A drawn frame can be queried like a world, and tells which entities came into the drawing and which left it since the frame before, so a game makes and puts away what stands for them without comparing lists itself.
 - A timer is an engine primitive on the world's time, owned by an entity or a state, and it disappears with its owner. Guards against stale completions, like Border's counters, are not needed.
 
 ### 4. Determinism: the whole world replays

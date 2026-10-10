@@ -1,5 +1,5 @@
-import type { Client } from '@lightocean/core';
-import { Effect, type Option, type Scope, Stream } from 'effect';
+import type { Client, World } from '@lightocean/core';
+import { Effect, Option, type Scope, Stream } from 'effect';
 import * as Timeline from '#src/Timeline.ts';
 
 /**
@@ -8,7 +8,11 @@ import * as Timeline from '#src/Timeline.ts';
  * Taking a frame is plain synchronous work, called once per displayed frame: no Effect runs per frame.
  */
 
-export type View = Timeline.View;
+/** What to draw this frame, and which entities came into the drawing or left it since the last frame, so whatever stands for them can be made or put away. */
+export interface View extends Timeline.View {
+  readonly entered: ReadonlyArray<World.Entity>;
+  readonly left: ReadonlyArray<World.Entity>;
+}
 
 export interface Drawing {
   /** Moves drawing on by `seconds` of real time and returns what to draw; called once a frame. */
@@ -26,6 +30,8 @@ export const make = (
   Effect.gen(function* () {
     const state = {
       timeline: Timeline.make({ stepRate: client.stepRate, keepSeconds: options.keepSeconds }),
+      /** The entities the last frame drew. */
+      drawn: new Set<World.Entity>(),
     };
     yield* client.worlds.pipe(
       Stream.runForEach((world) =>
@@ -38,7 +44,13 @@ export const make = (
     return {
       frame: (seconds) => {
         state.timeline = Timeline.advance(state.timeline, seconds);
-        return Timeline.view(state.timeline);
+        return Option.map(Timeline.view(state.timeline), (view) => {
+          const now = new Set(view.entities);
+          const entered = view.entities.filter((entity) => !state.drawn.has(entity));
+          const left = [...state.drawn].filter((entity) => !now.has(entity));
+          state.drawn = now;
+          return { ...view, entered, left };
+        });
       },
       present: (presentation) => {
         state.timeline = Timeline.present(state.timeline, presentation);

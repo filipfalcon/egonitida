@@ -54,6 +54,48 @@ const session = Effect.gen(function* () {
   return { host, client, drawing };
 });
 
+/** A session whose host raises a marker at tick 5 and removes it at tick 10. */
+const marked = Effect.gen(function* () {
+  const host = yield* Host.make({
+    game: Game.make({ stepRate: 60, systems: [mark], rules: [] }),
+    world: World.empty({ seed: 1 }),
+    components: markers,
+    join: (world) => World.spawn(world, []),
+    leave: World.despawn,
+    mayHold: true,
+    actions: [],
+  });
+  const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+  yield* host.connect(hostEnd);
+  const client = yield* Client.connect(clientEnd, { components: markers });
+  return yield* Drawing.make(client, { keepSeconds: 2 });
+});
+
+/** A marker that lives from tick 5 to tick 10 of the host's world. */
+const Marker = Component.make('Marker', Schema.Struct({}), {
+  owner: 'simulation',
+  network: 'server',
+});
+const markers = [Marker];
+const mark = System.make({
+  name: 'mark',
+  reads: [Marker],
+  writes: [],
+  emits: [],
+  spawns: [Marker],
+  despawns: true,
+  run: (context) => {
+    if (context.time.tick === 5) {
+      context.spawn([Marker.of({})]);
+    }
+    if (context.time.tick === 10) {
+      for (const [marker] of context.query(Marker)) {
+        context.despawn(marker);
+      }
+    }
+  },
+});
+
 const xOf = (view: Option.Option<Drawing.View>, entity: World.Entity) =>
   Option.getOrElse(
     Option.flatMap(view, (drawn) =>
@@ -89,6 +131,26 @@ describe('Drawing', () => {
       // And it only ever moves forward.
       const settled = drawn.filter((x) => !Number.isNaN(x));
       expect(settled.every((x, index) => index === 0 || x >= (settled[index - 1] ?? x))).toBe(true);
+    }),
+  );
+
+  it.effect('tells, frame by frame, which entities came into the drawing and which left it', () =>
+    Effect.gen(function* () {
+      const drawing = yield* marked;
+
+      const changes: Array<string> = [];
+      for (let index = 0; index < 30; index += 1) {
+        const view = yield* frame(drawing);
+        Option.map(view, ({ entered, left }) => {
+          changes.push(
+            ...entered.map((entity) => `+${entity}`),
+            ...left.map((entity) => `-${entity}`),
+          );
+        });
+      }
+
+      // The player joined as entity 0 and holds nothing, so only the marker, entity 1, is drawn: it comes once and goes once.
+      expect(changes).toEqual(['+1', '-1']);
     }),
   );
 });

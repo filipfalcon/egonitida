@@ -39,11 +39,11 @@ export const get = <Value>(
   component: Of<Value>,
 ): Option.Option<Value> => component.read(world.stores.get(component.name), entity);
 
-/** Every entity holding all of `components`, with their values, in the order the entities were spawned. */
-const rows = (
+/** Every entity holding all of `components`, in the order the entities were spawned. */
+export const holding = (
   world: Readable,
   components: ReadonlyArray<Component.Any>,
-): ReadonlyArray<ReadonlyArray<unknown>> => {
+): ReadonlyArray<Entity> => {
   const stores = components.map((component) => world.stores.get(component.name));
   const [first, ...rest] = stores;
   if (first === undefined || rest.some((store) => store === undefined)) {
@@ -51,14 +51,14 @@ const rows = (
   }
   return [...first.entities()]
     .filter((entity) => rest.every((store) => store?.has(entity)))
-    .sort((a, b) => a - b)
-    .map((entity) => [
-      entity,
-      ...components.map((component, index) =>
-        Option.getOrUndefined(component.read(stores[index], entity)),
-      ),
-    ]);
+    .sort((a, b) => a - b);
 };
+
+/** Every entity holding anything at all, in the order the entities were spawned. */
+export const entities = (world: Readable): ReadonlyArray<Entity> =>
+  [...new Set([...world.stores.values()].flatMap((store) => [...store.entities()]))].sort(
+    (a, b) => a - b,
+  );
 
 /**
  * A query over the components in `Allowed`, giving each entity holding all the components asked for, with their values. TypeScript cannot turn an array of values into a typed tuple, so there is one signature per number of components, up to six, the way Bevy writes one per tuple length.
@@ -94,8 +94,13 @@ export interface Query<Allowed extends Component.Any> {
   ): ReadonlyArray<readonly [Entity, A, B, C, D, E, F]>;
 }
 
-/** The query over everything in `world`. */
-export const queryIn = (world: Readable): Query<Component.Any> => {
+/**
+ * A query over entities `select` picks, with the values `read` gives them: over a world, or over anything that holds entities the way a world does, such as a world drawn between two others.
+ */
+export const queryBy = (
+  select: (components: ReadonlyArray<Component.Any>) => ReadonlyArray<Entity>,
+  read: <Value>(entity: Entity, component: Of<Value>) => Option.Option<Value>,
+): Query<Component.Any> => {
   function query<A>(a: Of<A>): ReadonlyArray<readonly [Entity, A]>;
   function query<A, B>(a: Of<A>, b: Of<B>): ReadonlyArray<readonly [Entity, A, B]>;
   function query<A, B, C>(a: Of<A>, b: Of<B>, c: Of<C>): ReadonlyArray<readonly [Entity, A, B, C]>;
@@ -120,14 +125,24 @@ export const queryIn = (world: Readable): Query<Component.Any> => {
     e: Of<E>,
     f: Of<F>,
   ): ReadonlyArray<readonly [Entity, A, B, C, D, E, F]>;
-  // The values come from each component's own store, in the order the components were asked for, which is what each signature above promises.
+  // The values come from `read`, in the order the components were asked for, which is what each signature above promises.
   function query(
     ...components: ReadonlyArray<Component.Any>
   ): ReadonlyArray<ReadonlyArray<unknown>> {
-    return rows(world, components);
+    return select(components).map((entity) => [
+      entity,
+      ...components.map((component) => Option.getOrUndefined(read(entity, component))),
+    ]);
   }
   return query;
 };
+
+/** The query over everything in `world`. */
+export const queryIn = (world: Readable): Query<Component.Any> =>
+  queryBy(
+    (components) => holding(world, components),
+    (entity, component) => get(world, entity, component),
+  );
 
 /** Every entity in `world` holding all of `components`, with their values, in the order the entities were spawned. */
 export function query<A>(world: Readable, a: Of<A>): ReadonlyArray<readonly [Entity, A]>;
@@ -170,7 +185,10 @@ export function query(
   world: Readable,
   ...components: ReadonlyArray<Component.Any>
 ): ReadonlyArray<ReadonlyArray<unknown>> {
-  return rows(world, components);
+  return holding(world, components).map((entity) => [
+    entity,
+    ...components.map((component) => Option.getOrUndefined(get(world, entity, component))),
+  ]);
 }
 
 export const spawn = (

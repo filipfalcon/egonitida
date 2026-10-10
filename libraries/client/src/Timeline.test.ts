@@ -98,6 +98,52 @@ describe('Timeline', () => {
     expect(Option.isSome(drawn(timeline))).toBe(true);
   });
 
+  describe('querying what is drawn', () => {
+    /** Ticks 1 and 2, the second with another entity at x = 100, drawn halfway between them. */
+    const halfway = (() => {
+      const [withOther] = World.spawn(worldAt(2), [Position.of({ x: 100 })]);
+      return Timeline.advance(
+        Timeline.receive(Timeline.receive(start, worldAt(1)), withOther),
+        STEP / 2,
+      );
+    })();
+    const rows = (timeline: Timeline.Timeline) =>
+      Option.map(Timeline.view(timeline), (view) => view.query(Position));
+
+    it('gives every entity drawn, each where it is between the two worlds, as `get` has it', () => {
+      const between = Option.getOrThrow(drawn(halfway));
+
+      expect(between).toBeGreaterThan(1);
+      expect(between).toBeLessThan(2);
+      expect(rows(halfway)).toEqual(Option.some([[0, { x: between }]]));
+    });
+
+    it('gives an entity from the moment the world it appears in is reached', () => {
+      const reached = Timeline.advance(halfway, STEP);
+
+      expect(rows(reached)).toEqual(
+        Option.some([
+          [0, { x: 2 }],
+          [1, { x: 100 }],
+        ]),
+      );
+      expect(Option.map(Timeline.view(reached), (view) => view.entities)).toEqual(
+        Option.some([0, 1]),
+      );
+    });
+
+    it('gives an entity until the world it is gone from is reached', () => {
+      const gone = World.despawn(worldAt(2), 0);
+      const between = Timeline.advance(
+        Timeline.receive(Timeline.receive(start, worldAt(1)), gone),
+        STEP / 2,
+      );
+
+      expect(rows(between)).toEqual(Option.some([[0, { x: 1 }]]));
+      expect(rows(Timeline.advance(between, STEP))).toEqual(Option.some([]));
+    });
+  });
+
   describe('presentations', () => {
     const recorded = Timeline.advance(
       receiveAll(

@@ -34,6 +34,10 @@ export interface View {
     entity: World.Entity,
     component: Component.Component<string, Value, Component.Owner>,
   ) => Option.Option<Value>;
+  /** Every entity drawn holding all of the components asked for, each with its values as `get` gives them. */
+  readonly query: World.Query<Component.Any>;
+  /** Every entity drawn, in the order they were spawned. */
+  readonly entities: ReadonlyArray<World.Entity>;
 }
 
 // While live, drawing keeps one step behind the newest world, so there is always a world to move toward.
@@ -144,21 +148,26 @@ export const view = (timeline: Timeline): Option.Option<View> => {
       ? 0
       : (timeline.cursor - timeOf(timeline, earlier)) /
         (timeOf(timeline, later) - timeOf(timeline, earlier));
+  // Which world says what is drawn: an entity appears or leaves when its world is reached, as `get` has it.
+  const drawn = later !== undefined && t >= 1 ? later : earlier;
+  const get: View['get'] = (entity, component) => {
+    const before = World.get(earlier, entity, component);
+    if (later === undefined || t <= 0) {
+      return before;
+    }
+    const after = World.get(later, entity, component);
+    if (t >= 1) {
+      return after;
+    }
+    // Present in both worlds, it moves between them; appearing or leaving, it does so when its world is reached.
+    return Option.isSome(before) && Option.isSome(after)
+      ? Option.some(Interpolate.between(component.schema, before.value, after.value, t))
+      : before;
+  };
   return Option.some({
     tick: later === undefined ? earlier.tick : earlier.tick + t * (later.tick - earlier.tick),
-    get: (entity, component) => {
-      const before = World.get(earlier, entity, component);
-      if (later === undefined || t <= 0) {
-        return before;
-      }
-      const after = World.get(later, entity, component);
-      if (t >= 1) {
-        return after;
-      }
-      // Present in both worlds, it moves between them; appearing or leaving, it does so when its world is reached.
-      return Option.isSome(before) && Option.isSome(after)
-        ? Option.some(Interpolate.between(component.schema, before.value, after.value, t))
-        : before;
-    },
+    get,
+    query: World.queryBy((components) => World.holding(drawn, components), get),
+    entities: World.entities(drawn),
   });
 };
