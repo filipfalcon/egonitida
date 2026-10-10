@@ -1,4 +1,4 @@
-import { Option } from 'effect';
+import { Option, Schema } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
@@ -89,10 +89,14 @@ export const act =
       onSome: (accepted) => ({ ...simulation, actions: [...simulation.actions, accepted] }),
     });
 
-/** Has `event` happen at the next step, as if something had emitted it, so the rules that handle it can be told on their own. */
+/** Has `event` happen at the next step with `fields`, as if something had emitted it, so the rules that handle it can be told on their own. */
 export const happen =
-  <Value extends Event.Tagged>(event: Event.Event<string, Value>, value: Value): Step =>
+  <Value extends Event.Tagged>(
+    event: Event.Event<string, Value>,
+    fields: Omit<Value, '_tag'>,
+  ): Step =>
   (simulation) => {
+    const value = { ...fields, _tag: event.tag };
     if (!event.is(value)) {
       throw new Error(`what is to happen is not a ${event.tag}`);
     }
@@ -120,6 +124,32 @@ export const steps =
     return { ...simulation, world, inputs: [], actions: [], events };
   };
 
+/**
+ * Takes one step at a time until `holds` says so of the world, taking the waiting input and actions into the first; fails if that does not come to pass within `limit` steps, 600 unless given. The events expected afterwards are those of every step it took.
+ */
+export const until =
+  (
+    holds: (world: World.World, named: (name: string) => World.Entity) => boolean,
+    options: { readonly limit?: number } = {},
+  ): Step =>
+  (simulation) => {
+    const limit = options.limit ?? 600;
+    const named = (name: string) => entityOf(simulation, name);
+    const events: Array<Event.Tagged> = [];
+    const go = (current: Simulation, taken: number): Simulation => {
+      if (holds(current.world, named)) {
+        return { ...current, events };
+      }
+      if (taken === limit) {
+        throw new Error(`it did not come to pass within ${limit} steps`);
+      }
+      const next = steps(1)(current);
+      events.push(...next.events);
+      return go(next, taken + 1);
+    };
+    return go(simulation, 0);
+  };
+
 /** Takes one step. */
 export const step = (): Step => steps(1);
 
@@ -141,6 +171,25 @@ export const expect =
       },
       onSome: (value) => {
         assert(value);
+        return simulation;
+      },
+    });
+
+/** Expects the entity named `name` to hold exactly `value` of `component`, compared as the component's schema encodes it. */
+export const expectEqual =
+  <Value>(name: string, component: Of<Value>, value: Value): Step =>
+  (simulation) =>
+    Option.match(World.get(simulation.world, entityOf(simulation, name), component), {
+      onNone: () => {
+        throw new Error(`${name} holds no ${component.name}`);
+      },
+      onSome: (held) => {
+        const encode = Schema.encodeSync(
+          Schema.fromJsonString(Schema.toCodecJson(component.schema)),
+        );
+        if (encode(held) !== encode(value)) {
+          throw new Error(`${name} holds ${component.name} ${encode(held)}, not ${encode(value)}`);
+        }
         return simulation;
       },
     });
@@ -187,3 +236,14 @@ export const world =
     assert(simulation.world, (name) => entityOf(simulation, name));
     return simulation;
   };
+
+// READING
+
+/** What the entity named `name` holds of `component` where `simulation`, a story told, ended: for comparing one story with another. */
+export const valueOf = <Value>(simulation: Simulation, name: string, component: Of<Value>): Value =>
+  Option.match(World.get(simulation.world, entityOf(simulation, name), component), {
+    onNone: () => {
+      throw new Error(`${name} holds no ${component.name}`);
+    },
+    onSome: (value) => value,
+  });

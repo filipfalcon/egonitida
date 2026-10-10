@@ -147,7 +147,7 @@ describe('Story', () => {
     Story.story(
       game,
       Story.spawn('her', her),
-      Story.happen(Bitten, { _tag: 'Bitten', entity: 0, damage: 20 }),
+      Story.happen(Bitten, { entity: 0, damage: 20 }),
       Story.step(),
       Story.expect('her', Health, (health) => expect(health.current).toBe(30)),
       Story.expectEvent(Bitten),
@@ -160,6 +160,53 @@ describe('Story', () => {
     expect(() =>
       Story.story(game, Story.spawn('her', her), Story.expectNone('her', Health)),
     ).toThrow('her holds Health');
+  });
+
+  it('expects a whole value, compared as its schema encodes it', () => {
+    Story.story(game, Story.spawn('her', her), Story.expectEqual('her', Health, { current: 50 }));
+
+    expect(() =>
+      Story.story(game, Story.spawn('her', her), Story.expectEqual('her', Health, { current: 1 })),
+    ).toThrow('her holds Health {"current":50}, not {"current":1}');
+  });
+
+  it('steps until something holds, and fails if it never does within a limit', () => {
+    const walked = Story.story(
+      game,
+      Story.spawn('her', her),
+      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.until((world, named) =>
+        Option.exists(World.get(world, named('her'), Position), ({ x }) => x >= 4),
+      ),
+    );
+
+    expect(walked.world.tick).toBe(4);
+    expect(() =>
+      Story.story(
+        game,
+        Story.spawn('her', her),
+        Story.until(() => false, { limit: 10 }),
+      ),
+    ).toThrow('it did not come to pass within 10 steps');
+  });
+
+  it('gives what a named entity holds where a story ended, for comparing one story with another', () => {
+    const walk = (move: number) =>
+      Story.valueOf(
+        Story.story(
+          game,
+          Story.spawn('her', her),
+          Story.input('her', Controls, { move, fire: false }),
+          Story.steps(5),
+        ),
+        'her',
+        Position,
+      );
+
+    expect(walk(1).x).toBeGreaterThan(walk(0.5).x);
+    expect(() => Story.valueOf(Story.story(game), 'her', Position)).toThrow(
+      'no entity is named her',
+    );
   });
 
   it('fails a story whose expectation does not hold', () => {
