@@ -17,6 +17,7 @@ import {
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
 import * as Rule from '#src/Rule.ts';
+import * as Story from '#src/Story.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
@@ -67,12 +68,15 @@ const takeBite = Rule.on(Bitten, {
 
 const game = Game.make({ stepRate: 10, ...declared, systems: [move, bite], rules: [takeBite] });
 
+/** A runner at `x`, running at 10 a second, with `health`. */
+const runner = (x: number, health: number) => [
+  Position.of({ x }),
+  Velocity.of({ x: 10 }),
+  Health.of({ current: health }),
+];
+
 const spawnRunner = (x: number, health: number) =>
-  World.spawn(World.empty({ seed: 7 }), [
-    Position.of({ x }),
-    Velocity.of({ x: 10 }),
-    Health.of({ current: health }),
-  ]);
+  World.spawn(World.empty({ seed: 7 }), runner(x, health));
 
 describe('Game.step', () => {
   it('advances the tick and runs the systems', () => {
@@ -86,10 +90,12 @@ describe('Game.step', () => {
 
   it('runs the systems in order, each seeing what the ones before it wrote', () => {
     // The runner reaches x = 10 in this very step, so `bite`, running after `move`, already sees it there.
-    const [world, runner] = spawnRunner(9, 100);
-    const after = Game.step(game, world).world;
-
-    expect(World.get(after, runner, Health)).toEqual(Option.some({ current: 70 }));
+    Story.story(
+      game,
+      Story.spawn('runner', runner(9, 100)),
+      Story.step(),
+      Story.expect('runner', Health, (health) => expect(health.current).toBe(70)),
+    );
   });
 
   it('applies events within the step that emitted them, one after another', () => {
@@ -111,15 +117,15 @@ describe('Game.step', () => {
       systems: [doubleBite],
       rules: [takeBite],
     });
-    const [world, runner] = spawnRunner(0, 50);
-
-    const { world: after, events } = Game.step(twice, world);
 
     // The second bite sees the health the first one left, so the runner dies exactly once.
-    expect(World.get(after, runner, Health)).toEqual(Option.some({ current: -10 }));
-    expect(events.filter((event) => event._tag === 'Died')).toEqual([
-      { _tag: 'Died', entity: runner },
-    ]);
+    Story.story(
+      twice,
+      Story.spawn('runner', runner(0, 50)),
+      Story.step(),
+      Story.expect('runner', Health, (health) => expect(health.current).toBe(-10)),
+      Story.expectEvent(Died, (deaths) => expect(deaths).toHaveLength(1)),
+    );
   });
 
   it('reports every event of the step, in the order they happened', () => {
@@ -197,33 +203,43 @@ describe('input', () => {
     },
   });
   const steered = Game.make({ stepRate: 10, ...declared, systems: [steer], rules: [] });
-  const [start, player] = World.spawn(World.empty({ seed: 1 }), [
+  const [start, recorded] = World.spawn(World.empty({ seed: 1 }), [
     Position.of({ x: 0 }),
     Controls.of({ move: 0, fire: false }),
   ]);
-  const push = (move: number) => [Input.of(player, Controls, { move, fire: false })];
+  const push = (move: number) => [Input.of(recorded, Controls, { move, fire: false })];
+
+  const player = [Position.of({ x: 0 }), Controls.of({ move: 0, fire: false })];
 
   it('reaches the systems in the step it is given to', () => {
-    const after = Game.step(steered, start, push(1)).world;
-
-    expect(World.get(after, player, Position)).toEqual(Option.some({ x: 1 }));
+    Story.story(
+      steered,
+      Story.spawn('her', player),
+      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.step(),
+      Story.expect('her', Position, (position) => expect(position.x).toBe(1)),
+    );
   });
 
   it('stays as it was in a step given no new input, the way a held stick does', () => {
-    const once = Game.step(steered, start, push(1)).world;
-    const twice = Game.step(steered, once).world;
-
-    expect(World.get(twice, player, Position)).toEqual(Option.some({ x: 2 }));
+    Story.story(
+      steered,
+      Story.spawn('her', player),
+      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.steps(2),
+      Story.expect('her', Position, (position) => expect(position.x).toBe(2)),
+    );
   });
 
   it('only reaches an entity spawned to accept it', () => {
-    const [world, bystander] = World.spawn(start, [Position.of({ x: 5 })]);
-    const after = Game.step(steered, world, [
-      Input.of(bystander, Controls, { move: 1, fire: false }),
-    ]).world;
-
-    expect(World.get(after, bystander, Controls)).toEqual(Option.none());
-    expect(World.get(after, bystander, Position)).toEqual(Option.some({ x: 5 }));
+    Story.story(
+      steered,
+      Story.spawn('bystander', [Position.of({ x: 5 })]),
+      Story.input('bystander', Controls, { move: 1, fire: false }),
+      Story.step(),
+      Story.expectNone('bystander', Controls),
+      Story.expect('bystander', Position, (position) => expect(position.x).toBe(5)),
+    );
   });
 
   it('replays to the same world from the same start and the same inputs', () => {
@@ -236,7 +252,7 @@ describe('input', () => {
 
     expect(contents(play())).toEqual(contents(play()));
     // A held stick keeps moving: 1 + 1 - 0.5 + 0.25 + 0.25 + 0.25.
-    expect(World.get(play(), player, Position)).toEqual(Option.some({ x: 2.25 }));
+    expect(World.get(play(), recorded, Position)).toEqual(Option.some({ x: 2.25 }));
   });
 });
 
@@ -268,9 +284,14 @@ describe('actions', () => {
 
   it('is handled by the rules within the step it arrives, before the systems run', () => {
     seen.length = 0;
-    const { world: after } = Game.step(restarting, world, [], [restarted(0)]);
+    Story.story(
+      restarting,
+      Story.spawn('her', runner(0, 10)),
+      Story.act('her', Restart, { x: 0 }),
+      Story.step(),
+      Story.expect('her', Health, (health) => expect(health.current).toBe(100)),
+    );
 
-    expect(World.get(after, player, Health)).toEqual(Option.some({ current: 100 }));
     expect(seen).toEqual([100]);
   });
 
@@ -359,11 +380,17 @@ describe('spawning and despawning within a step', () => {
       systems: [bite],
       rules: [takeBite, replace],
     });
-    const [start, runner] = spawnRunner(10, 30);
-    const after = Game.step(replacing, start).world;
-
-    expect(World.get(after, runner, Health)).toEqual(Option.none());
-    expect(World.get(after, runner + 1, Health)).toEqual(Option.some({ current: 100 }));
+    Story.story(
+      replacing,
+      Story.spawn('runner', runner(10, 30)),
+      Story.step(),
+      Story.expectNone('runner', Health),
+      Story.world((after, named) =>
+        expect(World.get(after, named('runner') + 1, Health)).toEqual(
+          Option.some({ current: 100 }),
+        ),
+      ),
+    );
   });
 
   it('leaves the world it was given untouched', () => {
