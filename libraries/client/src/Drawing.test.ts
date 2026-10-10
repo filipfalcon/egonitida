@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Game, Host, Plugin, System, Transport, World } from '@lightocean/core';
+import { Client, Component, Game, Host, Plugin, System, World } from '@lightocean/core';
+import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Drawing from '#src/Drawing.ts';
