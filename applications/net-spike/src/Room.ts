@@ -2,6 +2,7 @@ import * as Cloudflare from 'alchemy/Cloudflare';
 import { Effect, Option } from 'effect';
 import { HttpServerRequest } from 'effect/http/HttpServerRequest';
 import * as HttpServerResponse from 'effect/http/HttpServerResponse';
+import * as Pace from '#src/pace.ts';
 import * as Protocol from '#src/protocol.ts';
 import * as Simulation from '#src/simulation.ts';
 import { gaps, summarize } from '#src/stats.ts';
@@ -14,6 +15,9 @@ import * as Transport from '#src/Transport.ts';
 interface Attachment {
   readonly playerId: string;
 }
+
+// The most steps one timer firing takes to catch up: about a sixth of a second at 30 Hz.
+const MAX_CATCH_UP_STEPS = 5;
 
 // The moments and sizes kept for the stats endpoint; older ones are dropped.
 const MAX_SAMPLES = 10_000;
@@ -43,7 +47,10 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
         world: Simulation.empty,
         pending: [] as Array<Simulation.Input>,
         loop: undefined as ReturnType<typeof setInterval> | undefined,
-        tickMoments: [] as Array<number>,
+        pace: undefined as Pace.Pace | undefined,
+        stepsTaken: 0,
+        catchUps: 0,
+        firingMoments: [] as Array<number>,
         snapshotBytes: [] as Array<number>,
         wakes: 0,
       };
@@ -66,9 +73,27 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
         }
       };
 
-      const tick = () => {
-        keepLast(room.tickMoments, Date.now());
+      // The timer only says that time has passed; the pace decides how many steps that time is worth.
+      const fire = () => {
+        const now = Date.now();
+        keepLast(room.firingMoments, now);
+        if (room.pace === undefined) {
+          return;
+        }
+        const { steps, pace } = Pace.due(room.pace, room.stepsTaken, now);
+        room.pace = pace;
+        if (steps === 0) {
+          return;
+        }
+        room.stepsTaken += steps;
+        if (steps > 1) {
+          room.catchUps += 1;
+        }
+        // The inputs that arrived apply to the first step; the steps that catch up only move time on.
         room.world = Simulation.step(room.world, room.pending.splice(0));
+        for (let step = 1; step < steps; step += 1) {
+          room.world = Simulation.step(room.world, []);
+        }
         const snapshot = frame(
           'unreliable',
           Protocol.encodeServerUnreliable({
@@ -83,7 +108,13 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
 
       const start = () => {
         if (room.loop === undefined && sessions.size > 0) {
-          room.loop = setInterval(tick, 1000 / Simulation.STEP_RATE);
+          room.pace = Pace.start({
+            now: Date.now(),
+            stepRate: Simulation.STEP_RATE,
+            maxSteps: MAX_CATCH_UP_STEPS,
+          });
+          room.stepsTaken = 0;
+          room.loop = setInterval(fire, 1000 / Simulation.STEP_RATE);
         }
       };
 
@@ -130,7 +161,10 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
         tick: room.world.tick,
         ticking: room.loop !== undefined,
         wakesFromHibernation: room.wakes,
-        tickGapMillis: Option.getOrNull(summarize(gaps(room.tickMoments))),
+        stepsTaken: room.stepsTaken,
+        stepsSkipped: room.pace?.skipped ?? 0,
+        firingsThatCaughtUp: room.catchUps,
+        timerGapMillis: Option.getOrNull(summarize(gaps(room.firingMoments))),
         snapshotBytes: Option.getOrNull(summarize(room.snapshotBytes)),
       });
 

@@ -24,6 +24,7 @@ const playClient = (index: number) =>
         playerId: '',
         snapshotArrivals: [] as Array<number>,
         roundTrips: [] as Array<number>,
+        firstTick: 0,
         lastTick: 0,
         outOfOrder: 0,
       };
@@ -47,6 +48,9 @@ const playClient = (index: number) =>
               if (message.tick <= record.lastTick) {
                 record.outOfOrder += 1;
                 return;
+              }
+              if (record.firstTick === 0) {
+                record.firstTick = message.tick;
               }
               record.lastTick = message.tick;
               record.snapshotArrivals.push(now);
@@ -87,8 +91,10 @@ const playClient = (index: number) =>
       return {
         client: index,
         playerId: record.playerId,
+        // The world's own clock: how far it moved while this client watched, against what real time called for.
+        stepsWatched: record.lastTick - record.firstTick,
+        stepsExpected: Math.round(Number(durationSeconds) * Simulation.STEP_RATE),
         snapshotsReceived: record.snapshotArrivals.length,
-        snapshotsExpected: Math.round(Number(durationSeconds) * Simulation.STEP_RATE),
         snapshotsOutOfOrder: record.outOfOrder,
         unreliableDroppedAsStale: droppedUnreliable(),
         roundTripMillis: Option.getOrNull(summarize(record.roundTrips)),

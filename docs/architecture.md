@@ -8,7 +8,7 @@ The first game to run on the engine is Border, a first-person browser game in it
 
 ## Principles
 
-Five principles shape every API. Each builds on the one before it.
+Six principles shape every API. Each builds on the ones before it.
 
 ### 1. State: one state, ownership is a type
 
@@ -59,6 +59,26 @@ Five principles shape every API. Each builds on the one before it.
   - **server**: hosting a world in a Durable Object, and persistence.
 - A game's plugins split the same way, such as a horde's AI in core and its animation in client.
 - Imperative islands are allowed for gradual migration: a local, client-only plugin may use Three.js as it likes, but cannot write the state it does not own. Border can move onto the engine by wrapping its current code this way first.
+
+### 6. Frame pacing: measured, never assumed
+
+Frame pacing is a requirement, not a polish pass. A frame is presented on time and motion inside it is placed at the right moment, at whatever rate the display runs.
+
+- **Time from the display.** Interpolation and motion read the timestamp `requestAnimationFrame` hands a frame, the moment it is presented, never the moment code happens to run.
+- **No allocation in the hot path.** Nothing that runs every frame or every step creates objects; it works on pools, typed arrays, and preallocated vectors. This is a requirement on how simulation components are stored.
+- **The simulation off the main thread.** A singleplayer game's local server runs in a Web Worker, so the main thread only reads input, interpolates, and draws.
+- **The network never jumps.**
+  - Other entities are drawn slightly in the past, interpolated by tick number with an adaptive buffer, so irregular arrival and skipped ticks never show.
+  - The client's clock follows the server's by speeding up or slowing down playback by a percent or two, never by snapping.
+  - A prediction error in the client's own player decays over a few frames instead of teleporting.
+- **No compilation hitches.** Shaders and pipelines are compiled and warmed before first use, as an engine service.
+- **Any refresh rate.** 60, 120, 144 Hz, and variable refresh rate; nothing assumes 60.
+- **No DOM work every frame.** The UI updates when the Model changes, and values that change every frame reach the DOM at a bounded rate.
+
+It is measured, not assumed:
+
+- An in-editor overlay shows the frame-time histogram, missed vsyncs, and long frames, through the Long Animation Frames API.
+- Browser tests run a scene for a fixed time and fail when the 99th percentile frame time exceeds the budget or more than a few vsyncs are missed, the way a determinism check fails on divergence.
 
 ## Decisions
 
@@ -125,15 +145,29 @@ The first iteration, built before the principles above: the Elm Architecture ove
 
 ## Next
 
-- A Durable Object spike: a world stepping at 30 Hz with two clients, to measure latency, cost, and how a ticking object hibernates and stays alive. It is the largest assumption the principles rest on that is not yet verified.
-- The core state and system API, and the step schedule, designed test-first.
-- Linking LightOcean into Border as a package, and running Border on the engine without changing how it plays.
+- The core: state with declared ownership, systems with declared access, and the step schedule, built test-first for correctness before speed.
+- A local server in a Web Worker, over the same transport, so singleplayer has the client–server shape.
+- Linking LightOcean into Border, and running a first piece of the game on it.
+
+Later, for the editor:
+
 - Undo and redo, once it is decided what one step is (a keystroke in a field is not one).
 - Camera controls in the viewport, and a gizmo for moving objects.
 - More triggers (on start, on a timer) and program state beyond the objects, such as variables and conditions.
 - Saving the document to disk, through a local CLI.
 - Moving the viewport's Foldkit wiring, now repeated in the editor and the playground, into a library.
 - Browser tests for what Node cannot cover.
+
+Optimization waits until the raw engine works: an interpolation buffer, binary encoding, and sending each client only what is near it are tuned against something real, not ahead of it.
+
+## Findings
+
+The Durable Object spike (`applications/net-spike`) answered whether Durable Objects can host a fixed-step server. They can.
+
+- Stepping once per timer firing ran the world 9 % slow, because a timer always fires late and stalls swallow whole intervals. Taking as many steps as real time owes, capped at five, keeps the world at its real rate.
+- Deployed on Cloudflare, two clients over 20 seconds: the room took every step on time and gave none up, round trips had a median of 25 ms, and snapshots arrived 33 ms apart at the median. The stalls of about 300 ms seen under `alchemy dev` did not happen.
+- The irregularity is on the way to the client: 5 % of snapshots arrived about 100 ms after the one before, in bunches. Over TCP one lost packet holds back everything behind it, which is the case for WebTransport's datagrams; Wi-Fi power saving can bunch packets too. It was one run from one network.
+- A snapshot of two players is about 210 bytes of JSON, so a datagram fits about ten players before encoding has to become binary.
 
 ## Open questions
 
