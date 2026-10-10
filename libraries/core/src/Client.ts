@@ -1,4 +1,4 @@
-import { Deferred, Effect, Option, type Scope, Stream } from 'effect';
+import { Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
 import type * as Component from '#src/Component.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
@@ -17,8 +17,12 @@ export interface Options {
 export interface Client {
   /** The entity this client controls. */
   readonly entity: World.Entity;
+  /** The rate the host steps its world at, as it said on welcoming the client. */
+  readonly stepRate: number;
   /** The newest world the host sent. */
   readonly world: Effect.Effect<World.World>;
+  /** Every world the client receives from now on that is newer than the one before, in order. */
+  readonly worlds: Stream.Stream<World.World>;
   /** Sends the player's input, as values of input components. */
   readonly send: (values: ReadonlyArray<Component.Instance>) => Effect.Effect<void>;
   /** Asks the host to hold time; a host that does not allow it goes on. */
@@ -43,6 +47,8 @@ export const connect = (
 ): Effect.Effect<Client, never, Scope.Scope> =>
   Effect.gen(function* () {
     const welcome = yield* Deferred.make<Protocol.Welcome>();
+    // Each listener gets its own subscription, from the moment it starts listening.
+    const received = yield* PubSub.unbounded<World.World>();
     const state: { world: World.World; seq: number; history: ReadonlyArray<SentInput> } = {
       world: World.empty({ seed: 0 }),
       seq: 0,
@@ -56,16 +62,20 @@ export const connect = (
             onNone: () => Effect.void,
             onSome: (received) => Deferred.succeed(welcome, received).pipe(Effect.asVoid),
           })
-        : Effect.sync(() => {
-            Option.map(Snapshot.apply(state.world, frame.payload, options.components), (world) => {
-              if (world.tick > state.world.tick) {
+        : Option.match(Snapshot.apply(state.world, frame.payload, options.components), {
+            onNone: () => Effect.void,
+            onSome: (world) =>
+              Effect.suspend(() => {
+                if (world.tick <= state.world.tick) {
+                  return Effect.void;
+                }
                 state.world = world;
-              }
-            });
+                return PubSub.publish(received, world).pipe(Effect.asVoid);
+              }),
           });
 
     yield* connection.frames.pipe(Stream.runForEach(receive), Effect.forkScoped);
-    const { entity } = yield* Deferred.await(welcome);
+    const { entity, stepRate } = yield* Deferred.await(welcome);
 
     const send = (values: ReadonlyArray<Component.Instance>) =>
       Effect.suspend(() => {
@@ -85,7 +95,9 @@ export const connect = (
 
     return {
       entity,
+      stepRate,
       world: Effect.sync(() => state.world),
+      worlds: Stream.fromPubSub(received),
       send,
       hold: ask({ _tag: 'Hold' }),
       release: ask({ _tag: 'Release' }),

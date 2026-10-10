@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Exit, Option, Scope } from 'effect';
+import { Effect, Exit, Fiber, Option, Scope, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Client from '#src/Client.ts';
 import { Controls, Position } from '#src/fixtures.ts';
@@ -148,6 +148,30 @@ describe('a session between a host and its clients', () => {
 
       const world = yield* host.world;
       expect(positionIn(world, client.entity)).toEqual(Option.some(-30));
+    }),
+  );
+
+  it.effect('tells the client the rate its host steps at', () =>
+    Effect.gen(function* () {
+      const { client } = yield* session;
+
+      expect(client.stepRate).toBe(30);
+    }),
+  );
+
+  it.effect('hands on every newer world the client receives, in order', () =>
+    Effect.gen(function* () {
+      const { client } = yield* session;
+      const received = yield* client.worlds.pipe(
+        Stream.take(3),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      yield* advance(200);
+
+      const worlds = yield* Fiber.join(received);
+      expect(worlds.map((world) => world.tick)).toEqual([1, 2, 3]);
     }),
   );
 
