@@ -424,6 +424,41 @@ describe('spawning and despawning within a step', () => {
   });
 });
 
+describe('in development', () => {
+  /** Moves every runner by changing its position in place, as no system may. */
+  const shove = System.make({
+    name: 'shove',
+    reads: [],
+    writes: [Position],
+    emits: [],
+    run: (context) => {
+      for (const [, position] of context.query(Position)) {
+        Object.assign(position, { x: position.x + 1 });
+      }
+    },
+  });
+  const shoving = Game.make({ stepRate: 10, ...declared, systems: [shove], rules: [] });
+
+  it('freezes what a step leaves, so changing it in place fails at once', () => {
+    const [world] = spawnRunner(0, 100);
+    const once = Game.step(game, world, [], [], { freeze: true }).world;
+
+    expect(() => Game.step(shoving, once, [], [], { freeze: true })).toThrow(TypeError);
+  });
+
+  it('freezes what a world was spawned with, from the first step on', () => {
+    const [world] = spawnRunner(0, 100);
+
+    expect(() => Game.step(shoving, world, [], [], { freeze: true })).toThrow(TypeError);
+  });
+
+  it('freezes in every story', () => {
+    expect(() =>
+      Story.story(shoving, Story.spawn('runner', runner(0, 100)), Story.steps(2)),
+    ).toThrow(TypeError);
+  });
+});
+
 // What the type checker refuses: each line below must stay a compile error, or `vp check` fails on the unused directive.
 export const refused = () => {
   System.make({

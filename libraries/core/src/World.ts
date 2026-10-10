@@ -274,10 +274,18 @@ export const despawnFrom = (draft: Draft, entity: Entity): void => {
   }
 };
 
-/** The finished world; every store the step copied is sealed, so nothing can change it afterwards. */
-export const finish = (draft: Draft): World => {
+/**
+ * The finished world; every store the step copied is sealed, so nothing can change it afterwards. Every value of the components in `freeze` is frozen too, so changing one in place throws: a guard for development, which costs a walk over the world.
+ */
+export const finish = (draft: Draft, freeze: ReadonlyArray<Component.Any> = []): World => {
   for (const [component, copy] of draft.copies) {
     component.seal(copy);
+  }
+  for (const component of freeze) {
+    const store = draft.stores.get(component.name);
+    if (store !== undefined) {
+      component.freeze(store);
+    }
   }
   return {
     tick: draft.tick,

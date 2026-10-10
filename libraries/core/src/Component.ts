@@ -62,6 +62,8 @@ export interface Component<Name extends string, Value, O extends Owner> {
   remove(store: Store | undefined, entity: Entity): void;
   /** Ends a draft: from now on, nothing changes it. */
   seal(store: Store): void;
+  /** Freezes every value in `store`, all the way down, so changing one in place throws. */
+  freeze(store: Store): void;
   /** A store's values, encoded as JSON by this component's schema. */
   encode(store: Store | undefined): ReadonlyArray<readonly [Entity, unknown]>;
   /** A store of encoded values; `None` if any of them does not decode. */
@@ -71,6 +73,17 @@ export interface Component<Name extends string, Value, O extends Owner> {
 export type Any = Component<string, unknown, Owner>;
 
 export type ValueOf<C> = C extends Component<string, infer Value, Owner> ? Value : never;
+
+/** Freezes `value` and everything it holds; what is frozen already, and all it holds, is left as it is. */
+const freezeDeep = (value: unknown): void => {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
+    return;
+  }
+  Object.freeze(value);
+  for (const held of Object.values(value)) {
+    freezeDeep(held);
+  }
+};
 
 /**
  * Makes a component. Its values must never be `null` or `undefined`: holding nothing is the absence of the component, not a value of it.
@@ -135,6 +148,11 @@ export const make = <const Name extends string, Value, const O extends Owner>(
     },
     seal: (store) => {
       open.delete(store);
+    },
+    freeze: (store) => {
+      for (const value of values.get(store)?.values() ?? []) {
+        freezeDeep(value);
+      }
     },
     encode: (store) =>
       [...copyOf(store)].map(

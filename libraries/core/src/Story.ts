@@ -101,6 +101,9 @@ export const happen =
 
 // TIME
 
+// A story always freezes the worlds it steps through: a test is where changing one in place should fail.
+const frozen: Game.StepOptions = { freeze: true };
+
 /** Takes `count` steps: the waiting input and actions go into the first. */
 export const steps =
   (count: number): Step =>
@@ -109,8 +112,8 @@ export const steps =
     const world = Array.from({ length: count }).reduce<World.World>((current, _, index) => {
       const step =
         index === 0
-          ? Game.step(simulation.game, current, simulation.inputs, simulation.actions)
-          : Game.step(simulation.game, current);
+          ? Game.step(simulation.game, current, simulation.inputs, simulation.actions, frozen)
+          : Game.step(simulation.game, current, [], [], frozen);
       events.push(...step.events);
       return step.world;
     }, simulation.world);

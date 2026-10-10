@@ -21,6 +21,8 @@ export interface Options {
   readonly leave: (world: World.World, entity: World.Entity) => World.World;
   /** The most steps taken at once to catch up after a stall. */
   readonly maxCatchUpSteps?: number;
+  /** Freezes every world the host steps to, so a system or rule that changes a value in place throws at once; for development, since it walks the whole world every step. */
+  readonly freeze?: boolean;
   /**
    * Whether a client may hold time: a local server for one player grants it, a world shared with others refuses. Holding time is the host's to allow, never the world's.
    */
@@ -90,9 +92,10 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       const inputs = [...state.pending.values()].flat();
       state.pending.clear();
       const actions = state.acted.splice(0);
-      state.world = Game.step(options.game, state.world, inputs, actions).world;
+      const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
+      state.world = Game.step(options.game, state.world, inputs, actions, stepping).world;
       for (let step = 1; step < steps; step += 1) {
-        state.world = Game.step(options.game, state.world).world;
+        state.world = Game.step(options.game, state.world, [], [], stepping).world;
       }
       const payload = Snapshot.encode(state.world, options.game);
       yield* Effect.forEach(

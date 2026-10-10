@@ -59,12 +59,26 @@ export interface Step {
   readonly events: ReadonlyArray<Event.Tagged>;
 }
 
+export interface StepOptions {
+  /** Freezes every value of the world the step leaves, so a system or rule that changes one in place throws at once. For development: it walks the whole world. */
+  readonly freeze?: boolean;
+}
+
 export const step = (
   game: Game,
   world: World.World,
   inputs: ReadonlyArray<Input.Input> = [],
   actions: ReadonlyArray<Event.Tagged> = [],
+  options: StepOptions = {},
 ): Step => {
+  // The world a step is given is frozen too, so even what it was spawned with fails at once when changed in place.
+  const freezing = options.freeze === true ? game.components : [];
+  for (const component of freezing) {
+    const store = world.stores.get(component.name);
+    if (store !== undefined) {
+      component.freeze(store);
+    }
+  }
   const draft = World.draft(world);
   draft.tick += 1;
   // Input only reaches an entity spawned to accept it; anything else a client sends is ignored, not added.
@@ -120,7 +134,10 @@ export const step = (
   }
   settle();
 
-  return { world: World.finish(draft), events: line };
+  return {
+    world: World.finish(draft, freezing),
+    events: line,
+  };
 };
 
 /** The schema of a whole world of `game`: what saves, recordings, and the debugger carry it in. */
