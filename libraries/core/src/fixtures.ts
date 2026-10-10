@@ -21,6 +21,12 @@ export const Health = Component.make('Health', Schema.Struct({ current: Schema.I
   network: 'server',
 });
 
+export const Controls = Component.make(
+  'Controls',
+  Schema.Struct({ move: Schema.Finite, fire: Schema.Boolean }),
+  { owner: 'input', network: 'predicted' },
+);
+
 export const Bitten = Event.make('Bitten', { entity: Schema.Int, damage: Schema.Int });
 
 export const Died = Event.make('Died', { entity: Schema.Int });

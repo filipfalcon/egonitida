@@ -4,8 +4,10 @@ import type { Schema } from 'effect';
  * A kind of data an entity can hold, described by a Schema. A component is the unit of ownership: all of it is changed by one owner and travels the network one way. When part of something needs another owner, it is another component.
  */
 
-/** Who may change a component: the rules, through events, or the systems, every step. */
-export type Owner = 'rules' | 'simulation';
+/**
+ * Who may change a component: the rules, through events; the systems, every step; or the players, whose input the engine writes at the start of a step and nothing else may.
+ */
+export type Owner = 'rules' | 'simulation' | 'input';
 
 /**
  * How a component travels: decided by the server and sent to every client, guessed by a client and confirmed by the server, or kept on the client alone.

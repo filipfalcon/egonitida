@@ -1,7 +1,8 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
-import { Bitten, Died, Health, Position, Velocity } from '#src/fixtures.ts';
+import { Bitten, Controls, Died, Health, Position, Velocity } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
+import * as Input from '#src/Input.ts';
 import * as Rule from '#src/Rule.ts';
 import * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
@@ -158,6 +159,65 @@ describe('determinism', () => {
   });
 });
 
+describe('input', () => {
+  /** Moves every controlled entity by its stick, at 10 a second. */
+  const steer = System.make({
+    name: 'steer',
+    reads: [Controls],
+    writes: [Position],
+    emits: [],
+    run: (context) => {
+      for (const [entity, position, controls] of context.query(Position, Controls)) {
+        context.set(entity, Position, {
+          x: position.x + controls.move * 10 * context.time.stepSeconds,
+        });
+      }
+    },
+  });
+  const steered = Game.make({ stepRate: 10, systems: [steer], rules: [] });
+  const [start, player] = World.spawn(World.empty({ seed: 1 }), [
+    Position.of({ x: 0 }),
+    Controls.of({ move: 0, fire: false }),
+  ]);
+  const push = (move: number) => [Input.of(player, Controls, { move, fire: false })];
+
+  it('reaches the systems in the step it is given to', () => {
+    const after = Game.step(steered, start, push(1)).world;
+
+    expect(World.get(after, player, Position)).toEqual(Option.some({ x: 1 }));
+  });
+
+  it('stays as it was in a step given no new input, the way a held stick does', () => {
+    const once = Game.step(steered, start, push(1)).world;
+    const twice = Game.step(steered, once).world;
+
+    expect(World.get(twice, player, Position)).toEqual(Option.some({ x: 2 }));
+  });
+
+  it('only reaches an entity spawned to accept it', () => {
+    const [world, bystander] = World.spawn(start, [Position.of({ x: 5 })]);
+    const after = Game.step(steered, world, [
+      Input.of(bystander, Controls, { move: 1, fire: false }),
+    ]).world;
+
+    expect(World.get(after, bystander, Controls)).toEqual(Option.none());
+    expect(World.get(after, bystander, Position)).toEqual(Option.some({ x: 5 }));
+  });
+
+  it('replays to the same world from the same start and the same inputs', () => {
+    const recording = [push(1), [], push(-0.5), push(0.25), [], []];
+    const play = () =>
+      recording.reduce<World.World>(
+        (world, inputs) => Game.step(steered, world, inputs).world,
+        start,
+      );
+
+    expect(play()).toEqual(play());
+    // A held stick keeps moving: 1 + 1 - 0.5 + 0.25 + 0.25 + 0.25.
+    expect(World.get(play(), player, Position)).toEqual(Option.some({ x: 2.25 }));
+  });
+});
+
 // What the type checker refuses: each line below must stay a compile error, or `vp check` fails on the unused directive.
 export const refused = () => {
   System.make({
@@ -201,6 +261,18 @@ export const refused = () => {
       context.emit({ _tag: 'Died', entity: 0 });
     },
   });
+
+  System.make({
+    name: 'writesTheInput',
+    reads: [],
+    // @ts-expect-error Controls belong to the input; only the engine writes them, from what players send.
+    writes: [Controls],
+    emits: [],
+    run: () => {},
+  });
+
+  // @ts-expect-error Position is not input; no player can send it.
+  Input.of(0, Position, { x: 1 });
 
   Rule.on(Bitten, {
     // @ts-expect-error Position belongs to the simulation; a rule cannot write it.

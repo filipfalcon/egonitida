@@ -1,5 +1,7 @@
+import { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
+import type * as Input from '#src/Input.ts';
 import * as Random from '#src/Random.ts';
 import type * as Rule from '#src/Rule.ts';
 import type * as System from '#src/System.ts';
@@ -8,7 +10,7 @@ import * as World from '#src/World.ts';
 /**
  * A game: its fixed step rate, the systems that run every step in order, and the rules that handle what they emit.
  *
- * One step: the tick advances; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
+ * One step: the tick advances; the step's input is written to the entities it is aimed at; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
  */
 
 export interface Game {
@@ -25,9 +27,19 @@ export interface Step {
   readonly events: ReadonlyArray<Event.Tagged>;
 }
 
-export const step = (game: Game, world: World.World): Step => {
+export const step = (
+  game: Game,
+  world: World.World,
+  inputs: ReadonlyArray<Input.Input> = [],
+): Step => {
   const draft = World.draft(world);
   draft.tick += 1;
+  // Input only reaches an entity spawned to accept it; anything else a client sends is ignored, not added.
+  for (const input of inputs) {
+    if (Option.isSome(World.get(draft, input.entity, input.component))) {
+      World.write(draft, input.entity, input.component, input.value);
+    }
+  }
   const line: Array<Event.Tagged> = [];
 
   // Systems and rules share one context at run time; their types are what keep each to what it declared.
