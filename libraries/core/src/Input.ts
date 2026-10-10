@@ -5,8 +5,7 @@ import type { Entity } from '#src/World.ts';
  * What a player sent for a step, aimed at the entity it controls. Only the engine writes input, at the start of the step it belongs to, so a recording of a game is its first world and the input of every step after it.
  */
 
-// oxlint-disable-next-line typescript/no-explicit-any
-export type InputComponent = Component.Component<string, any, 'input'>;
+export type InputComponent = Component.Component<string, unknown, 'input'>;
 
 export interface Input {
   readonly entity: Entity;

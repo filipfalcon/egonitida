@@ -25,15 +25,15 @@ export interface Component<Name extends string, Value, O extends Owner> {
   readonly schema: Schema.Top;
   readonly owner: O;
   readonly network: NetworkRole;
-  /** The component holding `value`, to spawn an entity with. */
-  readonly of: (value: Value) => Instance;
+  /**
+   * The component holding `value`, to spawn an entity with. A method rather than a function property: TypeScript checks a method's parameters both ways, so a component of a particular value still fits where any component is accepted.
+   */
+  of(value: Value): Instance;
   /** Carries the value's type; never set. */
   readonly '~value'?: Value;
 }
 
-// `any` here is deliberate: a component of any value must fit where any component is accepted.
-// oxlint-disable-next-line typescript/no-explicit-any
-export type Any = Component<string, any, Owner>;
+export type Any = Component<string, unknown, Owner>;
 
 export type ValueOf<C> = C extends Component<string, infer Value, Owner> ? Value : never;
 

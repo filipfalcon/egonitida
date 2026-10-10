@@ -39,16 +39,15 @@ export interface Context<
   readonly emit: (event: Event.ValueOf<Emits>) => void;
 }
 
-// oxlint-disable-next-line typescript/no-explicit-any
-export type SimulationComponent = Component.Component<string, any, 'simulation'>;
+export type SimulationComponent = Component.Component<string, unknown, 'simulation'>;
 
 export interface System {
   readonly name: string;
   readonly reads: ReadonlyArray<Component.Any>;
   readonly writes: ReadonlyArray<SimulationComponent>;
   readonly emits: ReadonlyArray<Event.Any>;
-  // oxlint-disable-next-line typescript/no-explicit-any
-  readonly run: (context: Context<any, any, any>) => void;
+  // A context that allows everything fits wherever a system declared less, so any system's `run` fits here.
+  readonly run: (context: Context<Component.Any, Component.Any, Event.Any>) => void;
 }
 
 export const make = <
@@ -61,4 +60,4 @@ export const make = <
   readonly writes: Writes;
   readonly emits: Emits;
   readonly run: (context: Context<Reads[number], Writes[number], Emits[number]>) => void;
-}): System => spec as System;
+}): System => spec;

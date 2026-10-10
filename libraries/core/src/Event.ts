@@ -12,15 +12,14 @@ export interface Event<Tag extends string, Value> {
   readonly '~value'?: Value;
 }
 
-// oxlint-disable-next-line typescript/no-explicit-any
-export type Any = Event<string, any>;
-
-export type ValueOf<E> = E extends Event<string, infer Value> ? Value : never;
-
 /** What every event value has in common: the tag of the event it belongs to. */
 export interface Tagged {
   readonly _tag: string;
 }
+
+export type Any = Event<string, Tagged>;
+
+export type ValueOf<E> = E extends Event<string, infer Value> ? Value : never;
 
 export const make = <const Tag extends string, const Fields extends Schema.Struct.Fields>(
   tag: Tag,

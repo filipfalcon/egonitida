@@ -26,15 +26,16 @@ export interface Context<Writes extends Component.Any, Emits extends Event.Any> 
   readonly emit: (event: Event.ValueOf<Emits>) => void;
 }
 
-// oxlint-disable-next-line typescript/no-explicit-any
-export type RulesComponent = Component.Component<string, any, 'rules'>;
+export type RulesComponent = Component.Component<string, unknown, 'rules'>;
 
 export interface Rule {
   readonly tag: string;
   readonly writes: ReadonlyArray<RulesComponent>;
   readonly emits: ReadonlyArray<Event.Any>;
-  // oxlint-disable-next-line typescript/no-explicit-any
-  readonly run: (context: Context<any, any>, event: any) => void;
+  /**
+   * A method, so a rule written for its own event fits here: the engine calls a rule only with events of its tag, which the type of `event` cannot say on its own.
+   */
+  run(context: Context<Component.Any, Event.Any>, event: Event.Tagged): void;
 }
 
 export const on = <
@@ -51,4 +52,4 @@ export const on = <
       event: Event.ValueOf<E>,
     ) => void;
   },
-): Rule => ({ tag: event.tag, ...spec }) as Rule;
+): Rule => ({ tag: event.tag, ...spec });
