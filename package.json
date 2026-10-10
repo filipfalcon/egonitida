@@ -10,21 +10,30 @@
   "type": "module",
   "scripts": {
     "prepare": "effect-tsgo patch --oxlint",
+    "dev": "alchemy dev",
     "check": "vp check",
     "check:fix": "vp check --fix",
     "test": "vp test"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",
+    "@effect/platform-node": "4.0.0",
     "@effect/tsgo": "0.51.1",
-    "@effect/vitest": "4.0.2",
-    "effect": "4.0.2",
+    "@effect/vitest": "4.0.0",
+    "@types/node": "26.0.1",
+    "alchemy": "2.0.0-beta.81",
+    "effect": "4.0.0",
     "typescript": "7.0.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
     "vite-plus": "1.1.0",
     "vitest": "5.0.3"
   },
   "overrides": {
+    "@effect/platform-bun": "4.0.0",
+    "@effect/platform-node-shared": "4.0.0",
+    "@effect/sql-d1": "4.0.0",
+    "@effect/sql-sqlite-do": "4.0.0",
+    "@effect/vitest": "4.0.0",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
     "vitest": "5.0.3"
   },

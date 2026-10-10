@@ -10,3 +10,6 @@ dist
 
 # Agents
 .claude/worktrees
+
+# Alchemy
+.alchemy

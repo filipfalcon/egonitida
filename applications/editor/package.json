@@ -1,0 +1,28 @@
+{
+  "name": "@lightocean/editor",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0",
+    "@lightocean/engine": "*",
+    "@lightocean/reflection": "*",
+    "effect": "4.0.0",
+    "foldkit": "0.167.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@foldkit/devtools": "0.167.0",
+    "@foldkit/ui": "0.167.0",
+    "@foldkit/vite-plugin": "0.27.0",
+    "@types/three": "0.186.0"
+  }
+}

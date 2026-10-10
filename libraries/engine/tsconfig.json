@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The engine draws into the browser; its viewport speaks the DOM's types.
+    "lib": ["esnext", "dom", "dom.iterable"]
+  }
+}

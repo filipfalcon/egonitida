@@ -1,0 +1,15 @@
+{
+  "name": "@lightocean/reflection",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "effect": "4.0.0"
+  }
+}

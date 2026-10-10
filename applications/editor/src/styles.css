@@ -1,0 +1,236 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0b1020;
+  color: #e8ecf4;
+  font:
+    14px/1.4 system-ui,
+    sans-serif;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: 240px 1fr 300px;
+  height: 100%;
+}
+
+.panel {
+  overflow-y: auto;
+  padding: 12px;
+  background: #121933;
+}
+
+.panel h2 {
+  margin: 16px 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a94b3;
+}
+
+.toolbar {
+  display: flex;
+  gap: 6px;
+}
+
+button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: #253055;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #2f3c6b;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.entities {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entity {
+  width: 100%;
+  margin-bottom: 2px;
+  background: transparent;
+  text-align: left;
+}
+
+.entity.selected {
+  background: #4f8cff;
+  color: white;
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+}
+
+.viewport {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.error {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  margin: 0;
+  color: #ff6b6b;
+}
+
+.hint {
+  color: #8a94b3;
+}
+
+.property {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.property label {
+  color: #8a94b3;
+}
+
+.property input,
+.property select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid #2f3c6b;
+  border-radius: 4px;
+  background: #0b1020;
+  color: inherit;
+  font: inherit;
+}
+
+.property input[type='color'] {
+  height: 32px;
+  padding: 2px;
+}
+
+.vector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.badge {
+  float: right;
+  opacity: 0.7;
+}
+
+.play-controls {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.play-controls .play {
+  background: #2f9e44;
+}
+
+.play-controls .stop {
+  background: #e03131;
+}
+
+.editor.playing .stage {
+  box-shadow: inset 0 0 0 3px #2f9e44;
+}
+
+.panel h3 {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  color: #8a94b3;
+}
+
+.behaviour {
+  margin-top: 8px;
+  border-top: 1px solid #253055;
+}
+
+.rule {
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  background: #0b1020;
+}
+
+.rule .remove {
+  background: transparent;
+  color: #ff6b6b;
+  padding: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.status.live {
+  color: #51cf66;
+}
+
+.status.paused {
+  color: #fcc419;
+}
+
+.timeline,
+.changes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  width: 100%;
+  margin-bottom: 2px;
+  background: transparent;
+  text-align: left;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.entry.shown {
+  background: #253055;
+}
+
+.entry .index {
+  color: #8a94b3;
+}
+
+.changes li {
+  padding: 2px 0;
+  color: #fcc419;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.model {
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: #0b1020;
+  font-size: 11px;
+}
