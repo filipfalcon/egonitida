@@ -250,9 +250,23 @@ The packages are to become `core` (adding commands, plugins, and `Story`), `clie
 
 ## Next
 
-- Closing the seams where Border's server still takes its client's word, while what they rest on is still the game's: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`). Each goes once what it rests on moves into the simulation.
-- Pillars and crates as shapes with height, so rounds stop at them as they do in the game.
-- Prediction, once a client plays a server across a network.
+The API above is built in this order, each step test-first, and each breaking one with Border's migration:
+
+1. The game declares its components, actions, and events, and the schema of its whole world follows from it; hosts and clients take them from the game. Tagged unions and `Option` travel in components and interpolate.
+2. `Story`, and the engine's own tests moved onto it.
+3. Every message handled, the map of changes, frozen worlds in development, and the fixtures named as facts.
+4. Plugins: owning their components, requiring one another, and the `/internal` entry.
+5. Commands.
+6. Local systems.
+7. Views (`View.each`, `View.on`, `View.during`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.
+8. The lint plugin, and `AGENTS.md`.
+9. Devtools: recording, the log, rewinding, the determinism check, and reloading with the world kept, with the horde example.
+10. The agent bridge.
+11. Applications as worlds: the playground and the editor, the accessible mirror, and `engine` gone, with their examples.
+12. Skills, and the example that saves a score.
+13. Hosting in a Durable Object and prediction, as experimental, with the example over the network.
+
+Border's seams close along the way, once what each rests on is in the simulation: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`); and pillars and crates become shapes with height, so rounds stop at them.
 
 Later, for the editor:
 
@@ -260,7 +274,6 @@ Later, for the editor:
 - Camera controls in the viewport, and a gizmo for moving objects.
 - More triggers (on start, on a timer) and program state beyond the objects, such as variables and conditions.
 - Saving the document to disk, through a local CLI.
-- Moving the viewport's Foldkit wiring, now repeated in the editor and the playground, into a library.
 - Browser tests for what Node cannot cover.
 
 Optimization waits until the raw engine works: an interpolation buffer, binary encoding, and sending each client only what is near it are tuned against something real, not ahead of it.
