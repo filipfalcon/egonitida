@@ -1,5 +1,5 @@
 import { assert, describe, expect, it } from '@effect/vitest';
-import { Effect, Option } from 'effect';
+import { Effect, Exit, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Scene from '#src/Scene.ts';
 import * as SceneHost from '#src/SceneHost.ts';
@@ -292,6 +292,64 @@ describe('SceneHost', () => {
         expect(childNamed(host.root, 'group')).toBe(group);
         expect(childNamed(group, 'a')).toBe(a);
         expect(group.children.map((child) => child.name)).toEqual(['a', 'b']);
+      }),
+    );
+
+    it.effect('refuses siblings sharing a key, leaving what was drawn as it was', () =>
+      Effect.gen(function* () {
+        const host = yield* SceneHost.make<never>();
+        yield* host.render(Scene.scene({ camera, nodes: [cube({ key: 'a' })] }));
+        const a = childNamed(host.root, 'a');
+
+        const exit = yield* Effect.exit(
+          host.render(
+            Scene.scene({
+              camera,
+              nodes: [cube({ key: 'b' }), cube({ key: 'b' })],
+            }),
+          ),
+        );
+
+        expect(Exit.hasDies(exit)).toBe(true);
+        expect(host.root.children).toEqual([a]);
+      }),
+    );
+
+    it.effect('refuses siblings sharing a key inside a group', () =>
+      Effect.gen(function* () {
+        const host = yield* SceneHost.make<never>();
+
+        const exit = yield* Effect.exit(
+          host.render(
+            Scene.scene({
+              camera,
+              nodes: [
+                Scene.group({ key: 'group', children: [cube({ key: 'a' }), cube({ key: 'a' })] }),
+              ],
+            }),
+          ),
+        );
+
+        expect(Exit.hasDies(exit)).toBe(true);
+        expect(host.root.children).toEqual([]);
+      }),
+    );
+
+    it.effect('lets nodes under different parents share a key', () =>
+      Effect.gen(function* () {
+        const host = yield* SceneHost.make<never>();
+
+        yield* host.render(
+          Scene.scene({
+            camera,
+            nodes: [
+              cube({ key: 'a' }),
+              Scene.group({ key: 'group', children: [cube({ key: 'a' })] }),
+            ],
+          }),
+        );
+
+        expect(childNamed(childNamed(host.root, 'group'), 'a')).toBeInstanceOf(Three.Mesh);
       }),
     );
   });

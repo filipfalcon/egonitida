@@ -8,6 +8,7 @@ import type * as Scene from '#src/Scene.ts';
 export interface SceneHost<Message> {
   readonly root: Three.Scene;
   readonly camera: Three.PerspectiveCamera;
+  /** Draws `scene`; one where siblings share a key is a defect, and changes nothing that was drawn. */
   readonly render: (scene: Scene.Scene<Message>) => Effect.Effect<void>;
   /** The Message of the nearest object under the pointer, if that object handles clicks. */
   readonly pick: (pointer: Pointer) => Effect.Effect<Option.Option<Message>>;
@@ -300,6 +301,29 @@ const dispose = <Message>(live: Live<Message>, entry: Entry<Message>): void => {
 };
 
 /**
+ * The path to the first key two siblings share, if any. Siblings are told apart by key alone, so a scene where two share one is refused before anything is drawn: one of the two objects would otherwise be made and never released.
+ */
+const sharedKey = <Message>(
+  nodes: ReadonlyArray<Scene.Node<Message>>,
+  path: ReadonlyArray<string> = [],
+): Option.Option<ReadonlyArray<string>> => {
+  const seen = new Set<string>();
+  for (const node of nodes) {
+    if (seen.has(node.key)) {
+      return Option.some([...path, node.key]);
+    }
+    seen.add(node.key);
+    if (node._tag === 'Group') {
+      const within = sharedKey(node.children, [...path, node.key]);
+      if (Option.isSome(within)) {
+        return within;
+      }
+    }
+  }
+  return Option.none();
+};
+
+/**
  * Makes the children of `parent` match `nodes`: entries whose key survives with the same kind are updated in place, the rest are created or disposed, and the children end up in declared order.
  */
 const reconcile = <Message>(
@@ -357,10 +381,19 @@ export const make = <Message>(): Effect.Effect<SceneHost<Message>, never, Scope.
       };
 
       const render = (scene: Scene.Scene<Message>) =>
-        Effect.sync(() => {
-          applyCamera(camera, scene.camera);
-          state.entries = reconcile(live, root, state.entries, scene.nodes);
-          state.onClickNothing = scene.onClickNothing;
+        Option.match(sharedKey(scene.nodes), {
+          onSome: (path) =>
+            Effect.die(
+              new Error(
+                `Siblings share the key "${path.join(' / ')}". Give each sibling its own key, from an id in the Model rather than its position.`,
+              ),
+            ),
+          onNone: () =>
+            Effect.sync(() => {
+              applyCamera(camera, scene.camera);
+              state.entries = reconcile(live, root, state.entries, scene.nodes);
+              state.onClickNothing = scene.onClickNothing;
+            }),
         });
 
       const raycaster = new Three.Raycaster();
