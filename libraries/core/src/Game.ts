@@ -142,3 +142,79 @@ export const step = (
 
 /** The schema of a whole world of `game`: what saves, recordings, and the debugger carry it in. */
 export const schema = (game: Game) => World.schema(game.components);
+
+// CHANGES
+
+/** A part of a game that changes its state: a system, by its name, or a rule, by the event or action it handles. */
+export type Part =
+  | { readonly _tag: 'System'; readonly name: string }
+  | { readonly _tag: 'Rule'; readonly on: string };
+
+export interface ComponentChanges {
+  /** The systems that read it. Rules may read anything, so they are never listed. */
+  readonly readBy: ReadonlyArray<Part>;
+  readonly writtenBy: ReadonlyArray<Part>;
+  readonly spawnedBy: ReadonlyArray<Part>;
+}
+
+export interface EventChanges {
+  readonly emittedBy: ReadonlyArray<Part>;
+  readonly handledBy: ReadonlyArray<Part>;
+}
+
+/** How a game's state changes, read off what its systems and rules declare: by component, by event or action, and what may despawn. */
+export interface Changes {
+  readonly components: ReadonlyMap<string, ComponentChanges>;
+  readonly events: ReadonlyMap<string, EventChanges>;
+  readonly despawnedBy: ReadonlyArray<Part>;
+}
+
+/**
+ * The map of how `game` changes its state. A game of systems has no single `update` to read; its declarations are what is read instead, by people, the debugger, and agents alike. Parts are listed in the order the game runs them.
+ */
+export const changes = (game: Game): Changes => {
+  const parts = [
+    ...game.systems.map((system) => ({
+      part: { _tag: 'System', name: system.name } satisfies Part,
+      reads: system.reads,
+      writes: system.writes,
+      spawns: system.spawns,
+      emits: system.emits,
+      handles: [],
+      despawns: system.despawns,
+    })),
+    ...game.rules.map((rule) => ({
+      part: { _tag: 'Rule', on: rule.on.tag } satisfies Part,
+      reads: [],
+      writes: rule.writes,
+      spawns: rule.spawns,
+      emits: rule.emits,
+      handles: [rule.on],
+      despawns: rule.despawns,
+    })),
+  ];
+  const by = (has: (part: (typeof parts)[number]) => boolean) =>
+    parts.filter(has).map(({ part }) => part);
+  return {
+    components: new Map(
+      game.components.map((component) => [
+        component.name,
+        {
+          readBy: by(({ reads }) => reads.some(({ name }) => name === component.name)),
+          writtenBy: by(({ writes }) => writes.some(({ name }) => name === component.name)),
+          spawnedBy: by(({ spawns }) => spawns.some(({ name }) => name === component.name)),
+        },
+      ]),
+    ),
+    events: new Map(
+      [...game.actions, ...game.events].map((event) => [
+        event.tag,
+        {
+          emittedBy: by(({ emits }) => emits.some(({ tag }) => tag === event.tag)),
+          handledBy: by(({ handles }) => handles.some(({ tag }) => tag === event.tag)),
+        },
+      ]),
+    ),
+    despawnedBy: by(({ despawns }) => despawns),
+  };
+};

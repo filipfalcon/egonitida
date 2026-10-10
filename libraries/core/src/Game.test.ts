@@ -424,6 +424,57 @@ describe('spawning and despawning within a step', () => {
   });
 });
 
+describe('Game.changes', () => {
+  const changes = Game.changes(game);
+
+  it('tells which systems read, write, and spawn each component, and which rules write it', () => {
+    expect(changes.components.get('Position')).toEqual({
+      readBy: [{ _tag: 'System', name: 'bite' }],
+      writtenBy: [{ _tag: 'System', name: 'move' }],
+      spawnedBy: [],
+    });
+    expect(changes.components.get('Health')?.writtenBy).toEqual([{ _tag: 'Rule', on: 'Bitten' }]);
+  });
+
+  it('tells what emits each event and what handles it, actions included', () => {
+    expect(changes.events.get('Bitten')).toEqual({
+      emittedBy: [{ _tag: 'System', name: 'bite' }],
+      handledBy: [{ _tag: 'Rule', on: 'Bitten' }],
+    });
+    expect(changes.events.get('Died')).toEqual({
+      emittedBy: [{ _tag: 'Rule', on: 'Bitten' }],
+      handledBy: [],
+    });
+    expect(changes.events.get('Restart')).toEqual({ emittedBy: [], handledBy: [] });
+  });
+
+  it('lists every component and event the game declares, even those nothing touches', () => {
+    expect([...changes.components.keys()]).toEqual(game.components.map(({ name }) => name));
+    expect([...changes.events.keys()]).toEqual(['Restart', 'Bitten', 'Died']);
+    expect(changes.components.get('Wall')).toEqual({ readBy: [], writtenBy: [], spawnedBy: [] });
+  });
+
+  it('tells what may despawn', () => {
+    const removing = Game.make({
+      stepRate: 10,
+      ...declared,
+      systems: [
+        System.make({
+          name: 'sweep',
+          reads: [],
+          writes: [],
+          emits: [],
+          despawns: true,
+          run: () => {},
+        }),
+      ],
+      rules: [],
+    });
+
+    expect(Game.changes(removing).despawnedBy).toEqual([{ _tag: 'System', name: 'sweep' }]);
+  });
+});
+
 describe('in development', () => {
   /** Moves every runner by changing its position in place, as no system may. */
   const shove = System.make({
