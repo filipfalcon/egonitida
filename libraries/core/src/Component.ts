@@ -27,12 +27,6 @@ export interface Store {
   readonly without: (entity: Entity) => Store;
 }
 
-/** A copy of a store being changed in place, for the length of one step. */
-export interface Draft<Value> {
-  readonly store: Store;
-  set(entity: Entity, value: Value): void;
-}
-
 /** A component holding a value, ready to be given to an entity. */
 export interface Instance {
   readonly component: Any;
@@ -55,8 +49,12 @@ export interface Component<Name extends string, Value, O extends Owner> {
   of(value: Value): Instance;
   /** The value `entity` holds in `store`. */
   read(store: Store | undefined, entity: Entity): Option.Option<Value>;
-  /** A copy of `store` to change in place; only values of this component go in. */
-  draft(store: Store | undefined): Draft<Value>;
+  /** A copy of `store` that `set` may change in place, until it is sealed. */
+  draft(store: Store | undefined): Store;
+  /** Puts `value` in a draft this component made; a store that is not an unsealed draft is never changed. */
+  set(store: Store | undefined, entity: Entity, value: Value): void;
+  /** Ends a draft: from now on, nothing changes it. */
+  seal(store: Store): void;
   /** A store's values, encoded by this component's schema. */
   encode(store: Store | undefined): ReadonlyArray<readonly [Entity, unknown]>;
   /** A store of encoded values; `None` if any of them does not decode. */
@@ -77,6 +75,8 @@ export const make = <const Name extends string, Value, const O extends Owner>(
 ): Component<Name, Value, O> => {
   // Every store this component made, and the values in it. Nothing else can reach this map.
   const values = new WeakMap<Store, Map<Entity, Value>>();
+  // The drafts still open to change; every other store is fixed for good.
+  const open = new WeakSet<Store>();
 
   const storeOf = (map: Map<Entity, Value>): Store => {
     const store: Store = {
@@ -109,13 +109,17 @@ export const make = <const Name extends string, Value, const O extends Owner>(
     read: (store, entity) =>
       Option.fromNullishOr(store === undefined ? undefined : values.get(store)?.get(entity)),
     draft: (store) => {
-      const map = copyOf(store);
-      return {
-        store: storeOf(map),
-        set: (entity, value) => {
-          map.set(entity, value);
-        },
-      };
+      const draft = storeOf(copyOf(store));
+      open.add(draft);
+      return draft;
+    },
+    set: (store, entity, value) => {
+      if (store !== undefined && open.has(store)) {
+        values.get(store)?.set(entity, value);
+      }
+    },
+    seal: (store) => {
+      open.delete(store);
     },
     encode: (store) =>
       [...copyOf(store)].map(

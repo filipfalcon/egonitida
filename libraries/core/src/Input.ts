@@ -1,5 +1,5 @@
 import type * as Component from '#src/Component.ts';
-import type { Entity } from '#src/World.ts';
+import * as World from '#src/World.ts';
 
 /**
  * What a player sent for a step, aimed at the entity it controls. Only the engine writes input, at the start of the step it belongs to, so a recording of a game is its first world and the input of every step after it.
@@ -7,14 +7,20 @@ import type { Entity } from '#src/World.ts';
 
 export type InputComponent = Component.Component<string, unknown, 'input'>;
 
+/** An input aimed at an entity. Its value stays inside `writeInto`, made where the value's type is known, so no input can carry a value its component does not hold. */
 export interface Input {
-  readonly entity: Entity;
+  readonly entity: World.Entity;
   readonly component: InputComponent;
-  readonly value: unknown;
+  /** Writes the value into a world being stepped. */
+  readonly writeInto: (draft: World.Draft) => void;
 }
 
-export const of = <C extends InputComponent>(
-  entity: Entity,
-  component: C,
-  value: Component.ValueOf<C>,
-): Input => ({ entity, component, value });
+export const of = <Value>(
+  entity: World.Entity,
+  component: Component.Component<string, Value, 'input'>,
+  value: Value,
+): Input => ({
+  entity,
+  component,
+  writeInto: (draft) => World.write(draft, entity, component, value),
+});

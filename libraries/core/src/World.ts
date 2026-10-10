@@ -205,8 +205,8 @@ export interface Draft {
   nextEntity: Entity;
   random: number;
   readonly stores: Map<string, Component.Store>;
-  /** The stores this step has copied so far, by the component that owns each. */
-  readonly copies: Map<Component.Any, Component.Draft<unknown>>;
+  /** The stores this step has copied so far, by the component that owns each; only that component can change one. */
+  readonly copies: Map<Component.Any, Component.Store>;
 }
 
 export const draft = (world: World): Draft => ({
@@ -223,17 +223,24 @@ export const write = <Value>(
   component: Of<Value>,
   value: Value,
 ): void => {
-  const copy = draft.copies.get(component) ?? component.draft(draft.stores.get(component.name));
-  if (!draft.copies.has(component)) {
+  const existing = draft.copies.get(component);
+  const copy = existing ?? component.draft(draft.stores.get(component.name));
+  if (existing === undefined) {
     draft.copies.set(component, copy);
-    draft.stores.set(component.name, copy.store);
+    draft.stores.set(component.name, copy);
   }
-  copy.set(entity, value);
+  component.set(copy, entity, value);
 };
 
-export const finish = (draft: Draft): World => ({
-  tick: draft.tick,
-  nextEntity: draft.nextEntity,
-  random: draft.random,
-  stores: new Map(draft.stores),
-});
+/** The finished world; every store the step copied is sealed, so nothing can change it afterwards. */
+export const finish = (draft: Draft): World => {
+  for (const [component, copy] of draft.copies) {
+    component.seal(copy);
+  }
+  return {
+    tick: draft.tick,
+    nextEntity: draft.nextEntity,
+    random: draft.random,
+    stores: new Map(draft.stores),
+  };
+};

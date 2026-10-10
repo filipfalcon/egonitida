@@ -52,4 +52,12 @@ describe('World', () => {
 
     expect(World.get(before, entity, Position)).toEqual(Option.some({ x: 1 }));
   });
+
+  it('cannot be changed through a store of a finished world', () => {
+    const [world, entity] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 1 })]);
+
+    Position.set(world.stores.get(Position.name), entity, { x: 99 });
+
+    expect(World.get(world, entity, Position)).toEqual(Option.some({ x: 1 }));
+  });
 });

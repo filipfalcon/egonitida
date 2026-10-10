@@ -37,7 +37,7 @@ export const step = (
   // Input only reaches an entity spawned to accept it; anything else a client sends is ignored, not added.
   for (const input of inputs) {
     if (Option.isSome(World.get(draft, input.entity, input.component))) {
-      World.write(draft, input.entity, input.component, input.value);
+      input.writeInto(draft);
     }
   }
   const line: Array<Event.Tagged> = [];
