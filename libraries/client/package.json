@@ -1,0 +1,17 @@
+{
+  "name": "@lightocean/client",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0",
+    "@lightocean/core": "*",
+    "effect": "4.0.0"
+  }
+}

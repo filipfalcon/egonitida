@@ -10,4 +10,5 @@ export * as Rule from '#src/Rule.ts';
 export * as Snapshot from '#src/Snapshot.ts';
 export * as System from '#src/System.ts';
 export * as Transport from '#src/Transport.ts';
+export * as WorkerTransport from '#src/WorkerTransport.ts';
 export * as World from '#src/World.ts';

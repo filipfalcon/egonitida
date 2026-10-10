@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The client runs in the browser: it starts workers and, later, draws.
+    "lib": ["esnext", "dom", "dom.iterable"]
+  }
+}
