@@ -8,8 +8,10 @@ export default defineConfig({
   lint: {
     extends: [recommended],
     rules: {
-      // No type assertions: a value's type is proven where it is made, never claimed where it is used.
+      // Types are proven where values are made, never claimed where they are used: no `any`, no type assertions, and no non-null assertions, which are the same claim spelled `!`.
+      'typescript/no-explicit-any': 'error',
       'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+      'typescript/no-non-null-assertion': 'error',
     },
     options: {
       typeAware: true,
