@@ -21,6 +21,10 @@ export interface Client {
   readonly world: Effect.Effect<World.World>;
   /** Sends the player's input, as values of input components. */
   readonly send: (values: ReadonlyArray<Component.Instance>) => Effect.Effect<void>;
+  /** Asks the host to hold time; a host that does not allow it goes on. */
+  readonly hold: Effect.Effect<void>;
+  /** Lets go of time this client held. */
+  readonly release: Effect.Effect<void>;
 }
 
 type SentInput = Protocol.Inputs['inputs'][number];
@@ -76,5 +80,14 @@ export const connect = (
         });
       });
 
-    return { entity, world: Effect.sync(() => state.world), send };
+    const ask = (message: Protocol.ClientReliable) =>
+      connection.send({ channel: 'reliable', payload: Protocol.encodeClientReliable(message) });
+
+    return {
+      entity,
+      world: Effect.sync(() => state.world),
+      send,
+      hold: ask({ _tag: 'Hold' }),
+      release: ask({ _tag: 'Release' }),
+    };
   });

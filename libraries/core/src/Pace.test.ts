@@ -60,4 +60,13 @@ describe('pace', () => {
 
     expect(Pace.nextAt(pace, 5)).toBe(2034);
   });
+
+  it('owes nothing for time spent held, once it is let go', () => {
+    // Three steps by 1100, then held for four seconds.
+    const resumed = Pace.resume(started, 4000);
+
+    expect(Pace.due(resumed, 3, 5100).steps).toBe(0);
+    expect(Pace.due(resumed, 3, 5134).steps).toBe(1);
+    expect(Pace.nextAt(resumed, 3)).toBe(5134);
+  });
 });

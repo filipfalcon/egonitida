@@ -50,3 +50,11 @@ export const due = (
  */
 export const nextAt = (pace: Pace, done: number): number =>
   pace.origin + Math.ceil(((done + pace.skipped + 1) * 1000) / pace.stepRate);
+
+/**
+ * The pace after time was held for `heldMillis`: everything moves on by that long, so the steps that time would have owed are never owed at all, and the world goes on as if no time had passed.
+ */
+export const resume = (pace: Pace, heldMillis: number): Pace => ({
+  ...pace,
+  origin: pace.origin + heldMillis,
+});

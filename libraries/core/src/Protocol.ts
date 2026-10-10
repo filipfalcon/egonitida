@@ -6,6 +6,7 @@ import { Option, Schema } from 'effect';
  * - Reliable, host to client: `Welcome`, naming the entity the client controls.
  * - Unreliable, host to client: snapshots, as `Snapshot` encodes them.
  * - Unreliable, client to host: `Inputs`, the client's latest inputs repeated, so one lost message loses none of them.
+ * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again.
  */
 
 /** How many of its latest inputs a client repeats in each message. */
@@ -25,7 +26,19 @@ const Inputs = Schema.Struct({
 });
 export type Inputs = typeof Inputs.Type;
 
+const ClientReliable = Schema.Union([
+  Schema.TaggedStruct('Hold', {}),
+  Schema.TaggedStruct('Release', {}),
+]);
+export type ClientReliable = typeof ClientReliable.Type;
+
 const WelcomeJson = Schema.fromJsonString(Welcome);
+const ClientReliableJson = Schema.fromJsonString(ClientReliable);
+
+export const encodeClientReliable = (message: ClientReliable): string =>
+  Schema.encodeSync(ClientReliableJson)(message);
+export const decodeClientReliable = (text: string): Option.Option<ClientReliable> =>
+  Schema.decodeOption(ClientReliableJson)(text);
 const InputsJson = Schema.fromJsonString(Inputs);
 
 export const encodeWelcome = (welcome: Welcome): string => Schema.encodeSync(WelcomeJson)(welcome);

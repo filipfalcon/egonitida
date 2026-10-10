@@ -32,6 +32,8 @@ const hostOptions = {
   join: (world: World.World) =>
     World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
   leave: World.despawn,
+  // A local server for one player lets that player hold time.
+  mayHold: true,
 };
 
 describe('a local server', () => {

@@ -26,14 +26,17 @@ const steer = System.make({
 
 const components = [Position, Controls];
 
-const startHost = Host.make({
+const hostOptions = (mayHold: boolean): Host.Options => ({
   game: Game.make({ stepRate: 30, systems: [steer], rules: [] }),
   world: World.empty({ seed: 1 }),
   components,
   join: (world) =>
     World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0, fire: false })]),
   leave: World.despawn,
+  mayHold,
 });
+
+const startHost = Host.make(hostOptions(true));
 
 /** A host and one client joined to it, over a connection in memory. */
 const session = Effect.gen(function* () {
@@ -147,4 +150,56 @@ describe('a session between a host and its clients', () => {
       expect(positionIn(world, client.entity)).toEqual(Option.some(-30));
     }),
   );
+
+  describe('holding time', () => {
+    it.effect('holds time while a client asks, where the host allows it', () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* session;
+
+        yield* client.hold;
+        yield* advance(1000);
+        const held = yield* host.world;
+        expect(held.tick).toBe(0);
+
+        yield* client.release;
+        yield* advance(100);
+        // Three steps, not the thirty the held second would have owed.
+        const resumed = yield* host.world;
+        expect(resumed.tick).toBe(3);
+      }),
+    );
+
+    it.effect('refuses to hold time where the host does not allow it', () =>
+      Effect.gen(function* () {
+        const host = yield* Host.make(hostOptions(false));
+        const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+        yield* host.connect(hostEnd);
+        const client = yield* Client.connect(clientEnd, { components });
+
+        yield* client.hold;
+        yield* advance(1000);
+
+        const world = yield* host.world;
+        expect(world.tick).toBe(30);
+      }),
+    );
+
+    it.effect('lets time go when the client holding it leaves', () =>
+      Effect.gen(function* () {
+        const host = yield* startHost;
+        const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+        const scope = yield* Scope.make();
+        yield* host.connect(hostEnd).pipe(Scope.provide(scope));
+        const client = yield* Client.connect(clientEnd, { components });
+
+        yield* client.hold;
+        yield* advance(500);
+        yield* Scope.close(scope, Exit.void);
+        yield* advance(100);
+
+        const world = yield* host.world;
+        expect(world.tick).toBe(3);
+      }),
+    );
+  });
 });

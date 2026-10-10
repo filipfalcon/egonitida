@@ -1,4 +1,4 @@
-import { Clock, Effect, Option, Schema, type Scope, Stream } from 'effect';
+import { Clock, Effect, Latch, Option, Schema, type Scope, Stream } from 'effect';
 import type * as Component from '#src/Component.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
@@ -23,6 +23,10 @@ export interface Options {
   readonly leave: (world: World.World, entity: World.Entity) => World.World;
   /** The most steps taken at once to catch up after a stall. */
   readonly maxCatchUpSteps?: number;
+  /**
+   * Whether a client may hold time: a local server for one player grants it, a world shared with others refuses. Holding time is the host's to allow, never the world's.
+   */
+  readonly mayHold: boolean;
 }
 
 export interface Host {
@@ -52,10 +56,31 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
         maxSteps: options.maxCatchUpSteps ?? 5,
       }),
       done: 0,
+      /** The clients holding time now; time stands while there is any. */
+      holders: new Set<World.Entity>(),
+      heldSince: Option.none<number>(),
     };
+    // Open while time runs; the loop waits here while it is held.
+    const running = yield* Latch.make(true);
+
+    /** Stops or lets go of time to match whether anyone holds it; on letting go, the time held is never owed. */
+    const settleHold = Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      if (state.holders.size > 0 && Option.isNone(state.heldSince)) {
+        state.heldSince = Option.some(now);
+        yield* Latch.close(running);
+      } else if (state.holders.size === 0 && Option.isSome(state.heldSince)) {
+        state.pace = Pace.resume(state.pace, now - state.heldSince.value);
+        state.heldSince = Option.none();
+        yield* Latch.open(running);
+      }
+    });
 
     // Every step real time owes: the waiting input goes into the first, the rest only move time on.
     const takeDueSteps = Effect.gen(function* () {
+      if (Option.isSome(state.heldSince)) {
+        return;
+      }
       const { steps, pace } = Pace.due(state.pace, state.done, yield* Clock.currentTimeMillis);
       state.pace = pace;
       if (steps === 0) {
@@ -77,6 +102,7 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
     });
 
     yield* Effect.gen(function* () {
+      yield* Latch.await(running);
       const wait = Pace.nextAt(state.pace, state.done) - (yield* Clock.currentTimeMillis);
       if (wait > 0) {
         yield* Effect.sleep(`${wait} millis`);
@@ -84,11 +110,26 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       yield* takeDueSteps;
     }).pipe(Effect.forever, Effect.forkScoped);
 
+    /** Holds or lets go of time for a client, if the host allows holding at all. */
+    const receiveReliable = (entity: World.Entity, frame: Transport.Frame) =>
+      Option.match(Protocol.decodeClientReliable(frame.payload), {
+        onNone: () => Effect.void,
+        onSome: (message) =>
+          Effect.suspend(() => {
+            if (!options.mayHold) {
+              return Effect.void;
+            }
+            if (message._tag === 'Hold') {
+              state.holders.add(entity);
+            } else {
+              state.holders.delete(entity);
+            }
+            return settleHold;
+          }),
+      });
+
     /** Keeps a client's newest input, decoded by the schemas of input components only. */
     const receive = (entity: World.Entity, frame: Transport.Frame) => {
-      if (frame.channel !== 'unreliable') {
-        return;
-      }
       Option.map(Protocol.decodeInputs(frame.payload), ({ inputs }) => {
         const last = state.lastSeq.get(entity) ?? 0;
         const newest = inputs.reduce<Protocol.Inputs['inputs'][number] | undefined>(
@@ -121,11 +162,14 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
         state.world = world;
         state.connections.add(connection);
         yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
+          Effect.suspend(() => {
             state.connections.delete(connection);
             state.pending.delete(entity);
             state.lastSeq.delete(entity);
+            state.holders.delete(entity);
             state.world = options.leave(state.world, entity);
+            // A client that leaves lets go of time it was holding.
+            return settleHold;
           }),
         );
         yield* connection.send({
@@ -133,7 +177,11 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
           payload: Protocol.encodeWelcome({ entity, stepRate: options.game.stepRate }),
         });
         yield* connection.frames.pipe(
-          Stream.runForEach((frame) => Effect.sync(() => receive(entity, frame))),
+          Stream.runForEach((frame) =>
+            frame.channel === 'reliable'
+              ? receiveReliable(entity, frame)
+              : Effect.sync(() => receive(entity, frame)),
+          ),
           Effect.forkScoped,
         );
         return entity;
