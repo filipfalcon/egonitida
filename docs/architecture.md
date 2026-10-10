@@ -153,9 +153,8 @@ The first iteration, built before the principles above: the Elm Architecture ove
 
 ## Next
 
-- The core: state with declared ownership, systems with declared access, and the step schedule, built test-first for correctness before speed.
-- A local server in a Web Worker, over the same transport, so singleplayer has the client–server shape.
-- Linking LightOcean into Border, and running a first piece of the game on it.
+- Moving the rest of Border onto the engine: the undead first, which also lets the server see a wave go down; then dying, shooting, and smoking.
+- Prediction, once a client plays a server across a network.
 
 Later, for the editor:
 
@@ -177,8 +176,9 @@ The Durable Object spike (`applications/net-spike`) answered whether Durable Obj
 - The irregularity is on the way to the client: 5 % of snapshots arrived about 100 ms after the one before, in bunches. Over TCP one lost packet holds back everything behind it, which is the case for WebTransport's datagrams; Wi-Fi power saving can bunch packets too. It was one run from one network.
 - A snapshot of two players is about 210 bytes of JSON, so a datagram fits about ten players before encoding has to become binary.
 
+Border, played on a local server in a Web Worker at 60 Hz and drawn a step behind it without prediction, had no latency its player could feel. Prediction waits for play across a network, where the round trip adds to that step.
+
 ## Open questions
 
 - Whether Foldkit can apply game rules synchronously inside a step, or whether rules need their own loop with Foldkit kept for UI.
 - How simulation components are stored so per-step work does not copy immutable data, while their schemas still describe them.
-- The step rate Border's server runs at.
