@@ -1,6 +1,6 @@
 import { BrowserWorker, BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Game, System, WorkerTransport, World } from '@lightocean/core';
+import { Client, Component, Game, Plugin, System, WorkerTransport, World } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 
 const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }), {
@@ -26,11 +26,17 @@ const steer = System.make({
 
 const game = Game.make({
   stepRate: 30,
-  components: [Position, Controls],
-  actions: [],
-  events: [],
-  systems: [steer],
-  rules: [],
+  plugins: [
+    Plugin.make({
+      name: 'Test',
+      requires: [],
+      components: [Position, Controls],
+      actions: [],
+      events: [],
+      systems: [steer],
+      rules: [],
+    }),
+  ],
 });
 
 const hostOptions = {

@@ -1,12 +1,13 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
-import { Controls, declared, Health, Position, Splat, Velocity, Wall } from '#src/fixtures.ts';
+import { Controls, fixture, Health, Position, Splat, Velocity, Wall } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
+import * as Plugin from '#src/Plugin.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import * as World from '#src/World.ts';
 
-const game = Game.make({ stepRate: 10, ...declared, systems: [], rules: [] });
+const game = Game.only(fixture, { systems: [], rules: [] });
 
 const [withRunner] = World.spawn(World.empty({ seed: 9 }), [
   Position.of({ x: 3 }),
@@ -62,11 +63,17 @@ describe('Snapshot', () => {
   it('rejects a snapshot from a game made of other components', () => {
     const smaller = Game.make({
       stepRate: 10,
-      components: [Position],
-      actions: [],
-      events: [],
-      systems: [],
-      rules: [],
+      plugins: [
+        Plugin.make({
+          name: 'Test',
+          requires: [],
+          components: [Position],
+          actions: [],
+          events: [],
+          systems: [],
+          rules: [],
+        }),
+      ],
     });
 
     expect(

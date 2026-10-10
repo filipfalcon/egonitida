@@ -6,7 +6,8 @@ import {
   Bitten,
   Controls,
   Died,
-  declared,
+  Fixture,
+  fixture,
   Health,
   Position,
   ChoseRestart,
@@ -16,6 +17,7 @@ import {
 } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
+import * as Plugin from '#src/Plugin.ts';
 import * as Rule from '#src/Rule.ts';
 import * as Story from '#src/Story.ts';
 import * as Snapshot from '#src/Snapshot.ts';
@@ -66,7 +68,7 @@ const takeBite = Rule.on(Bitten, {
   },
 });
 
-const game = Game.make({ stepRate: 10, ...declared, systems: [move, bite], rules: [takeBite] });
+const game = Game.only(fixture, { systems: [move, bite], rules: [takeBite] });
 
 /** A runner at `x`, running at 10 a second, with `health`. */
 const runner = (x: number, health: number) => [
@@ -111,12 +113,7 @@ describe('Game.step', () => {
         }
       },
     });
-    const twice = Game.make({
-      stepRate: 10,
-      ...declared,
-      systems: [doubleBite],
-      rules: [takeBite],
-    });
+    const twice = Game.only(fixture, { systems: [doubleBite], rules: [takeBite] });
 
     // The second bite sees the health the first one left, so the runner dies exactly once.
     Story.story(
@@ -161,7 +158,7 @@ describe('determinism', () => {
       }
     },
   });
-  const noisy = Game.make({ stepRate: 10, ...declared, systems: [scatter], rules: [] });
+  const noisy = Game.only(fixture, { systems: [scatter], rules: [] });
   const run = (seed: number) => {
     const [start] = World.spawn(World.empty({ seed }), [Position.of({ x: 0 })]);
     return Array.from({ length: 20 }).reduce<World.World>(
@@ -202,7 +199,7 @@ describe('input', () => {
       }
     },
   });
-  const steered = Game.make({ stepRate: 10, ...declared, systems: [steer], rules: [] });
+  const steered = Game.only(fixture, { systems: [steer], rules: [] });
   const [start, recorded] = World.spawn(World.empty({ seed: 1 }), [
     Position.of({ x: 0 }),
     Controls.of({ move: 0, fire: false }),
@@ -277,7 +274,7 @@ describe('actions', () => {
       }
     },
   });
-  const restarting = Game.make({ stepRate: 10, ...declared, systems: [look], rules: [restart] });
+  const restarting = Game.only(fixture, { systems: [look], rules: [restart] });
   const [world, player] = spawnRunner(0, 10);
   /** An action as the host hands it on: sent by a client, then accepted as from its player. */
   const restarted = (x: number) =>
@@ -338,7 +335,7 @@ describe('spawning and despawning within a step', () => {
   const [world, keeper] = World.spawn(World.empty({ seed: 3 }), [Health.of({ current: 1 })]);
 
   it('gives the spawned entity the next id, and later systems see it in the same step', () => {
-    const lifecycle = Game.make({ stepRate: 10, ...declared, systems: [raise, move], rules: [] });
+    const lifecycle = Game.only(fixture, { systems: [raise, move], rules: [] });
     const after = Game.step(lifecycle, world).world;
     const runner = keeper + 1;
 
@@ -348,12 +345,7 @@ describe('spawning and despawning within a step', () => {
   });
 
   it('takes a despawned entity out of every store at once, so later systems no longer see it', () => {
-    const lifecycle = Game.make({
-      stepRate: 10,
-      ...declared,
-      systems: [raise, move, move, remove, move],
-      rules: [],
-    });
+    const lifecycle = Game.only(fixture, { systems: [raise, move, move, remove, move], rules: [] });
     const after = Game.step(lifecycle, world).world;
     const runner = keeper + 1;
 
@@ -375,12 +367,7 @@ describe('spawning and despawning within a step', () => {
         context.spawn([Health.of({ current: 100 })]);
       },
     });
-    const replacing = Game.make({
-      stepRate: 10,
-      ...declared,
-      systems: [bite],
-      rules: [takeBite, replace],
-    });
+    const replacing = Game.only(fixture, { systems: [bite], rules: [takeBite, replace] });
     Story.story(
       replacing,
       Story.spawn('runner', runner(10, 30)),
@@ -395,12 +382,7 @@ describe('spawning and despawning within a step', () => {
   });
 
   it('leaves the world it was given untouched', () => {
-    const lifecycle = Game.make({
-      stepRate: 10,
-      ...declared,
-      systems: [raise, move, move, remove],
-      rules: [],
-    });
+    const lifecycle = Game.only(fixture, { systems: [raise, move, move, remove], rules: [] });
     Game.step(lifecycle, world);
 
     expect(world.nextEntity).toBe(keeper + 1);
@@ -408,12 +390,7 @@ describe('spawning and despawning within a step', () => {
   });
 
   it('replays to the same world, ids and all', () => {
-    const lifecycle = Game.make({
-      stepRate: 10,
-      ...declared,
-      systems: [raise, move, remove],
-      rules: [],
-    });
+    const lifecycle = Game.only(fixture, { systems: [raise, move, remove], rules: [] });
     const play = () =>
       Array.from({ length: 12 }).reduce<World.World>(
         (current) => Game.step(lifecycle, current).world,
@@ -456,9 +433,7 @@ describe('Game.changes', () => {
   });
 
   it('tells what may despawn', () => {
-    const removing = Game.make({
-      stepRate: 10,
-      ...declared,
+    const removing = Game.only(fixture, {
       systems: [
         System.make({
           name: 'sweep',
@@ -489,7 +464,7 @@ describe('in development', () => {
       }
     },
   });
-  const shoving = Game.make({ stepRate: 10, ...declared, systems: [shove], rules: [] });
+  const shoving = Game.only(fixture, { systems: [shove], rules: [] });
 
   it('freezes what a step leaves, so changing it in place fails at once', () => {
     const [world] = spawnRunner(0, 100);
@@ -607,7 +582,139 @@ export const refused = () => {
   });
 };
 
+describe('Plugin.make', () => {
+  const Owned = Component.make('Owned', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'simulation',
+    network: 'server',
+  });
+  /** Noticed, like Owned, belongs to a plugin of its own, which not every plugin requires. */
+  const Noticed = Event.make('Noticed', {});
+  it('lets a plugin read, spawn, emit, and handle what the plugins it requires declare', () => {
+    const watching = System.make({
+      name: 'watching',
+      reads: [Position],
+      writes: [Owned],
+      emits: [Bitten],
+      spawns: [Health, Owned],
+      run: () => {},
+    });
+    const answering = Rule.on(Died, { writes: [], emits: [Noticed], run: () => {} });
+    const Watcher = Plugin.make({
+      name: 'Watcher',
+      requires: [Fixture],
+      components: [Owned],
+      actions: [],
+      events: [Noticed],
+      systems: [watching],
+      rules: [answering],
+    });
+
+    expect(Game.make({ stepRate: 10, plugins: [Fixture, Watcher] }).systems).toEqual([watching]);
+  });
+
+  it('refuses a plugin writing what another plugin owns, even one it requires', () => {
+    const meddling = System.make({
+      name: 'meddling',
+      reads: [],
+      writes: [Position],
+      emits: [],
+      run: () => {},
+    });
+    const overruling = Rule.on(Died, { writes: [Health], emits: [], run: () => {} });
+
+    Plugin.make({
+      name: 'Meddler',
+      requires: [Fixture],
+      components: [],
+      actions: [],
+      events: [],
+      // @ts-expect-error Position is the fixture's to write.
+      systems: [meddling],
+      rules: [],
+    });
+    Plugin.make({
+      name: 'Overruler',
+      requires: [Fixture],
+      components: [],
+      actions: [],
+      events: [],
+      systems: [],
+      // @ts-expect-error Health is the fixture's to write.
+      rules: [overruling],
+    });
+  });
+
+  it('refuses a plugin reading, emitting, or handling what a plugin it does not require declares', () => {
+    const reading = System.make({
+      name: 'reading',
+      reads: [Owned],
+      writes: [],
+      emits: [],
+      run: () => {},
+    });
+    const emitting = System.make({
+      name: 'emitting',
+      reads: [],
+      writes: [],
+      emits: [Noticed],
+      run: () => {},
+    });
+    const handling = Rule.on(Noticed, { writes: [], emits: [], run: () => {} });
+    const parts = {
+      name: 'Stranger',
+      requires: [Fixture],
+      components: [],
+      actions: [],
+      events: [],
+    } as const;
+
+    // @ts-expect-error Owned is not the stranger's, nor of a plugin it requires.
+    Plugin.make({ ...parts, systems: [reading], rules: [] });
+    // @ts-expect-error Noticed is not the stranger's, nor of a plugin it requires.
+    Plugin.make({ ...parts, systems: [emitting], rules: [] });
+    // @ts-expect-error Noticed is not the stranger's, nor of a plugin it requires.
+    Plugin.make({ ...parts, systems: [], rules: [handling] });
+  });
+});
+
 describe('Game.make', () => {
+  const Owned = Component.make('Owned', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'simulation',
+    network: 'server',
+  });
+  const Needy = Plugin.make({
+    name: 'Needy',
+    requires: [Fixture],
+    components: [Owned],
+    actions: [],
+    events: [],
+    systems: [],
+    rules: [],
+  });
+
+  it('is made of its plugins, their parts in the order the plugins come', () => {
+    const made = Game.make({ stepRate: 10, plugins: [Fixture, Needy] });
+
+    expect(made.components.map(({ name }) => name)).toEqual([
+      'Position',
+      'Velocity',
+      'Health',
+      'Controls',
+      'Splat',
+      'Wall',
+      'Owned',
+    ]);
+    expect(made.actions.map(({ tag }) => tag)).toEqual(['ChoseRestart']);
+    expect(made.events.map(({ tag }) => tag)).toEqual(['Bitten', 'Died']);
+  });
+
+  it('refuses a game missing a plugin one of its plugins requires', () => {
+    // @ts-expect-error Needy requires the fixture's plugin.
+    Game.make({ stepRate: 10, plugins: [Needy] });
+  });
+});
+
+describe('Game.only', () => {
   const Unknown = Event.make('Unknown', {});
   const Elsewhere = Component.make('Elsewhere', Schema.Struct({ x: Schema.Finite }), {
     owner: 'simulation',
@@ -616,19 +723,6 @@ describe('Game.make', () => {
   const Kept = Component.make('Kept', Schema.Struct({ x: Schema.Finite }), {
     owner: 'rules',
     network: 'server',
-  });
-
-  it('keeps what the game is made of', () => {
-    expect(game.components.map(({ name }) => name)).toEqual([
-      'Position',
-      'Velocity',
-      'Health',
-      'Controls',
-      'Splat',
-      'Wall',
-    ]);
-    expect(game.actions.map(({ tag }) => tag)).toEqual(['ChoseRestart']);
-    expect(game.events.map(({ tag }) => tag)).toEqual(['Bitten', 'Died']);
   });
 
   it('refuses a system reading, writing, emitting, or spawning what the game does not declare', () => {
@@ -663,13 +757,13 @@ describe('Game.make', () => {
     });
 
     // @ts-expect-error `Elsewhere` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [reading], rules: [] });
+    Game.only(fixture, { systems: [reading], rules: [] });
     // @ts-expect-error `Elsewhere` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [writing], rules: [] });
+    Game.only(fixture, { systems: [writing], rules: [] });
     // @ts-expect-error `Unknown` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [emitting], rules: [] });
+    Game.only(fixture, { systems: [emitting], rules: [] });
     // @ts-expect-error `Elsewhere` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [spawning], rules: [] });
+    Game.only(fixture, { systems: [spawning], rules: [] });
   });
 
   it('refuses a rule handling, writing, emitting, or spawning what the game does not declare', () => {
@@ -679,21 +773,19 @@ describe('Game.make', () => {
     const spawning = Rule.on(Died, { writes: [], emits: [], spawns: [Elsewhere], run: () => {} });
 
     // @ts-expect-error `Unknown` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [], rules: [handling] });
+    Game.only(fixture, { systems: [], rules: [handling] });
     // @ts-expect-error `Kept` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [], rules: [writing] });
+    Game.only(fixture, { systems: [], rules: [writing] });
     // @ts-expect-error `Unknown` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [], rules: [emitting] });
+    Game.only(fixture, { systems: [], rules: [emitting] });
     // @ts-expect-error `Elsewhere` is not part of the game.
-    Game.make({ stepRate: 10, ...declared, systems: [], rules: [spawning] });
+    Game.only(fixture, { systems: [], rules: [spawning] });
   });
 
   it('lets a rule handle an action the game declares', () => {
     const restart = Rule.on(ChoseRestart, { writes: [], emits: [], run: () => {} });
 
-    expect(Game.make({ stepRate: 10, ...declared, systems: [], rules: [restart] }).rules).toEqual([
-      restart,
-    ]);
+    expect(Game.only(fixture, { systems: [], rules: [restart] }).rules).toEqual([restart]);
   });
 });
 
@@ -750,11 +842,17 @@ describe('a component holding a state', () => {
   );
   const moody = Game.make({
     stepRate: 10,
-    components: [Mood],
-    actions: [],
-    events: [],
-    systems: [],
-    rules: [],
+    plugins: [
+      Plugin.make({
+        name: 'Test',
+        requires: [],
+        components: [Mood],
+        actions: [],
+        events: [],
+        systems: [],
+        rules: [],
+      }),
+    ],
   });
   const Json = Schema.fromJsonString(Game.schema(moody));
   const [calm, first] = World.spawn(World.empty({ seed: 1 }), [

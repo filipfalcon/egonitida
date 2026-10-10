@@ -6,6 +6,7 @@ export * as Game from '#src/Game.ts';
 export * as Host from '#src/Host.ts';
 export * as Input from '#src/Input.ts';
 export * as Pace from '#src/Pace.ts';
+export * as Plugin from '#src/Plugin.ts';
 export * as Protocol from '#src/Protocol.ts';
 export * as Rule from '#src/Rule.ts';
 export * as Snapshot from '#src/Snapshot.ts';

@@ -5,6 +5,7 @@ import * as Action from '#src/Action.ts';
 import * as Client from '#src/Client.ts';
 import { Controls, Health, Position } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
+import * as Plugin from '#src/Plugin.ts';
 import * as Host from '#src/Host.ts';
 import * as Rule from '#src/Rule.ts';
 import * as System from '#src/System.ts';
@@ -38,11 +39,17 @@ const heal = Rule.on(AskedToHeal, {
 
 const game = Game.make({
   stepRate: 30,
-  components: [Position, Controls, Health],
-  actions: [AskedToHeal],
-  events: [],
-  systems: [steer],
-  rules: [heal],
+  plugins: [
+    Plugin.make({
+      name: 'Test',
+      requires: [],
+      components: [Position, Controls, Health],
+      actions: [AskedToHeal],
+      events: [],
+      systems: [steer],
+      rules: [heal],
+    }),
+  ],
 });
 
 const hostOptions = (mayHold: boolean): Host.Options => ({

@@ -2,6 +2,8 @@ import { Schema } from 'effect';
 import * as Action from '#src/Action.ts';
 import * as Component from '#src/Component.ts';
 import * as Event from '#src/Event.ts';
+import * as Game from '#src/Game.ts';
+import * as Plugin from '#src/Plugin.ts';
 
 /**
  * A small game the core's tests share: things that move, and a player whose health the rules keep.
@@ -47,9 +49,16 @@ export const Wall = Component.make('Wall', Schema.Struct({ x: Schema.Finite }), 
   network: 'private',
 });
 
-/** Everything the small game is made of, for a test to make a game from. */
-export const declared = {
+/** Everything the small game is made of, as one plugin with no parts of its own. */
+export const Fixture = Plugin.make({
+  name: 'Fixture',
+  requires: [],
   components: [Position, Velocity, Health, Controls, Splat, Wall],
   actions: [ChoseRestart],
   events: [Bitten, Died],
-};
+  systems: [],
+  rules: [],
+});
+
+/** The small game at ten steps a second, for a test to give the parts it is about with `Game.only`. */
+export const fixture = Game.make({ stepRate: 10, plugins: [Fixture] });

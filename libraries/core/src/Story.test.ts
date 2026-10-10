@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
-import { Bitten, Controls, declared, Died, Health, Position, ChoseRestart } from '#src/fixtures.ts';
+import { Bitten, Controls, fixture, Died, Health, Position, ChoseRestart } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Rule from '#src/Rule.ts';
 import * as Story from '#src/Story.ts';
@@ -56,12 +56,7 @@ const restart = Rule.on(ChoseRestart, {
   },
 });
 
-const game = Game.make({
-  stepRate: 10,
-  ...declared,
-  systems: [steer, bite],
-  rules: [takeBite, restart],
-});
+const game = Game.only(fixture, { systems: [steer, bite], rules: [takeBite, restart] });
 
 const her = [
   Position.of({ x: 0 }),

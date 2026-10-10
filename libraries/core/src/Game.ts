@@ -3,55 +3,90 @@ import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type * as Input from '#src/Input.ts';
+import type * as Plugin from '#src/Plugin.ts';
 import * as Random from '#src/Random.ts';
 import type * as Rule from '#src/Rule.ts';
 import type * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
 
 /**
- * A game: its fixed step rate, everything its state is made of (its components, the actions its players take, and the events its steps emit), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
+ * A game: its fixed step rate and the plugins it is made of, and from them everything its state is made of (its components, the actions its players take, and the events its steps emit), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
  *
  * One step: the tick advances; the step's input is written to the entities it is aimed at; the players' actions are handled by the rules, in the order they came; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
  */
 
-export interface Game {
+export interface Game<
+  Components extends Component.Any = Component.Any,
+  Actions extends Action.Any = Action.Any,
+  Events extends Event.Any = Event.Any,
+> {
   readonly stepRate: number;
-  readonly components: ReadonlyArray<Component.Any>;
-  readonly actions: ReadonlyArray<Action.Any>;
-  readonly events: ReadonlyArray<Event.Any>;
+  readonly plugins: ReadonlyArray<Plugin.Any>;
+  readonly components: ReadonlyArray<Components>;
+  readonly actions: ReadonlyArray<Actions>;
+  readonly events: ReadonlyArray<Events>;
   readonly systems: ReadonlyArray<System.System>;
   readonly rules: ReadonlyArray<Rule.Rule>;
 }
 
+/** The names of the plugins `Plugins` require and do not hold. */
+type Missing<Plugins extends ReadonlyArray<Plugin.Any>> = Exclude<
+  Plugins[number]['requires'][number]['name'],
+  Plugins[number]['name']
+>;
+
+/** Nothing, when every plugin a game requires is there; otherwise a field naming those missing, which no game has, so it does not compile. */
+type Requirements<Plugins extends ReadonlyArray<Plugin.Any>> = [Missing<Plugins>] extends [never]
+  ? unknown
+  : { readonly missing: Missing<Plugins> };
+
 /**
- * A game made of what it declares: a system or a rule that reads, writes, emits, spawns, or handles anything the game does not declare does not compile. Rules may read any component, so what they read is not checked; one the game does not hold is simply never there.
+ * A game made of `plugins`: their components, actions, and events, their systems in the order the plugins come and then the order each lists them, and their rules likewise. A plugin required by one of them and missing from the list does not compile.
  */
-export const make = <
-  const Components extends ReadonlyArray<Component.Any>,
-  const Actions extends ReadonlyArray<Action.Any>,
-  const Events extends ReadonlyArray<Event.Any>,
->(game: {
-  readonly stepRate: number;
-  readonly components: Components;
-  readonly actions: Actions;
-  readonly events: Events;
-  readonly systems: ReadonlyArray<
-    System.System<
-      Components[number],
-      Extract<Components[number], System.SimulationComponent>,
-      Events[number],
-      Components[number]
-    >
-  >;
-  readonly rules: ReadonlyArray<
-    Rule.Rule<
-      Actions[number] | Events[number],
-      Extract<Components[number], Rule.RulesComponent>,
-      Events[number],
-      Components[number]
-    >
-  >;
-}): Game => game;
+export const make = <const Plugins extends ReadonlyArray<Plugin.Any>>(
+  game: { readonly stepRate: number; readonly plugins: Plugins } & Requirements<Plugins>,
+): Game<
+  Plugins[number]['components'][number],
+  Plugins[number]['actions'][number],
+  Plugins[number]['events'][number]
+> => ({
+  stepRate: game.stepRate,
+  plugins: game.plugins,
+  components: game.plugins.flatMap((plugin) => plugin.components),
+  actions: game.plugins.flatMap((plugin) => plugin.actions),
+  events: game.plugins.flatMap((plugin) => plugin.events),
+  systems: game.plugins.flatMap((plugin) => plugin.systems),
+  rules: game.plugins.flatMap((plugin) => plugin.rules),
+});
+
+/**
+ * `game` with only `systems` and `rules`, for a test told about some of what a game does, such as the undead standing still while a blast is tested. They may be any parts over what the game declares; which plugin owns what is not checked here, nor that every action is answered.
+ */
+export const only = <
+  Components extends Component.Any,
+  Actions extends Action.Any,
+  Events extends Event.Any,
+>(
+  game: Game<Components, Actions, Events>,
+  parts: {
+    readonly systems: ReadonlyArray<
+      System.System<
+        NoInfer<Components>,
+        NoInfer<Extract<Components, System.SimulationComponent>>,
+        NoInfer<Events>,
+        NoInfer<Components>
+      >
+    >;
+    readonly rules: ReadonlyArray<
+      Rule.Rule<
+        NoInfer<Actions> | NoInfer<Events>,
+        NoInfer<Extract<Components, Rule.RulesComponent>>,
+        NoInfer<Events>,
+        NoInfer<Components>
+      >
+    >;
+  },
+): Game<Components, Actions, Events> => ({ ...game, systems: parts.systems, rules: parts.rules });
 
 export interface Step {
   readonly world: World.World;

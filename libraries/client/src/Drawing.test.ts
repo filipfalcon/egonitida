@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Game, Host, System, Transport, World } from '@lightocean/core';
+import { Client, Component, Game, Host, Plugin, System, Transport, World } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Drawing from '#src/Drawing.ts';
@@ -28,11 +28,17 @@ const steer = System.make({
 
 const steered = Game.make({
   stepRate: 60,
-  components: [Position, Controls],
-  actions: [],
-  events: [],
-  systems: [steer],
-  rules: [],
+  plugins: [
+    Plugin.make({
+      name: 'Test',
+      requires: [],
+      components: [Position, Controls],
+      actions: [],
+      events: [],
+      systems: [steer],
+      rules: [],
+    }),
+  ],
 });
 
 const STEP_MILLIS = 1000 / 60;
@@ -110,11 +116,17 @@ const mark = System.make({
 });
 const marking = Game.make({
   stepRate: 60,
-  components: [Marker, Flag],
-  actions: [],
-  events: [],
-  systems: [mark],
-  rules: [],
+  plugins: [
+    Plugin.make({
+      name: 'Test',
+      requires: [],
+      components: [Marker, Flag],
+      actions: [],
+      events: [],
+      systems: [mark],
+      rules: [],
+    }),
+  ],
 });
 
 const xOf = (view: Option.Option<Drawing.View>, entity: World.Entity) =>
