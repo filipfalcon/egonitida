@@ -1,5 +1,5 @@
 import { Inspector } from '@lightocean/reflection';
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 
 /**
  * The project document the editor works on. Each field's `inspector` annotation is what puts it in the Details panel; `id` has none, so it is never edited there.
@@ -33,7 +33,43 @@ export const Action = Schema.Union([SetColor, MoveBy, SetSpin]);
 export type Action = typeof Action.Type;
 export type ActionKind = Action['_tag'];
 
-export const actionSchemas = { SetColor, MoveBy, SetSpin } as const;
+export const actionKinds = ['SetColor', 'MoveBy', 'SetSpin'] as const satisfies ReadonlyArray<
+  Action['_tag']
+>;
+
+/** The settings of an action, from its own variant's schema. */
+export const actionProperties = (kind: ActionKind): ReadonlyArray<Inspector.Property> => {
+  switch (kind) {
+    case 'SetColor':
+      return Inspector.properties(SetColor);
+    case 'MoveBy':
+      return Inspector.properties(MoveBy);
+    case 'SetSpin':
+      return Inspector.properties(SetSpin);
+  }
+};
+
+const editVariant = <Fields extends Inspector.DecodableFields>(
+  schema: Schema.Struct<Fields>,
+  action: Schema.Struct<Fields>['Type'],
+  key: string,
+  value: unknown,
+): Schema.Struct<Fields>['Type'] =>
+  Inspector.properties(schema).some((property) => property.key === key)
+    ? Option.getOrElse(Inspector.edit(schema, action, key, value), () => action)
+    : action;
+
+/** `action` with one of its settings changed, if its own variant's schema exposes the setting and accepts the value. */
+export const editAction = (action: Action, key: string, value: unknown): Action => {
+  switch (action._tag) {
+    case 'SetColor':
+      return editVariant(SetColor, action, key, value);
+    case 'MoveBy':
+      return editVariant(MoveBy, action, key, value);
+    case 'SetSpin':
+      return editVariant(SetSpin, action, key, value);
+  }
+};
 
 export const actionTitles: Record<ActionKind, string> = {
   SetColor: 'Set colour',

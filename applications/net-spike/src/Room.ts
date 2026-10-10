@@ -12,6 +12,18 @@ import * as Transport from '#src/Transport.ts';
  * One world, stepped by one Durable Object at a fixed rate. It ticks only while someone is connected, so an empty room can hibernate and costs nothing.
  */
 
+interface RoomState {
+  world: Simulation.State;
+  pending: Array<Simulation.Input>;
+  loop: ReturnType<typeof setInterval> | undefined;
+  pace: Pace.Pace | undefined;
+  stepsTaken: number;
+  catchUps: number;
+  firingMoments: Array<number>;
+  snapshotBytes: Array<number>;
+  wakes: number;
+}
+
 interface Attachment {
   readonly playerId: string;
 }
@@ -43,15 +55,15 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
       // The timer and the socket handlers run outside any Effect; they reuse the services this instance was built with.
       const run = Effect.runSyncWith(yield* Effect.context<never>());
       const sessions = new Map<string, Cloudflare.WebSocket>();
-      const room = {
+      const room: RoomState = {
         world: Simulation.empty,
-        pending: [] as Array<Simulation.Input>,
-        loop: undefined as ReturnType<typeof setInterval> | undefined,
-        pace: undefined as Pace.Pace | undefined,
+        pending: [],
+        loop: undefined,
+        pace: undefined,
         stepsTaken: 0,
         catchUps: 0,
-        firingMoments: [] as Array<number>,
-        snapshotBytes: [] as Array<number>,
+        firingMoments: [],
+        snapshotBytes: [],
         wakes: 0,
       };
 

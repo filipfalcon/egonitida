@@ -28,13 +28,11 @@ export type Inputs = typeof Inputs.Type;
 const WelcomeJson = Schema.fromJsonString(Welcome);
 const InputsJson = Schema.fromJsonString(Inputs);
 
-export const encodeWelcome = (welcome: Welcome): string =>
-  Schema.encodeSync(WelcomeJson)(welcome) as string;
+export const encodeWelcome = (welcome: Welcome): string => Schema.encodeSync(WelcomeJson)(welcome);
 export const decodeWelcome = (text: string): Option.Option<Welcome> =>
   Schema.decodeOption(WelcomeJson)(text);
 
-export const encodeInputs = (inputs: Inputs): string =>
-  Schema.encodeSync(InputsJson)(inputs) as string;
+export const encodeInputs = (inputs: Inputs): string => Schema.encodeSync(InputsJson)(inputs);
 
 /** The inputs a client sent; `None` for anything else, including more inputs than a client ever repeats. */
 export const decodeInputs = (text: string): Option.Option<Inputs> =>

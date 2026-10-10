@@ -20,10 +20,17 @@ const playClient = (index: number) =>
   Effect.scoped(
     Effect.gen(function* () {
       const { connection, droppedUnreliable } = yield* WebSocketTransport.connect(url);
-      const record = {
+      const record: {
+        playerId: string;
+        snapshotArrivals: Array<number>;
+        roundTrips: Array<number>;
+        firstTick: number;
+        lastTick: number;
+        outOfOrder: number;
+      } = {
         playerId: '',
-        snapshotArrivals: [] as Array<number>,
-        roundTrips: [] as Array<number>,
+        snapshotArrivals: [],
+        roundTrips: [],
         firstTick: 0,
         lastTick: 0,
         outOfOrder: 0,
@@ -60,7 +67,10 @@ const playClient = (index: number) =>
         Effect.forkScoped,
       );
 
-      const inputs = { seq: 0, history: [] as Array<{ seq: number; move: Simulation.Vector2 }> };
+      const inputs: { seq: number; history: Array<{ seq: number; move: Simulation.Vector2 }> } = {
+        seq: 0,
+        history: [],
+      };
       const sendInputs = Effect.suspend(() => {
         inputs.seq += 1;
         const angle = (inputs.seq / INPUT_RATE) * Math.PI + index;

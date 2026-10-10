@@ -161,7 +161,7 @@ export const mesh = <Message>(options: MeshOptions<Message>): Mesh<Message> => (
   key: options.key,
   geometry: options.geometry,
   material: options.material,
-  onClick: 'onClick' in options ? Option.some(options.onClick as Message) : Option.none(),
+  onClick: options.onClick === undefined ? Option.none() : Option.some(options.onClick),
   ...transform(options),
   ...animated(options),
 });
@@ -248,5 +248,5 @@ export const scene = <Message>(options: SceneOptions<Message>): Scene<Message> =
   camera: options.camera,
   nodes: options.nodes,
   onClickNothing:
-    'onClickNothing' in options ? Option.some(options.onClickNothing as Message) : Option.none(),
+    options.onClickNothing === undefined ? Option.none() : Option.some(options.onClickNothing),
 });

@@ -26,5 +26,6 @@ export const make = <const Tag extends string, const Fields extends Schema.Struc
   fields: Fields,
 ) => {
   const schema = Schema.TaggedStruct(tag, fields);
-  return { _tag: 'Event', tag, schema } as Event<Tag, typeof schema.Type>;
+  const event: Event<Tag, typeof schema.Type> = { _tag: 'Event', tag, schema };
+  return event;
 };

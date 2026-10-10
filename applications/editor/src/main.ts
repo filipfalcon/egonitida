@@ -4,14 +4,13 @@ import type { Runtime, Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';
 import { modifyFields } from 'foldkit/struct';
 import {
-  type Action,
   Document,
   Entity,
   type Rule,
   SELF,
   Shape,
-  actionSchemas,
   defaultAction,
+  editAction,
   entityProperties,
   makeEntity,
 } from '#src/document.ts';
@@ -96,15 +95,6 @@ const editEntity = (entity: Entity, key: string, value: unknown): Entity =>
   editableKeys.has(key)
     ? Option.getOrElse(Inspector.edit(Entity, entity, key, value), () => entity)
     : entity;
-
-const editAction = (action: Action, key: string, value: unknown): Action => {
-  // The action's own variant decides which settings exist and what they accept.
-  const schema = actionSchemas[action._tag] as unknown as Schema.Struct<Schema.Struct.Fields>;
-  const isEditable = Inspector.properties(schema).some((property) => property.key === key);
-  return isEditable
-    ? (Option.getOrElse(Inspector.edit(schema, action, key, value), () => action) as Action)
-    : action;
-};
 
 const mapEntity = (model: Model, entityId: string, f: (entity: Entity) => Entity): Model =>
   modifyFields(model, {

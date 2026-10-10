@@ -1,7 +1,9 @@
 import type { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
-import type { Entity } from '#src/World.ts';
+import type * as World from '#src/World.ts';
+
+type Of<Value> = Component.Component<string, Value, Component.Owner>;
 
 /**
  * Work the simulation does every step, such as moving things or noticing a bite. A system declares what it reads, what it writes, and what it emits, and the type checker holds it to that: it can only write components the simulation owns, and only those it declared.
@@ -24,18 +26,13 @@ export interface Context<
   readonly time: Time;
   /** A number in [0, 1) from the world's own generator. Systems take randomness from nowhere else. */
   readonly random: () => number;
-  readonly get: <C extends Reads | Writes>(
-    entity: Entity,
-    component: C,
-  ) => Option.Option<Component.ValueOf<C>>;
-  readonly query: <const Cs extends ReadonlyArray<Reads | Writes>>(
-    ...components: Cs
-  ) => ReadonlyArray<readonly [Entity, ...Component.ValuesOf<Cs>]>;
-  readonly set: <C extends Writes>(
-    entity: Entity,
-    component: C,
-    value: Component.ValueOf<C>,
-  ) => void;
+  /** Only components the system declared; a component's name is what identifies it. */
+  readonly get: <Value, Name extends (Reads | Writes)['name']>(
+    entity: World.Entity,
+    component: Component.Component<Name, Value, Component.Owner>,
+  ) => Option.Option<Value>;
+  readonly query: World.Query<Reads | Writes>;
+  readonly set: <Value>(entity: World.Entity, component: Of<Value> & Writes, value: Value) => void;
   readonly emit: (event: Event.ValueOf<Emits>) => void;
 }
 

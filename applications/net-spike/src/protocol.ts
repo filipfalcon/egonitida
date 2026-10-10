@@ -44,7 +44,7 @@ export type ServerUnreliable = typeof ServerUnreliable.Type;
 const codec = <S extends Schema.Codec<unknown, unknown>>(schema: S) => {
   const json = Schema.fromJsonString(schema);
   return {
-    encode: (message: S['Type']): string => Schema.encodeSync(json)(message) as string,
+    encode: (message: S['Type']): string => Schema.encodeSync(json)(message),
     decode: (text: string): Option.Option<S['Type']> => Schema.decodeOption(json)(text),
   };
 };

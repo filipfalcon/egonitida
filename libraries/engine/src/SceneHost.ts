@@ -21,26 +21,57 @@ export interface Pointer {
   readonly y: number;
 }
 
-/** The live counterpart of a declared node: the object it produced, and for a group, its children by key. */
-interface Entry<Message> {
-  node: Scene.Node<Message>;
-  readonly object: Three.Object3D;
-  children: Entries<Message>;
+type LiveMaterial = Three.MeshStandardNodeMaterial | Three.MeshBasicNodeMaterial;
+type LiveMesh = Three.Mesh<Three.BufferGeometry, LiveMaterial>;
+
+// The live counterpart of each kind of declared node: the node it was last brought in line with, and the Three.js object of exactly the kind that node produces.
+
+interface MeshEntry<Message> {
+  readonly kind: 'Mesh';
+  node: Scene.Mesh<Message>;
+  readonly object: LiveMesh;
   /** How far, in radians, the engine has spun the object on top of its declared rotation. */
   spun: number;
 }
 
-type Entries<Message> = Map<string, Entry<Message>>;
-
-/** What a host tracks across its entries: the ones whose motion `step` advances. */
-interface Live<Message> {
-  readonly animated: Set<Entry<Message>>;
+interface GroupEntry<Message> {
+  readonly kind: 'Group';
+  node: Scene.Group<Message>;
+  readonly object: Three.Group;
+  children: Entries<Message>;
+  spun: number;
 }
 
-type LiveMesh = Three.Mesh<Three.BufferGeometry, Three.Material>;
+interface AmbientLightEntry {
+  readonly kind: 'AmbientLight';
+  node: Scene.AmbientLight;
+  readonly object: Three.AmbientLight;
+}
 
-/** The entry each live object belongs to, so that a raycast hit leads back to its declared node. */
-const owners = new WeakMap<Three.Object3D, Entry<unknown>>();
+interface DirectionalLightEntry {
+  readonly kind: 'DirectionalLight';
+  node: Scene.DirectionalLight;
+  readonly object: Three.DirectionalLight;
+}
+
+type Entry<Message> =
+  | MeshEntry<Message>
+  | GroupEntry<Message>
+  | AmbientLightEntry
+  | DirectionalLightEntry;
+
+/** The entries the engine can move on its own. */
+type AnimatedEntry<Message> = MeshEntry<Message> | GroupEntry<Message>;
+
+type Entries<Message> = Map<string, Entry<Message>>;
+
+/** What a host tracks across its entries. */
+interface Live<Message> {
+  /** The entries whose motion `step` advances. */
+  readonly animated: Set<AnimatedEntry<Message>>;
+  /** The entry each live object belongs to, so a raycast hit leads back to its declared node. */
+  readonly owners: WeakMap<Three.Object3D, Entry<Message>>;
+}
 
 const applyTransform = (object: Three.Object3D, transform: Scene.Transform): void => {
   object.position.set(...transform.position);
@@ -71,8 +102,6 @@ const sameGeometry = (previous: Scene.Geometry, next: Scene.Geometry): boolean =
   }
 };
 
-type LiveMaterial = Three.MeshStandardNodeMaterial | Three.MeshBasicNodeMaterial;
-
 const createMaterial = (material: Scene.Material): LiveMaterial => {
   switch (material._tag) {
     case 'Standard':
@@ -88,122 +117,184 @@ const updateMaterial = (mesh: LiveMesh, previous: Scene.Material, next: Scene.Ma
     mesh.material.dispose();
     mesh.material = createMaterial(next);
   }
-  const material = mesh.material as LiveMaterial;
-  material.color.setHex(next.color);
-  material.wireframe = next.wireframe;
+  mesh.material.color.setHex(next.color);
+  mesh.material.wireframe = next.wireframe;
 };
 
 const spinAxis = new Three.Vector3();
 const spinRotation = new Three.Quaternion();
 
 /** Sets an object's rotation to its declared one, plus however far its spin has carried it. */
-const orient = <Message>(entry: Entry<Message>, node: Scene.Transform & Scene.Animated): void => {
-  entry.object.rotation.set(...node.rotation);
-  if (Option.isSome(node.motion)) {
-    spinAxis.set(...node.motion.value.axis).normalize();
+const orient = <Message>(entry: AnimatedEntry<Message>): void => {
+  entry.object.rotation.set(...entry.node.rotation);
+  if (Option.isSome(entry.node.motion)) {
+    spinAxis.set(...entry.node.motion.value.axis).normalize();
     entry.object.quaternion.multiply(spinRotation.setFromAxisAngle(spinAxis, entry.spun));
   }
 };
 
-const animate = <Message>(
-  live: Live<Message>,
-  entry: Entry<Message>,
-  node: Scene.Transform & Scene.Animated,
-): void => {
-  if (Option.isSome(node.motion)) {
+const animate = <Message>(live: Live<Message>, entry: AnimatedEntry<Message>): void => {
+  if (Option.isSome(entry.node.motion)) {
     live.animated.add(entry);
   } else {
     live.animated.delete(entry);
     entry.spun = 0;
   }
-  orient(entry, node);
+  orient(entry);
 };
 
-const create = <Message>(live: Live<Message>, node: Scene.Node<Message>): Entry<Message> => {
-  const entry: Entry<Message> = { node, object: createObject(node), children: new Map(), spun: 0 };
-  entry.object.name = node.key;
-  owners.set(entry.object, entry);
-  update(live, entry, node);
-  return entry;
-};
+// UPDATING
+//
+// Each kind of entry is brought in line with a node of its own kind.
 
-const createObject = <Message>(node: Scene.Node<Message>): Three.Object3D => {
-  switch (node._tag) {
-    case 'Mesh':
-      return new Three.Mesh(createGeometry(node.geometry), createMaterial(node.material));
-    case 'Group':
-      return new Three.Group();
-    case 'AmbientLight':
-      return new Three.AmbientLight();
-    case 'DirectionalLight':
-      return new Three.DirectionalLight();
+const updateMesh = <Message>(
+  live: Live<Message>,
+  entry: MeshEntry<Message>,
+  node: Scene.Mesh<Message>,
+): void => {
+  const previous = entry.node;
+  entry.node = node;
+  applyTransform(entry.object, node);
+  animate(live, entry);
+  if (!sameGeometry(previous.geometry, node.geometry)) {
+    entry.object.geometry.dispose();
+    entry.object.geometry = createGeometry(node.geometry);
   }
+  updateMaterial(entry.object, previous.material, node.material);
 };
 
-/** Brings a live entry in line with a node of the same kind. */
+const updateGroup = <Message>(
+  live: Live<Message>,
+  entry: GroupEntry<Message>,
+  node: Scene.Group<Message>,
+): void => {
+  entry.node = node;
+  applyTransform(entry.object, node);
+  animate(live, entry);
+  entry.children = reconcile(live, entry.object, entry.children, node.children);
+};
+
+const updateAmbientLight = (entry: AmbientLightEntry, node: Scene.AmbientLight): void => {
+  entry.node = node;
+  entry.object.color.setHex(node.color);
+  entry.object.intensity = node.intensity;
+};
+
+const updateDirectionalLight = (
+  entry: DirectionalLightEntry,
+  node: Scene.DirectionalLight,
+): void => {
+  entry.node = node;
+  applyTransform(entry.object, node);
+  entry.object.color.setHex(node.color);
+  entry.object.intensity = node.intensity;
+};
+
+/** Brings `entry` in line with `node`, if they are of the same kind; reports whether they were. */
 const update = <Message>(
   live: Live<Message>,
   entry: Entry<Message>,
   node: Scene.Node<Message>,
-): void => {
-  const previous = entry.node;
-  entry.node = node;
+): boolean => {
+  switch (entry.kind) {
+    case 'Mesh':
+      if (node._tag === 'Mesh') {
+        updateMesh(live, entry, node);
+        return true;
+      }
+      return false;
+    case 'Group':
+      if (node._tag === 'Group') {
+        updateGroup(live, entry, node);
+        return true;
+      }
+      return false;
+    case 'AmbientLight':
+      if (node._tag === 'AmbientLight') {
+        updateAmbientLight(entry, node);
+        return true;
+      }
+      return false;
+    case 'DirectionalLight':
+      if (node._tag === 'DirectionalLight') {
+        updateDirectionalLight(entry, node);
+        return true;
+      }
+      return false;
+  }
+};
+
+// CREATING
+
+const createEntry = <Message>(live: Live<Message>, node: Scene.Node<Message>): Entry<Message> => {
   switch (node._tag) {
     case 'Mesh': {
-      const mesh = entry.object as LiveMesh;
-      applyTransform(mesh, node);
-      animate(live, entry, node);
-      if (previous._tag === 'Mesh' && !sameGeometry(previous.geometry, node.geometry)) {
-        mesh.geometry.dispose();
-        mesh.geometry = createGeometry(node.geometry);
-      }
-      updateMaterial(
-        mesh,
-        previous._tag === 'Mesh' ? previous.material : node.material,
-        node.material,
-      );
-      return;
+      const entry: MeshEntry<Message> = {
+        kind: 'Mesh',
+        node,
+        object: new Three.Mesh(createGeometry(node.geometry), createMaterial(node.material)),
+        spun: 0,
+      };
+      updateMesh(live, entry, node);
+      return entry;
     }
-    case 'Group':
-      applyTransform(entry.object, node);
-      animate(live, entry, node);
-      entry.children = reconcile(live, entry.object, entry.children, node.children);
-      return;
+    case 'Group': {
+      const entry: GroupEntry<Message> = {
+        kind: 'Group',
+        node,
+        object: new Three.Group(),
+        children: new Map(),
+        spun: 0,
+      };
+      updateGroup(live, entry, node);
+      return entry;
+    }
     case 'AmbientLight': {
-      const light = entry.object as Three.AmbientLight;
-      light.color.setHex(node.color);
-      light.intensity = node.intensity;
-      return;
+      const entry: AmbientLightEntry = {
+        kind: 'AmbientLight',
+        node,
+        object: new Three.AmbientLight(),
+      };
+      updateAmbientLight(entry, node);
+      return entry;
     }
     case 'DirectionalLight': {
-      const light = entry.object as Three.DirectionalLight;
-      applyTransform(light, node);
-      light.color.setHex(node.color);
-      light.intensity = node.intensity;
-      return;
+      const entry: DirectionalLightEntry = {
+        kind: 'DirectionalLight',
+        node,
+        object: new Three.DirectionalLight(),
+      };
+      updateDirectionalLight(entry, node);
+      return entry;
     }
   }
+};
+
+const create = <Message>(live: Live<Message>, node: Scene.Node<Message>): Entry<Message> => {
+  const entry = createEntry(live, node);
+  entry.object.name = node.key;
+  live.owners.set(entry.object, entry);
+  return entry;
 };
 
 /** Detaches an entry and releases every GPU resource beneath it. */
 const dispose = <Message>(live: Live<Message>, entry: Entry<Message>): void => {
   entry.object.removeFromParent();
-  live.animated.delete(entry);
-  switch (entry.node._tag) {
-    case 'Mesh': {
-      const mesh = entry.object as LiveMesh;
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+  switch (entry.kind) {
+    case 'Mesh':
+      live.animated.delete(entry);
+      entry.object.geometry.dispose();
+      entry.object.material.dispose();
       return;
-    }
     case 'Group':
+      live.animated.delete(entry);
       for (const child of entry.children.values()) {
         dispose(live, child);
       }
       return;
     case 'AmbientLight':
     case 'DirectionalLight':
-      (entry.object as Three.Light).dispose();
+      entry.object.dispose();
       return;
   }
 };
@@ -222,8 +313,7 @@ const reconcile = <Message>(
   for (const node of nodes) {
     const existing = stale.get(node.key);
     stale.delete(node.key);
-    if (existing !== undefined && existing.node._tag === node._tag) {
-      update(live, existing, node);
+    if (existing !== undefined && update(live, existing, node)) {
       next.set(node.key, existing);
     } else {
       if (existing !== undefined) {
@@ -260,10 +350,10 @@ export const make = <Message>(): Effect.Effect<SceneHost<Message>, never, Scope.
     Effect.sync(() => {
       const root = new Three.Scene();
       const camera = new Three.PerspectiveCamera();
-      const live: Live<Message> = { animated: new Set() };
-      const state = {
-        entries: new Map() as Entries<Message>,
-        onClickNothing: Option.none() as Option.Option<Message>,
+      const live: Live<Message> = { animated: new Set(), owners: new WeakMap() };
+      const state: { entries: Entries<Message>; onClickNothing: Option.Option<Message> } = {
+        entries: new Map(),
+        onClickNothing: Option.none(),
       };
 
       const render = (scene: Scene.Scene<Message>) =>
@@ -283,11 +373,9 @@ export const make = <Message>(): Effect.Effect<SceneHost<Message>, never, Scope.
           return Option.match(Option.fromNullishOr(nearest), {
             onNone: () => state.onClickNothing,
             onSome: (hit) =>
-              Option.fromNullishOr(owners.get(hit.object)).pipe(
+              Option.fromNullishOr(live.owners.get(hit.object)).pipe(
                 Option.flatMap((entry) =>
-                  entry.node._tag === 'Mesh'
-                    ? (entry.node.onClick as Option.Option<Message>)
-                    : Option.none(),
+                  entry.kind === 'Mesh' ? entry.node.onClick : Option.none(),
                 ),
               ),
           });
@@ -297,10 +385,9 @@ export const make = <Message>(): Effect.Effect<SceneHost<Message>, never, Scope.
       const step = (seconds: number) =>
         Effect.sync(() => {
           for (const entry of live.animated) {
-            const node = entry.node as Scene.Mesh<Message> | Scene.Group<Message>;
-            if (Option.isSome(node.motion)) {
-              entry.spun += node.motion.value.speed * seconds;
-              orient(entry, node);
+            if (Option.isSome(entry.node.motion)) {
+              entry.spun += entry.node.motion.value.speed * seconds;
+              orient(entry);
             }
           }
         });

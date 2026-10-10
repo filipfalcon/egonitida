@@ -1,24 +1,19 @@
-import { Inspector } from '@lightocean/reflection';
 import { Schema } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';
 import { viewDetails } from '#src/details.ts';
 import {
-  type ActionKind,
   type Entity,
   type Rule,
   SELF,
-  actionSchemas,
+  actionKinds,
+  actionProperties,
   actionTitles,
 } from '#src/document.ts';
 import { Message } from '#src/main.ts';
 
-const actionKinds = Object.keys(actionTitles) as ReadonlyArray<ActionKind>;
-const isActionKind = Schema.is(Schema.Literals(['SetColor', 'MoveBy', 'SetSpin']));
+const isActionKind = Schema.is(Schema.Literals(actionKinds));
 
-const settingsOf = (rule: Rule) =>
-  Inspector.properties(
-    actionSchemas[rule.action._tag] as unknown as Schema.Struct<Schema.Struct.Fields>,
-  );
+const settingsOf = (rule: Rule) => actionProperties(rule.action._tag);
 
 const viewRule = (
   h: HtmlBuilder<Message>,

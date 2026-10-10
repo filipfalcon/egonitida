@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
 import { Controls, Health, Position, Splat, Velocity } from '#src/fixtures.ts';
+import type * as Component from '#src/Component.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import * as World from '#src/World.ts';
 
@@ -26,9 +27,12 @@ describe('Snapshot', () => {
     expect(world.tick).toBe(server.tick);
     expect(world.nextEntity).toBe(server.nextEntity);
     expect(world.random).toBe(server.random);
-    for (const component of [Position, Velocity, Health, Controls]) {
+    const sameIn = <Value>(component: Component.Component<string, Value, Component.Owner>) =>
       expect(World.query(world, component)).toEqual(World.query(server, component));
-    }
+    sameIn(Position);
+    sameIn(Velocity);
+    sameIn(Health);
+    sameIn(Controls);
   });
 
   it('never sends what is local, and leaves the client its own', () => {

@@ -1,4 +1,4 @@
-import { Deferred, Effect, Option, Schema, type Scope, Stream } from 'effect';
+import { Deferred, Effect, Option, type Scope, Stream } from 'effect';
 import type * as Component from '#src/Component.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
@@ -28,11 +28,8 @@ type SentInput = Protocol.Inputs['inputs'][number];
 const encodeValues = (values: ReadonlyArray<Component.Instance>): SentInput['values'] =>
   Object.fromEntries(
     values
-      .filter(({ component }) => component.owner === 'input')
-      .map(({ component, value }) => [
-        component.name,
-        Schema.encodeSync(component.schema as Schema.Codec<unknown, unknown>)(value),
-      ]),
+      .filter((instance) => instance.component.owner === 'input')
+      .map((instance) => [instance.component.name, instance.encoded()]),
   );
 
 /** Joins the host at the other end of `connection`, until the scope closes. */
@@ -42,10 +39,10 @@ export const connect = (
 ): Effect.Effect<Client, never, Scope.Scope> =>
   Effect.gen(function* () {
     const welcome = yield* Deferred.make<Protocol.Welcome>();
-    const state = {
+    const state: { world: World.World; seq: number; history: ReadonlyArray<SentInput> } = {
       world: World.empty({ seed: 0 }),
       seq: 0,
-      history: [] as ReadonlyArray<SentInput>,
+      history: [],
     };
 
     // A snapshot older than the world already held arrived out of order, and is of no use.

@@ -48,8 +48,6 @@ export interface Change {
   readonly key: string;
 }
 
-const entityKeys = Object.keys(Entity.fields).filter((key) => key !== 'id');
-
 // Entity values are plain data, so their JSON is a faithful structural comparison.
 const differs = (before: unknown, after: unknown) =>
   JSON.stringify(before) !== JSON.stringify(after);
@@ -58,9 +56,11 @@ const differs = (before: unknown, after: unknown) =>
 export const changes = (before: Document, after: Document): ReadonlyArray<Change> =>
   after.entities.flatMap((entity) => {
     const previous = before.entities.find((candidate) => candidate.id === entity.id);
-    return previous === undefined
-      ? []
-      : entityKeys
-          .filter((key) => differs(previous[key as keyof Entity], entity[key as keyof Entity]))
-          .map((key) => ({ entityId: entity.id, entityName: entity.name, key }));
+    if (previous === undefined) {
+      return [];
+    }
+    const was = new Map(Object.entries(previous));
+    return Object.entries(entity)
+      .filter(([key, value]) => key !== 'id' && differs(was.get(key), value))
+      .map(([key]) => ({ entityId: entity.id, entityName: entity.name, key }));
   });

@@ -4,6 +4,7 @@ import { Bitten, Controls, Died, Health, Position, Velocity } from '#src/fixture
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
 import * as Rule from '#src/Rule.ts';
+import * as Snapshot from '#src/Snapshot.ts';
 import * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
 
@@ -121,6 +122,10 @@ describe('Game.step', () => {
   });
 });
 
+/** A world's contents, written out component by component: what two worlds are compared by. Worlds are compared by what they hold, not by which objects hold it. */
+const contents = (world: World.World) =>
+  Snapshot.encode(world, [Position, Velocity, Health, Controls]);
+
 describe('determinism', () => {
   const scatter = System.make({
     name: 'scatter',
@@ -143,11 +148,11 @@ describe('determinism', () => {
   };
 
   it('reaches the same world from the same seed', () => {
-    expect(run(42)).toEqual(run(42));
+    expect(contents(run(42))).toEqual(contents(run(42)));
   });
 
   it('reaches another world from another seed', () => {
-    expect(run(42)).not.toEqual(run(43));
+    expect(contents(run(42))).not.toEqual(contents(run(43)));
   });
 
   it('draws randomness only from the world, in [0, 1)', () => {
@@ -212,7 +217,7 @@ describe('input', () => {
         start,
       );
 
-    expect(play()).toEqual(play());
+    expect(contents(play())).toEqual(contents(play()));
     // A held stick keeps moving: 1 + 1 - 0.5 + 0.25 + 0.25 + 0.25.
     expect(World.get(play(), player, Position)).toEqual(Option.some({ x: 2.25 }));
   });

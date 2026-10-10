@@ -51,8 +51,11 @@ export const step = (
       draft.random = state;
       return value;
     },
-    get: (entity, component) => World.get(draft, entity, component),
-    query: (...components) => World.query(draft, ...components),
+    get: <Value>(
+      entity: World.Entity,
+      component: Component.Component<string, Value, Component.Owner>,
+    ) => World.get(draft, entity, component),
+    query: World.queryIn(draft),
     set: (entity, component, value) => World.write(draft, entity, component, value),
     emit: (event: Event.Tagged) => {
       line.push(event);
@@ -62,8 +65,8 @@ export const step = (
   for (const system of game.systems) {
     system.run(context);
   }
-  for (let index = 0; index < line.length; index += 1) {
-    const event = line[index] as Event.Tagged;
+  // A rule's events join the end of the line, and iterating an array reaches what is pushed onto it meanwhile.
+  for (const event of line) {
     for (const rule of game.rules) {
       if (rule.tag === event._tag) {
         rule.run(context, event);

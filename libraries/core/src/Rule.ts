@@ -2,7 +2,9 @@ import type { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type { Time } from '#src/System.ts';
-import type { Entity } from '#src/World.ts';
+import type * as World from '#src/World.ts';
+
+type Of<Value> = Component.Component<string, Value, Component.Owner>;
 
 /**
  * What the game decides when something happens, such as what a bite does to health. A rule handles one event, may read anything, and writes only components the rules own, and only those it declared. It may emit further events, which are handled in the same step after it.
@@ -11,18 +13,9 @@ import type { Entity } from '#src/World.ts';
 export interface Context<Writes extends Component.Any, Emits extends Event.Any> {
   readonly time: Time;
   readonly random: () => number;
-  readonly get: <C extends Component.Any>(
-    entity: Entity,
-    component: C,
-  ) => Option.Option<Component.ValueOf<C>>;
-  readonly query: <const Cs extends ReadonlyArray<Component.Any>>(
-    ...components: Cs
-  ) => ReadonlyArray<readonly [Entity, ...Component.ValuesOf<Cs>]>;
-  readonly set: <C extends Writes>(
-    entity: Entity,
-    component: C,
-    value: Component.ValueOf<C>,
-  ) => void;
+  readonly get: <Value>(entity: World.Entity, component: Of<Value>) => Option.Option<Value>;
+  readonly query: World.Query<Component.Any>;
+  readonly set: <Value>(entity: World.Entity, component: Of<Value> & Writes, value: Value) => void;
   readonly emit: (event: Event.ValueOf<Emits>) => void;
 }
 

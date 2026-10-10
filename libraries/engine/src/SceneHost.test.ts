@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@effect/vitest';
+import { assert, describe, expect, it } from '@effect/vitest';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Scene from '#src/Scene.ts';
@@ -14,11 +14,24 @@ const cube = (options: Partial<Parameters<typeof Scene.mesh<never>>[0]> = {}): S
     ...options,
   });
 
-const childNamed = (parent: Three.Object3D, name: string) => {
+const childNamed = (parent: Three.Object3D, name: string): Three.Object3D => {
   const child = parent.getObjectByName(name);
-  expect(child).toBeDefined();
-  return child as Three.Object3D;
+  assert(child !== undefined, `there is a child named ${name}`);
+  return child;
 };
+
+/** `value`, checked to be an instance of `kind`; the test fails where it is not. */
+const ofKind = <T>(value: unknown, kind: abstract new (...args: never[]) => T): T => {
+  assert(value instanceof kind, `the value is a ${kind.name}`);
+  return value;
+};
+
+/** The child of `parent` named `name`, checked to be of `kind`. */
+const named = <T>(
+  parent: Three.Object3D,
+  name: string,
+  kind: abstract new (...args: never[]) => T,
+): T => ofKind(childNamed(parent, name), kind);
 
 describe('SceneHost', () => {
   describe('rendering', () => {
@@ -27,16 +40,16 @@ describe('SceneHost', () => {
         const host = yield* SceneHost.make<never>();
         yield* host.render(Scene.scene({ camera, nodes: [cube({ position: [1, 2, 3] })] }));
 
-        const mesh = childNamed(host.root, 'cube') as Three.Mesh;
+        const mesh = named(host.root, 'cube', Three.Mesh);
         expect(mesh.isMesh).toBe(true);
         expect(mesh.position.toArray()).toEqual([1, 2, 3]);
         expect(mesh.geometry).toBeInstanceOf(Three.BoxGeometry);
-        expect((mesh.geometry as Three.BoxGeometry).parameters).toMatchObject({
+        expect(ofKind(mesh.geometry, Three.BoxGeometry).parameters).toMatchObject({
           width: 1,
           height: 1,
           depth: 1,
         });
-        const material = mesh.material as Three.MeshStandardNodeMaterial;
+        const material = ofKind(mesh.material, Three.MeshStandardNodeMaterial);
         expect(material.isNodeMaterial).toBe(true);
         expect(material.color.getHex()).toBe(0xff0000);
       }),
@@ -52,9 +65,9 @@ describe('SceneHost', () => {
           }),
         );
 
-        const mesh = childNamed(host.root, 'cube') as Three.Mesh;
+        const mesh = named(host.root, 'cube', Three.Mesh);
         expect(mesh.geometry).toBeInstanceOf(Three.SphereGeometry);
-        expect((mesh.geometry as Three.SphereGeometry).parameters.radius).toBe(2);
+        expect(ofKind(mesh.geometry, Three.SphereGeometry).parameters.radius).toBe(2);
       }),
     );
 
@@ -98,10 +111,10 @@ describe('SceneHost', () => {
           }),
         );
 
-        const ambient = childNamed(host.root, 'ambient') as Three.AmbientLight;
+        const ambient = named(host.root, 'ambient', Three.AmbientLight);
         expect(ambient.isAmbientLight).toBe(true);
         expect(ambient.intensity).toBe(0.5);
-        const sun = childNamed(host.root, 'sun') as Three.DirectionalLight;
+        const sun = named(host.root, 'sun', Three.DirectionalLight);
         expect(sun.isDirectionalLight).toBe(true);
         expect(sun.color.getHex()).toBe(0xffeedd);
         expect(sun.intensity).toBe(2);
@@ -137,7 +150,7 @@ describe('SceneHost', () => {
       Effect.gen(function* () {
         const host = yield* SceneHost.make<never>();
         yield* host.render(Scene.scene({ camera, nodes: [cube({ position: [0, 0, 0] })] }));
-        const before = childNamed(host.root, 'cube') as Three.Mesh;
+        const before = named(host.root, 'cube', Three.Mesh);
         const geometry = before.geometry;
 
         yield* host.render(
@@ -147,11 +160,13 @@ describe('SceneHost', () => {
           }),
         );
 
-        const after = childNamed(host.root, 'cube') as Three.Mesh;
+        const after = named(host.root, 'cube', Three.Mesh);
         expect(after).toBe(before);
         expect(after.geometry).toBe(geometry);
         expect(after.position.x).toBe(4);
-        expect((after.material as Three.MeshStandardNodeMaterial).color.getHex()).toBe(0x00ff00);
+        expect(ofKind(after.material, Three.MeshStandardNodeMaterial).color.getHex()).toBe(
+          0x00ff00,
+        );
       }),
     );
 
@@ -159,7 +174,7 @@ describe('SceneHost', () => {
       Effect.gen(function* () {
         const host = yield* SceneHost.make<never>();
         yield* host.render(Scene.scene({ camera, nodes: [cube()] }));
-        const mesh = childNamed(host.root, 'cube') as Three.Mesh;
+        const mesh = named(host.root, 'cube', Three.Mesh);
         const disposed = watchDisposal(mesh.geometry);
 
         yield* host.render(
@@ -171,7 +186,7 @@ describe('SceneHost', () => {
 
         expect(disposed()).toBe(true);
         expect(childNamed(host.root, 'cube')).toBe(mesh);
-        expect((mesh.geometry as Three.BoxGeometry).parameters.width).toBe(2);
+        expect(ofKind(mesh.geometry, Three.BoxGeometry).parameters.width).toBe(2);
       }),
     );
 
@@ -179,9 +194,9 @@ describe('SceneHost', () => {
       Effect.gen(function* () {
         const host = yield* SceneHost.make<never>();
         yield* host.render(Scene.scene({ camera, nodes: [cube()] }));
-        const mesh = childNamed(host.root, 'cube') as Three.Mesh;
+        const mesh = named(host.root, 'cube', Three.Mesh);
         const geometryDisposed = watchDisposal(mesh.geometry);
-        const materialDisposed = watchDisposal(mesh.material as Three.Material);
+        const materialDisposed = watchDisposal(ofKind(mesh.material, Three.Material));
 
         yield* host.render(Scene.scene({ camera, nodes: [] }));
 
@@ -200,7 +215,7 @@ describe('SceneHost', () => {
             nodes: [Scene.group({ key: 'group', children: [cube()] })],
           }),
         );
-        const mesh = childNamed(host.root, 'cube') as Three.Mesh;
+        const mesh = named(host.root, 'cube', Three.Mesh);
         const disposed = watchDisposal(mesh.geometry);
 
         yield* host.render(Scene.scene({ camera, nodes: [] }));
@@ -213,7 +228,7 @@ describe('SceneHost', () => {
       Effect.gen(function* () {
         const host = yield* SceneHost.make<never>();
         yield* host.render(Scene.scene({ camera, nodes: [cube({ key: 'thing' })] }));
-        const mesh = childNamed(host.root, 'thing') as Three.Mesh;
+        const mesh = named(host.root, 'thing', Three.Mesh);
         const disposed = watchDisposal(mesh.geometry);
 
         yield* host.render(
@@ -403,7 +418,7 @@ describe('SceneHost', () => {
 
   describe('materials', () => {
     const materialOf = (host: SceneHost.SceneHost<never>) =>
-      (childNamed(host.root, 'cube') as Three.Mesh).material as Three.Material;
+      ofKind(named(host.root, 'cube', Three.Mesh).material, Three.Material);
 
     it.effect('creates an unlit material for a basic material', () =>
       Effect.gen(function* () {
@@ -412,7 +427,7 @@ describe('SceneHost', () => {
           Scene.scene({ camera, nodes: [cube({ material: Scene.basic({ color: 0x00ff00 }) })] }),
         );
 
-        const material = materialOf(host) as Three.MeshBasicNodeMaterial;
+        const material = ofKind(materialOf(host), Three.MeshBasicNodeMaterial);
         expect(material).toBeInstanceOf(Three.MeshBasicNodeMaterial);
         expect(material.color.getHex()).toBe(0x00ff00);
       }),
@@ -427,7 +442,7 @@ describe('SceneHost', () => {
             nodes: [cube({ material: Scene.standard({ color: 0xffffff, wireframe: true }) })],
           }),
         );
-        const material = materialOf(host) as Three.MeshStandardNodeMaterial;
+        const material = ofKind(materialOf(host), Three.MeshStandardNodeMaterial);
         expect(material.wireframe).toBe(true);
 
         yield* host.render(
@@ -564,8 +579,11 @@ describe('SceneHost', () => {
                 nodes: [Scene.group({ key: 'group', children: [cube()] })],
               }),
             );
-            const mesh = childNamed(host.root, 'cube') as Three.Mesh;
-            return [watchDisposal(mesh.geometry), watchDisposal(mesh.material as Three.Material)];
+            const mesh = named(host.root, 'cube', Three.Mesh);
+            return [
+              watchDisposal(mesh.geometry),
+              watchDisposal(ofKind(mesh.material, Three.Material)),
+            ];
           }),
         );
 

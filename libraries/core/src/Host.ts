@@ -106,15 +106,10 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
             const component = inputComponents.get(name);
             return component === undefined
               ? []
-              : Option.match(
-                  Schema.decodeUnknownOption(component.schema as Schema.Codec<unknown, unknown>)(
-                    encoded,
-                  ),
-                  {
-                    onNone: () => [],
-                    onSome: (value) => [Input.of(entity, component, value)],
-                  },
-                );
+              : Option.match(Schema.decodeUnknownOption(component.schema)(encoded), {
+                  onNone: () => [],
+                  onSome: (value) => [Input.of(entity, component, value)],
+                });
           }),
         );
       });

@@ -19,8 +19,6 @@ const WireJson = Schema.fromJsonString(Wire);
 const sent = (components: ReadonlyArray<Component.Any>) =>
   components.filter((component) => component.network !== 'local');
 
-const codecOf = (component: Component.Any) => component.schema as Schema.Codec<unknown, unknown>;
-
 export const encode = (world: World.World, components: ReadonlyArray<Component.Any>): string =>
   Schema.encodeSync(WireJson)({
     tick: world.tick,
@@ -29,26 +27,10 @@ export const encode = (world: World.World, components: ReadonlyArray<Component.A
     stores: Object.fromEntries(
       sent(components).map((component) => [
         component.name,
-        [...(world.stores.get(component.name) ?? new Map<World.Entity, unknown>())].map(
-          ([entity, value]) => [entity, Schema.encodeSync(codecOf(component))(value)] as const,
-        ),
+        component.encode(world.stores.get(component.name)),
       ]),
     ),
-  }) as string;
-
-/** The store a snapshot holds for a component, decoded by its schema; `None` if any of its values does not decode. */
-const decodeStore = (
-  component: Component.Any,
-  entries: ReadonlyArray<readonly [number, unknown]>,
-): Option.Option<ReadonlyMap<World.Entity, unknown>> =>
-  Option.all(
-    entries.map(([entity, encoded]) =>
-      Option.map(
-        Schema.decodeUnknownOption(codecOf(component))(encoded),
-        (value) => [entity, value] as const,
-      ),
-    ),
-  ).pipe(Option.map((decoded) => new Map(decoded)));
+  });
 
 /**
  * `world` with every sent component replaced by the snapshot's, and its local components kept. A snapshot that does not decode, in any part, changes nothing: `None`.
@@ -62,22 +44,16 @@ export const apply = (
     Option.all(
       sent(components).map((component) =>
         Option.map(
-          decodeStore(component, wire.stores[component.name] ?? []),
+          component.decode(wire.stores[component.name] ?? []),
           (store) => [component.name, store] as const,
         ),
       ),
     ).pipe(
-      Option.map((received) => {
-        const stores = new Map(world.stores);
-        for (const [name, store] of received) {
-          stores.set(name, store);
-        }
-        return {
-          tick: wire.tick,
-          nextEntity: wire.nextEntity,
-          random: wire.random,
-          stores,
-        };
-      }),
+      Option.map((received) => ({
+        tick: wire.tick,
+        nextEntity: wire.nextEntity,
+        random: wire.random,
+        stores: new Map([...world.stores, ...received]),
+      })),
     ),
   );

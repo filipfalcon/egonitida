@@ -80,16 +80,17 @@ export const properties = (schema: AnyStruct): ReadonlyArray<Property> =>
       : [{ key, title: annotations?.title ?? key, widget: widgetOf(field, annotation) }];
   });
 
+/** A struct whose every field can decode on its own, with no services: what an edit checks a candidate against. */
+export type DecodableFields = Record<string, Schema.ConstraintDecoder<unknown>>;
+
 /** `value` with `key` replaced by `candidate`, if the field's schema accepts the candidate. */
-export const edit = <S extends AnyStruct>(
-  schema: S,
-  value: S['Type'],
+export const edit = <Fields extends DecodableFields>(
+  schema: Schema.Struct<Fields>,
+  value: Schema.Struct<Fields>['Type'],
   key: string,
   candidate: unknown,
-): Option.Option<S['Type']> =>
+): Option.Option<Schema.Struct<Fields>['Type']> =>
   Option.fromNullishOr(schema.fields[key]).pipe(
-    Option.flatMap((field) =>
-      Schema.decodeUnknownOption(field as Schema.Codec<unknown>)(candidate),
-    ),
+    Option.flatMap((field) => Schema.decodeUnknownOption(field)(candidate)),
     Option.map((decoded) => ({ ...value, [key]: decoded })),
   );

@@ -7,6 +7,10 @@ export default defineConfig({
   },
   lint: {
     extends: [recommended],
+    rules: {
+      // No type assertions: a value's type is proven where it is made, never claimed where it is used.
+      'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+    },
     options: {
       typeAware: true,
       typeCheck: true,

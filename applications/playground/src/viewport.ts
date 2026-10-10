@@ -1,7 +1,7 @@
 import { type Scene, Viewport } from '@lightocean/engine';
 import { Effect, Option, Queue, Schema, Stream } from 'effect';
 import { Mount, Subscription } from 'foldkit';
-import { Message, type Model, viewScene } from '#src/main.ts';
+import { Message, Model, viewScene } from '#src/main.ts';
 
 export const VIEWPORT_ID = 'viewport';
 
@@ -39,6 +39,22 @@ export const MountViewport = Mount.define('MountViewport', {
 // The longest step one frame may take, so a frame after the tab was hidden does not jump motion forward by seconds.
 const maximumFrameSeconds = 0.1;
 
+/** Builds the scene for the latest Model, rebuilding only when the Model changed since the last frame. */
+const sceneReader = (readModel: () => Model): (() => Scene.Scene<Message>) => {
+  const cache: { model: Model | undefined; scene: Scene.Scene<Message> | undefined } = {
+    model: undefined,
+    scene: undefined,
+  };
+  return () => {
+    const model = readModel();
+    if (cache.scene === undefined || model !== cache.model) {
+      cache.model = model;
+      cache.scene = viewScene(model);
+    }
+    return cache.scene;
+  };
+};
+
 /** Draws `readScene()` every animation frame, and turns clicks on the canvas into the Messages their picks produce. */
 const drive = (
   viewport: Viewport.Viewport<Message>,
@@ -73,13 +89,9 @@ const drive = (
 
 export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
   viewport: entry(
-    // The scene has no Schema of its own until the reflection step; it is read through `readDependencies`, never compared.
-    { isViewportMounted: Schema.Boolean, scene: Schema.Any },
+    { isViewportMounted: Schema.Boolean, model: Model },
     {
-      modelToDependencies: (model) => ({
-        isViewportMounted: model.isViewportMounted,
-        scene: viewScene(model),
-      }),
+      modelToDependencies: (model) => ({ isViewportMounted: model.isViewportMounted, model }),
       // The frame loop survives every Model change except the viewport coming or going; a new scene reaches it on the next frame.
       keepAliveEquivalence: (previous, next) =>
         previous.isViewportMounted === next.isViewportMounted,
@@ -89,7 +101,10 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
           Option.match({
             onNone: () => Stream.empty,
             onSome: (viewport) =>
-              drive(viewport, () => readDependencies().scene as Scene.Scene<Message>),
+              drive(
+                viewport,
+                sceneReader(() => readDependencies().model),
+              ),
           }),
         ),
     },
