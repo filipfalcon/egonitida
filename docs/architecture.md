@@ -2,7 +2,63 @@
 
 LightOcean is an engine for web applications in the way Unreal Engine is an engine for games: an editor, a runtime, and a project format that the two share.
 
-This document records the decisions taken so far, what is built, and what comes next. It grows alongside the code.
+This document records the principles the engine stands on, the decisions taken so far, what is built, and what comes next. It grows alongside the code.
+
+The first game to run on the engine is Border, a first-person browser game in its own repository, which links LightOcean as a package. Its needs are what the principles below were measured against.
+
+## Principles
+
+Five principles shape every API. Each builds on the one before it.
+
+### 1. State: one state, ownership is a type
+
+- A game has one state, described by Effect Schema. It is not split into a rules Model and a simulation world joined by a hand-written bridge, the way Border joins them today.
+- The simulation follows the Entity Component System model, after Bevy: an entity is an id, components are the data attached to it, and systems are functions over every entity with given components.
+- Every field has exactly one owner, declared in its schema:
+  - **Rules** own the facts the game's rules decide, such as health, ammunition, or an open door. Only `update` changes them, through Messages, which are recorded.
+  - **Simulation** owns what changes every step, such as positions. Only systems change them.
+- A system declares what it reads, what it writes, and what it emits. Writing what it does not own is a compile error, not a runtime bug. Everything is readable by everyone, so nothing is ever copied and kept in sync.
+- Events a system emits are applied by the rules at a defined point in the step, so the next step already sees their result. Nothing waits on an asynchronous queue.
+- What is drawn is never a source of truth: the scene is derived from the state.
+
+### 2. Network: an authoritative server, from the start
+
+- The engine is built for multiplayer and for worlds split across many servers, as much as for singleplayer.
+- A server is a Cloudflare Durable Object: one object is one world, room, or zone. It simulates the world and sends clients its state. A client predicts its own player so input answers at once, corrects itself when the server disagrees, and interpolates everything else between the server's states.
+- Every field declares its network role next to its owner:
+  - **Server**: decided by the server and sent to every client.
+  - **Predicted**: guessed by the client, confirmed by the server.
+  - **Local**: kept on the client only and never sent, such as blood, casings, or a ragdoll after death. Most of what is expensive in Border is local.
+- The engine always has the client–server shape. Singleplayer is the same code with the server running in a Web Worker in the browser, the way Minecraft runs an integrated server; switching to multiplayer is configuration. The price is that a singleplayer game also sends its input as commands and marks what is local.
+- There is no single player in the API, only the set of players. Pausing is a rule of the world, which a shared world does not allow, and slowing time for the whole world and for one client's view are two different APIs.
+- Schemas double as the wire format, and change detection decides what is sent.
+
+### 3. Time: a fixed step, smooth drawing
+
+- The simulation advances in fixed steps. The step rate is a setting of each game, fixed for its lifetime, because tuning and recordings depend on it. A server typically steps at 20 to 30 Hz. A system that needs finer steps, such as a ragdoll, subdivides its own.
+- A displayed frame reads input, runs as many fixed steps as real time calls for (each step: systems, then events, then rules), interpolates between the last two steps, and draws. The number of steps per frame is capped, so a slow machine slows the game briefly instead of falling ever further behind.
+- Clocks are engine resources: a game clock that can be scaled and stopped, and a real clock for menus and UI.
+- A timer is an engine primitive on the game clock, owned by an entity or a state, and it disappears with its owner. Guards against stale completions, like Border's counters, are not needed.
+
+### 4. Determinism: the whole world replays
+
+- Determinism is a cornerstone of the engine. With the same build and the same inputs, the server's world steps to exactly the same result.
+- One mechanism serves three purposes: the client's prediction rewinds to the server's state and replays the inputs not yet confirmed; the debugger rewinds the whole world, not only the rules; and games can build replays, spectating, and death cameras on real recordings. A recording also makes a test.
+- Systems take randomness only from the engine's `Random` resource and time only from its `Time` resource; `Math.random` and `Date.now` are lint errors there. Asynchronous results enter as recorded events.
+- In development the engine replays alongside the running game and compares state fingerprints, reporting the first step and component where the two diverge.
+- Cosmetics are deterministic too: an event carries a seed, so every client generates the same blood from it without anything more being sent.
+- Rewinding starts from the nearest periodic snapshot and steps forward. A recording carries the fingerprint of the build it is valid for.
+
+### 5. Boundaries: everything is a plugin
+
+- The engine is made of plugins, and its own features (drawing, physics, audio, input, network) are plugins too. A game can do whatever the engine does, and can replace any plugin, as Border would replace physics with its own ragdoll.
+- A plugin is an Effect Layer that registers components, systems, and resources and declares the plugins it requires. A missing dependency is a compile error, and tests swap in other Layers.
+- Packages come in three layers:
+  - **core**: the state, systems, schedule, time, randomness, replay, network protocol, and game rules. It runs everywhere, and it compiles without the DOM's types, so the simulation always runs in a Durable Object.
+  - **client**: drawing, audio, input, haptics, cosmetics. Browser only.
+  - **server**: hosting a world in a Durable Object, and persistence.
+- A game's plugins split the same way, such as a horde's AI in core and its animation in client.
+- Imperative islands are allowed for gradual migration: a local, client-only plugin may use Three.js as it likes, but cannot write the state it does not own. Border can move onto the engine by wrapping its current code this way first.
 
 ## Decisions
 
@@ -20,7 +76,7 @@ This document records the decisions taken so far, what is built, and what comes 
 
 ### Program model
 
-The Elm Architecture covers the whole application, not only its DOM.
+The first iteration, built before the principles above: the Elm Architecture over the whole application. It stays for applications whose state is small, and is the base the editor's Play-in-Editor runs on. Games follow the principles above.
 
 - One program has one Model and one `update`, and two views of the Model:
   - `view: Model → Html`, rendered by Foldkit into the DOM.
@@ -69,6 +125,9 @@ The Elm Architecture covers the whole application, not only its DOM.
 
 ## Next
 
+- A Durable Object spike: a world stepping at 30 Hz with two clients, to measure latency, cost, and how a ticking object hibernates and stays alive. It is the largest assumption the principles rest on that is not yet verified.
+- The core state and system API, and the step schedule, designed test-first.
+- Linking LightOcean into Border as a package, and running Border on the engine without changing how it plays.
 - Undo and redo, once it is decided what one step is (a keystroke in a field is not one).
 - Camera controls in the viewport, and a gizmo for moving objects.
 - More triggers (on start, on a timer) and program state beyond the objects, such as variables and conditions.
@@ -78,4 +137,6 @@ The Elm Architecture covers the whole application, not only its DOM.
 
 ## Open questions
 
-- How time reaches `update`: event-driven only, an optional per-frame tick a program subscribes to, or a fixed-rate tick for everyone. Rules triggered by a timer will need an answer.
+- Whether Foldkit can apply game rules synchronously inside a step, or whether rules need their own loop with Foldkit kept for UI.
+- How simulation components are stored so per-step work does not copy immutable data, while their schemas still describe them.
+- The step rate Border's server runs at.
