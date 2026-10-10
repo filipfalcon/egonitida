@@ -151,7 +151,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 **Messages.**
 
 - Actions and events are named facts in the past tense, never commands. An action says what a player did, whatever device they did it with (`PulledTrigger`, `ChoseRestart`); an event says what the world made of it (`Shot`, `LevelRestarted`). The pair shows where authority lies: what a player claims, and what the server decided.
-- Every declared action and event has at least one rule; a message no one handles is an error, in its type where TypeScript bears it, and otherwise when the game is made.
+- Every action a game declares has at least one rule, since an action no rule answers is a player doing something to no effect. An event may go unanswered, since a plugin offers its events to others and a game may not hold the one that listens; an event a game declares that nothing emits and nothing handles is dead, and an error. Either is an error in its type where TypeScript bears it, and otherwise when the game is made.
 - Which systems and rules write, emit, spawn, and listen for what follows from the game's declarations, as a map of how its state changes: in a world of systems there is no single `update` to read, so the declarations are what is read.
 - In development the values in a world are frozen, so changing one in place fails at once.
 
@@ -255,8 +255,8 @@ The API above is built in this order, each step test-first, and each breaking on
 
 1. The game declares its components, actions, and events, and the schema of its whole world follows from it; hosts and clients take them from the game. Tagged unions and `Option` travel in components and interpolate.
 2. `Story`, and the engine's own tests moved onto it.
-3. Every message handled, the map of changes, frozen worlds in development, and the fixtures named as facts.
-4. Plugins: owning their components, requiring one another, and the `/internal` entry.
+3. The map of changes, frozen worlds in development, and the fixtures named as facts.
+4. Plugins: owning their components, requiring one another, every action answered and no event dead, and the `/internal` entry.
 5. Commands.
 6. Local systems.
 7. Views (`View.each`, `View.on`, `View.during`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.
