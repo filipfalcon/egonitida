@@ -20,6 +20,7 @@ Six principles shape every API. Each builds on the ones before it.
 - A system declares what it reads, what it writes, and what it emits. Writing what it does not own is a compile error, not a runtime bug. Everything is readable by everyone, so nothing is ever copied and kept in sync.
 - Events a system emits are applied by the rules at a defined point in the step, so the next step already sees their result. Nothing waits on an asynchronous queue.
 - What is drawn is never a source of truth: the scene is derived from the state.
+- A level is entities too: walls, obstacles, and doors are entities with components, so there is one model for everything the world holds, and an editor and a debugger see a level the way they see the rest. Stores never change in place, so a system may build something from one, such as a spatial index, and keep it for as long as the store is the same.
 
 ### 2. Network: an authoritative server, from the start
 
@@ -30,15 +31,22 @@ Six principles shape every API. Each builds on the ones before it.
   - **Predicted**: guessed by the client, confirmed by the server.
   - **Local**: kept on the client only and never sent, such as blood, casings, or a ragdoll after death. Most of what is expensive in Border is local.
 - The engine always has the client–server shape. Singleplayer is the same code with the server running in a Web Worker in the browser, the way Minecraft runs an integrated server; switching to multiplayer is configuration. The price is that a singleplayer game also sends its input as commands and marks what is local.
-- There is no single player in the API, only the set of players. Pausing is a rule of the world, which a shared world does not allow, and slowing time for the whole world and for one client's view are two different APIs.
+- There is no single player in the API, only the set of players.
+- Whether time may stop is the host's policy, not the world's: a local server grants a player's pause, a shared world refuses it. Switching a game to multiplayer turns its pause into a menu that does not stop anything, and the game has to live with that.
 - Schemas double as the wire format, and change detection decides what is sent.
 
 ### 3. Time: a fixed step, smooth drawing
 
-- The simulation advances in fixed steps. The step rate is a setting of each game, fixed for its lifetime, because tuning and recordings depend on it. A server typically steps at 20 to 30 Hz. A system that needs finer steps, such as a ragdoll, subdivides its own.
+- The simulation advances in fixed steps. The step rate is a setting of each game, given to `Game.make` and never defaulted by the engine, fixed for the game's lifetime, because tuning and recordings depend on it. Border steps at 60 Hz. A system that needs finer steps, such as a ragdoll, subdivides its own.
+- The step rate is one number everywhere: the server, a client predicting, and a replay all take the same steps, or prediction would not match. How often snapshots are sent is a separate, lower number when bandwidth calls for it, such as 20 or 30 Hz; clients interpolate between them.
+- Input is read once a step, so a step's length bounds how fast movement answers. Looking around is the client's alone, every frame, outside the simulation; the simulation only receives where the player looks as part of its input.
 - A displayed frame reads input, runs as many fixed steps as real time calls for (each step: systems, then events, then rules), interpolates between the last two steps, and draws. The number of steps per frame is capped, so a slow machine slows the game briefly instead of falling ever further behind.
-- Clocks are engine resources: a game clock that can be scaled and stopped, and a real clock for menus and UI.
-- A timer is an engine primitive on the game clock, owned by an entity or a state, and it disappears with its owner. Guards against stale completions, like Border's counters, are not needed.
+- The world has one time, and it only moves forward, step by step, at the game's rate. Nothing inside the world scales it or stops it; only the host can hold it, by its policy.
+- Presentation never changes how the world runs, in singleplayer or multiplayer alike, because a game can always be switched between the two. A client keeps a timeline of recent worlds, which serves three things:
+  - interpolation, drawing slightly in the past between two worlds;
+  - prediction, going back to a confirmed world to replay what the server has not confirmed;
+  - presentations, such as a slowed death, a frozen frame, or a killcam, which play a moment from the timeline at their own pace while the live world goes on, then return to it.
+- A timer is an engine primitive on the world's time, owned by an entity or a state, and it disappears with its owner. Guards against stale completions, like Border's counters, are not needed.
 
 ### 4. Determinism: the whole world replays
 
