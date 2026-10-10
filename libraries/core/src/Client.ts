@@ -2,6 +2,7 @@ import { Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
+import type * as Game from '#src/Game.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import type * as Transport from '#src/Transport.ts';
@@ -12,8 +13,8 @@ import * as World from '#src/World.ts';
  */
 
 export interface Options {
-  /** Every component the game uses, so snapshots can be decoded by their schemas. */
-  readonly components: ReadonlyArray<Component.Any>;
+  /** The game the host plays, whose components decode its snapshots. */
+  readonly game: Game.Game;
 }
 
 export interface Client {
@@ -69,7 +70,7 @@ export const connect = (
             onNone: () => Effect.void,
             onSome: (received) => Deferred.succeed(welcome, received).pipe(Effect.asVoid),
           })
-        : Option.match(Snapshot.apply(state.world, frame.payload, options.components), {
+        : Option.match(Snapshot.apply(state.world, frame.payload, options.game.components), {
             onNone: () => Effect.void,
             onSome: (world) =>
               Effect.suspend(() => {

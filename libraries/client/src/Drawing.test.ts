@@ -12,7 +12,6 @@ const Controls = Component.make('Controls', Schema.Struct({ move: Schema.Finite 
   owner: 'input',
   network: 'predicted',
 });
-const components = [Position, Controls];
 
 /** Moves every controlled entity by one per step, so a drawn position reads as a tick. */
 const steer = System.make({
@@ -27,6 +26,15 @@ const steer = System.make({
   },
 });
 
+const steered = Game.make({
+  stepRate: 60,
+  components: [Position, Controls],
+  actions: [],
+  events: [],
+  systems: [steer],
+  rules: [],
+});
+
 const STEP_MILLIS = 1000 / 60;
 
 /** One frame of a display at 60 Hz: test time passes, every fiber has its turn, and the drawing moves on. */
@@ -39,17 +47,15 @@ const frame = (drawing: Drawing.Drawing) =>
 
 const session = Effect.gen(function* () {
   const host = yield* Host.make({
-    game: Game.make({ stepRate: 60, systems: [steer], rules: [] }),
+    game: steered,
     world: World.empty({ seed: 1 }),
-    components,
     join: (world) => World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
     leave: World.despawn,
     mayHold: true,
-    actions: [],
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);
-  const client = yield* Client.connect(clientEnd, { components });
+  const client = yield* Client.connect(clientEnd, { game: steered });
   const drawing = yield* Drawing.make(client, { keepSeconds: 2 });
   return { host, client, drawing };
 });
@@ -57,17 +63,15 @@ const session = Effect.gen(function* () {
 /** A session whose host raises a marker at tick 5 and removes it at tick 10. */
 const marked = Effect.gen(function* () {
   const host = yield* Host.make({
-    game: Game.make({ stepRate: 60, systems: [mark], rules: [] }),
+    game: marking,
     world: World.empty({ seed: 1 }),
-    components: markers,
     join: (world) => World.spawn(world, []),
     leave: World.despawn,
     mayHold: true,
-    actions: [],
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);
-  const client = yield* Client.connect(clientEnd, { components: markers });
+  const client = yield* Client.connect(clientEnd, { game: marking });
   return yield* Drawing.make(client, { keepSeconds: 2 });
 });
 
@@ -81,7 +85,6 @@ const Flag = Component.make('Flag', Schema.Struct({}), {
   owner: 'simulation',
   network: 'server',
 });
-const markers = [Marker, Flag];
 const mark = System.make({
   name: 'mark',
   reads: [Marker],
@@ -104,6 +107,14 @@ const mark = System.make({
       }
     }
   },
+});
+const marking = Game.make({
+  stepRate: 60,
+  components: [Marker, Flag],
+  actions: [],
+  events: [],
+  systems: [mark],
+  rules: [],
 });
 
 const xOf = (view: Option.Option<Drawing.View>, entity: World.Entity) =>

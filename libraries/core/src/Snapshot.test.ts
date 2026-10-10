@@ -1,11 +1,11 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
-import { Controls, Health, Position, Splat, Velocity } from '#src/fixtures.ts';
+import { Controls, Health, Position, Splat, Velocity, Wall } from '#src/fixtures.ts';
 import type * as Component from '#src/Component.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import * as World from '#src/World.ts';
 
-const components = [Position, Velocity, Health, Controls, Splat];
+const components = [Position, Velocity, Health, Controls, Splat, Wall];
 
 const [withRunner, runner] = World.spawn(World.empty({ seed: 9 }), [
   Position.of({ x: 3 }),
@@ -13,7 +13,8 @@ const [withRunner, runner] = World.spawn(World.empty({ seed: 9 }), [
   Health.of({ current: 80 }),
   Controls.of({ move: 0.5, fire: true }),
 ]);
-const [server, splat] = World.spawn(withRunner, [Position.of({ x: 4 }), Splat.of({ size: 2 })]);
+const [withSplat, splat] = World.spawn(withRunner, [Position.of({ x: 4 }), Splat.of({ size: 2 })]);
+const [server] = World.spawn(withSplat, [Wall.of({ x: 12 })]);
 
 describe('Snapshot', () => {
   it('carries a world to a client, component for component', () => {
@@ -44,6 +45,15 @@ describe('Snapshot', () => {
     expect(Snapshot.encode(server, components)).not.toContain('Splat');
     expect(World.get(world, splat, Splat)).toEqual(Option.none());
     expect(World.query(world, Splat).map(([, value]) => value)).toEqual([{ size: 7 }]);
+  });
+
+  it('never sends what is private to the server', () => {
+    const world = Option.getOrThrow(
+      Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, components), components),
+    );
+
+    expect(Snapshot.encode(server, components)).not.toContain('Wall');
+    expect(World.query(world, Wall)).toEqual([]);
   });
 
   it('rejects a snapshot it cannot trust, keeping nothing of it', () => {

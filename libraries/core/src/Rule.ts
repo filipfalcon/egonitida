@@ -27,11 +27,18 @@ export interface Context<
 
 export type RulesComponent = Component.Component<string, unknown, 'rules'>;
 
-export interface Rule {
-  readonly tag: string;
-  readonly writes: ReadonlyArray<RulesComponent>;
-  readonly emits: ReadonlyArray<Event.Any>;
-  readonly spawns: ReadonlyArray<Component.Any>;
+/** A rule, with what it declared kept in its type, so a game can check it holds all of them. */
+export interface Rule<
+  On extends Event.Any = Event.Any,
+  Writes extends RulesComponent = RulesComponent,
+  Emits extends Event.Any = Event.Any,
+  Spawns extends Component.Any = Component.Any,
+> {
+  /** The event or action it handles. */
+  readonly on: On;
+  readonly writes: ReadonlyArray<Writes>;
+  readonly emits: ReadonlyArray<Emits>;
+  readonly spawns: ReadonlyArray<Spawns>;
   readonly despawns: boolean;
   /**
    * A method, so a rule written for its own event fits here: the engine calls a rule only with events of its tag, which the type of `event` cannot say on its own.
@@ -59,8 +66,8 @@ export const on = <
       event: Event.ValueOf<E>,
     ) => void;
   },
-): Rule => ({
-  tag: event.tag,
+): Rule<E, Writes[number], Emits[number], Spawns[number]> => ({
+  on: event,
   ...spec,
   spawns: spec.spawns ?? [],
   despawns: spec.despawns ?? false,

@@ -15,9 +15,9 @@ export type Entity = number;
 export type Owner = 'rules' | 'simulation' | 'input';
 
 /**
- * How a component travels: decided by the server and sent to every client, guessed by a client and confirmed by the server, or kept on the client alone.
+ * How a component travels: decided by the server and sent to every client; guessed by a client and confirmed by the server; kept on the client alone; or kept on the server alone, for what a client does not need, builds for itself, or must not see.
  */
-export type NetworkRole = 'server' | 'predicted' | 'local';
+export type NetworkRole = 'server' | 'predicted' | 'local' | 'private';
 
 /** One component's values by entity. Only the component that made a store can read the values in it. */
 export interface Store {

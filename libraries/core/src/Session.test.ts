@@ -26,8 +26,6 @@ const steer = System.make({
   },
 });
 
-const components = [Position, Controls, Health];
-
 /** A player asking to be healed to an amount; the rules grant it to whoever asked. */
 const Heal = Action.make('Heal', { amount: Schema.Int });
 const heal = Rule.on(Heal, {
@@ -38,10 +36,18 @@ const heal = Rule.on(Heal, {
   },
 });
 
+const game = Game.make({
+  stepRate: 30,
+  components: [Position, Controls, Health],
+  actions: [Heal],
+  events: [],
+  systems: [steer],
+  rules: [heal],
+});
+
 const hostOptions = (mayHold: boolean): Host.Options => ({
-  game: Game.make({ stepRate: 30, systems: [steer], rules: [heal] }),
+  game,
   world: World.empty({ seed: 1 }),
-  components,
   join: (world) =>
     World.spawn(world, [
       Position.of({ x: 0 }),
@@ -50,7 +56,6 @@ const hostOptions = (mayHold: boolean): Host.Options => ({
     ]),
   leave: World.despawn,
   mayHold,
-  actions: [Heal],
 });
 
 const startHost = Host.make(hostOptions(true));
@@ -60,7 +65,7 @@ const session = Effect.gen(function* () {
   const host = yield* startHost;
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);
-  const client = yield* Client.connect(clientEnd, { components });
+  const client = yield* Client.connect(clientEnd, { game });
   return { host, client, clientEnd };
 });
 
@@ -215,7 +220,7 @@ describe('a session between a host and its clients', () => {
         const host = yield* Host.make(hostOptions(false));
         const [clientEnd, hostEnd] = yield* Transport.memoryPair;
         yield* host.connect(hostEnd);
-        const client = yield* Client.connect(clientEnd, { components });
+        const client = yield* Client.connect(clientEnd, { game });
 
         yield* client.hold;
         yield* advance(1000);
@@ -231,7 +236,7 @@ describe('a session between a host and its clients', () => {
         const [clientEnd, hostEnd] = yield* Transport.memoryPair;
         const scope = yield* Scope.make();
         yield* host.connect(hostEnd).pipe(Scope.provide(scope));
-        const client = yield* Client.connect(clientEnd, { components });
+        const client = yield* Client.connect(clientEnd, { game });
 
         yield* client.hold;
         yield* advance(500);

@@ -1,6 +1,4 @@
 import { Clock, Effect, Latch, Option, Schema, type Scope, Stream } from 'effect';
-import type * as Action from '#src/Action.ts';
-import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
@@ -17,8 +15,6 @@ import type * as World from '#src/World.ts';
 export interface Options {
   readonly game: Game.Game;
   readonly world: World.World;
-  /** Every component the game uses, so input and snapshots can be decoded by their schemas. */
-  readonly components: ReadonlyArray<Component.Any>;
   /** Spawns the entity a joining client will control. */
   readonly join: (world: World.World) => readonly [World.World, World.Entity];
   /** Removes what a leaving client controlled. */
@@ -29,8 +25,6 @@ export interface Options {
    * Whether a client may hold time: a local server for one player grants it, a world shared with others refuses. Holding time is the host's to allow, never the world's.
    */
   readonly mayHold: boolean;
-  /** Every action players may take, so what arrives can be decoded by its schema. */
-  readonly actions: ReadonlyArray<Action.Any>;
 }
 
 export interface Host {
@@ -44,7 +38,7 @@ export interface Host {
 export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> =>
   Effect.gen(function* () {
     const inputComponents = new Map(
-      options.components
+      options.game.components
         .filter((component): component is Input.InputComponent => component.owner === 'input')
         .map((component) => [component.name, component]),
     );
@@ -100,7 +94,7 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       for (let step = 1; step < steps; step += 1) {
         state.world = Game.step(options.game, state.world).world;
       }
-      const payload = Snapshot.encode(state.world, options.components);
+      const payload = Snapshot.encode(state.world, options.game.components);
       yield* Effect.forEach(
         state.connections,
         (connection) => connection.send({ channel: 'unreliable', payload }),
@@ -125,7 +119,7 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
           Effect.suspend(() => {
             if (message._tag === 'Act') {
               // An action is taken as from the player whose connection it came on; one the game does not know is dropped.
-              for (const action of options.actions) {
+              for (const action of options.game.actions) {
                 Option.map(action.accept(message.action, entity), (accepted) =>
                   state.acted.push(accepted),
                 );

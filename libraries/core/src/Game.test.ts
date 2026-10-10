@@ -1,6 +1,17 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Option } from 'effect';
-import { Bitten, Controls, Died, Health, Position, Restart, Velocity } from '#src/fixtures.ts';
+import { Option, Schema } from 'effect';
+import * as Component from '#src/Component.ts';
+import * as Event from '#src/Event.ts';
+import {
+  Bitten,
+  Controls,
+  Died,
+  declared,
+  Health,
+  Position,
+  Restart,
+  Velocity,
+} from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
 import * as Rule from '#src/Rule.ts';
@@ -52,7 +63,7 @@ const takeBite = Rule.on(Bitten, {
   },
 });
 
-const game = Game.make({ stepRate: 10, systems: [move, bite], rules: [takeBite] });
+const game = Game.make({ stepRate: 10, ...declared, systems: [move, bite], rules: [takeBite] });
 
 const spawnRunner = (x: number, health: number) =>
   World.spawn(World.empty({ seed: 7 }), [
@@ -92,7 +103,12 @@ describe('Game.step', () => {
         }
       },
     });
-    const twice = Game.make({ stepRate: 10, systems: [doubleBite], rules: [takeBite] });
+    const twice = Game.make({
+      stepRate: 10,
+      ...declared,
+      systems: [doubleBite],
+      rules: [takeBite],
+    });
     const [world, runner] = spawnRunner(0, 50);
 
     const { world: after, events } = Game.step(twice, world);
@@ -138,7 +154,7 @@ describe('determinism', () => {
       }
     },
   });
-  const noisy = Game.make({ stepRate: 10, systems: [scatter], rules: [] });
+  const noisy = Game.make({ stepRate: 10, ...declared, systems: [scatter], rules: [] });
   const run = (seed: number) => {
     const [start] = World.spawn(World.empty({ seed }), [Position.of({ x: 0 })]);
     return Array.from({ length: 20 }).reduce<World.World>(
@@ -179,7 +195,7 @@ describe('input', () => {
       }
     },
   });
-  const steered = Game.make({ stepRate: 10, systems: [steer], rules: [] });
+  const steered = Game.make({ stepRate: 10, ...declared, systems: [steer], rules: [] });
   const [start, player] = World.spawn(World.empty({ seed: 1 }), [
     Position.of({ x: 0 }),
     Controls.of({ move: 0, fire: false }),
@@ -244,7 +260,7 @@ describe('actions', () => {
       }
     },
   });
-  const restarting = Game.make({ stepRate: 10, systems: [look], rules: [restart] });
+  const restarting = Game.make({ stepRate: 10, ...declared, systems: [look], rules: [restart] });
   const [world, player] = spawnRunner(0, 10);
   /** An action as the host hands it on: sent by a client, then accepted as from its player. */
   const restarted = (x: number) => Option.getOrThrow(Restart.accept(Restart.encode({ x }), player));
@@ -299,7 +315,7 @@ describe('spawning and despawning within a step', () => {
   const [world, keeper] = World.spawn(World.empty({ seed: 3 }), [Health.of({ current: 1 })]);
 
   it('gives the spawned entity the next id, and later systems see it in the same step', () => {
-    const lifecycle = Game.make({ stepRate: 10, systems: [raise, move], rules: [] });
+    const lifecycle = Game.make({ stepRate: 10, ...declared, systems: [raise, move], rules: [] });
     const after = Game.step(lifecycle, world).world;
     const runner = keeper + 1;
 
@@ -311,6 +327,7 @@ describe('spawning and despawning within a step', () => {
   it('takes a despawned entity out of every store at once, so later systems no longer see it', () => {
     const lifecycle = Game.make({
       stepRate: 10,
+      ...declared,
       systems: [raise, move, move, remove, move],
       rules: [],
     });
@@ -335,7 +352,12 @@ describe('spawning and despawning within a step', () => {
         context.spawn([Health.of({ current: 100 })]);
       },
     });
-    const replacing = Game.make({ stepRate: 10, systems: [bite], rules: [takeBite, replace] });
+    const replacing = Game.make({
+      stepRate: 10,
+      ...declared,
+      systems: [bite],
+      rules: [takeBite, replace],
+    });
     const [start, runner] = spawnRunner(10, 30);
     const after = Game.step(replacing, start).world;
 
@@ -344,7 +366,12 @@ describe('spawning and despawning within a step', () => {
   });
 
   it('leaves the world it was given untouched', () => {
-    const lifecycle = Game.make({ stepRate: 10, systems: [raise, move, move, remove], rules: [] });
+    const lifecycle = Game.make({
+      stepRate: 10,
+      ...declared,
+      systems: [raise, move, move, remove],
+      rules: [],
+    });
     Game.step(lifecycle, world);
 
     expect(world.nextEntity).toBe(keeper + 1);
@@ -352,7 +379,12 @@ describe('spawning and despawning within a step', () => {
   });
 
   it('replays to the same world, ids and all', () => {
-    const lifecycle = Game.make({ stepRate: 10, systems: [raise, move, remove], rules: [] });
+    const lifecycle = Game.make({
+      stepRate: 10,
+      ...declared,
+      systems: [raise, move, remove],
+      rules: [],
+    });
     const play = () =>
       Array.from({ length: 12 }).reduce<World.World>(
         (current) => Game.step(lifecycle, current).world,
@@ -459,3 +491,93 @@ export const refused = () => {
     run: () => {},
   });
 };
+
+describe('Game.make', () => {
+  const Unknown = Event.make('Unknown', {});
+  const Elsewhere = Component.make('Elsewhere', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'simulation',
+    network: 'server',
+  });
+  const Kept = Component.make('Kept', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'rules',
+    network: 'server',
+  });
+
+  it('keeps what the game is made of', () => {
+    expect(game.components.map(({ name }) => name)).toEqual([
+      'Position',
+      'Velocity',
+      'Health',
+      'Controls',
+      'Splat',
+      'Wall',
+    ]);
+    expect(game.actions.map(({ tag }) => tag)).toEqual(['Restart']);
+    expect(game.events.map(({ tag }) => tag)).toEqual(['Bitten', 'Died']);
+  });
+
+  it('refuses a system reading, writing, emitting, or spawning what the game does not declare', () => {
+    const reading = System.make({
+      name: 'reading',
+      reads: [Elsewhere],
+      writes: [],
+      emits: [],
+      run: () => {},
+    });
+    const writing = System.make({
+      name: 'writing',
+      reads: [],
+      writes: [Elsewhere],
+      emits: [],
+      run: () => {},
+    });
+    const emitting = System.make({
+      name: 'emitting',
+      reads: [],
+      writes: [],
+      emits: [Unknown],
+      run: () => {},
+    });
+    const spawning = System.make({
+      name: 'spawning',
+      reads: [],
+      writes: [],
+      emits: [],
+      spawns: [Elsewhere],
+      run: () => {},
+    });
+
+    // @ts-expect-error `Elsewhere` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [reading], rules: [] });
+    // @ts-expect-error `Elsewhere` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [writing], rules: [] });
+    // @ts-expect-error `Unknown` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [emitting], rules: [] });
+    // @ts-expect-error `Elsewhere` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [spawning], rules: [] });
+  });
+
+  it('refuses a rule handling, writing, emitting, or spawning what the game does not declare', () => {
+    const handling = Rule.on(Unknown, { writes: [], emits: [], run: () => {} });
+    const writing = Rule.on(Died, { writes: [Kept], emits: [], run: () => {} });
+    const emitting = Rule.on(Died, { writes: [], emits: [Unknown], run: () => {} });
+    const spawning = Rule.on(Died, { writes: [], emits: [], spawns: [Elsewhere], run: () => {} });
+
+    // @ts-expect-error `Unknown` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [], rules: [handling] });
+    // @ts-expect-error `Kept` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [], rules: [writing] });
+    // @ts-expect-error `Unknown` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [], rules: [emitting] });
+    // @ts-expect-error `Elsewhere` is not part of the game.
+    Game.make({ stepRate: 10, ...declared, systems: [], rules: [spawning] });
+  });
+
+  it('lets a rule handle an action the game declares', () => {
+    const restart = Rule.on(Restart, { writes: [], emits: [], run: () => {} });
+
+    expect(Game.make({ stepRate: 10, ...declared, systems: [], rules: [restart] }).rules).toEqual([
+      restart,
+    ]);
+  });
+});

@@ -57,12 +57,18 @@ export interface Context<
 
 export type SimulationComponent = Component.Component<string, unknown, 'simulation'>;
 
-export interface System {
+/** A system, with what it declared kept in its type, so a game can check it holds all of them. */
+export interface System<
+  Reads extends Component.Any = Component.Any,
+  Writes extends SimulationComponent = SimulationComponent,
+  Emits extends Event.Any = Event.Any,
+  Spawns extends Component.Any = Component.Any,
+> {
   readonly name: string;
-  readonly reads: ReadonlyArray<Component.Any>;
-  readonly writes: ReadonlyArray<SimulationComponent>;
-  readonly emits: ReadonlyArray<Event.Any>;
-  readonly spawns: ReadonlyArray<Component.Any>;
+  readonly reads: ReadonlyArray<Reads>;
+  readonly writes: ReadonlyArray<Writes>;
+  readonly emits: ReadonlyArray<Emits>;
+  readonly spawns: ReadonlyArray<Spawns>;
   readonly despawns: boolean;
   // A context that allows everything fits wherever a system declared less, so any system's `run` fits here.
   readonly run: (
@@ -88,4 +94,8 @@ export const make = <
   readonly run: (
     context: Context<Reads[number], Writes[number], Emits[number], Spawns[number], Despawns>,
   ) => void;
-}): System => ({ ...spec, spawns: spec.spawns ?? [], despawns: spec.despawns ?? false });
+}): System<Reads[number], Writes[number], Emits[number], Spawns[number]> => ({
+  ...spec,
+  spawns: spec.spawns ?? [],
+  despawns: spec.despawns ?? false,
+});

@@ -1,4 +1,5 @@
 import { Option } from 'effect';
+import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type * as Input from '#src/Input.ts';
@@ -8,18 +9,49 @@ import type * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
 
 /**
- * A game: its fixed step rate, the systems that run every step in order, and the rules that handle what they emit.
+ * A game: its fixed step rate, everything its state is made of (its components, the actions its players take, and the events its steps emit), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
  *
  * One step: the tick advances; the step's input is written to the entities it is aimed at; the players' actions are handled by the rules, in the order they came; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
  */
 
 export interface Game {
   readonly stepRate: number;
+  readonly components: ReadonlyArray<Component.Any>;
+  readonly actions: ReadonlyArray<Action.Any>;
+  readonly events: ReadonlyArray<Event.Any>;
   readonly systems: ReadonlyArray<System.System>;
   readonly rules: ReadonlyArray<Rule.Rule>;
 }
 
-export const make = (game: Game): Game => game;
+/**
+ * A game made of what it declares: a system or a rule that reads, writes, emits, spawns, or handles anything the game does not declare does not compile. Rules may read any component, so what they read is not checked; one the game does not hold is simply never there.
+ */
+export const make = <
+  const Components extends ReadonlyArray<Component.Any>,
+  const Actions extends ReadonlyArray<Action.Any>,
+  const Events extends ReadonlyArray<Event.Any>,
+>(game: {
+  readonly stepRate: number;
+  readonly components: Components;
+  readonly actions: Actions;
+  readonly events: Events;
+  readonly systems: ReadonlyArray<
+    System.System<
+      Components[number],
+      Extract<Components[number], System.SimulationComponent>,
+      Events[number],
+      Components[number]
+    >
+  >;
+  readonly rules: ReadonlyArray<
+    Rule.Rule<
+      Actions[number] | Events[number],
+      Extract<Components[number], Rule.RulesComponent>,
+      Events[number],
+      Components[number]
+    >
+  >;
+}): Game => game;
 
 export interface Step {
   readonly world: World.World;
@@ -49,7 +81,7 @@ export const step = (
     for (const event of line.slice(handled.count)) {
       handled.count += 1;
       for (const rule of game.rules) {
-        if (rule.tag === event._tag) {
+        if (rule.on.tag === event._tag) {
           rule.run(context, event);
         }
       }

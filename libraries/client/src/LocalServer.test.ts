@@ -11,7 +11,6 @@ const Controls = Component.make('Controls', Schema.Struct({ move: Schema.Finite 
   owner: 'input',
   network: 'predicted',
 });
-const components = [Position, Controls];
 
 const steer = System.make({
   name: 'steer',
@@ -25,16 +24,23 @@ const steer = System.make({
   },
 });
 
+const game = Game.make({
+  stepRate: 30,
+  components: [Position, Controls],
+  actions: [],
+  events: [],
+  systems: [steer],
+  rules: [],
+});
+
 const hostOptions = {
-  game: Game.make({ stepRate: 30, systems: [steer], rules: [] }),
+  game,
   world: World.empty({ seed: 1 }),
-  components,
   join: (world: World.World) =>
     World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
   leave: World.despawn,
   // A local server for one player lets that player hold time.
   mayHold: true,
-  actions: [],
 };
 
 describe('a local server', () => {
@@ -53,7 +59,7 @@ describe('a local server', () => {
       const connection = yield* WorkerTransport.connect.pipe(
         Effect.provide(BrowserWorker.layer(() => channel.port1)),
       );
-      const client = yield* Client.connect(connection, { components });
+      const client = yield* Client.connect(connection, { game });
       yield* client.send([Controls.of({ move: 1 })]);
       yield* Effect.sleep('300 millis');
 

@@ -40,3 +40,16 @@ export const Died = Event.make('Died', { entity: Schema.Int });
 
 /** A player asking to be put back at the start, at a given place. */
 export const Restart = Action.make('Restart', { x: Schema.Finite });
+
+/** The lab's walls: on the server only, since every client builds the same ones itself. */
+export const Wall = Component.make('Wall', Schema.Struct({ x: Schema.Finite }), {
+  owner: 'rules',
+  network: 'private',
+});
+
+/** Everything the small game is made of, for a test to make a game from. */
+export const declared = {
+  components: [Position, Velocity, Health, Controls, Splat, Wall],
+  actions: [Restart],
+  events: [Bitten, Died],
+};

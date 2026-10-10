@@ -33,6 +33,7 @@ Six principles shape every API. Each builds on the ones before it.
   - **Server**: decided by the server and sent to every client.
   - **Predicted**: guessed by the client, confirmed by the server.
   - **Local**: kept on the client only and never sent, such as blood, casings, or a ragdoll after death. Most of what is expensive in Border is local.
+  - **Private**: kept on the server only and never sent: what clients do not need, such as the size of a body; what each builds for itself, such as a level's walls; and, with several players, what a player must not see.
 - The engine always has the client–server shape. Singleplayer is the same code with the server running in a Web Worker in the browser, the way Minecraft runs an integrated server; switching to multiplayer is configuration. The price is that a singleplayer game also sends its input as commands and marks what is local.
 - There is no single player in the API, only the set of players.
 - Whether time may stop is the host's policy, not the world's: a local server grants a player's pause, a shared world refuses it. Switching a game to multiplayer turns its pause into a menu that does not stop anything, and the game has to live with that.
