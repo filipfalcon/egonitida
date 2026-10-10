@@ -9,7 +9,7 @@ import {
   declared,
   Health,
   Position,
-  Restart,
+  ChoseRestart,
   Splat,
   Velocity,
   Wall,
@@ -258,7 +258,7 @@ describe('input', () => {
 
 describe('actions', () => {
   // The rules put a restarting player's health back, and a system that runs after sees it this very step.
-  const restart = Rule.on(Restart, {
+  const restart = Rule.on(ChoseRestart, {
     writes: [Health],
     emits: [],
     run: (context, restarted) => {
@@ -280,14 +280,15 @@ describe('actions', () => {
   const restarting = Game.make({ stepRate: 10, ...declared, systems: [look], rules: [restart] });
   const [world, player] = spawnRunner(0, 10);
   /** An action as the host hands it on: sent by a client, then accepted as from its player. */
-  const restarted = (x: number) => Option.getOrThrow(Restart.accept(Restart.encode({ x }), player));
+  const restarted = (x: number) =>
+    Option.getOrThrow(ChoseRestart.accept(ChoseRestart.encode({ x }), player));
 
   it('is handled by the rules within the step it arrives, before the systems run', () => {
     seen.length = 0;
     Story.story(
       restarting,
       Story.spawn('her', runner(0, 10)),
-      Story.act('her', Restart, { x: 0 }),
+      Story.act('her', ChoseRestart, { x: 0 }),
       Story.step(),
       Story.expect('her', Health, (health) => expect(health.current).toBe(100)),
     );
@@ -299,8 +300,8 @@ describe('actions', () => {
     const { events } = Game.step(restarting, world, [], [restarted(1), restarted(2)]);
 
     expect(events).toEqual([
-      { _tag: 'Restart', x: 1, player },
-      { _tag: 'Restart', x: 2, player },
+      { _tag: 'ChoseRestart', x: 1, player },
+      { _tag: 'ChoseRestart', x: 2, player },
     ]);
   });
 });
@@ -445,12 +446,12 @@ describe('Game.changes', () => {
       emittedBy: [{ _tag: 'Rule', on: 'Bitten' }],
       handledBy: [],
     });
-    expect(changes.events.get('Restart')).toEqual({ emittedBy: [], handledBy: [] });
+    expect(changes.events.get('ChoseRestart')).toEqual({ emittedBy: [], handledBy: [] });
   });
 
   it('lists every component and event the game declares, even those nothing touches', () => {
     expect([...changes.components.keys()]).toEqual(game.components.map(({ name }) => name));
-    expect([...changes.events.keys()]).toEqual(['Restart', 'Bitten', 'Died']);
+    expect([...changes.events.keys()]).toEqual(['ChoseRestart', 'Bitten', 'Died']);
     expect(changes.components.get('Wall')).toEqual({ readBy: [], writtenBy: [], spawnedBy: [] });
   });
 
@@ -626,7 +627,7 @@ describe('Game.make', () => {
       'Splat',
       'Wall',
     ]);
-    expect(game.actions.map(({ tag }) => tag)).toEqual(['Restart']);
+    expect(game.actions.map(({ tag }) => tag)).toEqual(['ChoseRestart']);
     expect(game.events.map(({ tag }) => tag)).toEqual(['Bitten', 'Died']);
   });
 
@@ -688,7 +689,7 @@ describe('Game.make', () => {
   });
 
   it('lets a rule handle an action the game declares', () => {
-    const restart = Rule.on(Restart, { writes: [], emits: [], run: () => {} });
+    const restart = Rule.on(ChoseRestart, { writes: [], emits: [], run: () => {} });
 
     expect(Game.make({ stepRate: 10, ...declared, systems: [], rules: [restart] }).rules).toEqual([
       restart,

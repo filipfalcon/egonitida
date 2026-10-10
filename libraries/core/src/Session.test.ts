@@ -26,9 +26,9 @@ const steer = System.make({
   },
 });
 
-/** A player asking to be healed to an amount; the rules grant it to whoever asked. */
-const Heal = Action.make('Heal', { amount: Schema.Int });
-const heal = Rule.on(Heal, {
+/** A player asked to be healed to an amount; the rules grant it to whoever asked. */
+const AskedToHeal = Action.make('AskedToHeal', { amount: Schema.Int });
+const heal = Rule.on(AskedToHeal, {
   writes: [Health],
   emits: [],
   run: (context, healed) => {
@@ -39,7 +39,7 @@ const heal = Rule.on(Heal, {
 const game = Game.make({
   stepRate: 30,
   components: [Position, Controls, Health],
-  actions: [Heal],
+  actions: [AskedToHeal],
   events: [],
   systems: [steer],
   rules: [heal],
@@ -257,7 +257,7 @@ describe('a session between a host and its clients', () => {
       Effect.gen(function* () {
         const { host, client } = yield* session;
 
-        yield* client.act(Heal, { amount: 50 });
+        yield* client.act(AskedToHeal, { amount: 50 });
         yield* advance(50);
 
         const world = yield* host.world;
@@ -269,8 +269,8 @@ describe('a session between a host and its clients', () => {
       Effect.gen(function* () {
         const { host, client } = yield* session;
 
-        yield* client.act(Heal, { amount: 50 });
-        yield* client.act(Heal, { amount: 70 });
+        yield* client.act(AskedToHeal, { amount: 50 });
+        yield* client.act(AskedToHeal, { amount: 70 });
         yield* advance(50);
 
         const world = yield* host.world;
@@ -298,7 +298,7 @@ describe('a session between a host and its clients', () => {
         const { host, client } = yield* session;
 
         yield* client.hold;
-        yield* client.act(Heal, { amount: 50 });
+        yield* client.act(AskedToHeal, { amount: 50 });
         yield* advance(500);
         const held = yield* host.world;
         expect(healthOf(held, client.entity)).toEqual(Option.some(0));

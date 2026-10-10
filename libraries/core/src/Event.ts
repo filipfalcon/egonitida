@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 
 /**
- * Something that happened in a step, such as a bite or a death. Systems and rules emit events; rules handle them. An event is a tagged Schema struct, so it can be recorded, replayed, and sent.
+ * Something that happened in a step, such as a bite or a death, named as a fact in the past tense (`Bitten`, `Died`). Systems and rules emit events; rules handle them. An event is a tagged Schema struct, so it can be recorded, replayed, and sent.
  */
 
 export interface Event<Tag extends string, Value> {

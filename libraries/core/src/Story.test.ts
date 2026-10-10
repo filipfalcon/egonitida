@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
-import { Bitten, Controls, declared, Died, Health, Position, Restart } from '#src/fixtures.ts';
+import { Bitten, Controls, declared, Died, Health, Position, ChoseRestart } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Rule from '#src/Rule.ts';
 import * as Story from '#src/Story.ts';
@@ -48,7 +48,7 @@ const takeBite = Rule.on(Bitten, {
 });
 
 /** A player who restarts is healed whole. */
-const restart = Rule.on(Restart, {
+const restart = Rule.on(ChoseRestart, {
   writes: [Health],
   emits: [],
   run: (context, restarted) => {
@@ -104,7 +104,7 @@ describe('Story', () => {
     Story.story(
       game,
       Story.spawn('her', her),
-      Story.act('her', Restart, { x: 0 }),
+      Story.act('her', ChoseRestart, { x: 0 }),
       Story.expect('her', Health, (health) => expect(health.current).toBe(50)),
       Story.step(),
       Story.expect('her', Health, (health) => expect(health.current).toBe(100)),
