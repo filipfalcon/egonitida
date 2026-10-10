@@ -9,6 +9,7 @@ export * as Pace from '#src/Pace.ts';
 export * as Protocol from '#src/Protocol.ts';
 export * as Rule from '#src/Rule.ts';
 export * as Snapshot from '#src/Snapshot.ts';
+export * as Story from '#src/Story.ts';
 export * as System from '#src/System.ts';
 export * as Transport from '#src/Transport.ts';
 export * as WorkerTransport from '#src/WorkerTransport.ts';

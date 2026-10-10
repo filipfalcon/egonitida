@@ -10,6 +10,8 @@ export interface Event<Tag extends string, Value> {
   readonly schema: Schema.Top;
   /** Carries the value's type; never set. */
   readonly '~value'?: Value;
+  /** Whether `event` is one of this kind, checked by its schema. */
+  is(event: Tagged): event is Tagged & Value;
 }
 
 /** What every event value has in common: the tag of the event it belongs to. */
@@ -26,6 +28,11 @@ export const make = <const Tag extends string, const Fields extends Schema.Struc
   fields: Fields,
 ) => {
   const schema = Schema.TaggedStruct(tag, fields);
-  const event: Event<Tag, typeof schema.Type> = { _tag: 'Event', tag, schema };
+  const event: Event<Tag, typeof schema.Type> = {
+    _tag: 'Event',
+    tag,
+    schema,
+    is: Schema.is(schema),
+  };
   return event;
 };

@@ -27,6 +27,7 @@ export const make = <const Tag extends string, const F extends Fields>(tag: Tag,
     _tag: 'Event',
     tag,
     schema: received,
+    is: Schema.is(received),
     encode: (value) => ({ ...Schema.encodeSync(sent)(value), _tag: tag }),
     // The tag decides whether it is this action; the player is whoever sent it, whatever the client claimed.
     accept: (encoded, player) =>
