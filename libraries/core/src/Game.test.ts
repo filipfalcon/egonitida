@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
-import { Bitten, Controls, Died, Health, Position, Velocity } from '#src/fixtures.ts';
+import { Bitten, Controls, Died, Health, Position, Restart, Velocity } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
 import * as Rule from '#src/Rule.ts';
@@ -220,6 +220,50 @@ describe('input', () => {
     expect(contents(play())).toEqual(contents(play()));
     // A held stick keeps moving: 1 + 1 - 0.5 + 0.25 + 0.25 + 0.25.
     expect(World.get(play(), player, Position)).toEqual(Option.some({ x: 2.25 }));
+  });
+});
+
+describe('actions', () => {
+  // The rules put a restarting player's health back, and a system that runs after sees it this very step.
+  const restart = Rule.on(Restart, {
+    writes: [Health],
+    emits: [],
+    run: (context, restarted) => {
+      context.set(restarted.player, Health, { current: 100 });
+    },
+  });
+  const seen: Array<number> = [];
+  const look = System.make({
+    name: 'look',
+    reads: [Health],
+    writes: [],
+    emits: [],
+    run: (context) => {
+      for (const [, health] of context.query(Health)) {
+        seen.push(health.current);
+      }
+    },
+  });
+  const restarting = Game.make({ stepRate: 10, systems: [look], rules: [restart] });
+  const [world, player] = spawnRunner(0, 10);
+  /** An action as the host hands it on: sent by a client, then accepted as from its player. */
+  const restarted = (x: number) => Option.getOrThrow(Restart.accept(Restart.encode({ x }), player));
+
+  it('is handled by the rules within the step it arrives, before the systems run', () => {
+    seen.length = 0;
+    const { world: after } = Game.step(restarting, world, [], [restarted(0)]);
+
+    expect(World.get(after, player, Health)).toEqual(Option.some({ current: 100 }));
+    expect(seen).toEqual([100]);
+  });
+
+  it('is reported first among the step’s events, in the order the actions came', () => {
+    const { events } = Game.step(restarting, world, [], [restarted(1), restarted(2)]);
+
+    expect(events).toEqual([
+      { _tag: 'Restart', x: 1, player },
+      { _tag: 'Restart', x: 2, player },
+    ]);
   });
 });
 

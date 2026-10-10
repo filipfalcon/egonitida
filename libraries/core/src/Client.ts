@@ -1,5 +1,7 @@
 import { Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
+import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
+import type * as Event from '#src/Event.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import type * as Transport from '#src/Transport.ts';
@@ -29,6 +31,11 @@ export interface Client {
   readonly hold: Effect.Effect<void>;
   /** Lets go of time this client held. */
   readonly release: Effect.Effect<void>;
+  /** Takes an action, which the host hands to the rules at its next step, as from this client's player. */
+  readonly act: <Sent>(
+    action: Action.Action<string, Sent, Event.Tagged>,
+    value: Sent,
+  ) => Effect.Effect<void>;
 }
 
 type SentInput = Protocol.Inputs['inputs'][number];
@@ -101,5 +108,6 @@ export const connect = (
       send,
       hold: ask({ _tag: 'Hold' }),
       release: ask({ _tag: 'Release' }),
+      act: (action, value) => ask({ _tag: 'Act', action: action.encode(value) }),
     };
   });

@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import * as Action from '#src/Action.ts';
 import * as Component from '#src/Component.ts';
 import * as Event from '#src/Event.ts';
 
@@ -36,3 +37,6 @@ export const Splat = Component.make('Splat', Schema.Struct({ size: Schema.Finite
 export const Bitten = Event.make('Bitten', { entity: Schema.Int, damage: Schema.Int });
 
 export const Died = Event.make('Died', { entity: Schema.Int });
+
+/** A player asking to be put back at the start, at a given place. */
+export const Restart = Action.make('Restart', { x: Schema.Finite });

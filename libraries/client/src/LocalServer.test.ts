@@ -34,6 +34,7 @@ const hostOptions = {
   leave: World.despawn,
   // A local server for one player lets that player hold time.
   mayHold: true,
+  actions: [],
 };
 
 describe('a local server', () => {

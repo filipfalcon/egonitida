@@ -1,5 +1,7 @@
 import { Clock, Effect, Latch, Option, Schema, type Scope, Stream } from 'effect';
+import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
+import type * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
 import * as Pace from '#src/Pace.ts';
@@ -27,6 +29,8 @@ export interface Options {
    * Whether a client may hold time: a local server for one player grants it, a world shared with others refuses. Holding time is the host's to allow, never the world's.
    */
   readonly mayHold: boolean;
+  /** Every action players may take, so what arrives can be decoded by its schema. */
+  readonly actions: ReadonlyArray<Action.Any>;
 }
 
 export interface Host {
@@ -58,6 +62,8 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       done: 0,
       /** The clients holding time now; time stands while there is any. */
       holders: new Set<World.Entity>(),
+      /** The players' actions waiting for the next step, in the order they came. */
+      acted: new Array<Event.Tagged>(),
       heldSince: Option.none<number>(),
     };
     // Open while time runs; the loop waits here while it is held.
@@ -89,7 +95,8 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       state.done += steps;
       const inputs = [...state.pending.values()].flat();
       state.pending.clear();
-      state.world = Game.step(options.game, state.world, inputs).world;
+      const actions = state.acted.splice(0);
+      state.world = Game.step(options.game, state.world, inputs, actions).world;
       for (let step = 1; step < steps; step += 1) {
         state.world = Game.step(options.game, state.world).world;
       }
@@ -116,6 +123,15 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
         onNone: () => Effect.void,
         onSome: (message) =>
           Effect.suspend(() => {
+            if (message._tag === 'Act') {
+              // An action is taken as from the player whose connection it came on; one the game does not know is dropped.
+              for (const action of options.actions) {
+                Option.map(action.accept(message.action, entity), (accepted) =>
+                  state.acted.push(accepted),
+                );
+              }
+              return Effect.void;
+            }
             if (!options.mayHold) {
               return Effect.void;
             }

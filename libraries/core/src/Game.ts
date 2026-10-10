@@ -10,7 +10,7 @@ import * as World from '#src/World.ts';
 /**
  * A game: its fixed step rate, the systems that run every step in order, and the rules that handle what they emit.
  *
- * One step: the tick advances; the step's input is written to the entities it is aimed at; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
+ * One step: the tick advances; the step's input is written to the entities it is aimed at; the players' actions are handled by the rules, in the order they came; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
  */
 
 export interface Game {
@@ -31,6 +31,7 @@ export const step = (
   game: Game,
   world: World.World,
   inputs: ReadonlyArray<Input.Input> = [],
+  actions: ReadonlyArray<Event.Tagged> = [],
 ): Step => {
   const draft = World.draft(world);
   draft.tick += 1;
@@ -40,7 +41,23 @@ export const step = (
       input.writeInto(draft);
     }
   }
-  const line: Array<Event.Tagged> = [];
+  // Everything that happens in the step, in order: the actions first, then what systems and rules emit.
+  const line: Array<Event.Tagged> = [...actions];
+  const handled = { count: 0 };
+  /** Hands every event not yet handled to the rules that handle it, including events those rules emit meanwhile. */
+  const settle = () => {
+    for (const event of line.slice(handled.count)) {
+      handled.count += 1;
+      for (const rule of game.rules) {
+        if (rule.tag === event._tag) {
+          rule.run(context, event);
+        }
+      }
+    }
+    if (handled.count < line.length) {
+      settle();
+    }
+  };
 
   // Systems and rules share one context at run time; their types are what keep each to what it declared.
   const context: System.Context<Component.Any, Component.Any, Event.Any> &
@@ -62,17 +79,12 @@ export const step = (
     },
   };
 
+  // The players' actions are decided before anything moves, so the systems see what the rules made of them.
+  settle();
   for (const system of game.systems) {
     system.run(context);
   }
-  // A rule's events join the end of the line, and iterating an array reaches what is pushed onto it meanwhile.
-  for (const event of line) {
-    for (const rule of game.rules) {
-      if (rule.tag === event._tag) {
-        rule.run(context, event);
-      }
-    }
-  }
+  settle();
 
   return { world: World.finish(draft), events: line };
 };

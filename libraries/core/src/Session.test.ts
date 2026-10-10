@@ -1,10 +1,12 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Exit, Fiber, Option, Scope, Stream } from 'effect';
+import { Effect, Exit, Fiber, Option, Schema, Scope, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
+import * as Action from '#src/Action.ts';
 import * as Client from '#src/Client.ts';
-import { Controls, Position } from '#src/fixtures.ts';
+import { Controls, Health, Position } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Host from '#src/Host.ts';
+import * as Rule from '#src/Rule.ts';
 import * as System from '#src/System.ts';
 import * as Transport from '#src/Transport.ts';
 import * as World from '#src/World.ts';
@@ -24,16 +26,31 @@ const steer = System.make({
   },
 });
 
-const components = [Position, Controls];
+const components = [Position, Controls, Health];
+
+/** A player asking to be healed to an amount; the rules grant it to whoever asked. */
+const Heal = Action.make('Heal', { amount: Schema.Int });
+const heal = Rule.on(Heal, {
+  writes: [Health],
+  emits: [],
+  run: (context, healed) => {
+    context.set(healed.player, Health, { current: healed.amount });
+  },
+});
 
 const hostOptions = (mayHold: boolean): Host.Options => ({
-  game: Game.make({ stepRate: 30, systems: [steer], rules: [] }),
+  game: Game.make({ stepRate: 30, systems: [steer], rules: [heal] }),
   world: World.empty({ seed: 1 }),
   components,
   join: (world) =>
-    World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0, fire: false })]),
+    World.spawn(world, [
+      Position.of({ x: 0 }),
+      Controls.of({ move: 0, fire: false }),
+      Health.of({ current: 0 }),
+    ]),
   leave: World.despawn,
   mayHold,
+  actions: [Heal],
 });
 
 const startHost = Host.make(hostOptions(true));
@@ -223,6 +240,68 @@ describe('a session between a host and its clients', () => {
 
         const world = yield* host.world;
         expect(world.tick).toBe(3);
+      }),
+    );
+  });
+
+  describe('actions', () => {
+    const healthOf = (world: World.World, entity: World.Entity) =>
+      Option.map(World.get(world, entity, Health), (health) => health.current);
+
+    it.effect('hands a client’s action to the rules, as from the player who sent it', () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* session;
+
+        yield* client.act(Heal, { amount: 50 });
+        yield* advance(50);
+
+        const world = yield* host.world;
+        expect(healthOf(world, client.entity)).toEqual(Option.some(50));
+      }),
+    );
+
+    it.effect('keeps a client’s actions in the order it sent them', () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* session;
+
+        yield* client.act(Heal, { amount: 50 });
+        yield* client.act(Heal, { amount: 70 });
+        yield* advance(50);
+
+        const world = yield* host.world;
+        expect(healthOf(world, client.entity)).toEqual(Option.some(70));
+      }),
+    );
+
+    it.effect('ignores an action the host does not know', () =>
+      Effect.gen(function* () {
+        const { host, client, clientEnd } = yield* session;
+
+        yield* clientEnd.send({
+          channel: 'reliable',
+          payload: JSON.stringify({ _tag: 'Act', action: { _tag: 'Teleport', x: 1 } }),
+        });
+        yield* advance(50);
+
+        const world = yield* host.world;
+        expect(healthOf(world, client.entity)).toEqual(Option.some(0));
+      }),
+    );
+
+    it.effect('carries out an action sent while time is held once it runs again', () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* session;
+
+        yield* client.hold;
+        yield* client.act(Heal, { amount: 50 });
+        yield* advance(500);
+        const held = yield* host.world;
+        expect(healthOf(held, client.entity)).toEqual(Option.some(0));
+
+        yield* client.release;
+        yield* advance(50);
+        const resumed = yield* host.world;
+        expect(healthOf(resumed, client.entity)).toEqual(Option.some(50));
       }),
     );
   });

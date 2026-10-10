@@ -6,7 +6,7 @@ import { Option, Schema } from 'effect';
  * - Reliable, host to client: `Welcome`, naming the entity the client controls.
  * - Unreliable, host to client: snapshots, as `Snapshot` encodes them.
  * - Unreliable, client to host: `Inputs`, the client's latest inputs repeated, so one lost message loses none of them.
- * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again.
+ * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again, and `Act`, an action the player takes, encoded by its own schema.
  */
 
 /** How many of its latest inputs a client repeats in each message. */
@@ -29,6 +29,7 @@ export type Inputs = typeof Inputs.Type;
 const ClientReliable = Schema.Union([
   Schema.TaggedStruct('Hold', {}),
   Schema.TaggedStruct('Release', {}),
+  Schema.TaggedStruct('Act', { action: Schema.Unknown }),
 ]);
 export type ClientReliable = typeof ClientReliable.Type;
 

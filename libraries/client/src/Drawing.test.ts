@@ -45,6 +45,7 @@ const session = Effect.gen(function* () {
     join: (world) => World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
     leave: World.despawn,
     mayHold: true,
+    actions: [],
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);
