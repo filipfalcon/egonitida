@@ -645,6 +645,67 @@ describe('Plugin.make', () => {
     });
   });
 
+  it('lets a plugin write what a plugin it requires shares, and nothing else of it', () => {
+    const Moved = Component.make('Moved', Schema.Struct({ x: Schema.Finite }), {
+      owner: 'simulation',
+      network: 'server',
+    });
+    const Kept = Component.make('Kept', Schema.Struct({ x: Schema.Finite }), {
+      owner: 'simulation',
+      network: 'server',
+    });
+    const Bodies = Plugin.make({
+      name: 'Bodies',
+      requires: [],
+      components: [Moved, Kept],
+      shares: [Moved],
+      actions: [],
+      events: [],
+      systems: [],
+      rules: [],
+    });
+    const pushing = System.make({
+      name: 'pushing',
+      reads: [],
+      writes: [Moved],
+      emits: [],
+      run: () => {},
+    });
+    const keeping = System.make({
+      name: 'keeping',
+      reads: [],
+      writes: [Kept],
+      emits: [],
+      run: () => {},
+    });
+    const parts = {
+      requires: [Bodies],
+      components: [],
+      actions: [],
+      events: [],
+      rules: [],
+    } as const;
+    const Pusher = Plugin.make({ ...parts, name: 'Pusher', systems: [pushing] });
+
+    expect(Game.make({ stepRate: 10, plugins: [Bodies, Pusher] }).systems).toEqual([pushing]);
+    // @ts-expect-error Kept is not shared.
+    Plugin.make({ ...parts, name: 'Keeper', systems: [keeping] });
+  });
+
+  it('refuses a plugin sharing what it does not own', () => {
+    Plugin.make({
+      name: 'Generous',
+      requires: [Fixture],
+      components: [],
+      // @ts-expect-error Position is the fixture's, not the generous plugin's.
+      shares: [Position],
+      actions: [],
+      events: [],
+      systems: [],
+      rules: [],
+    });
+  });
+
   it('refuses a plugin reading, emitting, or handling what a plugin it does not require declares', () => {
     const reading = System.make({
       name: 'reading',
