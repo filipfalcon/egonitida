@@ -17,7 +17,9 @@ Six principles shape every API. Each builds on the ones before it.
 - Every field has exactly one owner, declared in its schema:
   - **Rules** own the facts the game's rules decide, such as health, ammunition, or an open door. Only `update` changes them, through Messages, which are recorded.
   - **Simulation** owns what changes every step, such as positions. Only systems change them.
+- A game declares everything its state is made of: its components, actions, and events. One schema of the whole world, its components with its tick, randomness, and next entity, follows from the game, and snapshots, saves, recordings, and the debugger all use it.
 - A system declares what it reads, what it writes, and what it emits. Writing what it does not own is a compile error, not a runtime bug. Everything is readable by everyone, so nothing is ever copied and kept in sync.
+- State kept on the client alone, such as a ragdoll, blood, or casings, lives in the same world as local components, changed by local systems: the same kind of system, run only on the client after each step, which reads everything but writes and spawns only local components, and draws from its own randomness. A snapshot never replaces local components and a prediction's rewind never takes them back, so they only move forward.
 - Events a system emits are applied by the rules at a defined point in the step, so the next step already sees their result. Nothing waits on an asynchronous queue.
 - Systems and rules spawn and despawn entities within a step, and declare it: `spawns` lists the components they may create an entity with, whoever owns them, since being born changes no one's state; `despawns` says they may remove one, which takes it out of every component at once. Either takes effect at once, so what runs later in the same step sees it; steps run in order, so nothing needs a queue of commands, as Bevy's parallel systems do. Ids come from the world's own counter, so a replay gives out the same ones, and a despawned id is never given out again.
 - What is drawn is never a source of truth: the scene is derived from the state.
@@ -63,12 +65,14 @@ Six principles shape every API. Each builds on the ones before it.
 ### 5. Boundaries: everything is a plugin
 
 - The engine is made of plugins, and its own features (drawing, physics, audio, input, network) are plugins too. A game can do whatever the engine does, and can replace any plugin, as Border would replace physics with its own ragdoll.
-- A plugin is an Effect Layer that registers components, systems, and resources and declares the plugins it requires. A missing dependency is a compile error, and tests swap in other Layers.
+- A plugin is a value: the components, actions, events, systems, rules, and commands it brings, and the plugins it requires. A game is the list of its plugins, flattened by `Game.make` in order, so nothing is wired by hand. The services a plugin needs while running, such as storage for its commands or a renderer for its views, are Effect Layers the host provides, and tests swap in other Layers.
+- A plugin writes only its own components. Any plugin reads any component, but changes another plugin's state only by emitting an event that plugin declared, and that plugin's rules decide what it means. Writing another plugin's component, or reading one from a plugin not in `requires`, is a compile error.
 - Packages come in three layers:
   - **core**: the state, systems, schedule, time, randomness, replay, network protocol, and game rules. It runs everywhere, and it compiles without the DOM's types, so the simulation always runs in a Durable Object.
   - **client**: drawing, audio, input, haptics, cosmetics. Browser only.
   - **server**: hosting a world in a Durable Object, and persistence.
-- A game's plugins split the same way, such as a horde's AI in core and its animation in client.
+- A game's plugins split the same way: a plugin's core part in one module, its client part (local systems and views) in a `.view` module, so a worker or a Durable Object never imports Three.js.
+- One program runs everywhere, with no annotations saying where: the roles of components and the split of a plugin say what runs where.
 - Imperative islands are allowed for gradual migration: a local, client-only plugin may use Three.js as it likes, but cannot write the state it does not own. Border can move onto the engine by wrapping its current code this way first.
 
 ### 6. Frame pacing: measured, never assumed
@@ -101,13 +105,19 @@ It is measured, not assumed:
 
 ### Language
 
-- Everything is written in Effect, on the 4.x line. The repository pins `effect` at exactly 4.0.0, because Foldkit and its tooling declare that exact version as a peer dependency.
+- Effect, on the 4.x line, is structural, and used at the edges: hosting, transport, scopes and resources, services and Layers, executing commands, and acquiring what a view draws with. What runs every step or every frame (a system's or rule's `run`, a view's `draw`, interpolation) is plain code, never an Effect per entity or per frame. Effect is used where interruption, resources, services, typed failure, or composition call for it, never for style. The repository pins `effect` at exactly 4.0.0, because Foldkit and its tooling declare that exact version as a peer dependency.
+- State uses `Option` for absence; the hot path indexes plainly and checks for `undefined`, which `noUncheckedIndexedAccess` makes as safe without allocating. No sentinel values such as `-1`.
 - Effect Schema is the reflection system, the counterpart of Unreal's `UCLASS` and `UPROPERTY`. One schema gives a type its saved format, its validation, and its Details panel.
 - GPU resources are acquired and released through `Scope`, so disposal is never manual.
 
 ### Program model
 
-The first iteration, built before the principles above: the Elm Architecture over the whole application. It stays for applications whose state is small, and is the base the editor's Play-in-Editor runs on. Games follow the principles above.
+Everything that lives in 3D, an application as much as a game, is a world made of plugins. Foldkit keeps the DOM: an application's UI, a game's HUD and menus, and the editor itself. There is one idiom, so a debugger, recordings, and agent tooling are built once.
+
+- The editor's documents are entities with components, its low-code rules are rules on actions, and Play-in-Editor runs a local server, as a game does.
+- A world with no systems need not step at its rate while nothing happens; when its host steps it is decided when it is built.
+
+What is built now is the first iteration, from before the principles above: the Elm Architecture over the whole application, which the playground and Play-in-Editor run on. It goes once worlds and views can carry them; the reconciler may stay inside as an implementation.
 
 - One program has one Model and one `update`, and two views of the Model:
   - `view: Model → Html`, rendered by Foldkit into the DOM.
@@ -128,6 +138,85 @@ The first iteration, built before the principles above: the Elm Architecture ove
   - A **Mount** on the canvas acquires the renderer for exactly as long as the canvas is in the DOM.
   - A **Subscription** that stays alive across Model changes runs the frame loop, draws the latest scene, and turns clicks into Messages.
 
+### API
+
+Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each holds for the engine; where Foldkit's own form did not fit a game, the reason is given.
+
+**State.**
+
+- States are tagged unions and absence is `Option`, never a boolean flag beside nullable data. The engine carries both through a component end to end: across the wire, and through interpolation, which holds the earlier value when the tag changes and moves fields within one tag. The rule is for state; a view's description may have optional parameters with defaults.
+- LightOcean has no router of its own: applications and the editor use Foldkit's. Addresses of worlds, such as a room's id, are branded schemas, parsed and built from one definition, and refused at the Worker before a Durable Object is reached.
+
+**Messages.**
+
+- Actions and events are named facts in the past tense, never commands. An action says what a player did, whatever device they did it with (`PulledTrigger`, `ChoseRestart`); an event says what the world made of it (`Shot`, `LevelRestarted`). The pair shows where authority lies: what a player claims, and what the server decided.
+- Every declared action and event has at least one rule; a message no one handles is an error, in its type where TypeScript bears it, and otherwise when the game is made.
+- Which systems and rules write, emit, spawn, and listen for what follows from the game's declarations, as a map of how its state changes: in a world of systems there is no single `update` to read, so the declarations are what is read.
+- In development the values in a world are frozen, so changing one in place fails at once.
+
+**Commands.** A rule that needs something done outside the world, such as saving progress, returns a command: a declared value with a name, arguments, and the events its result may be, failure included. Systems never issue them, since they run every step. The host executes a command outside the step with the services of its Layers, and its result enters the world as an event at a later step, recorded, so a replay or a prediction never executes one. A command is defined beside the rule that issues it.
+
+**Views.** A game's client draws through three primitives over the drawn frame, each releasing what it holds through a `Scope`:
+
+| What causes it                                           | Primitive                                                                                                                                                |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A rule decided something should happen outside the world | a command                                                                                                                                                |
+| An entity is in the drawing                              | `View.each(components, { acquire, draw })`: `acquire` builds its objects when the entity comes in, and the scope closes when it leaves or stops matching |
+| An entity just gained a component                        | `View.on`: a one-off output that is not state, such as a sound or a haptic pulse                                                                         |
+| A condition holds                                        | `View.during`: a resource held while a condition over the drawn world and the UI Model holds, such as music, an `AudioContext`, or pointer lock          |
+
+- `draw` changes only its own objects, from the drawn values, the UI Model, and the frame's time, in place and without allocating: what is drawn is a function of the state even though the scene is kept between frames. Building and diffing a whole tree every frame would allocate at the display's rate. A view keeps nothing between frames; what it must remember is a local component.
+- A view's identity is the pair of its declaration and its entity, and entity ids are never reused, so nothing one entity's objects held carries over to another.
+- `addEventListener`, `setInterval`, `requestAnimationFrame`, and `new WebSocket` belong inside these primitives only.
+- In an application, the entities a rule handles a click on are mirrored as a hidden list of focusable elements, each read out by the entity's `Label`: Tab moves focus, focus highlights the object, and Enter sends the same action as a click. An interactive entity without a `Label` is an error when the game is made.
+- A drawn frame is `Drawing.Frame`. "Presentation" names only playing a moment from the timeline, such as a killcam.
+
+**Testing.** Two harnesses, with no mocks and no browser:
+
+- `Story`, in core, steps a game from a world built with named entities, takes actions, and expects components, events, and commands; a command never executes, and the test resolves it with a result. Files are `*.story.test.ts`.
+- `Scene`, in client, plays worlds through a game's views frame by frame and finds what they drew by view and entity, never by walking the scene graph; outputs such as sounds go through a recording Layer. Files are `*.scene.test.ts`.
+
+**Inspection.** In development the host records a game's first world and, for every step, its input, actions, and command results; everything else follows from them. A log for people and agents adds what each step emitted, issued, and changed, and by which system or rule, and hides input unless asked. The debugger rewinds from a keyframe every few steps, keeps a bounded span of time, and draws a past step through the same views. A client's timeline keeps local components with each world, so a presentation of the past shows them as they were, and local systems do not run while it plays. A replay runs beside the game and reports the first step and component where the two diverge. All of it is in `@lightocean/devtools`, which only a development entry imports.
+
+**Agents.** `@lightocean/devtools-mcp` lets an agent read a game's schema and its map of changes, query any step's world, read the log, and compare steps; and, on a local server, hold time, act as a player through the game's own schemas, step, and turn what it did into a `Story` test. Secrets never enter the world, which travels to clients; credentials stay in the services of Layers, and a secret in a command's arguments is `Schema.Redacted`.
+
+**Enforcement.** A rule is a type where it can be, a lint rule where it cannot, and written down only where neither can tell. `@lightocean/oxlint-plugin` has one rule per convention a type cannot hold, scoped by the call its code sits in rather than by file name, with a message that says what to do instead, and with a fixture it must fail on and one it must pass. The first rules: no `Math.random`, `Date.now`, `performance.now`, `crypto`, or Effect inside a system's or rule's `run` or a view's `draw`; no nullable or optional fields in a component's schema; no `let` or mutable closures in a view; no key derived from an index; no Three.js outside a `.view` module; secrets in commands' arguments are `Schema.Redacted`. CI runs `vp check` and `vp test` on every pull request.
+
+**Conventions.**
+
+- Nothing is wired implicitly: no automatic registration, decorators, wiring by file name, or global registries. All wiring is in `Game.make` and plugins' `requires`.
+- `AGENTS.md` holds the rules an agent follows and the exemplar files it reads first; `CLAUDE.md` links to it. This document holds why. Agents reach for the runtime's inspection before adding logs.
+- A barrel exports only the public API; what only a host or a test needs is under `/internal`, and what is not settled under `/experimental`.
+- A plugin lives in a folder: `index.ts` as the barrel, `name.ts` with its core part, `name.view.ts` with its client part, and its Story and Scene tests. A plugin's file has the sections `COMPONENTS`, `ACTIONS`, `EVENTS`, `COMMANDS`, `RULES`, `SYSTEMS`, and `PLUGIN`.
+- Every public export has a doc comment saying what it is and why. Code, tests, and documents carry no notes about discarded attempts.
+- A declaration's change (`writes`, `emits`, `requires`) is an architectural change, and is where a review looks first. Before a push is proposed, an independent review checks the commits against `AGENTS.md`.
+
+**Documentation.**
+
+- `examples/` is the curriculum and the end-to-end tests at once; each example adds one idea: a spinning cube, click to colour, Pong for two, a small horde, saving a score, and Pong over the network. A feature lands with its example.
+- Code in documentation comes from compiled, type-checked snippets, except short sketches in design documents of what does not exist yet. Prose leads with its claim, and headings are labels.
+- The agent skills (`lightocean` for framing, `generate-plugin`, and a read-only `audit-game`) live in `skills/` and are written once the API above exists. Agents read the sources of Effect and Three.js in `node_modules`, pinned by the lockfile.
+
+**Development.** When a file changes, the host keeps its world and swaps in the new game, so a game runs on with the new logic; a world the new schema cannot decode starts over from the initial world, with the reason given. A recording starts a new segment, since a recording is valid for one build.
+
+### Stability
+
+LightOcean stays private until the architecture above is built and Border runs on it; then its first 0.x versions are published, with changesets from then on.
+
+- Locked: the six principles and the decisions in this document.
+- May change: names and signatures.
+- A breaking change is marked with `!` in its commit, whose body gives a before-and-after table, and Border is migrated with it.
+- 1.0 means the examples all work, Border runs with no seam where its server takes a client's word, LightOcean has held up in a project outside this repository, and no known flaw in correctness undermines the promise of stability.
+
+### Positioning
+
+LightOcean is sold by its structure, not its stack: _Your world is data. LightOcean gives every piece of state one owner and every change a step, so your app replays, rewinds, runs on a server, and can be played by an agent._ Three.js, WebGPU, Effect, and Durable Objects come after. Each claim is shown by a running example, or it is not made.
+
+- **A strong fit:** real-time 3D applications and games in a browser that need an authoritative server or several players; teams and agents that want shared conventions; developers already on Effect.
+- **Think twice when:** you need React and React Three Fiber's ecosystem; you are building a 3D showcase with no state, where plain Three.js does; you need a ready physics engine or high-end graphics, where Unity, Godot, or Unreal fit; you need thousands of entities today, before optimization is measured.
+- Compared honestly: Three.js and React Three Fiber solve rendering and leave the architecture to you; Bevy has the ECS LightOcean follows, but is not made for the web or an authoritative server; Colyseus is a server without an engine; PlayCanvas and Babylon.js are engines with editors scripted imperatively.
+- A `Viewport` embeds in any page or existing application, and existing Three.js code can live as an imperative island while it moves over.
+
 ### Audience
 
 - The tool serves developers and non-coders alike. The low-code mode is the preferred way to build.
@@ -144,10 +233,15 @@ The first iteration, built before the principles above: the Elm Architecture ove
 
 ## Repository
 
+- `libraries/core`: the world, components, actions, events, systems, rules, the game, the host, the client, transports, and snapshots.
+- `libraries/client`: the timeline, interpolation, and the drawing.
 - `libraries/engine`: the `Scene` description, `SceneHost` (reconciler, picking, motion, resource lifetimes), and `Viewport` (the renderer on a canvas).
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
 - `applications/editor`: the editor.
 - `applications/playground`: the first proof that one Model drives both the DOM and the 3D world.
+- `applications/net-spike`: the spike that hosted a world in a Durable Object.
+
+The packages are to become `core` (adding commands, plugins, and `Story`), `client` (adding local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object, and persistence), `reflection`, `devtools`, `devtools-mcp`, and `oxlint-plugin`. `engine` goes, its `Viewport` moving to `client`.
 
 ## Development
 
