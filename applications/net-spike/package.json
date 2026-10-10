@@ -1,0 +1,18 @@
+{
+  "name": "@lightocean/net-spike",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "probe": "node scripts/probe.ts"
+  },
+  "dependencies": {
+    "effect": "4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261010.1"
+  }
+}

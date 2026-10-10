@@ -4,8 +4,8 @@
       {
         // Diagnostics stay on in the editor as well as in `vp check`: nothing else surfaces Oxlint results in the IDE, so there is no double reporting to avoid.
         "name": "@effect/language-service",
-        // The modules Effect still marks unstable that this repository builds on by choice: the test harness every suite is written in.
-        "allowedUnstableApis": ["@effect/vitest"]
+        // The modules Effect still marks unstable that this repository builds on by choice: the test harness every suite is written in, and the HTTP modules Alchemy's Workers are served through.
+        "allowedUnstableApis": ["@effect/vitest", "effect/http"]
       }
     ],
     "target": "esnext",
