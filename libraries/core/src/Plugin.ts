@@ -22,7 +22,13 @@ export interface Plugin<
   Actions extends Action.Any = Action.Any,
   Events extends Event.Any = Event.Any,
   Requires extends string = string,
+  /** The tags of the actions and events its rules handle. */
+  Handles extends string = string,
+  /** The tags of the events its systems and rules emit. */
+  Emits extends string = string,
 > extends Required<Name> {
+  /** Carries what it handles and emits in its type; never set. */
+  readonly '~parts'?: { readonly handles: Handles; readonly emits: Emits };
   readonly requires: ReadonlyArray<Required<Requires>>;
   readonly components: ReadonlyArray<Components>;
   readonly actions: ReadonlyArray<Actions>;
@@ -33,41 +39,60 @@ export interface Plugin<
 
 export type Any = Plugin;
 
+type Reads<Components extends ReadonlyArray<Component.Any>, Requires extends ReadonlyArray<Any>> =
+  | Components[number]
+  | Requires[number]['components'][number];
+
+type Hears<
+  Actions extends ReadonlyArray<Action.Any>,
+  Events extends ReadonlyArray<Event.Any>,
+  Requires extends ReadonlyArray<Any>,
+> =
+  | Actions[number]
+  | Events[number]
+  | Requires[number]['actions'][number]
+  | Requires[number]['events'][number];
+
+type Says<Events extends ReadonlyArray<Event.Any>, Requires extends ReadonlyArray<Any>> =
+  | Events[number]
+  | Requires[number]['events'][number];
+
 export const make = <
   const Name extends string,
   const Requires extends ReadonlyArray<Any>,
   const Components extends ReadonlyArray<Component.Any>,
   const Actions extends ReadonlyArray<Action.Any>,
   const Events extends ReadonlyArray<Event.Any>,
+  const Systems extends ReadonlyArray<
+    System.System<
+      Reads<Components, Requires>,
+      Extract<Components[number], System.SimulationComponent>,
+      Says<Events, Requires>,
+      Reads<Components, Requires>
+    >
+  >,
+  const Rules extends ReadonlyArray<
+    Rule.Rule<
+      Hears<Actions, Events, Requires>,
+      Extract<Components[number], Rule.RulesComponent>,
+      Says<Events, Requires>,
+      Reads<Components, Requires>
+    >
+  >,
 >(plugin: {
   readonly name: Name;
   readonly requires: Requires;
   readonly components: Components;
   readonly actions: Actions;
   readonly events: Events;
-  readonly systems: ReadonlyArray<
-    System.System<
-      Components[number] | Requires[number]['components'][number],
-      Extract<Components[number], System.SimulationComponent>,
-      Events[number] | Requires[number]['events'][number],
-      Components[number] | Requires[number]['components'][number]
-    >
-  >;
-  readonly rules: ReadonlyArray<
-    Rule.Rule<
-      | Actions[number]
-      | Events[number]
-      | Requires[number]['actions'][number]
-      | Requires[number]['events'][number],
-      Extract<Components[number], Rule.RulesComponent>,
-      Events[number] | Requires[number]['events'][number],
-      Components[number] | Requires[number]['components'][number]
-    >
-  >;
+  readonly systems: Systems;
+  readonly rules: Rules;
 }): Plugin<
   Name,
   Components[number],
   Actions[number],
   Events[number],
-  Requires[number]['name']
+  Requires[number]['name'],
+  Rules[number]['on']['tag'],
+  Systems[number]['emits'][number]['tag'] | Rules[number]['emits'][number]['tag']
 > => ({ _tag: 'Plugin', ...plugin });

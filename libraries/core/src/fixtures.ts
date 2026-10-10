@@ -1,9 +1,10 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import * as Action from '#src/Action.ts';
 import * as Component from '#src/Component.ts';
 import * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
 import * as Plugin from '#src/Plugin.ts';
+import * as Rule from '#src/Rule.ts';
 
 /**
  * A small game the core's tests share: things that move, and a player whose health the rules keep.
@@ -49,7 +50,30 @@ export const Wall = Component.make('Wall', Schema.Struct({ x: Schema.Finite }), 
   network: 'private',
 });
 
-/** Everything the small game is made of, as one plugin with no parts of its own. */
+/** A bite takes from health, and one that takes the last of it is a death. */
+export const takeBite = Rule.on(Bitten, {
+  writes: [Health],
+  emits: [Died],
+  run: (context, bitten) => {
+    const health = Option.getOrElse(context.get(bitten.entity, Health), () => ({ current: 0 }));
+    const current = health.current - bitten.damage;
+    context.set(bitten.entity, Health, { current });
+    if (current <= 0 && health.current > 0) {
+      context.emit({ _tag: 'Died', entity: bitten.entity });
+    }
+  },
+});
+
+/** A player who chose to restart is healed whole. */
+export const restart = Rule.on(ChoseRestart, {
+  writes: [Health],
+  emits: [],
+  run: (context, restarted) => {
+    context.set(restarted.player, Health, { current: 100 });
+  },
+});
+
+/** Everything the small game is made of, as one plugin answering its own actions and events, with no systems: a test gives the ones it is about. */
 export const Fixture = Plugin.make({
   name: 'Fixture',
   requires: [],
@@ -57,7 +81,7 @@ export const Fixture = Plugin.make({
   actions: [ChoseRestart],
   events: [Bitten, Died],
   systems: [],
-  rules: [],
+  rules: [takeBite, restart],
 });
 
 /** The small game at ten steps a second, for a test to give the parts it is about with `Game.only`. */

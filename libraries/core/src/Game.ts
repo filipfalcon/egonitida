@@ -35,13 +35,34 @@ type Missing<Plugins extends ReadonlyArray<Plugin.Any>> = Exclude<
   Plugins[number]['name']
 >;
 
-/** Nothing, when every plugin a game requires is there; otherwise a field naming those missing, which no game has, so it does not compile. */
-type Requirements<Plugins extends ReadonlyArray<Plugin.Any>> = [Missing<Plugins>] extends [never]
+/** The tags of the actions no rule of `Plugins` answers. */
+type Unanswered<Plugins extends ReadonlyArray<Plugin.Any>> = Exclude<
+  Plugins[number]['actions'][number]['tag'],
+  Parts<Plugins>['handles']
+>;
+
+/** The tags of the events `Plugins` declare that nothing emits and nothing handles. */
+type Dead<Plugins extends ReadonlyArray<Plugin.Any>> = Exclude<
+  Plugins[number]['events'][number]['tag'],
+  Parts<Plugins>['handles'] | Parts<Plugins>['emits']
+>;
+
+type Parts<Plugins extends ReadonlyArray<Plugin.Any>> = NonNullable<Plugins[number]['~parts']>;
+
+/** Nothing, when there is none of `Found`; otherwise a field naming them under `name`, which no game has, so it does not compile. */
+type Refuse<Name extends string, Found> = [Found] extends [never]
   ? unknown
-  : { readonly missing: Missing<Plugins> };
+  : { readonly [K in Name]: Found };
 
 /**
- * A game made of `plugins`: their components, actions, and events, their systems in the order the plugins come and then the order each lists them, and their rules likewise. A plugin required by one of them and missing from the list does not compile.
+ * What a game of `Plugins` must not be: missing a plugin one requires, holding an action no rule answers, a player doing something to no effect, or an event nothing emits or handles. An event that is emitted and goes unanswered is a plugin's offer to others, and is fine.
+ */
+type Requirements<Plugins extends ReadonlyArray<Plugin.Any>> = Refuse<'missing', Missing<Plugins>> &
+  Refuse<'unanswered', Unanswered<Plugins>> &
+  Refuse<'dead', Dead<Plugins>>;
+
+/**
+ * A game made of `plugins`: their components, actions, and events, their systems in the order the plugins come and then the order each lists them, and their rules likewise. A plugin required by one of them and missing from the list, an action no rule answers, and an event nothing emits or handles do not compile.
  */
 export const make = <const Plugins extends ReadonlyArray<Plugin.Any>>(
   game: { readonly stepRate: number; readonly plugins: Plugins } & Requirements<Plugins>,

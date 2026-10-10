@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option, Schema } from 'effect';
+import * as Action from '#src/Action.ts';
 import * as Component from '#src/Component.ts';
 import * as Event from '#src/Event.ts';
 import {
@@ -706,6 +707,41 @@ describe('Game.make', () => {
     ]);
     expect(made.actions.map(({ tag }) => tag)).toEqual(['ChoseRestart']);
     expect(made.events.map(({ tag }) => tag)).toEqual(['Bitten', 'Died']);
+  });
+
+  it('refuses an action no rule answers, and an event nothing emits or handles', () => {
+    const Pressed = Action.make('Pressed', {});
+    const Forgotten = Event.make('Forgotten', {});
+    const parts = { requires: [], components: [], systems: [], rules: [] } as const;
+    const Mute = Plugin.make({ ...parts, name: 'Mute', actions: [Pressed], events: [] });
+    const Haunted = Plugin.make({ ...parts, name: 'Haunted', actions: [], events: [Forgotten] });
+
+    // @ts-expect-error Pressed is a player doing something to no effect.
+    Game.make({ stepRate: 10, plugins: [Mute] });
+    // @ts-expect-error Forgotten is never emitted and never handled.
+    Game.make({ stepRate: 10, plugins: [Haunted] });
+  });
+
+  it('lets an event go unanswered, as a plugin’s offer to others', () => {
+    const Called = Event.make('Called', {});
+    const calling = System.make({
+      name: 'calling',
+      reads: [],
+      writes: [],
+      emits: [Called],
+      run: () => {},
+    });
+    const Caller = Plugin.make({
+      name: 'Caller',
+      requires: [],
+      components: [],
+      actions: [],
+      events: [Called],
+      systems: [calling],
+      rules: [],
+    });
+
+    expect(Game.make({ stepRate: 10, plugins: [Caller] }).events).toEqual([Called]);
   });
 
   it('refuses a game missing a plugin one of its plugins requires', () => {
