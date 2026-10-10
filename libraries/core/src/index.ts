@@ -1,7 +1,13 @@
+export * as Client from '#src/Client.ts';
 export * as Component from '#src/Component.ts';
 export * as Event from '#src/Event.ts';
 export * as Game from '#src/Game.ts';
+export * as Host from '#src/Host.ts';
 export * as Input from '#src/Input.ts';
+export * as Pace from '#src/Pace.ts';
+export * as Protocol from '#src/Protocol.ts';
 export * as Rule from '#src/Rule.ts';
+export * as Snapshot from '#src/Snapshot.ts';
 export * as System from '#src/System.ts';
+export * as Transport from '#src/Transport.ts';
 export * as World from '#src/World.ts';

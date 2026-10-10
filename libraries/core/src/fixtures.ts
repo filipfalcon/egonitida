@@ -27,6 +27,12 @@ export const Controls = Component.make(
   { owner: 'input', network: 'predicted' },
 );
 
+/** A blood splat: drawn by each client for itself, never sent. */
+export const Splat = Component.make('Splat', Schema.Struct({ size: Schema.Finite }), {
+  owner: 'simulation',
+  network: 'local',
+});
+
 export const Bitten = Event.make('Bitten', { entity: Schema.Int, damage: Schema.Int });
 
 export const Died = Event.make('Died', { entity: Schema.Int });
