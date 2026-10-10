@@ -21,7 +21,7 @@ export interface Simulation {
   readonly names: ReadonlyMap<string, World.Entity>;
   /** The input waiting for the next step. */
   readonly inputs: ReadonlyArray<Input.Input>;
-  /** The actions waiting for the next step, in the order they were taken. */
+  /** The actions taken and events made to happen, waiting for the next step in the order they came. */
   readonly actions: ReadonlyArray<Event.Tagged>;
   /** Every event of the steps last taken, in the order it happened. */
   readonly events: ReadonlyArray<Event.Tagged>;
@@ -51,10 +51,10 @@ export const story = (game: Game.Game, ...steps: ReadonlyArray<Step>): Simulatio
 
 // SETTING THE SCENE
 
-/** Starts from `world`, forgetting the names given so far. */
+/** Starts from `world`, built however a test likes, with its entities named by `names`; the names given so far are forgotten. */
 export const given =
-  (world: World.World): Step =>
-  (simulation) => ({ ...simulation, world, names: new Map() });
+  (world: World.World, names: Readonly<Record<string, World.Entity>> = {}): Step =>
+  (simulation) => ({ ...simulation, world, names: new Map(Object.entries(names)) });
 
 /** Spawns an entity holding `instances`, by the name `name`. */
 export const spawn =
@@ -88,6 +88,16 @@ export const act =
       },
       onSome: (accepted) => ({ ...simulation, actions: [...simulation.actions, accepted] }),
     });
+
+/** Has `event` happen at the next step, as if something had emitted it, so the rules that handle it can be told on their own. */
+export const happen =
+  <Value extends Event.Tagged>(event: Event.Event<string, Value>, value: Value): Step =>
+  (simulation) => {
+    if (!event.is(value)) {
+      throw new Error(`what is to happen is not a ${event.tag}`);
+    }
+    return { ...simulation, actions: [...simulation.actions, value] };
+  };
 
 // TIME
 

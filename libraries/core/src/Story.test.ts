@@ -133,6 +133,27 @@ describe('Story', () => {
     );
   });
 
+  it('names the entities of a world it is given', () => {
+    const [world, runner] = World.spawn(World.empty({ seed: 3 }), [Position.of({ x: 7 })]);
+
+    Story.story(
+      game,
+      Story.given(world, { runner }),
+      Story.expect('runner', Position, (position) => expect(position.x).toBe(7)),
+    );
+  });
+
+  it('has an event happen at the next step, for the rules that handle it', () => {
+    Story.story(
+      game,
+      Story.spawn('her', her),
+      Story.happen(Bitten, { _tag: 'Bitten', entity: 0, damage: 20 }),
+      Story.step(),
+      Story.expect('her', Health, (health) => expect(health.current).toBe(30)),
+      Story.expectEvent(Bitten),
+    );
+  });
+
   it('expects an entity not to hold a component', () => {
     Story.story(game, Story.spawn('her', [Position.of({ x: 0 })]), Story.expectNone('her', Health));
 
