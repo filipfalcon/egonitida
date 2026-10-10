@@ -122,3 +122,6 @@ export const step = (
 
   return { world: World.finish(draft), events: line };
 };
+
+/** The schema of a whole world of `game`: what saves, recordings, and the debugger carry it in. */
+export const schema = (game: Game) => World.schema(game.components);

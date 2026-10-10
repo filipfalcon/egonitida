@@ -1,4 +1,4 @@
-import { Option } from 'effect';
+import { Effect, Option, Schema, SchemaGetter, SchemaIssue } from 'effect';
 import type * as Component from '#src/Component.ts';
 
 /**
@@ -285,4 +285,76 @@ export const finish = (draft: Draft): World => {
     random: draft.random,
     stores: new Map(draft.stores),
   };
+};
+
+// ENCODING
+
+/** A world as its schema encodes it: its tick, randomness, and next entity, and the values of every component it holds, by entity. */
+const Encoded = Schema.Struct({
+  tick: Schema.Int,
+  nextEntity: Schema.Int,
+  random: Schema.Int,
+  stores: Schema.Record(Schema.String, Schema.Array(Schema.Tuple([Schema.Int, Schema.Unknown]))),
+});
+
+const isWorld = (value: unknown): value is World =>
+  typeof value === 'object' &&
+  value !== null &&
+  'tick' in value &&
+  typeof value.tick === 'number' &&
+  'nextEntity' in value &&
+  typeof value.nextEntity === 'number' &&
+  'random' in value &&
+  typeof value.random === 'number' &&
+  'stores' in value &&
+  value.stores instanceof Map;
+
+/**
+ * The schema of a world made of `components`: each component's values travel encoded by its own schema. A world that holds a component not among them does not decode, nor does one with a value its component cannot decode, so nothing reaches a world that its game would not have put there.
+ */
+export const schema = (components: ReadonlyArray<Component.Any>) => {
+  const byName = new Map(components.map((component) => [component.name, component]));
+  return Encoded.pipe(
+    Schema.decodeTo(Schema.declare(isWorld), {
+      decode: SchemaGetter.transformEffect((encoded, options) =>
+        Option.match(
+          Option.all(
+            Object.entries(encoded.stores).map(([name, entries]) =>
+              Option.flatMap(Option.fromNullishOr(byName.get(name)), (component) =>
+                Option.map(component.decode(entries), (store) => [name, store] as const),
+              ),
+            ),
+          ),
+          {
+            onNone: () =>
+              Effect.fail(
+                new SchemaIssue.InvalidValue(
+                  { message: 'a component its game does not hold, or a value it cannot decode' },
+                  encoded,
+                  options,
+                ),
+              ),
+            onSome: (stores) =>
+              Effect.succeed<World>({
+                tick: encoded.tick,
+                nextEntity: encoded.nextEntity,
+                random: encoded.random,
+                stores: new Map(stores),
+              }),
+          },
+        ),
+      ),
+      encode: SchemaGetter.transform((world: World) => ({
+        tick: world.tick,
+        nextEntity: world.nextEntity,
+        random: world.random,
+        stores: Object.fromEntries(
+          components.flatMap((component) => {
+            const store = world.stores.get(component.name);
+            return store === undefined ? [] : [[component.name, component.encode(store)] as const];
+          }),
+        ),
+      })),
+    }),
+  );
 };

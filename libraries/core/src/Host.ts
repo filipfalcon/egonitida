@@ -94,7 +94,7 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       for (let step = 1; step < steps; step += 1) {
         state.world = Game.step(options.game, state.world).world;
       }
-      const payload = Snapshot.encode(state.world, options.game.components);
+      const payload = Snapshot.encode(state.world, options.game);
       yield* Effect.forEach(
         state.connections,
         (connection) => connection.send({ channel: 'unreliable', payload }),

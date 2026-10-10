@@ -10,12 +10,13 @@ import {
   Health,
   Position,
   Restart,
+  Splat,
   Velocity,
+  Wall,
 } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
 import * as Rule from '#src/Rule.ts';
-import * as Snapshot from '#src/Snapshot.ts';
 import * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
 
@@ -139,8 +140,7 @@ describe('Game.step', () => {
 });
 
 /** A world's contents, written out component by component: what two worlds are compared by. Worlds are compared by what they hold, not by which objects hold it. */
-const contents = (world: World.World) =>
-  Snapshot.encode(world, [Position, Velocity, Health, Controls]);
+const contents = Schema.encodeSync(Schema.fromJsonString(Game.schema(game)));
 
 describe('determinism', () => {
   const scatter = System.make({
@@ -579,5 +579,44 @@ describe('Game.make', () => {
     expect(Game.make({ stepRate: 10, ...declared, systems: [], rules: [restart] }).rules).toEqual([
       restart,
     ]);
+  });
+});
+
+describe('Game.schema', () => {
+  const Json = Schema.fromJsonString(Game.schema(game));
+  const [withRunner, runner] = spawnRunner(4, 60);
+  const [withSplat, splat] = World.spawn(withRunner, [Splat.of({ size: 2 })]);
+  const [whole, wall] = World.spawn(withSplat, [Wall.of({ x: 12 })]);
+  const stepped = Game.step(game, whole).world;
+
+  it('carries a whole world and back: its tick, randomness, next entity, and every component', () => {
+    const text = Schema.encodeSync(Json)(stepped);
+    const back = Schema.decodeSync(Json)(text);
+
+    expect(back.tick).toBe(stepped.tick);
+    expect(back.random).toBe(stepped.random);
+    expect(back.nextEntity).toBe(stepped.nextEntity);
+    expect(World.get(back, runner, Position)).toEqual(World.get(stepped, runner, Position));
+    expect(World.get(back, runner, Health)).toEqual(Option.some({ current: 60 }));
+    // A whole world holds what is local and what is private too; only a snapshot leaves them out.
+    expect(World.get(back, splat, Splat)).toEqual(Option.some({ size: 2 }));
+    expect(World.get(back, wall, Wall)).toEqual(Option.some({ x: 12 }));
+    expect(Schema.encodeSync(Json)(back)).toBe(text);
+  });
+
+  it('steps a world it decoded as it steps the one it encoded', () => {
+    const back = Schema.decodeSync(Json)(Schema.encodeSync(Json)(stepped));
+    const encode = Schema.encodeSync(Json);
+
+    expect(encode(Game.step(game, back).world)).toBe(encode(Game.step(game, stepped).world));
+  });
+
+  it('refuses a value its component cannot decode, or a component the game does not hold', () => {
+    const text = Schema.encodeSync(Json)(stepped);
+    const forged = text.replace('"current":60', '"current":"lots"');
+    const foreign = text.replace('"Health"', '"Mana"');
+
+    expect(Schema.decodeOption(Json)(forged)).toEqual(Option.none());
+    expect(Schema.decodeOption(Json)(foreign)).toEqual(Option.none());
   });
 });

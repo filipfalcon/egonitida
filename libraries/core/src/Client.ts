@@ -70,7 +70,7 @@ export const connect = (
             onNone: () => Effect.void,
             onSome: (received) => Deferred.succeed(welcome, received).pipe(Effect.asVoid),
           })
-        : Option.match(Snapshot.apply(state.world, frame.payload, options.game.components), {
+        : Option.match(Snapshot.apply(state.world, frame.payload, options.game), {
             onNone: () => Effect.void,
             onSome: (world) =>
               Effect.suspend(() => {

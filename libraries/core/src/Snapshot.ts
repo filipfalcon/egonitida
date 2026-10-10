@@ -1,61 +1,55 @@
 import { Option, Schema } from 'effect';
-import type * as Component from '#src/Component.ts';
-import type * as World from '#src/World.ts';
+import type * as Game from '#src/Game.ts';
+import * as World from '#src/World.ts';
 
 /**
- * A world as the server sends it to its clients. Every component travels encoded by its own schema, except the local ones, which each client keeps for itself, and the private ones, which the server keeps for itself. A snapshot is whole and carries its tick, so a client can take any one of them, in any order, and lose some on the way.
+ * A world as the server sends it to its clients: the game's world schema, over only the components that travel. Local components each client keeps for itself, and private ones the server keeps for itself. A snapshot is whole and carries its tick, so a client can take any one of them, in any order, and lose some on the way.
  *
  * It is JSON for now; a binary encoding waits until something real measures it.
  */
 
-const Wire = Schema.Struct({
-  tick: Schema.Int,
-  nextEntity: Schema.Int,
-  random: Schema.Int,
-  stores: Schema.Record(Schema.String, Schema.Array(Schema.Tuple([Schema.Int, Schema.Unknown]))),
-});
-const WireJson = Schema.fromJsonString(Wire);
+interface Wire {
+  /** The names of the components that travel. */
+  readonly sent: ReadonlySet<string>;
+  readonly json: Schema.Codec<World.World, string>;
+}
 
-const sent = (components: ReadonlyArray<Component.Any>) =>
-  components.filter(
+// A game's wire is made once and kept, since a host encodes with it every step.
+const wires = new WeakMap<Game.Game, Wire>();
+
+const wireOf = (game: Game.Game): Wire => {
+  const known = wires.get(game);
+  if (known !== undefined) {
+    return known;
+  }
+  const sent = game.components.filter(
     (component) => component.network === 'server' || component.network === 'predicted',
   );
+  const wire: Wire = {
+    sent: new Set(sent.map((component) => component.name)),
+    json: Schema.fromJsonString(World.schema(sent)),
+  };
+  wires.set(game, wire);
+  return wire;
+};
 
-export const encode = (world: World.World, components: ReadonlyArray<Component.Any>): string =>
-  Schema.encodeSync(WireJson)({
-    tick: world.tick,
-    nextEntity: world.nextEntity,
-    random: world.random,
-    stores: Object.fromEntries(
-      sent(components).map((component) => [
-        component.name,
-        component.encode(world.stores.get(component.name)),
-      ]),
-    ),
-  });
+export const encode = (world: World.World, game: Game.Game): string =>
+  Schema.encodeSync(wireOf(game).json)(world);
 
 /**
- * `world` with every sent component replaced by the snapshot's, and its local components kept. A snapshot that does not decode, in any part, changes nothing: `None`.
+ * `world` with every component that travels replaced by the snapshot's, including any the snapshot no longer holds, and the rest kept. A snapshot that does not decode, in any part, changes nothing: `None`.
  */
 export const apply = (
   world: World.World,
   text: string,
-  components: ReadonlyArray<Component.Any>,
-): Option.Option<World.World> =>
-  Option.flatMap(Schema.decodeOption(WireJson)(text), (wire) =>
-    Option.all(
-      sent(components).map((component) =>
-        Option.map(
-          component.decode(wire.stores[component.name] ?? []),
-          (store) => [component.name, store] as const,
-        ),
-      ),
-    ).pipe(
-      Option.map((received) => ({
-        tick: wire.tick,
-        nextEntity: wire.nextEntity,
-        random: wire.random,
-        stores: new Map([...world.stores, ...received]),
-      })),
-    ),
-  );
+  game: Game.Game,
+): Option.Option<World.World> => {
+  const wire = wireOf(game);
+  return Option.map(Schema.decodeOption(wire.json)(text), (received) => ({
+    ...received,
+    stores: new Map([
+      ...[...world.stores].filter(([name]) => !wire.sent.has(name)),
+      ...received.stores,
+    ]),
+  }));
+};
