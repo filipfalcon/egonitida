@@ -1,0 +1,12 @@
+# Operating System
+.DS_Store
+
+# Dependencies
+node_modules
+deno.lock
+
+# Build
+dist
+
+# Agents
+.claude/worktrees

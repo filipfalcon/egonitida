@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "plugins": [
+      {
+        // Diagnostics stay on in the editor as well as in `vp check`: nothing else surfaces Oxlint results in the IDE, so there is no double reporting to avoid.
+        "name": "@effect/language-service"
+      }
+    ],
+    "target": "esnext",
+    "lib": ["esnext"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  }
+}

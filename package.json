@@ -1,0 +1,43 @@
+{
+  "name": "lightocean",
+  "version": "0.0.0",
+  "private": true,
+  "description": "An engine for web applications, rendered by Three.js on WebGPU and written in Effect.",
+  "workspaces": [
+    "applications/*",
+    "libraries/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "prepare": "effect-tsgo patch --oxlint",
+    "check": "vp check",
+    "check:fix": "vp check --fix",
+    "test": "vp test"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.3",
+    "@effect/tsgo": "0.51.1",
+    "@effect/vitest": "4.0.2",
+    "effect": "4.0.2",
+    "typescript": "7.0.2",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
+    "vite-plus": "1.1.0",
+    "vitest": "5.0.3"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
+    "vitest": "5.0.3"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": "^12.0.0",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "^24.15.0",
+      "onFail": "download"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '00:00'
+      timezone: 'Europe/Prague'
+    commit-message:
+      prefix: 'chore'
+    labels:
+      - 'Dependencies | Queued'
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '00:00'
+      timezone: 'Europe/Prague'
+    commit-message:
+      prefix: 'chore'
+    labels:
+      - 'Dependencies | Queued'

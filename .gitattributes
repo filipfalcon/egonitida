@@ -1,0 +1,3 @@
+# Entrypoints carry a node shebang, which Linguist reads as an interpreter and
+# counts the file as JavaScript. The extension is the truth here.
+*.ts linguist-language=TypeScript
