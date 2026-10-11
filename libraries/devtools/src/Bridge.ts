@@ -1,4 +1,4 @@
-import { Effect, Option, Queue, Random, Schema, type Scope, Stream } from 'effect';
+import { Cause, Effect, Option, Queue, Random, Schema, type Scope, Stream } from 'effect';
 import type * as Inspect from '#src/Inspect.ts';
 
 /**
@@ -22,6 +22,8 @@ export const ToHost = Schema.Union([
   Schema.TaggedStruct('Who', {}),
 ]);
 export type ToHost = typeof ToHost.Type;
+
+const refusal = (id: number, reason: string): FromHost => ({ _tag: 'Refusal', id, reason });
 
 /** A way between a host and a relay: what the host sends, and what reaches it, as it arrived. */
 export interface Channel {
@@ -50,6 +52,13 @@ export const serve = (
           onSuccess: (answered): FromHost => ({ _tag: 'Answer', id: message.id, answer: answered }),
           onFailure: ({ reason }): FromHost => ({ _tag: 'Refusal', id: message.id, reason }),
         }),
+        // Answering that breaks, such as a step that throws, is a bug in the game or the engine: it is told to whoever asked and to the console, and the bridge goes on answering.
+        Effect.catchCause((cause) =>
+          Effect.as(
+            Effect.logError('Answering a request broke', cause),
+            refusal(message.id, `answering broke: ${Cause.pretty(cause)}`),
+          ),
+        ),
         Effect.flatMap(channel.send),
       );
     };

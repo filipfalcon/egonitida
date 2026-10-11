@@ -90,4 +90,42 @@ describe('a bridge from a host', () => {
       expect(yield* Queue.take(sent)).toEqual(hello);
     }),
   );
+
+  it.effect('says when answering broke, and goes on answering', () =>
+    Effect.gen(function* () {
+      const sent = yield* Queue.unbounded<Bridge.FromHost>();
+      const toHost = yield* Queue.unbounded<unknown>();
+      const answers = { given: 0 };
+      const breaking: Inspect.Inspector = {
+        answer: () => Effect.succeed('fine'),
+        answerUnknown: () =>
+          Effect.suspend(() => {
+            answers.given += 1;
+            return answers.given === 1
+              ? Effect.die(new Error('the step threw'))
+              : Effect.succeed('fine');
+          }),
+      };
+      yield* Bridge.serve(
+        { send: (message) => Queue.offer(sent, message), received: Stream.fromQueue(toHost) },
+        breaking,
+        {
+          name: 'test',
+        },
+      );
+      const hello = yield* Queue.take(sent);
+      const host = hello._tag === 'Hello' ? hello.host : '';
+
+      yield* Queue.offer(toHost, { _tag: 'Ask', id: 1, host, request: { _tag: 'Span' } });
+      const broke = yield* Queue.take(sent);
+      yield* Queue.offer(toHost, { _tag: 'Ask', id: 2, host, request: { _tag: 'Span' } });
+
+      expect(broke).toEqual({
+        _tag: 'Refusal',
+        id: 1,
+        reason: expect.stringContaining('the step threw'),
+      });
+      expect(yield* Queue.take(sent)).toEqual({ _tag: 'Answer', id: 2, answer: 'fine' });
+    }),
+  );
 });
