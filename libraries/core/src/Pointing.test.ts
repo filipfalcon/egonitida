@@ -53,4 +53,18 @@ describe('pointing', () => {
       Story.expectEqual('lamp', Pointing.Label, { text: 'Desk lamp' }),
     );
   });
+
+  it('reads an entity out by a new label once it is relabelled, and leaves one with no label without', () => {
+    Story.story(
+      game,
+      Story.spawn('lamp', [Lamp.of({ lit: false }), Pointing.Label.of({ text: 'Desk lamp' })]),
+      Story.spawn('chair', [Lamp.of({ lit: false })]),
+      // The lamp is the first entity spawned, the chair the second.
+      Story.happen(Pointing.Relabelled, { entity: 0, text: 'Reading lamp' }),
+      Story.happen(Pointing.Relabelled, { entity: 1, text: 'Chair' }),
+      Story.step(),
+      Story.expectEqual('lamp', Pointing.Label, { text: 'Reading lamp' }),
+      Story.expectNone('chair', Pointing.Label),
+    );
+  });
 });
