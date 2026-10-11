@@ -172,4 +172,19 @@ describe('a world from Foldkit', () => {
       expect(told).toEqual(['joined']);
     }).pipe(Effect.scoped),
   );
+
+  // Real time: a world that never joins, looked for until the Model stops asking.
+  it.live('says nothing of a world never joined, and stops looking when asked to', () =>
+    Effect.gen(function* () {
+      const resource = ManagedResource.tag<World.Joined>()('Never');
+
+      const told = yield* World.whenJoined({ resource, onJoined: () => 'joined' }).pipe(
+        Stream.runCollect,
+        Effect.timeoutOption('300 millis'),
+        Held.holding(resource, yield* Ref.make(Option.none<World.Joined>())),
+      );
+
+      expect(told).toEqual(Option.none());
+    }),
+  );
 });
