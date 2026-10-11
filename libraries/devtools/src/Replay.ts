@@ -128,10 +128,11 @@ const firstOf = (game: Game.Game, first: unknown) =>
     Effect.mapError((issue) => new Unreadable({ reason: issue.message })),
   );
 
-/** Replays `recording` with `setup`, traced if asked: what every entry came to, up to where it first came apart, if it did. */
-export const steps = (
+/** Takes `entries` with `setup` from `world`, traced if asked: what every entry came to, up to where it first came apart, if it did. */
+export const from = (
   setup: Setup,
-  recording: Recording.Recording,
+  world: World.World,
+  entries: ReadonlyArray<Recording.Entry>,
   options: { readonly trace?: boolean } = {},
 ): Effect.Effect<
   { readonly taken: ReadonlyArray<Taken>; readonly divergence: Option.Option<Divergence> },
@@ -140,17 +141,27 @@ export const steps = (
   Effect.gen(function* () {
     const take = taking(setup, { trace: options.trace ?? false });
     const taken: Array<Taken> = [];
-    let world = yield* firstOf(setup.game, recording.first);
-    for (const entry of recording.entries) {
-      const next = yield* take(world, entry);
+    let now = world;
+    for (const entry of entries) {
+      const next = yield* take(now, entry);
       if (Result.isFailure(next)) {
         return { taken, divergence: Option.some(next.failure) };
       }
       taken.push(next.success);
-      world = next.success.world;
+      now = next.success.world;
     }
     return { taken, divergence: Option.none() };
   });
+
+/** Replays `recording` with `setup`, traced if asked: what every entry came to, up to where it first came apart, if it did. */
+export const steps = (
+  setup: Setup,
+  recording: Recording.Recording,
+  options: { readonly trace?: boolean } = {},
+) =>
+  Effect.flatMap(firstOf(setup.game, recording.first), (first) =>
+    from(setup, first, recording.entries, options),
+  );
 
 /** Replays `recording` with `setup`: where it first came apart, if it did. */
 export const check = (

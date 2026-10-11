@@ -93,9 +93,9 @@ export const join = (world: World.World) =>
 
 export const setup = (played: Played = game) => ({ game: played, join, leave: World.despawn });
 
-/** Hosts `played`, until the scope closes. */
-export const host = (played: Played = game) =>
-  Host.make({ ...setup(played), world: World.empty({ seed: 7 }), mayHold: false });
+/** Hosts `played`, until the scope closes; a host that lets clients hold time if `mayHold`, as a local server for one player does. */
+export const host = (played: Played = game, mayHold = false) =>
+  Host.make({ ...setup(played), world: World.empty({ seed: 7 }), mayHold });
 
 /** Lets `millis` of test time pass a little at a time, giving every fiber its turn. */
 export const advance = (millis: number) =>
