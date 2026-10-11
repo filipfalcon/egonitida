@@ -9,6 +9,9 @@ import * as Survivor from '#src/survivor.ts';
 
 const setup = { game: Game.game, join: Survivor.join, leave: World.despawn };
 
+/** How long a test that plays twenty seconds of the horde may take, beside every other test running at once. */
+const PLAYING = 30_000;
+
 /** Twenty seconds of a survivor circling the arena, turning and firing as the horde comes, recorded. */
 const played = Effect.gen(function* () {
   const host = yield* Host.make({ ...setup, world: Game.world, mayHold: false });
@@ -32,42 +35,51 @@ const played = Effect.gen(function* () {
   return yield* recorder.recording;
 });
 
-it.effect('replays as it was played', () =>
-  Effect.gen(function* () {
-    const recording = yield* played;
+it.effect(
+  'replays as it was played',
+  () =>
+    Effect.gen(function* () {
+      const recording = yield* played;
 
-    expect(recording.entries.length).toBeGreaterThan(1000);
-    expect(yield* Replay.check(setup, recording)).toEqual(Option.none());
-  }),
+      expect(recording.entries.length).toBeGreaterThan(1000);
+      expect(yield* Replay.check(setup, recording)).toEqual(Option.none());
+    }),
+  PLAYING,
 );
 
-it.effect('logs every shot a survivor fires, and every kill it makes', () =>
-  Effect.gen(function* () {
-    const text = Log.format(yield* Log.of(setup, yield* played));
+it.effect(
+  'logs every shot a survivor fires, and every kill it makes',
+  () =>
+    Effect.gen(function* () {
+      const text = Log.format(yield* Log.of(setup, yield* played));
 
-    expect(text).toContain('  Horde: on PulledTrigger {"player":1}\n    set LastShot of 1');
-    expect(text).toContain('    emitted Killed {"survivor":1}');
-  }),
+      expect(text).toContain('  Horde: on PulledTrigger {"player":1}\n    set LastShot of 1');
+      expect(text).toContain('    emitted Killed {"survivor":1}');
+    }),
+  PLAYING,
 );
 
-it.effect('is told as a story that holds, from what was played', () =>
-  Effect.gen(function* () {
-    const recording = yield* played;
-    const { taken } = yield* Replay.steps(setup, recording);
-    // A stretch after the survivor joined, as the horde rises, shambles, and falls to shots.
-    const [start, end] = Option.getOrThrow(
-      Option.all([Option.fromNullishOr(taken[300]), Option.fromNullishOr(taken[900])]),
-    );
-    const lines = Transcript.of(
-      setup,
-      start.world,
-      taken.slice(301, 901).map(({ entry }) => entry),
-      end.world,
-    );
+it.effect(
+  'is told as a story that holds, from what was played',
+  () =>
+    Effect.gen(function* () {
+      const recording = yield* played;
+      const { taken } = yield* Replay.steps(setup, recording);
+      // A stretch after the survivor joined, as the horde rises, shambles, and falls to shots.
+      const [start, end] = Option.getOrThrow(
+        Option.all([Option.fromNullishOr(taken[300]), Option.fromNullishOr(taken[900])]),
+      );
+      const lines = Transcript.of(
+        setup,
+        start.world,
+        taken.slice(301, 901).map(({ entry }) => entry),
+        end.world,
+      );
 
-    expect(Result.isSuccess(lines)).toBe(true);
-    expect(() =>
-      Story.story(Game.game, ...Transcript.steps(Result.getOrThrow(lines))),
-    ).not.toThrow();
-  }),
+      expect(Result.isSuccess(lines)).toBe(true);
+      expect(() =>
+        Story.story(Game.game, ...Transcript.steps(Result.getOrThrow(lines))),
+      ).not.toThrow();
+    }),
+  PLAYING,
 );
