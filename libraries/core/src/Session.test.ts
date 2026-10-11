@@ -348,7 +348,7 @@ describe('watching a host', () => {
 
         expect(watching.world.tick).toBe(3);
         const [joined, firstStep, ...rest] = happenings;
-        expect(joined).toEqual({ _tag: 'Joined', entity });
+        expect(joined).toEqual({ _tag: 'Joined', entity, client: true });
         expect(
           firstStep?._tag === 'Stepped' && {
             tick: firstStep.world.tick,
@@ -623,8 +623,8 @@ describe('playing from beside the host', () => {
       ]);
       expect(positionIn(yield* host.world, first)).toEqual(Option.none());
       expect(yield* Fiber.join(told)).toEqual([
-        { _tag: 'Joined', entity: first },
-        { _tag: 'Joined', entity: second },
+        { _tag: 'Joined', entity: first, client: false },
+        { _tag: 'Joined', entity: second, client: false },
         { _tag: 'Left', entity: first },
       ]);
     }),

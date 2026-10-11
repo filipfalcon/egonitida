@@ -175,7 +175,7 @@ describe('a local server', () => {
       const client = yield* Client.connect(connection, { game });
 
       expect(yield* Fiber.join(joined)).toEqual(
-        Option.some({ _tag: 'Joined', entity: client.entity }),
+        Option.some({ _tag: 'Joined', entity: client.entity, client: true }),
       );
     }),
   );

@@ -87,7 +87,9 @@ export const entryOf = (game: Game.Game): ((happening: Happening) => Entry) => {
             actions: happening.actions.map(encodeAction),
             fingerprint: Fingerprint.of(game, happening.world),
           }
-        : happening;
+        : happening._tag === 'Joined'
+          ? { _tag: 'Joined', entity: happening.entity }
+          : happening;
 };
 
 /** A segment begun from `world`, as `game` encodes it. */

@@ -48,7 +48,8 @@ export interface Options<Services = never> extends Setup<Services> {
 
 /** What changed a host's world: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a world it was given or taking up another game, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
 export type Happening =
-  | { readonly _tag: 'Joined'; readonly entity: World.Entity }
+  /** A player joined: through a client's connection, or from beside the host with no client. */
+  | { readonly _tag: 'Joined'; readonly entity: World.Entity; readonly client: boolean }
   | { readonly _tag: 'Left'; readonly entity: World.Entity }
   /** The host went back to a world it was given, such as a past one, and steps on from it. */
   | { readonly _tag: 'Restored'; readonly world: World.World }
@@ -304,7 +305,7 @@ export const make = <Services = never>(
       Effect.gen(function* () {
         const [world, entity] = state.setup.join(state.world);
         state.world = world;
-        PubSub.publishUnsafe(happened, { _tag: 'Joined', entity });
+        PubSub.publishUnsafe(happened, { _tag: 'Joined', entity, client: true });
         state.connections.add(connection);
         yield* Effect.addFinalizer(() =>
           Effect.suspend(() => {
@@ -340,7 +341,7 @@ export const make = <Services = never>(
       join: Effect.sync(() => {
         const [world, entity] = state.setup.join(state.world);
         state.world = world;
-        PubSub.publishUnsafe(happened, { _tag: 'Joined', entity });
+        PubSub.publishUnsafe(happened, { _tag: 'Joined', entity, client: false });
         return entity;
       }),
       leave: (entity) =>
