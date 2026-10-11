@@ -1,4 +1,6 @@
 export * as Clicking from '#src/Clicking.ts';
+export * as Controls from '#src/Controls.ts';
+export * as Devices from '#src/Devices.ts';
 export * as Drawing from '#src/Drawing.ts';
 export * as Interpolate from '#src/Interpolate.ts';
 export * as Mirror from '#src/Mirror.ts';
