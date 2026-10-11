@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect, Layer } from 'effect';
 import { HttpClient, HttpClientError, HttpClientResponse } from 'effect/http';
-import { Scores, http } from '#src/scores.ts';
+import { Scores, http, nowhere } from '#src/scores.ts';
 
 /** The scores Worker as a page reaches it, answering every POST with `answer`; what it was sent is kept, in order. */
 const worker = (answer: (sent: unknown) => Response) => {
@@ -58,4 +58,17 @@ describe('scores kept by the scores Worker', () => {
       expect(yield* reasonOf(unreachable)).toContain('could not be reached');
     });
   });
+
+  it.effect(
+    'are kept nowhere, every one unsaved for the reason given, when the page was not told where',
+    () =>
+      Effect.gen(function* () {
+        return yield* (yield* Scores).save(7);
+      }).pipe(
+        Effect.as('saved'),
+        Effect.catchTag('Unsaved', ({ reason }) => Effect.succeed(reason)),
+        Effect.tap((told) => Effect.sync(() => expect(told).toBe('Not told where.'))),
+        Effect.provide(nowhere('Not told where.')),
+      ),
+  );
 });

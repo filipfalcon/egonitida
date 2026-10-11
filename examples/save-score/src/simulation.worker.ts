@@ -6,11 +6,14 @@ import { FetchHttpClient } from 'effect/http';
 import * as Score from '#src/score.ts';
 import * as Scores from '#src/scores.ts';
 
-// The local server: the round, stepped off the main thread, its scores saved by the scores Worker, which `alchemy dev` serves locally unless VITE_SCORES_URL says where. A page that joins is whoever plays: an entity that holds nothing, whom its clicks are from. In development it goes on from the world kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
+// The local server: the round, stepped off the main thread, its scores saved by the scores Worker at VITE_SCORES_URL, which the Alchemy stack gives the page. A page that joins is whoever plays: an entity that holds nothing, whom its clicks are from. In development it goes on from the world kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
 
-/** Where the scores Worker is: as configured, or where `alchemy dev` serves it. */
+/** Where scores are kept, as the Alchemy stack says where the scores Worker is; nowhere, saying so, if it says nothing, as when the page is served without the stack. */
 const configured: unknown = import.meta.env['VITE_SCORES_URL'];
-const scoresUrl = typeof configured === 'string' ? configured : 'http://127.0.0.1:5490/scores';
+const scores =
+  typeof configured === 'string' && configured !== ''
+    ? Scores.http(new URL('/scores', configured).href).pipe(Layer.provide(FetchHttpClient.layer))
+    : Scores.nowhere('The page was not told where scores are kept: serve it with `npm run dev`.');
 
 const options: Host.Options<Scores.Scores> = {
   game: Score.game,
@@ -35,12 +38,7 @@ Effect.runFork(
         Effect.sync(() => import.meta.hot?.invalidate(reason)),
       ),
     ),
-    Effect.provide(
-      Layer.mergeAll(
-        Scores.http(scoresUrl).pipe(Layer.provide(FetchHttpClient.layer)),
-        BrowserWorkerRunner.layer,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(scores, BrowserWorkerRunner.layer)),
     Effect.scoped,
   ),
 );

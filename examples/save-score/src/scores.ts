@@ -17,6 +17,10 @@ export class Scores extends Context.Service<
   }
 >()('@lightocean/example-save-score/Scores') {}
 
+/** Scores kept nowhere, every one unsaved for `reason`: where the page was not told where scores are kept. */
+export const nowhere = (reason: string): Layer.Layer<Scores> =>
+  Layer.succeed(Scores, { save: () => Effect.fail(new Unsaved({ reason })) });
+
 /** What the scores Worker answers a score with: the best kept so far. */
 const Answer = Schema.Struct({ best: Schema.Int });
 
