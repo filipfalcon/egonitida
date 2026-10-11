@@ -98,6 +98,8 @@ export const make = (
     );
 
     const render = Effect.sync(() => renderer.render(scene, camera));
+    // Whether the loop has drawn a frame yet, before which a shot would show nothing of the world.
+    const drawn = { once: false };
 
     const loop = <R>(frame: (seconds: number) => Effect.Effect<void, never, R>) =>
       Effect.gen(function* () {
@@ -118,6 +120,7 @@ export const make = (
           state.previous = Option.some(now);
           yield* frame(seconds);
           yield* render;
+          drawn.once = true;
         }).pipe(Effect.forever, Effect.forkScoped);
       });
 
@@ -140,6 +143,13 @@ export const make = (
     // The canvas holds what was drawn only until the task that drew it ends, so the shot is taken in the same task.
     const capture = (width: Option.Option<number>) =>
       Effect.suspend(() => {
+        if (!drawn.once) {
+          return Effect.fail(
+            new ViewportError({
+              reason: 'Nothing has been drawn yet: the page is still starting.',
+            }),
+          );
+        }
         renderer.render(scene, camera);
         const scale = Option.match(width, {
           onNone: () => 1,
