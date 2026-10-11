@@ -1,284 +1,131 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
-import { SELF, defaultAction } from '#src/document.ts';
-import { Message, type Model, displayedWorld, initialModel, update } from '#src/main.ts';
+import { Story } from 'foldkit';
+import { Message, type Model, SendEdit, initialModel, update } from '#src/main.ts';
 
-const after = (messages: ReadonlyArray<Message>, model: Model = initialModel): Model =>
-  messages.reduce((current, message) => update(current, message).model, model);
+/** The page with the document joined, and a box selected. */
+const selecting: Model = {
+  ...initialModel,
+  isDocumentJoined: true,
+  outline: [
+    { entity: 1, name: 'Box 1', kind: 'Box', reacts: false },
+    { entity: 2, name: 'Sphere 2', kind: 'Sphere', reacts: false },
+  ],
+  maybeSelected: Option.some({
+    entity: 1,
+    name: 'Box 1',
+    shape: { kind: 'Box' },
+    transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    colour: { hex: 0x4f8cff },
+    spin: { speed: 0.5 },
+    reactions: [],
+  }),
+};
 
-const entityIds = (model: Model) => model.document.entities.map((entity) => entity.id);
+/** That `message` sends the document `edit`, and changes nothing on the page until the document says what came of it. */
+const sends = (message: Message, edit: Parameters<typeof SendEdit>[0]['edit']) =>
+  Story.story(
+    update,
+    Story.given(selecting),
+    Story.message(message),
+    Story.Command.expectExact(SendEdit({ edit })),
+    Story.Command.resolve(SendEdit, Message.SentEdit()),
+    Story.model((model) => {
+      expect(model).toEqual(selecting);
+    }),
+  );
 
-describe('editor', () => {
-  it('starts with a box and a sphere, and nothing selected', () => {
-    expect(initialModel.document.entities.map((entity) => entity.shape)).toEqual(['Box', 'Sphere']);
-    expect(initialModel.maybeSelectedId).toEqual(Option.none());
-  });
-
-  describe('adding', () => {
-    it('adds a named entity of the chosen shape, and selects it', () => {
-      const model = after([Message.ClickedAddEntity({ shape: 'Sphere' })]);
-      const added = model.document.entities.at(-1);
-
-      expect(added?.shape).toBe('Sphere');
-      expect(added?.name).toBe('Sphere 3');
-      expect(model.maybeSelectedId).toEqual(Option.some(added?.id));
-    });
-
-    it('gives every added entity an id and a place of its own', () => {
-      const model = after(
-        Array.from({ length: 6 }, () => Message.ClickedAddEntity({ shape: 'Box' })),
-      );
-      const positions = model.document.entities.map((entity) => entity.position.join(','));
-
-      expect(new Set(entityIds(model)).size).toBe(8);
-      expect(new Set(positions).size).toBe(8);
-    });
-  });
-
-  describe('selecting', () => {
-    const [first] = entityIds(initialModel);
-
-    it('selects an entity by id', () => {
-      const model = after([Message.SelectedEntity({ id: first ?? '' })]);
-
-      expect(model.maybeSelectedId).toEqual(Option.some(first));
-    });
-
-    it('ignores an id no entity has', () => {
-      const model = after([Message.SelectedEntity({ id: 'missing' })]);
-
-      expect(model.maybeSelectedId).toEqual(Option.none());
-    });
-
-    it('clears the selection on a click that hits nothing', () => {
-      const model = after([Message.SelectedEntity({ id: first ?? '' }), Message.ClickedNothing()]);
-
-      expect(model.maybeSelectedId).toEqual(Option.none());
+describe('the editor', () => {
+  it('starts joining its document, with nothing shown, outlined, or selected', () => {
+    expect(initialModel).toEqual({
+      isDocumentJoined: false,
+      isCanvasMounted: false,
+      outline: [],
+      maybeSelected: Option.none(),
+      maybeError: Option.none(),
     });
   });
 
-  describe('deleting', () => {
-    it('deletes the selected entity and clears the selection', () => {
-      const [first, second] = entityIds(initialModel);
-      const model = after([
-        Message.SelectedEntity({ id: first ?? '' }),
-        Message.ClickedDeleteSelected(),
-      ]);
+  it('shows the document once it is joined and its canvas is in the page, and lets go of the canvas when it is left', () => {
+    Story.story(
+      update,
+      Story.given(initialModel),
+      Story.message(Message.JoinedDocument()),
+      Story.message(Message.MountedCanvas()),
+      Story.model((model) => {
+        expect([model.isDocumentJoined, model.isCanvasMounted]).toEqual([true, true]);
+      }),
+      Story.message(Message.LeftDocument()),
+      Story.model((model) => {
+        expect([model.isDocumentJoined, model.isCanvasMounted]).toEqual([false, false]);
+      }),
+    );
+  });
 
-      expect(entityIds(model)).toEqual([second]);
-      expect(model.maybeSelectedId).toEqual(Option.none());
+  it('keeps what the document says of its objects and of what the editor has selected', () => {
+    const projected = [
+      Message.ProjectedOutline({ objects: selecting.outline }),
+      Message.ProjectedSelection({ maybeSelected: selecting.maybeSelected }),
+    ].reduce((model, message) => update(model, message).model, {
+      ...initialModel,
+      isDocumentJoined: true,
     });
 
-    it('deletes nothing while nothing is selected', () => {
-      expect(after([Message.ClickedDeleteSelected()]).document).toEqual(initialModel.document);
+    expect(projected).toEqual(selecting);
+  });
+
+  it('sends the document each edit, as the editor makes it', () => {
+    sends(Message.ClickedAddObject({ shape: 'Sphere' }), { _tag: 'AddedObject', shape: 'Sphere' });
+    sends(Message.ClickedObject({ entity: 2 }), { _tag: 'Clicked', entity: 2 });
+    sends(Message.ClickedDeleteSelected(), { _tag: 'RemovedObject', entity: 1 });
+    sends(Message.ClickedDeselect(), { _tag: 'Deselected' });
+    sends(Message.ChangedProperty({ component: 'Transform', field: 'scale', value: [2, 1, 1] }), {
+      _tag: 'EditedProperty',
+      entity: 1,
+      component: 'Transform',
+      field: 'scale',
+      value: [2, 1, 1],
+    });
+    sends(Message.ClickedAddReaction(), { _tag: 'AddedReaction', entity: 1 });
+    sends(Message.ChangedReactionTarget({ index: 0, target: '2' }), {
+      _tag: 'ChangedReactionTarget',
+      entity: 1,
+      index: 0,
+      target: { _tag: 'Other', entity: 2 },
+    });
+    sends(Message.ChangedReactionTarget({ index: 0, target: 'itself' }), {
+      _tag: 'ChangedReactionTarget',
+      entity: 1,
+      index: 0,
+      target: { _tag: 'Itself' },
     });
   });
 
-  describe('editing', () => {
-    const [first, second] = entityIds(initialModel);
+  it('sends nothing for a value not yet typed whole, nor for an edit with nothing selected', () => {
+    const noCommands = (model: Model, message: Message) =>
+      Story.story(update, Story.given(model), Story.message(message), Story.Command.expectNone());
 
-    it('changes a property of one entity, leaving the others', () => {
-      const model = after([
-        Message.ChangedProperty({ id: first ?? '', key: 'name', value: 'Crate' }),
-        Message.ChangedProperty({ id: first ?? '', key: 'position', value: [4, 5, 6] }),
-      ]);
-      const [edited, untouched] = model.document.entities;
-
-      expect(edited?.name).toBe('Crate');
-      expect(edited?.position).toEqual([4, 5, 6]);
-      expect(untouched).toEqual(initialModel.document.entities[1]);
-      expect(untouched?.id).toBe(second);
-    });
-
-    it('ignores a value the property’s schema rejects', () => {
-      const model = after([
-        Message.ChangedProperty({ id: first ?? '', key: 'spinSpeed', value: Number.NaN }),
-        Message.ChangedProperty({ id: first ?? '', key: 'shape', value: 'Cone' }),
-      ]);
-
-      expect(model.document).toEqual(initialModel.document);
-    });
-
-    it('ignores a field the Details panel does not expose', () => {
-      const model = after([
-        Message.ChangedProperty({ id: first ?? '', key: 'id', value: 'stolen' }),
-      ]);
-
-      expect(model.document).toEqual(initialModel.document);
-    });
+    noCommands(
+      selecting,
+      Message.ChangedProperty({
+        component: 'Transform',
+        field: 'scale',
+        value: [Number.NaN, 1, 1],
+      }),
+    );
+    noCommands(
+      { ...selecting, maybeSelected: Option.none() },
+      Message.ChangedProperty({ component: 'Colour', field: 'hex', value: 0 }),
+    );
   });
 
-  describe('viewport', () => {
-    it('records that the viewport mounted', () => {
-      expect(after([Message.SucceededMountViewport()]).isViewportMounted).toBe(true);
-    });
+  it('says why the document could not be joined, shown, or edited', () => {
+    const reasons = [
+      Message.FailedJoinDocument({ reason: 'No worker.' }),
+      Message.FailedShowDocument({ reason: 'No GPU.' }),
+      Message.FailedSendEdit({ reason: 'Not joined.' }),
+    ].map((failed) => update(initialModel, failed).model.maybeError);
 
-    it('records why the viewport failed to mount', () => {
-      const model = after([Message.FailedMountViewport({ reason: 'No GPU.' })]);
-
-      expect(model.maybeViewportError).toEqual(Option.some('No GPU.'));
-    });
-  });
-
-  describe('behaviour', () => {
-    const [first, second] = entityIds(initialModel);
-    const entityId = first ?? '';
-    const rulesOf = (model: Model) =>
-      model.document.entities.find((entity) => entity.id === entityId)?.rules ?? [];
-    const withRule = after([Message.ClickedAddRule({ entityId })]);
-    const ruleId = rulesOf(withRule)[0]?.id ?? '';
-
-    it('adds a rule that sets the entity’s own colour', () => {
-      expect(rulesOf(withRule)).toEqual([
-        { id: ruleId, target: SELF, action: defaultAction('SetColor') },
-      ]);
-    });
-
-    it('gives every rule an id of its own', () => {
-      const model = after([Message.ClickedAddRule({ entityId })], withRule);
-      const [one, two] = rulesOf(model);
-
-      expect(one?.id).not.toBe(two?.id);
-    });
-
-    it('removes a rule', () => {
-      const model = after([Message.ClickedRemoveRule({ entityId, ruleId })], withRule);
-
-      expect(rulesOf(model)).toEqual([]);
-    });
-
-    it('retargets a rule at another entity, or back at itself', () => {
-      const retargeted = after(
-        [Message.ChangedRuleTarget({ entityId, ruleId, target: second ?? '' })],
-        withRule,
-      );
-      const back = after(
-        [Message.ChangedRuleTarget({ entityId, ruleId, target: SELF })],
-        retargeted,
-      );
-
-      expect(rulesOf(retargeted)[0]?.target).toBe(second);
-      expect(rulesOf(back)[0]?.target).toBe(SELF);
-    });
-
-    it('ignores a target no entity has', () => {
-      const model = after(
-        [Message.ChangedRuleTarget({ entityId, ruleId, target: 'missing' })],
-        withRule,
-      );
-
-      expect(rulesOf(model)[0]?.target).toBe(SELF);
-    });
-
-    it('switches a rule to another action, with that action’s defaults', () => {
-      const model = after(
-        [Message.ChangedRuleAction({ entityId, ruleId, kind: 'MoveBy' })],
-        withRule,
-      );
-
-      expect(rulesOf(model)[0]?.action).toEqual(defaultAction('MoveBy'));
-    });
-
-    it('changes a setting of the rule’s action, through that action’s schema', () => {
-      const moving = after(
-        [Message.ChangedRuleAction({ entityId, ruleId, kind: 'MoveBy' })],
-        withRule,
-      );
-      const model = after(
-        [
-          Message.ChangedRuleSetting({ entityId, ruleId, key: 'offset', value: [2, 0, 0] }),
-          Message.ChangedRuleSetting({ entityId, ruleId, key: 'offset', value: [1, 2] }),
-          Message.ChangedRuleSetting({ entityId, ruleId, key: '_tag', value: 'SetSpin' }),
-        ],
-        moving,
-      );
-
-      expect(rulesOf(model)[0]?.action).toEqual({ _tag: 'MoveBy', offset: [2, 0, 0] });
-    });
-  });
-
-  describe('playing', () => {
-    const [first] = entityIds(initialModel);
-    const entityId = first ?? '';
-    // The box turns green when clicked.
-    const authored = after([
-      Message.ClickedAddRule({ entityId }),
-      Message.SelectedEntity({ id: entityId }),
-    ]);
-    const playing = after([Message.ClickedPlay()], authored);
-    const colorIn = (model: Model) =>
-      Option.map(displayedWorld(model), (world) => world.entities[0]?.color);
-
-    it('plays the document as it stands, with nothing selected', () => {
-      expect(Option.map(playing.maybeSession, (session) => session.initial)).toEqual(
-        Option.some(authored.document),
-      );
-      expect(playing.maybeSelectedId).toEqual(Option.none());
-    });
-
-    it('steps the running world on a click, and records it', () => {
-      const model = after([Message.ClickedInWorld({ id: entityId })], playing);
-      const entries = Option.map(model.maybeSession, (session) => session.entries.length);
-
-      expect(colorIn(model)).toEqual(Option.some(0xffffff));
-      expect(entries).toEqual(Option.some(1));
-      expect(model.document).toEqual(authored.document);
-    });
-
-    it('records a click that changed nothing too', () => {
-      const [, second] = entityIds(initialModel);
-      const model = after([Message.ClickedInWorld({ id: second ?? '' })], playing);
-
-      expect(Option.map(model.maybeSession, (session) => session.entries.length)).toEqual(
-        Option.some(1),
-      );
-    });
-
-    it('shows the world as it was at an inspected entry, ignoring clicks meanwhile', () => {
-      const moved = after(
-        [
-          Message.ChangedRuleAction({ entityId, ruleId: 'rule-1', kind: 'MoveBy' }),
-          Message.ClickedPlay(),
-          Message.ClickedInWorld({ id: entityId }),
-          Message.ClickedInWorld({ id: entityId }),
-          Message.InspectedEntry({ index: 0 }),
-          Message.ClickedInWorld({ id: entityId }),
-        ],
-        authored,
-      );
-      const heightIn = (model: Model) =>
-        Option.map(displayedWorld(model), (world) => world.entities[0]?.position[1]);
-
-      expect(heightIn(moved)).toEqual(Option.some(1));
-      expect(heightIn(after([Message.ClickedLive()], moved))).toEqual(Option.some(2));
-    });
-
-    it('ignores an entry that does not exist', () => {
-      const model = after([Message.InspectedEntry({ index: 3 })], playing);
-
-      expect(Option.flatMap(model.maybeSession, (session) => session.maybeInspectedIndex)).toEqual(
-        Option.none(),
-      );
-    });
-
-    it('leaves the document alone while playing', () => {
-      const model = after([Message.ClickedAddEntity({ shape: 'Box' })], playing);
-
-      expect(model.document).toEqual(authored.document);
-    });
-
-    it('stops, keeping the document as it was before playing', () => {
-      const model = after(
-        [Message.ClickedInWorld({ id: entityId }), Message.ClickedStop()],
-        playing,
-      );
-
-      expect(model.maybeSession).toEqual(Option.none());
-      expect(model.document).toEqual(authored.document);
-    });
-
-    it('shows no running world while editing', () => {
-      expect(displayedWorld(authored)).toEqual(Option.none());
-    });
+    expect(reasons).toEqual(['No worker.', 'No GPU.', 'Not joined.'].map(Option.some));
   });
 });

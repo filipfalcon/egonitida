@@ -1,15 +1,39 @@
-import { Option } from 'effect';
+import { Inspector } from '@lightocean/reflection';
+import { Option, Schema } from 'effect';
 import type { Document, Html, HtmlBuilder } from 'foldkit/html';
 import { viewBehaviour } from '#src/behaviour.ts';
-import { viewDebugger } from '#src/debugger.ts';
 import { viewDetails } from '#src/details.ts';
-import { type Entity, entityProperties } from '#src/document.ts';
-import { Message, type Model, displayedWorld } from '#src/main.ts';
-import { MountViewport, VIEWPORT_ID } from '#src/viewport.ts';
+import { Message, type Model, type Selected } from '#src/main.ts';
+import * as Objects from '#src/objects.ts';
+import { CANVAS_ID, MountCanvas } from '#src/world.ts';
 
-const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const isPlaying = Option.isSome(model.maybeSession);
-  return h.aside(
+/** An object's name, as the Details panel edits it: its label's text. */
+const NameFields = Schema.Struct({
+  text: Schema.String.annotate({ title: 'Name', inspector: Inspector.text() }),
+});
+
+/** Each component the Details panel edits, with the properties its schema shows, in order. */
+const SECTIONS = [
+  { component: 'Label', properties: Inspector.properties(NameFields) },
+  { component: 'Shape', properties: Inspector.properties(Objects.ShapeFields) },
+  { component: 'Transform', properties: Inspector.properties(Objects.TransformFields) },
+  { component: 'Colour', properties: Inspector.properties(Objects.ColourFields) },
+  { component: 'Spin', properties: Inspector.properties(Objects.SpinFields) },
+];
+
+/** The value of each component of `selected` the Details panel edits. */
+const valuesOf = (
+  selected: Selected,
+): Readonly<Record<string, Readonly<Record<string, unknown>>>> => ({
+  Label: { text: selected.name },
+  Shape: selected.shape,
+  Transform: selected.transform,
+  Colour: selected.colour,
+  Spin: selected.spin,
+});
+
+const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.aside(
     [h.Class('panel outliner')],
     [
       h.header(
@@ -18,23 +42,23 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.button(
             [
               h.Type('button'),
-              h.Disabled(isPlaying),
-              h.OnClick(Message.ClickedAddEntity({ shape: 'Box' })),
+              h.Disabled(!model.isDocumentJoined),
+              h.OnClick(Message.ClickedAddObject({ shape: 'Box' })),
             ],
             ['+ Box'],
           ),
           h.button(
             [
               h.Type('button'),
-              h.Disabled(isPlaying),
-              h.OnClick(Message.ClickedAddEntity({ shape: 'Sphere' })),
+              h.Disabled(!model.isDocumentJoined),
+              h.OnClick(Message.ClickedAddObject({ shape: 'Sphere' })),
             ],
             ['+ Sphere'],
           ),
           h.button(
             [
               h.Type('button'),
-              h.Disabled(isPlaying || Option.isNone(model.maybeSelectedId)),
+              h.Disabled(Option.isNone(model.maybeSelected)),
               h.OnClick(Message.ClickedDeleteSelected()),
             ],
             ['Delete'],
@@ -44,22 +68,24 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.h2([], ['Outliner']),
       h.ul(
         [h.Class('entities')],
-        model.document.entities.map((entity) => {
-          const isSelected = Option.exists(model.maybeSelectedId, (id) => id === entity.id);
+        model.outline.map(({ entity, name, kind, reacts }) => {
+          const isSelected = Option.exists(
+            model.maybeSelected,
+            (selected) => selected.entity === entity,
+          );
           return h.li(
-            [h.Key(entity.id)],
+            [h.Key(String(entity))],
             [
               h.button(
                 [
                   h.Type('button'),
                   h.Class(isSelected ? 'entity selected' : 'entity'),
-                  h.Disabled(isPlaying),
                   h.AriaPressed(String(isSelected)),
-                  h.OnClick(Message.SelectedEntity({ id: entity.id })),
+                  h.OnClick(Message.ClickedObject({ entity })),
                 ],
                 [
-                  `${entity.shape === 'Box' ? '■' : '●'} ${entity.name}`,
-                  ...(entity.rules.length > 0 ? [h.span([h.Class('badge')], ['⚡'])] : []),
+                  `${kind === 'Box' ? '■' : '●'} ${name}`,
+                  ...(reacts ? [h.span([h.Class('badge')], ['⚡'])] : []),
                 ],
               ),
             ],
@@ -68,92 +94,70 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
     ],
   );
-};
 
-const viewSelected = (model: Model, entity: Entity, h: HtmlBuilder<Message>): Html =>
-  h.div(
-    [h.Key(entity.id)],
+const viewSelected = (model: Model, selected: Selected, h: HtmlBuilder<Message>): Html => {
+  const values = valuesOf(selected);
+  return h.div(
+    [h.Key(String(selected.entity))],
     [
-      viewDetails(h, entityProperties, entity, (key, value) =>
-        Message.ChangedProperty({ id: entity.id, key, value }),
+      h.button([h.Type('button'), h.OnClick(Message.ClickedDeselect())], ['Deselect']),
+      ...SECTIONS.map(({ component, properties }) =>
+        viewDetails(
+          h,
+          properties,
+          values[component] ?? {},
+          (field, value) => Message.ChangedProperty({ component, field, value }),
+          `${component}-${selected.entity}`,
+        ),
       ),
-      viewBehaviour(h, entity, model.document.entities),
+      viewBehaviour(h, selected, model.outline),
     ],
   );
+};
 
 const viewDetailsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.aside(
     [h.Class('panel')],
     [
       h.h2([], ['Details']),
-      Option.match(
-        Option.flatMap(model.maybeSelectedId, (id) =>
-          Option.fromNullishOr(model.document.entities.find((entity) => entity.id === id)),
-        ),
-        {
-          onNone: () => h.p([h.Class('hint')], ['Select an object to edit it.']),
-          // Keyed by entity, so switching selection replaces the form instead of patching one entity's inputs into another's.
-          onSome: (entity) => viewSelected(model, entity, h),
-        },
-      ),
-    ],
-  );
-
-const viewSidePanel = (model: Model, h: HtmlBuilder<Message>): Html =>
-  Option.match(
-    Option.zipWith(model.maybeSession, displayedWorld(model), (session, world) => ({
-      session,
-      world,
-    })),
-    {
-      onNone: () => viewDetailsPanel(model, h),
-      onSome: ({ session, world }) =>
-        h.aside([h.Class('panel')], [viewDebugger(h, session, world)]),
-    },
-  );
-
-const viewPlayControls = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.div(
-    [h.Class('play-controls')],
-    [
-      Option.isSome(model.maybeSession)
-        ? h.button(
-            [h.Type('button'), h.Class('stop'), h.OnClick(Message.ClickedStop())],
-            ['■ Stop'],
-          )
-        : h.button(
-            [h.Type('button'), h.Class('play'), h.OnClick(Message.ClickedPlay())],
-            ['▶ Play'],
-          ),
+      Option.match(model.maybeSelected, {
+        onNone: () => h.p([h.Class('hint')], ['Select an object to edit it.']),
+        // Keyed by object, so switching selection replaces the form instead of patching one object's inputs into another's.
+        onSome: (selected) => viewSelected(model, selected, h),
+      }),
     ],
   );
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Editor',
   body: h.div(
-    [h.Class(Option.isSome(model.maybeSession) ? 'editor playing' : 'editor')],
+    [h.Class('editor')],
     [
       viewOutliner(model, h),
       h.main(
         [h.Class('stage')],
         [
-          h.canvas(
-            [
-              h.Id(VIEWPORT_ID),
-              h.Class('viewport'),
-              h.AriaLabel('Viewport'),
-              h.OnMount(MountViewport({ viewportId: VIEWPORT_ID })),
-            ],
-            [],
-          ),
-          viewPlayControls(model, h),
-          ...Option.match(model.maybeViewportError, {
+          // The canvas is in the page while the document is joined, and goes with it.
+          ...(model.isDocumentJoined
+            ? [
+                h.canvas(
+                  [
+                    h.Id(CANVAS_ID),
+                    h.Class('viewport'),
+                    h.AriaLabel('Viewport'),
+                    h.OnMount(MountCanvas()),
+                  ],
+                  [],
+                ),
+              ]
+            : []),
+          ...Option.match(model.maybeError, {
             onNone: () => [],
             onSome: (reason) => [h.p([h.Class('error')], [reason])],
           }),
         ],
       ),
-      viewSidePanel(model, h),
+      viewDetailsPanel(model, h),
     ],
   ),
 });

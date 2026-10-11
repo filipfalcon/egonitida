@@ -1,0 +1,152 @@
+import { Tab } from '@lightocean/client';
+import { Pointing, World as Worlds } from '@lightocean/core';
+import { Projection, Stage, World } from '@lightocean/foldkit';
+import { Effect, Option, Schema, Stream } from 'effect';
+import { ManagedResource, Mount, Subscription } from 'foldkit';
+import * as Three from 'three/webgpu';
+import * as Editing from '#src/editing.ts';
+import * as EditingView from '#src/editing.view.ts';
+import { Document, Message, type Model, OutlineEntry, Selected, type Services } from '#src/main.ts';
+import * as Objects from '#src/objects.ts';
+import * as ObjectsView from '#src/objects.view.ts';
+
+// Where the document meets the page: joined in a worker while the editor is open, shown on the canvas once Foldkit has it in the page, and read for the outliner and the panels of what is selected.
+
+/** The id the devtools know the editor's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the document kept for the tab. */
+const host = Tab.id('editor');
+
+/** The id of the canvas the document is shown on. */
+export const CANVAS_ID = 'viewport';
+
+export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
+  document: entry(
+    World.Requirements,
+    World.managed<Model, Message, Services>({
+      resource: Document,
+      game: Editing.game,
+      worker: () =>
+        new Worker(new URL('./simulation.worker.ts', import.meta.url), {
+          type: 'module',
+          name: host,
+        }),
+      joins: () => true,
+      onJoined: () => Message.JoinedDocument(),
+      onLeft: () => Message.LeftDocument(),
+      onFailed: (reason) => Message.FailedJoinDocument({ reason }),
+    }),
+  ),
+}));
+
+/** Says when the canvas is in the page, so the document can be shown on it. */
+export const MountCanvas = Mount.define('MountCanvas', {
+  messages: [Message.MountedCanvas],
+  execute: () => Effect.succeed(Message.MountedCanvas()),
+});
+
+/** A camera looking down over the document, and the light its objects are seen by. */
+const setUp = ({
+  scene,
+  camera,
+}: {
+  readonly scene: Three.Scene;
+  readonly camera: Three.Camera;
+}) => {
+  const sun = new Three.DirectionalLight(0xffffff, 2.5);
+  sun.position.set(5, 8, 6);
+  scene.add(new Three.AmbientLight(0xffffff, 0.4), sun);
+  camera.position.set(0, 4, 10);
+  camera.rotation.set(-0.35, 0, 0);
+};
+
+/** Every object in the document, as the outliner lists it, in the order they were made. */
+const outlineOf = (world: Worlds.World): ReadonlyArray<OutlineEntry> =>
+  Worlds.holding(world, [Objects.Shape]).flatMap((entity) =>
+    Option.toArray(
+      Option.all({
+        shape: Worlds.get(world, entity, Objects.Shape),
+        label: Worlds.get(world, entity, Pointing.Label),
+        behaviour: Worlds.get(world, entity, Objects.Behaviour),
+      }).pipe(
+        Option.map(({ shape, label, behaviour }) => ({
+          entity,
+          name: label.text,
+          kind: shape.kind,
+          reacts: behaviour.reactions.length > 0,
+        })),
+      ),
+    ),
+  );
+
+/** The object `editor` has selected, as the panels show it, if they have one. */
+const selectedBy = (world: Worlds.World, editor: Worlds.Entity): Option.Option<Selected> =>
+  Option.flatMap(
+    Option.flatMap(Worlds.get(world, editor, Editing.Selection), ({ selected }) => selected),
+    (entity) =>
+      Option.map(
+        Option.all({
+          label: Worlds.get(world, entity, Pointing.Label),
+          shape: Worlds.get(world, entity, Objects.Shape),
+          transform: Worlds.get(world, entity, Objects.Transform),
+          colour: Worlds.get(world, entity, Objects.Colour),
+          spin: Worlds.get(world, entity, Objects.Spin),
+          behaviour: Worlds.get(world, entity, Objects.Behaviour),
+        }),
+        ({ label, behaviour, ...rest }) => ({
+          entity,
+          name: label.text,
+          reactions: behaviour.reactions,
+          ...rest,
+        }),
+      ),
+  );
+
+export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
+  stage: entry(
+    { isShown: Schema.Boolean },
+    {
+      modelToDependencies: (model) => ({
+        isShown: model.isDocumentJoined && model.isCanvasMounted,
+      }),
+      dependenciesToStream: ({ isShown }) =>
+        isShown
+          ? Stage.stream({
+              resource: Document,
+              canvasId: CANVAS_ID,
+              views: [...ObjectsView.views, ...EditingView.views],
+              setup: setUp,
+              onFailed: (reason) => Message.FailedShowDocument({ reason }),
+            })
+          : Stream.empty,
+    },
+  ),
+  outline: entry(
+    { isDocumentJoined: Schema.Boolean },
+    {
+      modelToDependencies: ({ isDocumentJoined }) => ({ isDocumentJoined }),
+      dependenciesToStream: ({ isDocumentJoined }) =>
+        isDocumentJoined
+          ? Projection.stream({
+              resource: Document,
+              schema: Schema.Array(OutlineEntry),
+              project: outlineOf,
+              onProjected: (objects) => Message.ProjectedOutline({ objects }),
+            })
+          : Stream.empty,
+    },
+  ),
+  selection: entry(
+    { isDocumentJoined: Schema.Boolean },
+    {
+      modelToDependencies: ({ isDocumentJoined }) => ({ isDocumentJoined }),
+      dependenciesToStream: ({ isDocumentJoined }) =>
+        isDocumentJoined
+          ? Projection.stream({
+              resource: Document,
+              schema: Schema.Option(Selected),
+              project: selectedBy,
+              onProjected: (maybeSelected) => Message.ProjectedSelection({ maybeSelected }),
+            })
+          : Stream.empty,
+    },
+  ),
+}));

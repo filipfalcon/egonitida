@@ -1,50 +1,64 @@
-import { Schema } from 'effect';
+import { Inspector } from '@lightocean/reflection';
 import type { Html, HtmlBuilder } from 'foldkit/html';
 import { viewDetails } from '#src/details.ts';
-import {
-  type Entity,
-  type Rule,
-  SELF,
-  actionKinds,
-  actionProperties,
-  actionTitles,
-} from '#src/document.ts';
-import { Message } from '#src/main.ts';
+import { Message, type OutlineEntry, type Selected } from '#src/main.ts';
+import * as Objects from '#src/objects.ts';
 
-const isActionKind = Schema.is(Schema.Literals(actionKinds));
+/** What each kind of change is called. */
+const TITLES: Record<Objects.ChangeKind, string> = {
+  Recolour: 'Set colour',
+  MoveBy: 'Move by',
+  SetSpin: 'Set spin',
+};
 
-const settingsOf = (rule: Rule) => actionProperties(rule.action._tag);
+const KINDS: ReadonlyArray<Objects.ChangeKind> = ['Recolour', 'MoveBy', 'SetSpin'];
 
-const viewRule = (
+const isKind = (chosen: string): chosen is Objects.ChangeKind =>
+  KINDS.some((kind) => kind === chosen);
+
+/** The settings a change shows, from its own kind's schema. */
+const settingsOf = (change: Objects.Change): ReadonlyArray<Inspector.Property> => {
+  switch (change._tag) {
+    case 'Recolour':
+      return Inspector.properties(Objects.Recolour);
+    case 'MoveBy':
+      return Inspector.properties(Objects.MoveBy);
+    case 'SetSpin':
+      return Inspector.properties(Objects.SetSpin);
+  }
+};
+
+/** The target a reaction names, as its select holds it. */
+const chosenOf = (target: Objects.Target) =>
+  target._tag === 'Itself' ? 'itself' : String(target.entity);
+
+const viewReaction = (
   h: HtmlBuilder<Message>,
-  entity: Entity,
-  entities: ReadonlyArray<Entity>,
-  rule: Rule,
+  selected: Selected,
+  outline: ReadonlyArray<OutlineEntry>,
+  reaction: Objects.Reaction,
+  index: number,
 ): Html => {
-  const ids = { entityId: entity.id, ruleId: rule.id };
-  const prefix = `${entity.id}-${rule.id}`;
+  const prefix = `reaction-${selected.entity}-${index}`;
   return h.div(
-    [h.Class('rule'), h.Key(rule.id)],
+    [h.Class('rule'), h.Key(String(index))],
     [
       h.div(
         [h.Class('property')],
         [
-          h.label([h.For(`${prefix}-action`)], ['When clicked']),
+          h.label([h.For(`${prefix}-kind`)], ['When clicked']),
           h.select(
             [
-              h.Id(`${prefix}-action`),
+              h.Id(`${prefix}-kind`),
               h.OnChange((kind) =>
-                Message.ChangedRuleAction({
-                  ...ids,
-                  kind: isActionKind(kind) ? kind : rule.action._tag,
+                Message.ChangedReactionKind({
+                  index,
+                  kind: isKind(kind) ? kind : reaction.change._tag,
                 }),
               ),
             ],
-            actionKinds.map((kind) =>
-              h.option(
-                [h.Value(kind), h.Selected(kind === rule.action._tag)],
-                [actionTitles[kind]],
-              ),
+            KINDS.map((kind) =>
+              h.option([h.Value(kind), h.Selected(kind === reaction.change._tag)], [TITLES[kind]]),
             ),
           ),
         ],
@@ -56,14 +70,23 @@ const viewRule = (
           h.select(
             [
               h.Id(`${prefix}-target`),
-              h.OnChange((target) => Message.ChangedRuleTarget({ ...ids, target })),
+              h.OnChange((target) => Message.ChangedReactionTarget({ index, target })),
             ],
             [
-              h.option([h.Value(SELF), h.Selected(rule.target === SELF)], ['Itself']),
-              ...entities
-                .filter((other) => other.id !== entity.id)
-                .map((other) =>
-                  h.option([h.Value(other.id), h.Selected(rule.target === other.id)], [other.name]),
+              h.option(
+                [h.Value('itself'), h.Selected(reaction.target._tag === 'Itself')],
+                ['Itself'],
+              ),
+              ...outline
+                .filter(({ entity }) => entity !== selected.entity)
+                .map(({ entity, name }) =>
+                  h.option(
+                    [
+                      h.Value(String(entity)),
+                      h.Selected(chosenOf(reaction.target) === String(entity)),
+                    ],
+                    [name],
+                  ),
                 ),
             ],
           ),
@@ -71,35 +94,34 @@ const viewRule = (
       ),
       viewDetails(
         h,
-        settingsOf(rule),
-        rule.action,
-        (key, value) => Message.ChangedRuleSetting({ ...ids, key, value }),
+        settingsOf(reaction.change),
+        reaction.change,
+        (field, value) => Message.ChangedReactionSetting({ index, field, value }),
         prefix,
       ),
       h.button(
-        [h.Type('button'), h.Class('remove'), h.OnClick(Message.ClickedRemoveRule(ids))],
+        [h.Type('button'), h.Class('remove'), h.OnClick(Message.ClickedRemoveReaction({ index }))],
         ['Remove rule'],
       ),
     ],
   );
 };
 
-/** The rules an entity follows while the document plays. */
+/** What the selected object does when clicked while the document plays. */
 export const viewBehaviour = (
   h: HtmlBuilder<Message>,
-  entity: Entity,
-  entities: ReadonlyArray<Entity>,
+  selected: Selected,
+  outline: ReadonlyArray<OutlineEntry>,
 ): Html =>
   h.section(
     [h.Class('behaviour')],
     [
       h.h2([], ['Behaviour']),
-      ...(entity.rules.length === 0
+      ...(selected.reactions.length === 0
         ? [h.p([h.Class('hint')], ['No rules yet. Add one to make this object react to clicks.'])]
-        : entity.rules.map((rule) => viewRule(h, entity, entities, rule))),
-      h.button(
-        [h.Type('button'), h.OnClick(Message.ClickedAddRule({ entityId: entity.id }))],
-        ['+ Add rule'],
-      ),
+        : selected.reactions.map((reaction, index) =>
+            viewReaction(h, selected, outline, reaction, index),
+          )),
+      h.button([h.Type('button'), h.OnClick(Message.ClickedAddReaction())], ['+ Add rule']),
     ],
   );

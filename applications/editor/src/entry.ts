@@ -1,7 +1,7 @@
 import { Runtime } from 'foldkit';
 import { Message, Model, init, update } from '#src/main.ts';
 import { view } from '#src/view.ts';
-import { subscriptions } from '#src/viewport.ts';
+import { managedResources, subscriptions } from '#src/world.ts';
 
 const application = Runtime.makeApplication({
   Model,
@@ -9,8 +9,9 @@ const application = Runtime.makeApplication({
   update,
   view,
   subscriptions,
+  managedResources,
   container: document.getElementById('root'),
-  // Inspect, not time travel: the viewport draws the live Model through a Subscription, so a historical DOM would sit beside a live 3D view.
+  // Inspect, not time travel: the canvas shows the live document, whose past the devtools beside its host go back in.
   devTools: { Message, mode: 'Inspect' },
 });
 

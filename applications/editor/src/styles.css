@@ -16,6 +16,8 @@ body {
 .editor {
   display: grid;
   grid-template-columns: 240px 1fr 300px;
+  /* One row, as tall as the window: a row sized by its content would grow with the canvas, which sizes itself by the row. */
+  grid-template-rows: 100%;
   height: 100%;
 }
 
@@ -78,6 +80,8 @@ button:disabled {
 .stage {
   position: relative;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .viewport {

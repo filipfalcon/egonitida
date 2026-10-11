@@ -1,257 +1,305 @@
-import { Inspector } from '@lightocean/reflection';
-import { Option, Schema } from 'effect';
-import type { Runtime, Update } from 'foldkit';
+import { World } from '@lightocean/foldkit';
+import { Pointing } from '@lightocean/core';
+import { Effect, Option, Schema } from 'effect';
+import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';
 import { modifyFields } from 'foldkit/struct';
-import {
-  Document,
-  Entity,
-  type Rule,
-  SELF,
-  Shape,
-  defaultAction,
-  editAction,
-  entityProperties,
-  makeEntity,
-} from '#src/document.ts';
-import { WorldEvent, step } from '#src/play.ts';
+import * as Editing from '#src/editing.ts';
+import * as Objects from '#src/objects.ts';
+
+/**
+ * The editor's page. The document is a world, joined in a worker; the page holds no more of it than its panels show, the objects in the outliner and the one the editor has selected, and sends the document every edit as the editor's action, which the document checks and decides on.
+ */
 
 // MODEL
 
-/** One recorded event of a play session, with the world it led to. */
-export const Entry = Schema.Struct({ event: WorldEvent, world: Document });
-export type Entry = typeof Entry.Type;
-
-/** The document running as a program: where it started, everything that has happened since, and which moment the debugger is showing. */
-export const Session = Schema.Struct({
-  initial: Document,
-  entries: Schema.Array(Entry),
-  /** `None` while following the live world; `Some(index)` while showing the world after that entry. */
-  maybeInspectedIndex: Schema.Option(Schema.Int),
+/** An object as the outliner lists it. */
+export const OutlineEntry = Schema.Struct({
+  entity: Schema.Int,
+  name: Schema.String,
+  kind: Objects.ShapeFields.fields.kind,
+  /** Whether it reacts when clicked. */
+  reacts: Schema.Boolean,
 });
-export type Session = typeof Session.Type;
+export type OutlineEntry = typeof OutlineEntry.Type;
+
+/** The object the editor has selected, as the Details and Behaviour panels show it. */
+export const Selected = Schema.Struct({
+  entity: Schema.Int,
+  name: Schema.String,
+  shape: Objects.ShapeFields,
+  transform: Objects.TransformFields,
+  colour: Objects.ColourFields,
+  spin: Objects.SpinFields,
+  reactions: Schema.Array(Objects.Reaction),
+});
+export type Selected = typeof Selected.Type;
 
 export const Model = Schema.Struct({
-  document: Document,
-  maybeSelectedId: Schema.Option(Schema.String),
-  nextEntityNumber: Schema.Int,
-  nextRuleNumber: Schema.Int,
-  maybeSession: Schema.Option(Session),
-  isViewportMounted: Schema.Boolean,
-  maybeViewportError: Schema.Option(Schema.String),
+  isDocumentJoined: Schema.Boolean,
+  isCanvasMounted: Schema.Boolean,
+  outline: Schema.Array(OutlineEntry),
+  maybeSelected: Schema.Option(Selected),
+  maybeError: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
-
-const ActionKind = Schema.Literals(['SetColor', 'MoveBy', 'SetSpin']);
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  ClickedAddEntity: { shape: Shape },
-  SelectedEntity: { id: Schema.String },
-  ClickedNothing: {},
+  JoinedDocument: {},
+  LeftDocument: {},
+  FailedJoinDocument: { reason: Schema.String },
+  MountedCanvas: {},
+  FailedShowDocument: { reason: Schema.String },
+  ProjectedOutline: { objects: Schema.Array(OutlineEntry) },
+  ProjectedSelection: { maybeSelected: Schema.Option(Selected) },
+  ClickedAddObject: { shape: Objects.ShapeFields.fields.kind },
+  ClickedObject: { entity: Schema.Int },
   ClickedDeleteSelected: {},
-  /** A value typed into the Details panel, not yet checked against the property's schema. */
-  ChangedProperty: { id: Schema.String, key: Schema.String, value: Schema.Unknown },
-  ClickedAddRule: { entityId: Schema.String },
-  ClickedRemoveRule: { entityId: Schema.String, ruleId: Schema.String },
-  ChangedRuleTarget: { entityId: Schema.String, ruleId: Schema.String, target: Schema.String },
-  ChangedRuleAction: { entityId: Schema.String, ruleId: Schema.String, kind: ActionKind },
-  /** A value typed into a rule's settings, not yet checked against its action's schema. */
-  ChangedRuleSetting: {
-    entityId: Schema.String,
-    ruleId: Schema.String,
-    key: Schema.String,
-    value: Schema.Unknown,
-  },
-  ClickedPlay: {},
-  ClickedStop: {},
-  ClickedInWorld: { id: Schema.String },
-  InspectedEntry: { index: Schema.Int },
-  ClickedLive: {},
-  SucceededMountViewport: {},
-  FailedMountViewport: { reason: Schema.String },
+  ClickedDeselect: {},
+  /** A value typed into the Details panel, not yet checked against its component's schema. */
+  ChangedProperty: { component: Schema.String, field: Schema.String, value: Schema.Unknown },
+  ClickedAddReaction: {},
+  ClickedRemoveReaction: { index: Schema.Int },
+  ChangedReactionKind: { index: Schema.Int, kind: Objects.ChangeKind },
+  /** The target chosen: `itself`, or the id of another object. */
+  ChangedReactionTarget: { index: Schema.Int, target: Schema.String },
+  /** A value typed into a reaction's settings, not yet checked against its change's schema. */
+  ChangedReactionSetting: { index: Schema.Int, field: Schema.String, value: Schema.Unknown },
+  SentEdit: {},
+  FailedSendEdit: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
 
-// SESSION
+// RESOURCES
 
-const liveWorld = (session: Session): Document => session.entries.at(-1)?.world ?? session.initial;
+/** The document, joined while the editor is open. */
+export const Document = ManagedResource.tag<World.Joined>()('Document');
 
-/** The world the viewport shows while playing: the inspected moment, or else the live one. */
-export const displayedWorld = (model: Model): Option.Option<Document> =>
-  Option.map(model.maybeSession, (session) =>
-    Option.match(session.maybeInspectedIndex, {
-      onNone: () => liveWorld(session),
-      onSome: (index) => session.entries[index]?.world ?? liveWorld(session),
-    }),
-  );
+/** What the editor's Commands and Subscriptions reach: its document. */
+export type Services = ManagedResource.ServiceOf<typeof Document>;
+
+// COMMANDS
+
+/** An edit, as the editor's action it is sent as. */
+export const Edit = Schema.Union([
+  Schema.TaggedStruct('AddedObject', { shape: Objects.ShapeFields.fields.kind }),
+  Schema.TaggedStruct('RemovedObject', { entity: Schema.Int }),
+  Schema.TaggedStruct('Clicked', { entity: Schema.Int }),
+  Schema.TaggedStruct('Deselected', {}),
+  Schema.TaggedStruct('EditedProperty', {
+    entity: Schema.Int,
+    component: Schema.String,
+    field: Schema.String,
+    value: Schema.Json,
+  }),
+  Schema.TaggedStruct('AddedReaction', { entity: Schema.Int }),
+  Schema.TaggedStruct('RemovedReaction', { entity: Schema.Int, index: Schema.Int }),
+  Schema.TaggedStruct('ChangedReactionKind', {
+    entity: Schema.Int,
+    index: Schema.Int,
+    kind: Objects.ChangeKind,
+  }),
+  Schema.TaggedStruct('ChangedReactionTarget', {
+    entity: Schema.Int,
+    index: Schema.Int,
+    target: Objects.Target,
+  }),
+  Schema.TaggedStruct('ChangedReactionSetting', {
+    entity: Schema.Int,
+    index: Schema.Int,
+    field: Schema.String,
+    value: Schema.Json,
+  }),
+]);
+export type Edit = typeof Edit.Type;
+
+/** Sends `edit` to the document, as the editor's action. */
+export const SendEdit = Command.define('SendEdit', {
+  args: { edit: Edit },
+  messages: [Message.SentEdit, Message.FailedSendEdit],
+  execute: ({ edit }) =>
+    Document.get.pipe(
+      Effect.flatMap(({ client }) => {
+        switch (edit._tag) {
+          case 'AddedObject':
+            return client.act(Editing.AddedObject, { shape: edit.shape });
+          case 'RemovedObject':
+            return client.act(Editing.RemovedObject, { entity: edit.entity });
+          case 'Clicked':
+            return client.act(Pointing.Clicked, { entity: edit.entity });
+          case 'Deselected':
+            return client.act(Editing.Deselected, {});
+          case 'EditedProperty':
+            return client.act(Editing.EditedProperty, {
+              entity: edit.entity,
+              component: edit.component,
+              field: edit.field,
+              value: edit.value,
+            });
+          case 'AddedReaction':
+            return client.act(Editing.AddedReaction, { entity: edit.entity });
+          case 'RemovedReaction':
+            return client.act(Editing.RemovedReaction, { entity: edit.entity, index: edit.index });
+          case 'ChangedReactionKind':
+            return client.act(Editing.ChangedReactionKind, {
+              entity: edit.entity,
+              index: edit.index,
+              kind: edit.kind,
+            });
+          case 'ChangedReactionTarget':
+            return client.act(Editing.ChangedReactionTarget, {
+              entity: edit.entity,
+              index: edit.index,
+              target: edit.target,
+            });
+          case 'ChangedReactionSetting':
+            return client.act(Editing.ChangedReactionSetting, {
+              entity: edit.entity,
+              index: edit.index,
+              field: edit.field,
+              value: edit.value,
+            });
+        }
+      }),
+      Effect.as(Message.SentEdit()),
+      Effect.catch(({ resource }) =>
+        Effect.succeed(
+          Message.FailedSendEdit({ reason: `The document ${resource} is not joined.` }),
+        ),
+      ),
+    ),
+});
 
 // UPDATE
 
-const editableKeys = new Set(entityProperties.map((property) => property.key));
+/** A typed value as it can travel: whole numbers, text, and lists of them; none while a number is not yet typed whole. */
+const isWhole = (value: unknown): boolean =>
+  typeof value === 'number'
+    ? Number.isFinite(value)
+    : Array.isArray(value)
+      ? value.every(isWhole)
+      : typeof value === 'string' || typeof value === 'boolean';
 
-const editEntity = (entity: Entity, key: string, value: unknown): Entity =>
-  editableKeys.has(key)
-    ? Option.getOrElse(Inspector.edit(Entity, entity, key, value), () => entity)
-    : entity;
+const jsonOf = (value: unknown): Option.Option<Schema.Json> =>
+  isWhole(value) ? Schema.decodeUnknownOption(Schema.Json)(value) : Option.none();
 
-const mapEntity = (model: Model, entityId: string, f: (entity: Entity) => Entity): Model =>
-  modifyFields(model, {
-    document: (document) => ({
-      entities: document.entities.map((entity) => (entity.id === entityId ? f(entity) : entity)),
-    }),
+/** A target as chosen: the object itself, or another by its id. */
+const targetOf = (chosen: string): Option.Option<Objects.Target> =>
+  chosen === 'itself'
+    ? Option.some(Objects.itself)
+    : Option.map(
+        Option.filter(Option.some(Number(chosen)), Number.isInteger),
+        (entity): Objects.Target => ({ _tag: 'Other', entity }),
+      );
+
+const failed = (model: Model, reason: string) =>
+  modifyFields(model, { maybeError: () => Option.some(reason) });
+
+/** Sends `edit`, if there is one; the page changes only once the document says what came of it. */
+const sending = (
+  model: Model,
+  edit: Option.Option<Edit>,
+): Update.Return<Model, Message, Services> =>
+  Option.match(edit, {
+    onNone: () => ({ model }),
+    onSome: (sent) => ({ model, commands: [SendEdit({ edit: sent })] }),
   });
 
-const mapRule = (model: Model, entityId: string, ruleId: string, f: (rule: Rule) => Rule) =>
-  mapEntity(model, entityId, (entity) => ({
-    ...entity,
-    rules: entity.rules.map((rule) => (rule.id === ruleId ? f(rule) : rule)),
-  }));
-
-const hasEntity = (model: Model, id: string) =>
-  model.document.entities.some((entity) => entity.id === id);
-
-const mapSession = (model: Model, f: (session: Session) => Session): Model =>
-  modifyFields(model, { maybeSession: (maybeSession) => Option.map(maybeSession, f) });
-
-/** Edits to the document only apply while it is not playing, the way Unreal locks the level during Play-in-Editor. */
-const editing = (model: Model, edit: () => Model): Update.Return<Model, Message> => ({
-  model: Option.isSome(model.maybeSession) ? model : edit(),
-});
+/** An edit of the selected object, if one is selected. */
+const ofSelected = (model: Model, edit: (entity: number) => Option.Option<Edit>) =>
+  Option.flatMap(model.maybeSelected, ({ entity }) => edit(entity));
 
 export const update = (model: Model, message: Message) =>
-  Message.match<Update.Return<Model, Message>>(message, {
-    ClickedAddEntity: ({ shape }) =>
-      editing(model, () => {
-        const entity = makeEntity(shape, model.nextEntityNumber);
-        return modifyFields(model, {
-          document: (document) => ({ entities: [...document.entities, entity] }),
-          maybeSelectedId: () => Option.some(entity.id),
-          nextEntityNumber: (number) => number + 1,
-        });
-      }),
-    SelectedEntity: ({ id }) =>
-      editing(model, () =>
-        hasEntity(model, id)
-          ? modifyFields(model, { maybeSelectedId: () => Option.some(id) })
-          : model,
-      ),
-    ClickedNothing: () => ({
-      model: modifyFields(model, { maybeSelectedId: () => Option.none() }),
+  Message.match<Update.Return<Model, Message, Services>>(message, {
+    JoinedDocument: () => ({ model: modifyFields(model, { isDocumentJoined: () => true }) }),
+    // The canvas goes with the document, so a document joined again waits for its own canvas.
+    LeftDocument: () => ({
+      model: modifyFields(model, { isDocumentJoined: () => false, isCanvasMounted: () => false }),
     }),
+    FailedJoinDocument: ({ reason }) => ({ model: failed(model, reason) }),
+    MountedCanvas: () => ({ model: modifyFields(model, { isCanvasMounted: () => true }) }),
+    FailedShowDocument: ({ reason }) => ({ model: failed(model, reason) }),
+    ProjectedOutline: ({ objects }) => ({ model: modifyFields(model, { outline: () => objects }) }),
+    ProjectedSelection: ({ maybeSelected }) => ({
+      model: modifyFields(model, { maybeSelected: () => maybeSelected }),
+    }),
+    ClickedAddObject: ({ shape }) => sending(model, Option.some({ _tag: 'AddedObject', shape })),
+    ClickedObject: ({ entity }) => sending(model, Option.some({ _tag: 'Clicked', entity })),
     ClickedDeleteSelected: () =>
-      editing(model, () =>
-        Option.match(model.maybeSelectedId, {
-          onNone: () => model,
-          onSome: (id) =>
-            modifyFields(model, {
-              document: (document) => ({
-                entities: document.entities.filter((entity) => entity.id !== id),
-              }),
-              maybeSelectedId: () => Option.none(),
-            }),
-        }),
+      sending(
+        model,
+        ofSelected(model, (entity) => Option.some({ _tag: 'RemovedObject', entity })),
       ),
-    ChangedProperty: ({ id, key, value }) =>
-      editing(model, () => mapEntity(model, id, (entity) => editEntity(entity, key, value))),
-    ClickedAddRule: ({ entityId }) =>
-      editing(model, () =>
-        modifyFields(
-          mapEntity(model, entityId, (entity) => ({
-            ...entity,
-            rules: [
-              ...entity.rules,
-              {
-                id: `rule-${model.nextRuleNumber}`,
-                target: SELF,
-                action: defaultAction('SetColor'),
-              },
-            ],
+    ClickedDeselect: () => sending(model, Option.some({ _tag: 'Deselected' })),
+    ChangedProperty: ({ component, field, value }) =>
+      sending(
+        model,
+        ofSelected(model, (entity) =>
+          Option.map(jsonOf(value), (json) => ({
+            _tag: 'EditedProperty',
+            entity,
+            component,
+            field,
+            value: json,
           })),
-          { nextRuleNumber: (number) => number + 1 },
         ),
       ),
-    ClickedRemoveRule: ({ entityId, ruleId }) =>
-      editing(model, () =>
-        mapEntity(model, entityId, (entity) => ({
-          ...entity,
-          rules: entity.rules.filter((rule) => rule.id !== ruleId),
-        })),
+    ClickedAddReaction: () =>
+      sending(
+        model,
+        ofSelected(model, (entity) => Option.some({ _tag: 'AddedReaction', entity })),
       ),
-    ChangedRuleTarget: ({ entityId, ruleId, target }) =>
-      editing(model, () =>
-        target === SELF || hasEntity(model, target)
-          ? mapRule(model, entityId, ruleId, (rule) => ({ ...rule, target }))
-          : model,
+    ClickedRemoveReaction: ({ index }) =>
+      sending(
+        model,
+        ofSelected(model, (entity) => Option.some({ _tag: 'RemovedReaction', entity, index })),
       ),
-    ChangedRuleAction: ({ entityId, ruleId, kind }) =>
-      editing(model, () =>
-        mapRule(model, entityId, ruleId, (rule) => ({ ...rule, action: defaultAction(kind) })),
+    ChangedReactionKind: ({ index, kind }) =>
+      sending(
+        model,
+        ofSelected(model, (entity) =>
+          Option.some({ _tag: 'ChangedReactionKind', entity, index, kind }),
+        ),
       ),
-    ChangedRuleSetting: ({ entityId, ruleId, key, value }) =>
-      editing(model, () =>
-        mapRule(model, entityId, ruleId, (rule) => ({
-          ...rule,
-          action: editAction(rule.action, key, value),
-        })),
+    ChangedReactionTarget: ({ index, target }) =>
+      sending(
+        model,
+        ofSelected(model, (entity) =>
+          Option.map(targetOf(target), (chosen) => ({
+            _tag: 'ChangedReactionTarget',
+            entity,
+            index,
+            target: chosen,
+          })),
+        ),
       ),
-    ClickedPlay: () =>
-      editing(model, () =>
-        modifyFields(model, {
-          maybeSession: () =>
-            Option.some({
-              initial: model.document,
-              entries: [],
-              maybeInspectedIndex: Option.none(),
-            }),
-          maybeSelectedId: () => Option.none(),
-        }),
+    ChangedReactionSetting: ({ index, field, value }) =>
+      sending(
+        model,
+        ofSelected(model, (entity) =>
+          Option.map(jsonOf(value), (json) => ({
+            _tag: 'ChangedReactionSetting',
+            entity,
+            index,
+            field,
+            value: json,
+          })),
+        ),
       ),
-    ClickedStop: () => ({
-      model: modifyFields(model, { maybeSession: () => Option.none() }),
-    }),
-    ClickedInWorld: ({ id }) => ({
-      model: mapSession(model, (session) => {
-        // While the debugger shows the past, the world is paused: a click there changes nothing.
-        if (Option.isSome(session.maybeInspectedIndex)) {
-          return session;
-        }
-        const event: WorldEvent = { _tag: 'ClickedEntity', id };
-        return {
-          ...session,
-          entries: [...session.entries, { event, world: step(liveWorld(session), event) }],
-        };
-      }),
-    }),
-    InspectedEntry: ({ index }) => ({
-      model: mapSession(model, (session) =>
-        index >= 0 && index < session.entries.length
-          ? { ...session, maybeInspectedIndex: Option.some(index) }
-          : session,
-      ),
-    }),
-    ClickedLive: () => ({
-      model: mapSession(model, (session) => ({ ...session, maybeInspectedIndex: Option.none() })),
-    }),
-    SucceededMountViewport: () => ({
-      model: modifyFields(model, { isViewportMounted: () => true }),
-    }),
-    FailedMountViewport: ({ reason }) => ({
-      model: modifyFields(model, { maybeViewportError: () => Option.some(reason) }),
-    }),
+    SentEdit: () => ({ model }),
+    FailedSendEdit: ({ reason }) => ({ model: failed(model, reason) }),
   });
 
 // INIT
 
 export const initialModel: Model = {
-  document: { entities: [makeEntity('Box', 1), makeEntity('Sphere', 2)] },
-  maybeSelectedId: Option.none(),
-  nextEntityNumber: 3,
-  nextRuleNumber: 1,
-  maybeSession: Option.none(),
-  isViewportMounted: false,
-  maybeViewportError: Option.none(),
+  isDocumentJoined: false,
+  isCanvasMounted: false,
+  outline: [],
+  maybeSelected: Option.none(),
+  maybeError: Option.none(),
 };
 
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({ model: initialModel });
