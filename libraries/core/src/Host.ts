@@ -1,4 +1,4 @@
-import { Clock, Effect, Latch, Option, PubSub, Schema, type Scope, Stream } from 'effect';
+import { Clock, Data, Effect, Latch, Option, PubSub, Schema, type Scope, Stream } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
@@ -19,19 +19,23 @@ import type * as World from '#src/World.ts';
  * It also runs the commands the game's rules issue, once the step that issued them is over, with the services of the Layers it is given; so hosting a game that saves needs whatever it saves to. A command's result enters the world at the next step taken after it comes, as actions do. A command that breaks is reported, has no result, and stops nothing.
  */
 
-/** What it takes to host a game whose commands need `Services`. */
-export interface Options<Services = never> {
+/** What a host plays: a game whose commands need `Services`, and how a client joins it and leaves. */
+export interface Setup<Services = never> {
   readonly game: Game.Game<
     Component.Any,
     Action.Any,
     Event.Any,
     Command.Command<string, unknown, Event.Any, Services>
   >;
-  readonly world: World.World;
   /** Spawns the entity a joining client will control. */
   readonly join: (world: World.World) => readonly [World.World, World.Entity];
   /** Removes what a leaving client controlled. */
   readonly leave: (world: World.World, entity: World.Entity) => World.World;
+}
+
+/** What it takes to host a game whose commands need `Services`: what it plays, and the world it starts from. */
+export interface Options<Services = never> extends Setup<Services> {
+  readonly world: World.World;
   /** The most steps taken at once to catch up after a stall. */
   readonly maxCatchUpSteps?: number;
   /** Freezes every world the host steps to, so a system or rule that changes a value in place throws at once; for development, since it walks the whole world every step. */
@@ -42,12 +46,14 @@ export interface Options<Services = never> {
   readonly mayHold: boolean;
 }
 
-/** What changed a host's world: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a world it was given, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
+/** What changed a host's world: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a world it was given or taking up another game, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
 export type Happening =
   | { readonly _tag: 'Joined'; readonly entity: World.Entity }
   | { readonly _tag: 'Left'; readonly entity: World.Entity }
   /** The host went back to a world it was given, such as a past one, and steps on from it. */
   | { readonly _tag: 'Restored'; readonly world: World.World }
+  /** The host plays another game from now on, such as a new build of its own, from the world it held, as the new game read it. */
+  | ({ readonly _tag: 'Reloaded'; readonly world: World.World } & Setup<unknown>)
   | {
       readonly _tag: 'Stepped';
       /** The world the step took it to. */
@@ -68,7 +74,10 @@ export interface Control {
   readonly payload: unknown;
 }
 
-export interface Host {
+/** A game a host was given in place of its own that it cannot play: one that cannot read the world it holds, or steps at another rate. */
+export class Unreadable extends Data.TaggedError('Unreadable')<{ readonly reason: string }> {}
+
+export interface Host<Services = never> {
   /** Joins a client through `connection`, until the scope closes; returns the entity it controls. */
   readonly connect: (
     connection: Transport.Connection,
@@ -78,6 +87,8 @@ export interface Host {
   readonly controls: Stream.Stream<Control>;
   /** Shows every client `world` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
   readonly show: (world: World.World) => Effect.Effect<void>;
+  /** Plays `setup` from now on, such as a new build of the game, from the world the host holds, read by the new game; refuses one that cannot read it, and plays on as it was. */
+  reload(setup: Setup<Services>): Effect.Effect<void, Unreadable>;
   /** Goes back to `world`, such as a past one, and steps on from it; every client is shown it at once. */
   readonly restore: (world: World.World) => Effect.Effect<void>;
   /** Watches the world until the scope closes: where it is now, and everything that happens to it from now on, with nothing missed between the two. */
@@ -86,14 +97,18 @@ export interface Host {
 
 export const make = <Services = never>(
   options: Options<Services>,
-): Effect.Effect<Host, never, Scope.Scope | Services> =>
+): Effect.Effect<Host<Services>, never, Scope.Scope | Services> =>
   Effect.gen(function* () {
-    const inputComponents = new Map(
-      options.game.components
-        .filter((component): component is Input.InputComponent => component.owner === 'input')
-        .map((component) => [component.name, component]),
-    );
+    /** The input components of `game`, by name. */
+    const inputsOf = (game: Setup<Services>['game']) =>
+      new Map(
+        game.components
+          .filter((component): component is Input.InputComponent => component.owner === 'input')
+          .map((component) => [component.name, component]),
+      );
     const state = {
+      setup: { game: options.game, join: options.join, leave: options.leave },
+      inputComponents: inputsOf(options.game),
       world: options.world,
       connections: new Set<Transport.Connection>(),
       /** The newest input of each client, waiting for the next step. */
@@ -148,7 +163,7 @@ export const make = <Services = never>(
     /** Sends every client `world`, in the era it is now. */
     const broadcast = (world: World.World) =>
       Effect.suspend(() => {
-        const payload = Snapshot.encode(world, options.game, state.era);
+        const payload = Snapshot.encode(world, state.setup.game, state.era);
         return Effect.forEach(
           state.connections,
           (connection) => connection.send({ channel: 'unreliable', payload }),
@@ -173,7 +188,13 @@ export const make = <Services = never>(
       const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
       for (let step = 0; step < steps; step += 1) {
         const taken = step === 0 ? { inputs, actions } : { inputs: [], actions: [] };
-        const next = Game.step(options.game, state.world, taken.inputs, taken.actions, stepping);
+        const next = Game.step(
+          state.setup.game,
+          state.world,
+          taken.inputs,
+          taken.actions,
+          stepping,
+        );
         state.world = next.world;
         PubSub.publishUnsafe(happened, { _tag: 'Stepped', world: next.world, ...taken });
         yield* Effect.forEach(next.commands, run, { discard: true });
@@ -198,7 +219,7 @@ export const make = <Services = never>(
           Effect.suspend(() => {
             if (message._tag === 'Act') {
               // An action is taken as from the player whose connection it came on; one the game does not know is dropped.
-              for (const action of options.game.actions) {
+              for (const action of state.setup.game.actions) {
                 Option.map(action.accept(message.action, entity), (accepted) =>
                   state.acted.push(accepted),
                 );
@@ -236,7 +257,7 @@ export const make = <Services = never>(
         state.pending.set(
           entity,
           Object.entries(newest.values).flatMap(([name, encoded]) => {
-            const component = inputComponents.get(name);
+            const component = state.inputComponents.get(name);
             return component === undefined
               ? []
               : Option.match(Schema.decodeUnknownOption(component.schema)(encoded), {
@@ -250,7 +271,7 @@ export const make = <Services = never>(
 
     const connect = (connection: Transport.Connection) =>
       Effect.gen(function* () {
-        const [world, entity] = options.join(state.world);
+        const [world, entity] = state.setup.join(state.world);
         state.world = world;
         PubSub.publishUnsafe(happened, { _tag: 'Joined', entity });
         state.connections.add(connection);
@@ -260,7 +281,7 @@ export const make = <Services = never>(
             state.pending.delete(entity);
             state.lastSeq.delete(entity);
             state.holders.delete(entity);
-            state.world = options.leave(state.world, entity);
+            state.world = state.setup.leave(state.world, entity);
             PubSub.publishUnsafe(happened, { _tag: 'Left', entity });
             // A client that leaves lets go of time it was holding.
             return settleHold;
@@ -268,7 +289,7 @@ export const make = <Services = never>(
         );
         yield* connection.send({
           channel: 'reliable',
-          payload: Protocol.encodeWelcome({ entity, stepRate: options.game.stepRate }),
+          payload: Protocol.encodeWelcome({ entity, stepRate: state.setup.game.stepRate }),
         });
         yield* connection.frames.pipe(
           Stream.runForEach((frame) =>
@@ -289,6 +310,25 @@ export const make = <Services = never>(
         Effect.suspend(() => {
           state.era += 1;
           return broadcast(world);
+        }),
+      reload: (setup) =>
+        Effect.gen(function* () {
+          if (setup.game.stepRate !== state.setup.game.stepRate) {
+            return yield* new Unreadable({
+              reason: `it steps ${setup.game.stepRate} times a second, not ${state.setup.game.stepRate}`,
+            });
+          }
+          // A world its own game cannot encode is a bug in the engine; one the new game cannot read is the new game's to answer for.
+          const encoded = yield* Schema.encodeEffect(Game.schema(state.setup.game))(
+            state.world,
+          ).pipe(Effect.orDie);
+          const world = yield* Schema.decodeEffect(Game.schema(setup.game))(encoded).pipe(
+            Effect.mapError((issue) => new Unreadable({ reason: issue.message })),
+          );
+          state.setup = { game: setup.game, join: setup.join, leave: setup.leave };
+          state.inputComponents = inputsOf(setup.game);
+          state.world = world;
+          PubSub.publishUnsafe(happened, { _tag: 'Reloaded', world, ...state.setup });
         }),
       restore: (world) =>
         Effect.suspend(() => {

@@ -434,6 +434,107 @@ describe('going back in time', () => {
   );
 });
 
+describe('reloading a game', () => {
+  /** The game, but moving twice as far by the same stick. */
+  const brisk = Game.make({
+    stepRate: 30,
+    domains: [
+      Domain.make({
+        name: 'Test',
+        requires: [],
+        components: [Position, Controls, Health],
+        actions: [AskedToHeal],
+        events: [],
+        systems: [
+          System.make({
+            name: 'steer',
+            reads: [Controls],
+            writes: [Position],
+            emits: [],
+            run: (context) => {
+              for (const [entity, position, controls] of context.query(Position, Controls)) {
+                context.set(entity, Position, {
+                  x: position.x + controls.move * 60 * context.time.stepSeconds,
+                });
+              }
+            },
+          }),
+        ],
+        rules: [heal],
+      }),
+    ],
+  });
+  /** A game that holds nothing of health, so cannot read a world that does. */
+  const unhealthy = Game.make({
+    stepRate: 30,
+    domains: [
+      Domain.make({
+        name: 'Test',
+        requires: [],
+        components: [Position, Controls],
+        actions: [],
+        events: [],
+        systems: [steer],
+        rules: [],
+      }),
+    ],
+  });
+  const setupOf = (played: Host.Options['game']) => ({ ...hostOptions(true), game: played });
+
+  it.effect('plays on with the new game from the world it holds', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      yield* client.send([Controls.of({ move: 1, fire: false })]);
+      yield* advance(100);
+      const before = yield* host.world;
+
+      yield* host.reload(setupOf(brisk));
+      yield* advance(100);
+
+      const after = yield* host.world;
+      expect(after.tick).toBe(before.tick + 3);
+      expect(positionIn(after, client.entity)).toEqual(
+        Option.map(positionIn(before, client.entity), (x) => x + 6),
+      );
+    }),
+  );
+
+  it.effect('refuses a game that cannot read the world it holds, and plays on as it was', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      yield* client.send([Controls.of({ move: 1, fire: false })]);
+      yield* advance(100);
+      const before = yield* host.world;
+
+      const refused = yield* host.reload(setupOf(unhealthy)).pipe(Effect.flip);
+      yield* advance(100);
+
+      expect(refused._tag).toBe('Unreadable');
+      expect(positionIn(yield* host.world, client.entity)).toEqual(
+        Option.map(positionIn(before, client.entity), (x) => x + 3),
+      );
+    }),
+  );
+
+  it.effect('is told to whoever watches it, with the world the new game read', () =>
+    Effect.gen(function* () {
+      const host = yield* startHost;
+      yield* advance(100);
+      const watching = yield* host.watch;
+      const told = yield* watching.happenings.pipe(Stream.runHead, Effect.forkChild);
+      yield* Effect.yieldNow;
+
+      yield* host.reload(setupOf(brisk));
+
+      const happening = yield* Fiber.join(told);
+      expect(Option.map(happening, ({ _tag }) => _tag)).toEqual(Option.some('Reloaded'));
+      expect(
+        Option.map(happening, (reloaded) => reloaded._tag === 'Reloaded' && reloaded.game),
+      ).toEqual(Option.some(brisk));
+    }),
+  );
+});
+
 describe('controls', () => {
   it.effect('reach whatever listens beside the host, from the client that sent them', () =>
     Effect.gen(function* () {
