@@ -1,4 +1,4 @@
-import type { Option } from 'effect';
+import { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type { Despawning, Spawning, Time } from '#src/System.ts';
@@ -36,6 +36,8 @@ export interface Rule<
 > {
   /** The event or action it handles. */
   readonly on: On;
+  /** What it is called, where more than one rule handles its event and the map of a game's changes should tell them apart. */
+  readonly name: Option.Option<string>;
   readonly writes: ReadonlyArray<Writes>;
   readonly emits: ReadonlyArray<Emits>;
   readonly spawns: ReadonlyArray<Spawns>;
@@ -55,6 +57,8 @@ export const on = <
 >(
   event: E,
   spec: {
+    /** What it is called; none if left out. */
+    readonly name?: string;
     readonly writes: Writes;
     readonly emits: Emits;
     /** The components it may spawn entities with; none if left out. */
@@ -69,6 +73,7 @@ export const on = <
 ): Rule<E, Writes[number], Emits[number], Spawns[number]> => ({
   on: event,
   ...spec,
+  name: Option.fromNullishOr(spec.name),
   spawns: spec.spawns ?? [],
   despawns: spec.despawns ?? false,
 });

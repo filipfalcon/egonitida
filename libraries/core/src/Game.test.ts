@@ -408,20 +408,22 @@ describe('Game.changes', () => {
 
   it('tells which systems read, write, and spawn each component, and which rules write it', () => {
     expect(changes.components.get('Position')).toEqual({
-      readBy: [{ _tag: 'System', name: 'bite' }],
-      writtenBy: [{ _tag: 'System', name: 'move' }],
+      readBy: [{ _tag: 'System', name: 'bite', domain: Option.none() }],
+      writtenBy: [{ _tag: 'System', name: 'move', domain: Option.none() }],
       spawnedBy: [],
     });
-    expect(changes.components.get('Health')?.writtenBy).toEqual([{ _tag: 'Rule', on: 'Bitten' }]);
+    expect(changes.components.get('Health')?.writtenBy).toEqual([
+      { _tag: 'Rule', on: 'Bitten', name: Option.none(), domain: Option.none() },
+    ]);
   });
 
   it('tells what emits each event and what handles it, actions included', () => {
     expect(changes.events.get('Bitten')).toEqual({
-      emittedBy: [{ _tag: 'System', name: 'bite' }],
-      handledBy: [{ _tag: 'Rule', on: 'Bitten' }],
+      emittedBy: [{ _tag: 'System', name: 'bite', domain: Option.none() }],
+      handledBy: [{ _tag: 'Rule', on: 'Bitten', name: Option.none(), domain: Option.none() }],
     });
     expect(changes.events.get('Died')).toEqual({
-      emittedBy: [{ _tag: 'Rule', on: 'Bitten' }],
+      emittedBy: [{ _tag: 'Rule', on: 'Bitten', name: Option.none(), domain: Option.none() }],
       handledBy: [],
     });
     expect(changes.events.get('ChoseRestart')).toEqual({ emittedBy: [], handledBy: [] });
@@ -431,6 +433,31 @@ describe('Game.changes', () => {
     expect([...changes.components.keys()]).toEqual(game.components.map(({ name }) => name));
     expect([...changes.events.keys()]).toEqual(['ChoseRestart', 'Bitten', 'Died']);
     expect(changes.components.get('Wall')).toEqual({ readBy: [], writtenBy: [], spawnedBy: [] });
+  });
+
+  it('tells which domain each part belongs to, and a rule by its name', () => {
+    const Owned = Component.make('Owned', Schema.Struct({ x: Schema.Finite }), {
+      owner: 'rules',
+      network: 'server',
+    });
+    const keeping = Rule.on(Died, { name: 'keep', writes: [Owned], emits: [], run: () => {} });
+    const Keeper = Domain.make({
+      name: 'Keeper',
+      requires: [Fixture],
+      components: [Owned],
+      actions: [],
+      events: [],
+      systems: [],
+      rules: [keeping],
+    });
+    const handled = Game.changes(Game.make({ stepRate: 10, domains: [Fixture, Keeper] })).events;
+
+    expect(handled.get('Died')?.handledBy).toEqual([
+      { _tag: 'Rule', on: 'Died', name: Option.some('keep'), domain: Option.some('Keeper') },
+    ]);
+    expect(handled.get('Bitten')?.handledBy).toEqual([
+      { _tag: 'Rule', on: 'Bitten', name: Option.none(), domain: Option.some('Fixture') },
+    ]);
   });
 
   it('tells what may despawn', () => {
@@ -448,7 +475,9 @@ describe('Game.changes', () => {
       rules: [],
     });
 
-    expect(Game.changes(removing).despawnedBy).toEqual([{ _tag: 'System', name: 'sweep' }]);
+    expect(Game.changes(removing).despawnedBy).toEqual([
+      { _tag: 'System', name: 'sweep', domain: Option.none() },
+    ]);
   });
 });
 

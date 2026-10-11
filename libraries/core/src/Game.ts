@@ -201,10 +201,19 @@ export const schema = (game: Game) => World.schema(game.components);
 
 // CHANGES
 
-/** A part of a game that changes its state: a system, by its name, or a rule, by the event or action it handles. */
+/** A part of a game that changes its state, with the domain it belongs to: a system, by its name, or a rule, by the event or action it handles and its name if it has one. A part a test gave a game with `only` belongs to no domain. */
 export type Part =
-  | { readonly _tag: 'System'; readonly name: string }
-  | { readonly _tag: 'Rule'; readonly on: string };
+  | {
+      readonly _tag: 'System';
+      readonly name: string;
+      readonly domain: Option.Option<string>;
+    }
+  | {
+      readonly _tag: 'Rule';
+      readonly on: string;
+      readonly name: Option.Option<string>;
+      readonly domain: Option.Option<string>;
+    };
 
 export interface ComponentChanges {
   /** The systems that read it. Rules may read anything, so they are never listed. */
@@ -229,9 +238,18 @@ export interface Changes {
  * The map of how `game` changes its state. A game of systems has no single `update` to read; its declarations are what is read instead, by people, the debugger, and agents alike. Parts are listed in the order the game runs them.
  */
 export const changes = (game: Game): Changes => {
+  const domainOf = new Map<System.System | Rule.Rule, string>(
+    game.domains.flatMap((domain) =>
+      [...domain.systems, ...domain.rules].map((part) => [part, domain.name] as const),
+    ),
+  );
   const parts = [
     ...game.systems.map((system) => ({
-      part: { _tag: 'System', name: system.name } satisfies Part,
+      part: {
+        _tag: 'System',
+        name: system.name,
+        domain: Option.fromNullishOr(domainOf.get(system)),
+      } satisfies Part,
       reads: system.reads,
       writes: system.writes,
       spawns: system.spawns,
@@ -240,7 +258,12 @@ export const changes = (game: Game): Changes => {
       despawns: system.despawns,
     })),
     ...game.rules.map((rule) => ({
-      part: { _tag: 'Rule', on: rule.on.tag } satisfies Part,
+      part: {
+        _tag: 'Rule',
+        on: rule.on.tag,
+        name: rule.name,
+        domain: Option.fromNullishOr(domainOf.get(rule)),
+      } satisfies Part,
       reads: [],
       writes: rule.writes,
       spawns: rule.spawns,
