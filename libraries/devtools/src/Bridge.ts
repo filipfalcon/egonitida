@@ -8,17 +8,25 @@ import type * as Inspect from '#src/Inspect.ts';
 /** The name messages travel under on the development server's channel. */
 export const EVENT = 'lightocean:devtools';
 
-/** What a host sends a relay: hello, with its id and its game's name, or an answer to a request, or why it refused one. */
+/** What a host or a page that draws one sends a relay: hello, with its id and its game's name, or the host it draws; an answer to a request; or why it refused one. */
 export const FromHost = Schema.Union([
   Schema.TaggedStruct('Hello', { host: Schema.String, name: Schema.String }),
+  /** A page that draws a host, by the host's id, says hello with an id of its own. */
+  Schema.TaggedStruct('Showing', { page: Schema.String, host: Schema.String }),
   Schema.TaggedStruct('Answer', { id: Schema.Int, answer: Schema.Unknown }),
   Schema.TaggedStruct('Refusal', { id: Schema.Int, reason: Schema.String }),
 ]);
 export type FromHost = typeof FromHost.Type;
 
-/** What a relay sends a host: a request for one host, by its id, or a question who is there. */
+/** What a relay sends a host or a page: a request for one host, by its id, a capture of what one page draws, or a question who is there. */
 export const ToHost = Schema.Union([
   Schema.TaggedStruct('Ask', { id: Schema.Int, host: Schema.String, request: Schema.Unknown }),
+  /** A shot of what a page draws now, at most `width` pixels across if given. */
+  Schema.TaggedStruct('Capture', {
+    id: Schema.Int,
+    page: Schema.String,
+    width: Schema.OptionFromOptionalKey(Schema.Int),
+  }),
   Schema.TaggedStruct('Who', {}),
 ]);
 export type ToHost = typeof ToHost.Type;
@@ -35,16 +43,20 @@ export interface Channel {
 export const serve = (
   channel: Channel,
   inspector: Inspect.Inspector,
-  options: { readonly name: string },
+  options: {
+    readonly name: string;
+    /** The host's id, if the page that draws it chose one, so the page can name it; one of its own otherwise. */
+    readonly id?: string;
+  },
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const id = `${options.name}-${(yield* Random.nextInt).toString(36)}`;
+    const id = options.id ?? `${options.name}-${(yield* Random.nextInt).toString(36)}`;
     const hello: FromHost = { _tag: 'Hello', host: id, name: options.name };
     const answer = (message: ToHost) => {
       if (message._tag === 'Who') {
         return channel.send(hello);
       }
-      if (message.host !== id) {
+      if (message._tag === 'Capture' || message.host !== id) {
         return Effect.void;
       }
       return inspector.answerUnknown(message.request).pipe(

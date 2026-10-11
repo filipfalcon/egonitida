@@ -174,4 +174,58 @@ describe('a relay', () => {
       expect(tool.received).toEqual([]);
     }),
   );
+
+  it.effect(
+    'hands a capture to the newest page showing the host asked for, and its shot back',
+    () =>
+      Effect.gen(function* () {
+        const { relay, second, tool } = yield* relayed;
+        const older = peer<Bridge.ToHost>();
+        const newer = peer<Bridge.ToHost>();
+        yield* relay.fromHost(older, { _tag: 'Showing', page: 'page-1', host: 'horde-b' });
+        yield* relay.fromHost(newer, { _tag: 'Showing', page: 'page-2', host: 'horde-b' });
+
+        yield* relay.fromTool(tool, { _tag: 'Capture', id: 3, width: 320 });
+        const captures = newer.received.flatMap((message) =>
+          message._tag === 'Capture' ? [message] : [],
+        );
+        yield* Effect.forEach(captures, ({ id }) =>
+          relay.fromHost(newer, {
+            _tag: 'Answer',
+            id,
+            answer: { png: 'iVBOR', width: 320, height: 200 },
+          }),
+        );
+
+        expect(captures).toMatchObject([
+          { _tag: 'Capture', page: 'page-2', width: Option.some(320) },
+        ]);
+        expect(older.received).toEqual([]);
+        expect(second.received).toEqual([]);
+        expect(tool.received).toEqual([
+          { _tag: 'Answer', id: 3, answer: { png: 'iVBOR', width: 320, height: 200 } },
+        ]);
+      }),
+  );
+
+  it.effect(
+    'refuses a capture when no page shows the host, and forgets a page that went away',
+    () =>
+      Effect.gen(function* () {
+        const { relay, tool } = yield* relayed;
+        const page = peer<Bridge.ToHost>();
+        yield* relay.fromHost(page, { _tag: 'Showing', page: 'page-1', host: 'horde-b' });
+        yield* relay.hostGone(page);
+
+        yield* relay.fromTool(tool, { _tag: 'Capture', id: 4 });
+
+        expect(tool.received).toEqual([
+          {
+            _tag: 'Refusal',
+            id: 4,
+            reason: 'no page shows horde-b: open it in a browser with the development server',
+          },
+        ]);
+      }),
+  );
 });
