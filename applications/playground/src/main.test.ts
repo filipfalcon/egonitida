@@ -1,87 +1,62 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
-import { Message, type Model, initialModel, palette, update, viewScene } from '#src/main.ts';
+import { Story } from 'foldkit';
+import { AskForCube, Message, initialModel, update } from '#src/main.ts';
 
-const after = (messages: ReadonlyArray<Message>, model: Model = initialModel): Model =>
-  messages.reduce((current, message) => update(current, message).model, model);
-
-const meshes = (model: Model) => viewScene(model).nodes.filter((node) => node._tag === 'Mesh');
-
-describe('playground', () => {
-  describe('update', () => {
-    it('starts with no cubes and no viewport', () => {
-      expect(initialModel.cubes).toEqual([]);
-      expect(initialModel.isViewportMounted).toBe(false);
-    });
-
-    it('spawns cubes with fresh ids, in the first colour', () => {
-      const model = after([Message.ClickedSpawnCube(), Message.ClickedSpawnCube()]);
-
-      expect(model.cubes).toEqual([
-        { id: 0, color: palette[0] },
-        { id: 1, color: palette[0] },
-      ]);
-    });
-
-    it('moves a clicked cube on to the next colour, leaving the others', () => {
-      const model = after([
-        Message.ClickedSpawnCube(),
-        Message.ClickedSpawnCube(),
-        Message.ClickedCube({ id: 1 }),
-      ]);
-
-      expect(model.cubes).toEqual([
-        { id: 0, color: palette[0] },
-        { id: 1, color: palette[1] },
-      ]);
-    });
-
-    it('wraps a cube back to the first colour after the last', () => {
-      const clicks = palette.map(() => Message.ClickedCube({ id: 0 }));
-      const model = after([Message.ClickedSpawnCube(), ...clicks]);
-
-      expect(model.cubes[0]?.color).toBe(palette[0]);
-    });
-
-    it('records that the viewport mounted', () => {
-      expect(after([Message.SucceededMountViewport()]).isViewportMounted).toBe(true);
-    });
-
-    it('records why the viewport failed to mount', () => {
-      const model = after([Message.FailedMountViewport({ reason: 'No GPU.' })]);
-
-      expect(model.maybeViewportError).toEqual(Option.some('No GPU.'));
+describe('the playground', () => {
+  it('starts joining the world, with nothing shown and no cubes counted', () => {
+    expect(initialModel).toEqual({
+      isWorldJoined: false,
+      isCanvasMounted: false,
+      cubeCount: 0,
+      maybeError: Option.none(),
     });
   });
 
-  describe('viewScene', () => {
-    it('lights the scene', () => {
-      const tags = viewScene(initialModel).nodes.map((node) => node._tag);
+  it('shows the world once it is joined and its canvas is in the page, and lets go of the canvas when the world is left', () => {
+    Story.story(
+      update,
+      Story.given(initialModel),
+      Story.message(Message.JoinedWorld()),
+      Story.message(Message.MountedCanvas()),
+      Story.model((model) => {
+        expect([model.isWorldJoined, model.isCanvasMounted]).toEqual([true, true]);
+      }),
+      Story.message(Message.LeftWorld()),
+      Story.model((model) => {
+        expect([model.isWorldJoined, model.isCanvasMounted]).toEqual([false, false]);
+      }),
+    );
+  });
 
-      expect(tags).toContain('AmbientLight');
-      expect(tags).toContain('DirectionalLight');
-    });
+  it('asks the world for a cube when Spawn cube is clicked, and leaves the count to the world', () => {
+    Story.story(
+      update,
+      Story.given({ ...initialModel, isWorldJoined: true }),
+      Story.message(Message.ClickedSpawnCube()),
+      Story.Command.expectExact(AskForCube),
+      Story.Command.resolve(AskForCube, Message.AskedWorldForCube()),
+      Story.model((model) => {
+        expect(model.cubeCount).toBe(0);
+      }),
+      Story.message(Message.CountedCubes({ count: 1 })),
+      Story.model((model) => {
+        expect(model.cubeCount).toBe(1);
+      }),
+    );
+  });
 
-    it('declares one spinning, clickable mesh per cube, in its colour', () => {
-      const model = after([
-        Message.ClickedSpawnCube(),
-        Message.ClickedSpawnCube(),
-        Message.ClickedCube({ id: 1 }),
-      ]);
+  it('says why the world could not be joined, shown, or asked', () => {
+    const reasons = [
+      Message.FailedJoinWorld({ reason: 'No worker.' }),
+      Message.FailedShowWorld({ reason: 'No GPU.' }),
+      Message.FailedAskWorldForCube({ reason: 'Not joined.' }),
+    ].map((failed) => update(initialModel, failed).model.maybeError);
 
-      const [first, second] = meshes(model);
-      expect(first?.key).toBe('cube-0');
-      expect(first?.material.color).toBe(palette[0]);
-      expect(first?.onClick).toEqual(Option.some(Message.ClickedCube({ id: 0 })));
-      expect(second?.material.color).toBe(palette[1]);
-      expect(Option.isSome(second?.motion ?? Option.none())).toBe(true);
-    });
-
-    it('places every cube somewhere of its own', () => {
-      const model = after(Array.from({ length: 8 }, () => Message.ClickedSpawnCube()));
-      const positions = new Set(meshes(model).map((mesh) => mesh.position.join(',')));
-
-      expect(positions.size).toBe(8);
-    });
+    expect(reasons).toEqual([
+      Option.some('No worker.'),
+      Option.some('No GPU.'),
+      Option.some('Not joined.'),
+    ]);
   });
 });

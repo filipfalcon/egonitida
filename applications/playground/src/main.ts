@@ -1,98 +1,91 @@
-import { Scene } from '@lightocean/engine';
-import { Option, Schema } from 'effect';
-import type { Runtime, Update } from 'foldkit';
+import { World } from '@lightocean/foldkit';
+import { Effect, Option, Schema } from 'effect';
+import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';
 import { modifyFields } from 'foldkit/struct';
+import * as Cubes from '#src/cubes.ts';
+
+/**
+ * The playground: the first proof that a world and Foldkit make one application. The cubes are a world, hosted in a worker and drawn on a canvas; the page around them is Foldkit's, and holds no more of the world than it shows, the count of cubes. A click on Spawn cube asks the world for one, as a player's action; the world decides.
+ */
 
 // MODEL
 
-export const Cube = Schema.Struct({ id: Schema.Int, color: Schema.Int });
-export type Cube = typeof Cube.Type;
-
 export const Model = Schema.Struct({
-  cubes: Schema.Array(Cube),
-  nextCubeId: Schema.Int,
-  isViewportMounted: Schema.Boolean,
-  maybeViewportError: Schema.Option(Schema.String),
+  isWorldJoined: Schema.Boolean,
+  isCanvasMounted: Schema.Boolean,
+  cubeCount: Schema.Int,
+  maybeError: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
-
-/** The colours a cube steps through, one per click. */
-export const palette: ReadonlyArray<number> = [0x4f8cff, 0xff6b6b, 0x51cf66, 0xfcc419, 0xcc5de8];
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
+  JoinedWorld: {},
+  LeftWorld: {},
+  FailedJoinWorld: { reason: Schema.String },
+  MountedCanvas: {},
+  FailedShowWorld: { reason: Schema.String },
+  CountedCubes: { count: Schema.Int },
   ClickedSpawnCube: {},
-  ClickedCube: { id: Schema.Int },
-  SucceededMountViewport: {},
-  FailedMountViewport: { reason: Schema.String },
+  AskedWorldForCube: {},
+  FailedAskWorldForCube: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
 
+// RESOURCES
+
+/** The cubes' world, joined while the playground is open. */
+export const CubesWorld = ManagedResource.tag<World.Joined>()('CubesWorld');
+
+/** What the playground's Commands and Subscriptions reach: the cubes' world. */
+export type Services = ManagedResource.ServiceOf<typeof CubesWorld>;
+
+// COMMANDS
+
+/** Asks the world for another cube, as the player's action. */
+export const AskForCube = Command.define('AskForCube', {
+  messages: [Message.AskedWorldForCube, Message.FailedAskWorldForCube],
+  execute: CubesWorld.get.pipe(
+    Effect.flatMap(({ client }) => client.act(Cubes.AskedForCube, {})),
+    Effect.as(Message.AskedWorldForCube()),
+    Effect.catch(({ resource }) =>
+      Effect.succeed(
+        Message.FailedAskWorldForCube({ reason: `The world ${resource} is not joined.` }),
+      ),
+    ),
+  ),
+});
+
 // UPDATE
 
-const nextColor = (color: number): number =>
-  palette[(palette.indexOf(color) + 1) % palette.length] ?? color;
+const failed = (model: Model, reason: string) =>
+  modifyFields(model, { maybeError: () => Option.some(reason) });
 
 export const update = (model: Model, message: Message) =>
-  Message.match<Update.Return<Model, Message>>(message, {
-    ClickedSpawnCube: () => ({
-      model: modifyFields(model, {
-        cubes: (cubes) => [...cubes, { id: model.nextCubeId, color: palette[0] ?? 0xffffff }],
-        nextCubeId: (id) => id + 1,
-      }),
+  Message.match<Update.Return<Model, Message, Services>>(message, {
+    JoinedWorld: () => ({ model: modifyFields(model, { isWorldJoined: () => true }) }),
+    // The canvas goes with the world, so a world joined again waits for its own canvas.
+    LeftWorld: () => ({
+      model: modifyFields(model, { isWorldJoined: () => false, isCanvasMounted: () => false }),
     }),
-    ClickedCube: ({ id }) => ({
-      model: modifyFields(model, {
-        cubes: (cubes) =>
-          cubes.map((cube) => (cube.id === id ? { ...cube, color: nextColor(cube.color) } : cube)),
-      }),
-    }),
-    SucceededMountViewport: () => ({
-      model: modifyFields(model, { isViewportMounted: () => true }),
-    }),
-    FailedMountViewport: ({ reason }) => ({
-      model: modifyFields(model, { maybeViewportError: () => Option.some(reason) }),
-    }),
+    FailedJoinWorld: ({ reason }) => ({ model: failed(model, reason) }),
+    MountedCanvas: () => ({ model: modifyFields(model, { isCanvasMounted: () => true }) }),
+    FailedShowWorld: ({ reason }) => ({ model: failed(model, reason) }),
+    CountedCubes: ({ count }) => ({ model: modifyFields(model, { cubeCount: () => count }) }),
+    ClickedSpawnCube: () => ({ model, commands: [AskForCube()] }),
+    AskedWorldForCube: () => ({ model }),
+    FailedAskWorldForCube: ({ reason }) => ({ model: failed(model, reason) }),
   });
 
 // INIT
 
 export const initialModel: Model = {
-  cubes: [],
-  nextCubeId: 0,
-  isViewportMounted: false,
-  maybeViewportError: Option.none(),
+  isWorldJoined: false,
+  isCanvasMounted: false,
+  cubeCount: 0,
+  maybeError: Option.none(),
 };
 
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({ model: initialModel });
-
-// SCENE
-
-const cubesPerRow = 4;
-const spacing = 2;
-
-const cubeNode = (cube: Cube, index: number): Scene.Node<Message> =>
-  Scene.mesh({
-    key: `cube-${cube.id}`,
-    geometry: Scene.box({ width: 1, height: 1, depth: 1 }),
-    material: Scene.standard({ color: cube.color }),
-    position: [
-      ((index % cubesPerRow) - (cubesPerRow - 1) / 2) * spacing,
-      0,
-      -Math.floor(index / cubesPerRow) * spacing,
-    ],
-    motion: Scene.spin({ axis: [0.3, 1, 0.2], speed: 0.8 + (cube.id % 3) * 0.3 }),
-    onClick: Message.ClickedCube({ id: cube.id }),
-  });
-
-export const viewScene = (model: Model): Scene.Scene<Message> =>
-  Scene.scene({
-    camera: Scene.perspectiveCamera({ position: [0, 3, 10], rotation: [-0.25, 0, 0] }),
-    nodes: [
-      Scene.ambientLight({ key: 'ambient', intensity: 0.4 }),
-      Scene.directionalLight({ key: 'sun', intensity: 2.5, position: [5, 8, 6] }),
-      ...model.cubes.map(cubeNode),
-    ],
-  });
