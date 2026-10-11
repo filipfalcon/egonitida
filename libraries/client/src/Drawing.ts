@@ -1,5 +1,5 @@
-import type { Client, Component, World } from '@lightocean/core';
-import { Effect, Option, type Scope, Stream } from 'effect';
+import { type Client, type Component, World } from '@lightocean/core';
+import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Timeline from '#src/Timeline.ts';
 
 /**
@@ -9,20 +9,22 @@ import * as Timeline from '#src/Timeline.ts';
  */
 
 /**
- * What to draw this frame, and what changed since the frame before: which entities came into the drawing or left it, so whatever stands for them can be made or put away, and which gained or lost a component, such as a moment like a hit kept as state, so it can be shown as it happens.
+ * What to draw this frame, and what changed since the frame before: which entities came into the drawing or left it, so whatever stands for them can be made or put away, and which gained a component, held it anew, or lost it, such as a moment like a hit kept as state, so it can be shown as it happens.
  */
-export interface View extends Timeline.View {
+export interface Frame extends Timeline.View {
   readonly entered: ReadonlyArray<World.Entity>;
   readonly left: ReadonlyArray<World.Entity>;
   /** The entities holding `component` now that did not the frame before. */
   readonly gained: (component: Component.Any) => ReadonlyArray<World.Entity>;
+  /** The entities that held `component` the frame before and hold another value of it now, as the world drawn has it: a moment such as a hit, kept as state and replaced by the next. */
+  readonly changed: (component: Component.Any) => ReadonlyArray<World.Entity>;
   /** The entities that held `component` the frame before and do not now, gone or not. */
   readonly lost: (component: Component.Any) => ReadonlyArray<World.Entity>;
 }
 
 export interface Drawing {
   /** Moves drawing on by `seconds` of real time and returns what to draw; called once a frame. */
-  readonly frame: (seconds: number) => Option.Option<View>;
+  readonly frame: (seconds: number) => Option.Option<Frame>;
   /** Plays the past from `from`, in seconds of the world's time, at `rate` times real time, until `live`. */
   readonly present: (options: { readonly from: number; readonly rate: number }) => void;
   /** Returns drawing to the live world. */
@@ -36,6 +38,36 @@ const without = (
 ): ReadonlyArray<World.Entity> => {
   const excluded = new Set(those);
   return these.filter((entity) => !excluded.has(entity));
+};
+
+// A component's values as JSON, made once for each component, to tell one value of it from another.
+const encoders = new WeakMap<Component.Any, (value: unknown) => string>();
+
+const encoderOf = (component: Component.Any) => {
+  const known = encoders.get(component);
+  if (known !== undefined) {
+    return known;
+  }
+  const encode = Schema.encodeUnknownSync(
+    Schema.fromJsonString(Schema.toCodecJson(component.schema)),
+  );
+  encoders.set(component, encode);
+  return encode;
+};
+
+/** The entities holding `component` in both worlds, with another value of it in `now` than in `before`. */
+const changedBetween = (
+  before: World.World,
+  now: World.World,
+  component: Component.Any,
+): ReadonlyArray<World.Entity> => {
+  const encode = encoderOf(component);
+  return World.query(now, component).flatMap(([entity, value]) =>
+    Option.match(World.get(before, entity, component), {
+      onNone: () => [],
+      onSome: (was) => (was === value || encode(was) === encode(value) ? [] : [entity]),
+    }),
+  );
 };
 
 export const make = (
@@ -78,6 +110,11 @@ export const make = (
             entered: without(view.entities, before),
             left: without(before, view.entities),
             gained: (component) => without(holding(view, component), holdingBefore(component)),
+            changed: (component) =>
+              Option.match(previous, {
+                onNone: () => [],
+                onSome: (last) => changedBetween(last.drawn, view.drawn, component),
+              }),
             lost: (component) => without(holdingBefore(component), holding(view, component)),
           };
         });

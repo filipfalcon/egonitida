@@ -82,13 +82,13 @@ const marked = Effect.gen(function* () {
   return yield* Drawing.make(client, { keepSeconds: 2 });
 });
 
-/** A marker that lives from tick 5 to tick 10 of the host's world, flagged from tick 8. */
+/** A marker that lives from tick 5 to tick 10 of the host's world, flagged at tick 8 and flagged anew at tick 9. */
 const Marker = Component.make('Marker', Schema.Struct({}), {
   owner: 'simulation',
   network: 'server',
 });
 /** A flag the marker is given at tick 8, as a moment such as a hit is given to what it hits. */
-const Flag = Component.make('Flag', Schema.Struct({}), {
+const Flag = Component.make('Flag', Schema.Struct({ at: Schema.Int }), {
   owner: 'simulation',
   network: 'server',
 });
@@ -103,9 +103,9 @@ const mark = System.make({
     if (context.time.tick === 5) {
       context.spawn([Marker.of({})]);
     }
-    if (context.time.tick === 8) {
+    if (context.time.tick === 8 || context.time.tick === 9) {
       for (const [marker] of context.query(Marker)) {
-        context.set(marker, Flag, {});
+        context.set(marker, Flag, { at: context.time.tick });
       }
     }
     if (context.time.tick === 10) {
@@ -130,7 +130,7 @@ const marking = Game.make({
   ],
 });
 
-const xOf = (view: Option.Option<Drawing.View>, entity: World.Entity) =>
+const xOf = (view: Option.Option<Drawing.Frame>, entity: World.Entity) =>
   Option.getOrElse(
     Option.flatMap(view, (drawn) =>
       Option.map(drawn.get(entity, Position), (position) => position.x),
@@ -188,25 +188,28 @@ describe('Drawing', () => {
     }),
   );
 
-  it.effect('tells, frame by frame, which entities gained a component and which lost it', () =>
-    Effect.gen(function* () {
-      const drawing = yield* marked;
+  it.effect(
+    'tells, frame by frame, which entities gained a component, held it anew, or lost it',
+    () =>
+      Effect.gen(function* () {
+        const drawing = yield* marked;
 
-      const changes: Array<string> = [];
-      for (let index = 0; index < 30; index += 1) {
-        const view = yield* frame(drawing);
-        Option.map(view, ({ entered, gained, lost, left }) => {
-          changes.push(
-            ...entered.map((entity) => `+${entity}`),
-            ...gained(Flag).map((entity) => `flag +${entity}`),
-            ...lost(Flag).map((entity) => `flag -${entity}`),
-            ...left.map((entity) => `-${entity}`),
-          );
-        });
-      }
+        const changes: Array<string> = [];
+        for (let index = 0; index < 30; index += 1) {
+          const view = yield* frame(drawing);
+          Option.map(view, ({ entered, gained, changed, lost, left }) => {
+            changes.push(
+              ...entered.map((entity) => `+${entity}`),
+              ...gained(Flag).map((entity) => `flag +${entity}`),
+              ...changed(Flag).map((entity) => `flag ~${entity}`),
+              ...lost(Flag).map((entity) => `flag -${entity}`),
+              ...left.map((entity) => `-${entity}`),
+            );
+          });
+        }
 
-      // Flagged after it came, the marker loses its flag as it leaves.
-      expect(changes).toEqual(['+1', 'flag +1', 'flag -1', '-1']);
-    }),
+        // Flagged after it came and flagged anew a step later, the marker loses its flag as it leaves.
+        expect(changes).toEqual(['+1', 'flag +1', 'flag ~1', 'flag -1', '-1']);
+      }),
   );
 });

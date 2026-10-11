@@ -38,6 +38,8 @@ export interface View {
   readonly query: World.Query<Component.Any>;
   /** Every entity drawn, in the order they were spawned. */
   readonly entities: ReadonlyArray<World.Entity>;
+  /** The world that says what is drawn: which entities there are and what each holds, before anything is moved between worlds. */
+  readonly drawn: World.World;
 }
 
 // While live, drawing keeps one step behind the newest world, so there is always a world to move toward.
@@ -169,5 +171,6 @@ export const view = (timeline: Timeline): Option.Option<View> => {
     get,
     query: World.queryBy((components) => World.holding(drawn, components), get),
     entities: World.entities(drawn),
+    drawn,
   });
 };
