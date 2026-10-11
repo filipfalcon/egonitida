@@ -85,6 +85,17 @@ export interface Host<Services = never> {
   readonly world: Effect.Effect<World.World>;
   /** The controls clients send, such as a development tool's, from now on, as they come; a host that lets no client hold time passes on none. */
   readonly controls: Stream.Stream<Control>;
+  /** Joins a player with no client, from beside the host, such as one an agent plays: the game's own `join` makes its entity, as it does for a client. */
+  readonly join: Effect.Effect<World.Entity>;
+  /** Lets go of the player of `entity`, by the game's own `leave`, whoever joined it. */
+  readonly leave: (entity: World.Entity) => Effect.Effect<void>;
+  /** Takes input for `entity` from beside the host, such as from an agent playing it, each value read by its component's schema as it travels: it reaches the next step after what the entity's client sent, so it is what the step takes. */
+  readonly input: (
+    entity: World.Entity,
+    values: ReadonlyArray<{ readonly component: string; readonly value: unknown }>,
+  ) => Effect.Effect<void, Unreadable>;
+  /** Takes an action as from the player of `entity`, from beside the host, read by the game's actions as one from a client is. */
+  readonly act: (entity: World.Entity, action: unknown) => Effect.Effect<void, Unreadable>;
   /** Holds time for whatever runs beside the host, such as a development tool, as a client may hold it for itself. */
   readonly hold: Effect.Effect<void>;
   /** Lets go of time held beside the host; it runs on once no client holds it either. */
@@ -119,6 +130,8 @@ export const make = <Services = never>(
       connections: new Set<Transport.Connection>(),
       /** The newest input of each client, waiting for the next step. */
       pending: new Map<World.Entity, ReadonlyArray<Input.Input>>(),
+      /** The newest input given from beside the host for each entity, which goes in after its client's. */
+      pendingBeside: new Map<World.Entity, ReadonlyArray<Input.Input>>(),
       lastSeq: new Map<World.Entity, number>(),
       pace: Pace.start({
         now: yield* Clock.currentTimeMillis,
@@ -185,8 +198,9 @@ export const make = <Services = never>(
     /** Takes `count` steps: the waiting input and actions go into the first, the rest only move time on. */
     const takeSteps = (count: number) =>
       Effect.gen(function* () {
-        const inputs = [...state.pending.values()].flat();
+        const inputs = [...state.pending.values(), ...state.pendingBeside.values()].flat();
         state.pending.clear();
+        state.pendingBeside.clear();
         const actions = state.acted.splice(0);
         const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
         for (let step = 0; step < count; step += 1) {
@@ -323,6 +337,53 @@ export const make = <Services = never>(
       connect,
       world: Effect.sync(() => state.world),
       controls: Stream.fromPubSub(controlled),
+      join: Effect.sync(() => {
+        const [world, entity] = state.setup.join(state.world);
+        state.world = world;
+        PubSub.publishUnsafe(happened, { _tag: 'Joined', entity });
+        return entity;
+      }),
+      leave: (entity) =>
+        Effect.sync(() => {
+          state.pendingBeside.delete(entity);
+          state.world = state.setup.leave(state.world, entity);
+          PubSub.publishUnsafe(happened, { _tag: 'Left', entity });
+        }),
+      input: (entity, values) =>
+        Effect.gen(function* () {
+          const inputs = yield* Effect.forEach(values, ({ component: name, value }) =>
+            Effect.gen(function* () {
+              const component = state.inputComponents.get(name);
+              if (component === undefined) {
+                return yield* new Unreadable({ reason: `${name} is no input of the game` });
+              }
+              const decoded = yield* Schema.decodeUnknownEffect(
+                Schema.toCodecJson(component.schema),
+              )(value).pipe(
+                Effect.mapError((issue) => new Unreadable({ reason: `${name}: ${issue.message}` })),
+              );
+              return Input.of(entity, component, decoded);
+            }),
+          );
+          state.pendingBeside.set(entity, inputs);
+        }),
+      act: (entity, action) =>
+        Effect.suspend(() => {
+          for (const known of state.setup.game.actions) {
+            const accepted = known.accept(action, entity);
+            if (Option.isSome(accepted)) {
+              state.acted.push(accepted.value);
+              return Effect.void;
+            }
+          }
+          const tag =
+            typeof action === 'object' && action !== null && '_tag' in action
+              ? String(action._tag)
+              : 'What was given';
+          return Effect.fail(
+            new Unreadable({ reason: `${tag} is no action of the game, or not one like it` }),
+          );
+        }),
       hold: Effect.suspend(() => {
         state.heldBeside = true;
         return settleHold;

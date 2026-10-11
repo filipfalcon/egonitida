@@ -562,6 +562,101 @@ describe('time held beside the host', () => {
   );
 });
 
+describe('playing from beside the host', () => {
+  it.effect('takes input for an entity, read by its component, over what its client sends', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      yield* host.hold;
+      yield* client.send([Controls.of({ move: 1, fire: false })]);
+      yield* advance(10);
+      const before = yield* host.world;
+
+      yield* host.input(client.entity, [
+        { component: 'Controls', value: { move: -2, fire: false } },
+      ]);
+      yield* host.advance(1);
+
+      expect(positionIn(yield* host.world, client.entity)).toEqual(
+        Option.map(positionIn(before, client.entity), (x) => x - 2),
+      );
+    }),
+  );
+
+  it.effect('takes an action as from the player of an entity', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      yield* host.hold;
+
+      yield* host.act(client.entity, { _tag: 'AskedToHeal', amount: 42 });
+      yield* host.advance(1);
+
+      expect(World.get(yield* host.world, client.entity, Health)).toEqual(
+        Option.some({ current: 42 }),
+      );
+    }),
+  );
+
+  it.effect('joins players with no client, plays each, and lets them go, as watching tells', () =>
+    Effect.gen(function* () {
+      const host = yield* startHost;
+      yield* host.hold;
+      const watching = yield* host.watch;
+      const told = yield* watching.happenings.pipe(
+        Stream.filter(({ _tag }) => _tag !== 'Stepped'),
+        Stream.take(3),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* Effect.yieldNow;
+
+      const first = yield* host.join;
+      const second = yield* host.join;
+      yield* host.input(first, [{ component: 'Controls', value: { move: 1, fire: false } }]);
+      yield* host.input(second, [{ component: 'Controls', value: { move: -1, fire: false } }]);
+      yield* host.advance(1);
+      const played = yield* host.world;
+      yield* host.leave(first);
+
+      expect([positionIn(played, first), positionIn(played, second)]).toEqual([
+        Option.some(1),
+        Option.some(-1),
+      ]);
+      expect(positionIn(yield* host.world, first)).toEqual(Option.none());
+      expect(yield* Fiber.join(told)).toEqual([
+        { _tag: 'Joined', entity: first },
+        { _tag: 'Joined', entity: second },
+        { _tag: 'Left', entity: first },
+      ]);
+    }),
+  );
+
+  it.effect(
+    'refuses what the game cannot read: no input component, no value of it, no action',
+    () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* session;
+        const refusal = (attempt: Effect.Effect<void, Host.Unreadable>) =>
+          attempt.pipe(
+            Effect.match({ onFailure: ({ reason }) => reason, onSuccess: () => 'taken' }),
+          );
+
+        const reasons = [
+          yield* refusal(host.input(client.entity, [{ component: 'Position', value: { x: 9 } }])),
+          yield* refusal(
+            host.input(client.entity, [{ component: 'Controls', value: { move: 'far' } }]),
+          ),
+          yield* refusal(host.act(client.entity, { _tag: 'Flew' })),
+        ];
+
+        expect(reasons).toEqual([
+          'Position is no input of the game',
+          expect.stringContaining('Controls'),
+          'Flew is no action of the game, or not one like it',
+        ]);
+      }),
+  );
+});
+
 describe('controls', () => {
   it.effect('reach whatever listens beside the host, from the client that sent them', () =>
     Effect.gen(function* () {
