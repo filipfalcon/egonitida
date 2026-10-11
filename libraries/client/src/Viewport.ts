@@ -14,6 +14,13 @@ export interface Viewport {
   readonly clicks: Stream.Stream<{ readonly x: number; readonly y: number }>;
   /** Draws the scene as it is now. */
   readonly render: Effect.Effect<void>;
+  /** Draws the scene as it is now and takes a shot of it: a PNG, as base64, at most `width` pixels across if given, and its size; for showing a tool what a person sees. */
+  readonly capture: (
+    width: Option.Option<number>,
+  ) => Effect.Effect<
+    { readonly png: string; readonly width: number; readonly height: number },
+    ViewportError
+  >;
   /** Runs `frame` with the seconds since the frame before, at every frame the display shows, then draws the scene; until the scope closes. */
   readonly loop: <R>(
     frame: (seconds: number) => Effect.Effect<void, never, R>,
@@ -130,5 +137,29 @@ export const make = (
       ),
     );
 
-    return { canvas, scene, camera, clicks, render, loop };
+    // The canvas holds what was drawn only until the task that drew it ends, so the shot is taken in the same task.
+    const capture = (width: Option.Option<number>) =>
+      Effect.suspend(() => {
+        renderer.render(scene, camera);
+        const scale = Option.match(width, {
+          onNone: () => 1,
+          onSome: (most) => Math.min(1, most / Math.max(canvas.width, 1)),
+        });
+        const shot = document.createElement('canvas');
+        shot.width = Math.max(1, Math.round(canvas.width * scale));
+        shot.height = Math.max(1, Math.round(canvas.height * scale));
+        const drawing = shot.getContext('2d');
+        if (drawing === null) {
+          return Effect.fail(new ViewportError({ reason: 'A shot cannot be drawn here.' }));
+        }
+        drawing.drawImage(canvas, 0, 0, shot.width, shot.height);
+        const url = shot.toDataURL('image/png');
+        return Effect.succeed({
+          png: url.slice(url.indexOf(',') + 1),
+          width: shot.width,
+          height: shot.height,
+        });
+      });
+
+    return { canvas, scene, camera, clicks, render, capture, loop };
   });
