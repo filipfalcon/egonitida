@@ -13,12 +13,12 @@ export const xOf = (across: number) => (across - (Ocean.SIZE - 1) / 2) * SPACING
 export const zOf = (back: number) => (back - (Ocean.SIZE - 1) / 2) * SPACING;
 
 /** The glow of a light deep in a trough, and of one at a crest. */
-const DEEP = new Three.Color(0x0a2a5c);
-const CREST = new Three.Color(0x9fe8ff);
+const DEEP = new Three.Color(0x031233);
+const CREST = new Three.Color(0x8ff0ff);
 
 /** How high a light must stand to glow as a crest, and how low to glow as a trough. */
-const TROUGH_HEIGHT = -0.4;
-const CREST_HEIGHT = 0.8;
+const TROUGH_HEIGHT = -0.3;
+const CREST_HEIGHT = 0.6;
 
 /** Every light, as a tile where its place in the square is, as high as it swells, glowing the brighter the higher it stands. */
 export const lights = View.each([Ocean.Light, Ocean.Swell], {
@@ -28,7 +28,7 @@ export const lights = View.each([Ocean.Light, Ocean.Swell], {
         () =>
           new Three.Mesh(
             new Three.BoxGeometry(0.8, 0.2, 0.8),
-            new Three.MeshStandardNodeMaterial({ color: 0x0b1530, roughness: 0.4 }),
+            new Three.MeshStandardNodeMaterial({ color: 0x02060f, roughness: 0.6 }),
           ),
       ),
       (mesh) =>

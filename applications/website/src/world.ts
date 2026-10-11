@@ -64,11 +64,12 @@ const setUp = ({
   readonly scene: Three.Scene;
   readonly camera: Three.Camera;
 }) => {
-  const moon = new Three.DirectionalLight(0xbcd7ff, 0.8);
+  const moon = new Three.DirectionalLight(0xbcd7ff, 0.5);
   moon.position.set(-4, 10, 2);
-  scene.add(new Three.AmbientLight(0x6a8cff, 0.25), moon);
-  camera.position.set(7, 6, 9);
-  camera.lookAt(0, -0.5, 0);
+  scene.add(new Three.AmbientLight(0x6a8cff, 0.1), moon);
+  camera.position.set(5, 7, 13);
+  // Aimed left of the middle, so the ocean lies to the right of the words over it.
+  camera.lookAt(-4, -0.5, 0);
 };
 
 /** The canvas showing the ocean, while it is joined and the canvas is in the page. */

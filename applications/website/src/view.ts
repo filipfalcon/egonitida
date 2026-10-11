@@ -79,8 +79,9 @@ const styles = stylex.create({
     color: colours.muted,
     fontSize: { default: 20, [NARROW]: 18 },
   },
-  actions: { display: 'flex', flexWrap: 'wrap', gap: 12, pointerEvents: 'auto' },
+  actions: { display: 'flex', flexWrap: 'wrap', gap: 12 },
   primary: {
+    pointerEvents: 'auto',
     paddingBlock: 12,
     paddingInline: 20,
     borderRadius: 8,
@@ -90,6 +91,7 @@ const styles = stylex.create({
     textDecoration: 'none',
   },
   secondary: {
+    pointerEvents: 'auto',
     paddingBlock: 11,
     paddingInline: 19,
     borderWidth: 1,
@@ -131,7 +133,13 @@ const styles = stylex.create({
     fontSize: 14,
     lineHeight: 1.55,
   },
-  inline: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9em' },
+  inline: {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: '0.9em',
+    color: colours.accent,
+  },
+  // Left out of a narrow bar, which has room for only the links found nowhere else on the page.
+  wide: { display: { default: 'inline', [NARROW]: 'none' } },
   grid: {
     display: 'grid',
     gridTemplateColumns: {
@@ -290,8 +298,11 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
         h.nav(
           [h.AriaLabel('Main'), ...Styled.attributes(h, styles.links)],
           [
-            external(inRepository('docs/architecture.md'), 'Architecture'),
-            external(`${REPOSITORY}/tree/main/examples`, 'Examples'),
+            external(inRepository('docs/architecture.md'), 'Architecture', [
+              styles.link,
+              styles.wide,
+            ]),
+            external(`${REPOSITORY}/tree/main/examples`, 'Examples', [styles.link, styles.wide]),
             external(REPOSITORY, 'GitHub'),
             external(DISCORD, 'Discord'),
           ],

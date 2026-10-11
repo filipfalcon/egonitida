@@ -15,7 +15,7 @@ const RIPPLE_SPEED = 3;
 export const RIPPLE_SECONDS = 4;
 
 /** How high a ripple lifts a light as it passes, when it has just set out. */
-const RIPPLE_PEAK = 0.6;
+const RIPPLE_PEAK = 0.9;
 
 /** How wide a ripple's crest is, in places of the square. */
 const RIPPLE_WIDTH = 0.5;
