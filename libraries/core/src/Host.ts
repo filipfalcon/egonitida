@@ -48,8 +48,8 @@ export type Happening =
   | { readonly _tag: 'Left'; readonly entity: World.Entity }
   | {
       readonly _tag: 'Stepped';
-      /** The tick the step took the world to. */
-      readonly tick: number;
+      /** The world the step took it to. */
+      readonly world: World.World;
       readonly inputs: ReadonlyArray<Input.Input>;
       readonly actions: ReadonlyArray<Event.Tagged>;
     };
@@ -147,7 +147,7 @@ export const make = <Services = never>(
         const taken = step === 0 ? { inputs, actions } : { inputs: [], actions: [] };
         const next = Game.step(options.game, state.world, taken.inputs, taken.actions, stepping);
         state.world = next.world;
-        PubSub.publishUnsafe(happened, { _tag: 'Stepped', tick: next.world.tick, ...taken });
+        PubSub.publishUnsafe(happened, { _tag: 'Stepped', world: next.world, ...taken });
         yield* Effect.forEach(next.commands, run, { discard: true });
       }
       const payload = Snapshot.encode(state.world, options.game);

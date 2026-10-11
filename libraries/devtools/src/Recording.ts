@@ -65,7 +65,7 @@ const entryOf = (
   happening._tag === 'Stepped'
     ? {
         _tag: 'Stepped',
-        tick: happening.tick,
+        tick: happening.world.tick,
         inputs: happening.inputs.map((input) => ({
           entity: input.entity,
           component: input.component.name,

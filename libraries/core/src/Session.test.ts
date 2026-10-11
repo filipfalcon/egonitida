@@ -351,7 +351,7 @@ describe('watching a host', () => {
         expect(joined).toEqual({ _tag: 'Joined', entity });
         expect(
           firstStep?._tag === 'Stepped' && {
-            tick: firstStep.tick,
+            tick: firstStep.world.tick,
             inputs: firstStep.inputs.map((input) => [
               input.entity,
               input.component.name,
