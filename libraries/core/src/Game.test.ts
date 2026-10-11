@@ -1099,7 +1099,7 @@ describe('a component holding a state', () => {
   it('travels in a snapshot too', () => {
     const back = Option.getOrThrow(
       Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(world, moody), moody),
-    );
+    ).world;
 
     expect(World.get(back, second, Mood)).toEqual(World.get(world, second, Mood));
   });

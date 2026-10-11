@@ -21,7 +21,7 @@ const [server] = World.spawn(withSplat, [Wall.of({ x: 12 })]);
 describe('Snapshot', () => {
   it('carries a world to a client, component for component', () => {
     const received = Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game), game);
-    const world = Option.getOrThrow(received);
+    const { world } = Option.getOrThrow(received);
 
     expect(world.tick).toBe(server.tick);
     expect(world.nextEntity).toBe(server.nextEntity);
@@ -36,7 +36,9 @@ describe('Snapshot', () => {
 
   it('never sends what is local, and leaves the client its own', () => {
     const [client] = World.spawn(World.empty({ seed: 0 }), [Splat.of({ size: 7 })]);
-    const world = Option.getOrThrow(Snapshot.apply(client, Snapshot.encode(server, game), game));
+    const world = Option.getOrThrow(
+      Snapshot.apply(client, Snapshot.encode(server, game), game),
+    ).world;
 
     expect(Snapshot.encode(server, game)).not.toContain('Splat');
     expect(World.get(world, splat, Splat)).toEqual(Option.none());
@@ -46,7 +48,9 @@ describe('Snapshot', () => {
   it('takes what a client keeps on an entity the server no longer holds away with it', () => {
     const [onRunner] = World.spawn(World.empty({ seed: 0 }), [Splat.of({ size: 1 })]);
     const gone = World.despawn(server, 0);
-    const world = Option.getOrThrow(Snapshot.apply(onRunner, Snapshot.encode(gone, game), game));
+    const world = Option.getOrThrow(
+      Snapshot.apply(onRunner, Snapshot.encode(gone, game), game),
+    ).world;
 
     expect(World.query(world, Splat)).toEqual([]);
   });
@@ -55,19 +59,27 @@ describe('Snapshot', () => {
     const draft = World.draft(World.empty({ seed: 0 }));
     const own = World.spawnLocalInto(draft, [Splat.of({ size: 3 })]);
     const client = World.finish(draft);
-    const world = Option.getOrThrow(Snapshot.apply(client, Snapshot.encode(server, game), game));
+    const world = Option.getOrThrow(
+      Snapshot.apply(client, Snapshot.encode(server, game), game),
+    ).world;
 
     expect(World.get(world, own, Splat)).toEqual(Option.some({ size: 3 }));
     expect(world.nextLocal).toBe(client.nextLocal);
   });
 
   it('never sends what is private to the server', () => {
-    const world = Option.getOrThrow(
+    const { world } = Option.getOrThrow(
       Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game), game),
     );
 
     expect(Snapshot.encode(server, game)).not.toContain('Wall');
     expect(World.query(world, Wall)).toEqual([]);
+  });
+
+  it('carries the era a world was sent in', () => {
+    const sent = Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game, 3), game);
+
+    expect(Option.map(sent, ({ era }) => era)).toEqual(Option.some(3));
   });
 
   it('rejects a snapshot it cannot trust, keeping nothing of it', () => {
@@ -102,7 +114,9 @@ describe('Snapshot', () => {
   it('takes away what the server no longer holds', () => {
     const [client] = World.spawn(World.empty({ seed: 0 }), [Health.of({ current: 5 })]);
     const [empty] = World.spawn(World.empty({ seed: 0 }), [Position.of({ x: 1 })]);
-    const world = Option.getOrThrow(Snapshot.apply(client, Snapshot.encode(empty, game), game));
+    const world = Option.getOrThrow(
+      Snapshot.apply(client, Snapshot.encode(empty, game), game),
+    ).world;
 
     expect(World.query(world, Health)).toEqual([]);
   });

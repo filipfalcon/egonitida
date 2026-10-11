@@ -51,6 +51,9 @@ const encodeValues = (values: ReadonlyArray<Component.Instance>): SentInput['val
 /** The most ticks a client steps what it keeps for itself through at once. */
 const MAX_LOCAL_STEPS = 5;
 
+/** How many worlds a client keeps, with what it kept for itself at each, so a host going back in time finds them: ten seconds at 60 steps a second. */
+const KEPT_WORLDS = 600;
+
 /** Joins the host at the other end of `connection`, until the scope closes. */
 export const connect = (
   connection: Transport.Connection,
@@ -60,8 +63,17 @@ export const connect = (
     const welcome = yield* Deferred.make<Protocol.Welcome>();
     // Each listener gets its own subscription, from the moment it starts listening.
     const received = yield* PubSub.unbounded<World.World>();
-    const state: { world: World.World; seq: number; history: ReadonlyArray<SentInput> } = {
+    const state: {
+      world: World.World;
+      era: number;
+      /** The worlds lately received, oldest first, with what the client kept for itself at each. */
+      kept: ReadonlyArray<World.World>;
+      seq: number;
+      history: ReadonlyArray<SentInput>;
+    } = {
       world: World.empty({ seed: 0 }),
+      era: 0,
+      kept: [],
       seq: 0,
       history: [],
     };
@@ -77,7 +89,16 @@ export const connect = (
           world,
         );
 
-    // A snapshot older than the world already held arrived out of order, and is of no use.
+    /**
+     * A world the host went back to, or shows: with what the client kept for itself at its tick, if the client still has that tick, and with nothing of its own otherwise, since what it keeps now belongs to another time.
+     */
+    const backTo = (text: string, tick: number) => {
+      const then = state.kept.find((kept) => kept.tick === tick);
+      const base = then ?? { ...state.world, stores: new Map() };
+      return Option.map(Snapshot.apply(base, text, options.game), ({ world }) => world);
+    };
+
+    // A snapshot of an earlier era, or older than the world already held in this one, arrived out of order, and is of no use.
     const receive = (frame: Transport.Frame) =>
       frame.channel === 'reliable'
         ? Option.match(Protocol.decodeWelcome(frame.payload), {
@@ -86,14 +107,24 @@ export const connect = (
           })
         : Option.match(Snapshot.apply(state.world, frame.payload, options.game), {
             onNone: () => Effect.void,
-            onSome: (world) =>
+            onSome: ({ era, world }) =>
               Effect.suspend(() => {
-                if (world.tick <= state.world.tick) {
+                if (era < state.era || (era === state.era && world.tick <= state.world.tick)) {
                   return Effect.void;
                 }
-                const stepped = keepUp(world, state.world.tick);
-                state.world = stepped;
-                return PubSub.publish(received, stepped).pipe(Effect.asVoid);
+                const next =
+                  era > state.era
+                    ? backTo(frame.payload, world.tick)
+                    : Option.some(keepUp(world, state.world.tick));
+                return Option.match(next, {
+                  onNone: () => Effect.void,
+                  onSome: (arrived) => {
+                    state.era = era;
+                    state.world = arrived;
+                    state.kept = [...state.kept, arrived].slice(-KEPT_WORLDS);
+                    return PubSub.publish(received, arrived).pipe(Effect.asVoid);
+                  },
+                });
               }),
           });
 

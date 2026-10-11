@@ -42,10 +42,12 @@ export interface Options<Services = never> {
   readonly mayHold: boolean;
 }
 
-/** What changed a host's world: a client joining or leaving, between steps, by the game's own `join` and `leave`, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
+/** What changed a host's world: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a world it was given, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
 export type Happening =
   | { readonly _tag: 'Joined'; readonly entity: World.Entity }
   | { readonly _tag: 'Left'; readonly entity: World.Entity }
+  /** The host went back to a world it was given, such as a past one, and steps on from it. */
+  | { readonly _tag: 'Restored'; readonly world: World.World }
   | {
       readonly _tag: 'Stepped';
       /** The world the step took it to. */
@@ -66,6 +68,10 @@ export interface Host {
     connection: Transport.Connection,
   ) => Effect.Effect<World.Entity, never, Scope.Scope>;
   readonly world: Effect.Effect<World.World>;
+  /** Shows every client `world` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
+  readonly show: (world: World.World) => Effect.Effect<void>;
+  /** Goes back to `world`, such as a past one, and steps on from it; every client is shown it at once. */
+  readonly restore: (world: World.World) => Effect.Effect<void>;
   /** Watches the world until the scope closes: where it is now, and everything that happens to it from now on, with nothing missed between the two. */
   readonly watch: Effect.Effect<Watching, never, Scope.Scope>;
 }
@@ -96,6 +102,8 @@ export const make = <Services = never>(
       /** The players' actions waiting for the next step, in the order they came. */
       acted: new Array<Event.Tagged>(),
       heldSince: Option.none<number>(),
+      /** Counts every time the host showed its clients another world than the one it stepped to, so they take it even if it is older. */
+      era: 0,
     };
     const happened = yield* PubSub.unbounded<Happening>();
     // Open while time runs; the loop waits here while it is held.
@@ -128,6 +136,17 @@ export const make = <Services = never>(
         Effect.forkScoped,
       );
 
+    /** Sends every client `world`, in the era it is now. */
+    const broadcast = (world: World.World) =>
+      Effect.suspend(() => {
+        const payload = Snapshot.encode(world, options.game, state.era);
+        return Effect.forEach(
+          state.connections,
+          (connection) => connection.send({ channel: 'unreliable', payload }),
+          { discard: true },
+        );
+      });
+
     // Every step real time owes: the waiting input goes into the first, the rest only move time on.
     const takeDueSteps = Effect.gen(function* () {
       if (Option.isSome(state.heldSince)) {
@@ -150,12 +169,7 @@ export const make = <Services = never>(
         PubSub.publishUnsafe(happened, { _tag: 'Stepped', world: next.world, ...taken });
         yield* Effect.forEach(next.commands, run, { discard: true });
       }
-      const payload = Snapshot.encode(state.world, options.game);
-      yield* Effect.forEach(
-        state.connections,
-        (connection) => connection.send({ channel: 'unreliable', payload }),
-        { discard: true },
-      );
+      yield* broadcast(state.world);
     });
 
     yield* Effect.gen(function* () {
@@ -258,6 +272,18 @@ export const make = <Services = never>(
     return {
       connect,
       world: Effect.sync(() => state.world),
+      show: (world) =>
+        Effect.suspend(() => {
+          state.era += 1;
+          return broadcast(world);
+        }),
+      restore: (world) =>
+        Effect.suspend(() => {
+          state.world = world;
+          state.era += 1;
+          PubSub.publishUnsafe(happened, { _tag: 'Restored', world });
+          return broadcast(world);
+        }),
       // Subscribing and reading the world happen with nothing in between, so the first happening told is the first after the world given.
       watch: Effect.map(PubSub.subscribe(happened), (subscription) => ({
         world: state.world,

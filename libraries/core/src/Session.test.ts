@@ -373,6 +373,67 @@ describe('watching a host', () => {
   );
 });
 
+describe('going back in time', () => {
+  it.effect(
+    'shows its clients a world it does not hold, such as a past one, and holds its own',
+    () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* session;
+        yield* client.send([Controls.of({ move: 1, fire: false })]);
+        yield* advance(100);
+        const past = yield* host.world;
+        yield* advance(200);
+        const now = yield* host.world;
+
+        yield* host.show(past);
+        yield* Effect.yieldNow;
+
+        expect((yield* client.world).tick).toBe(past.tick);
+        expect(positionIn(yield* client.world, client.entity)).toEqual(
+          positionIn(past, client.entity),
+        );
+        expect(yield* host.world).toBe(now);
+      }),
+  );
+
+  it.effect('goes back to a world it is given, and steps on from there', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      yield* client.send([Controls.of({ move: 1, fire: false })]);
+      yield* advance(100);
+      const past = yield* host.world;
+      yield* advance(200);
+
+      yield* host.restore(past);
+      yield* advance(100);
+
+      const world = yield* host.world;
+      expect(world.tick).toBe(past.tick + 3);
+      expect((yield* client.world).tick).toBe(world.tick);
+    }),
+  );
+
+  it.effect('is told to whoever watches it', () =>
+    Effect.gen(function* () {
+      const host = yield* startHost;
+      yield* advance(100);
+      const past = yield* host.world;
+      yield* advance(100);
+      const watching = yield* host.watch;
+      const told = yield* watching.happenings.pipe(
+        Stream.filter((happening) => happening._tag === 'Restored'),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      yield* Effect.yieldNow;
+
+      yield* host.restore(past);
+
+      expect(yield* Fiber.join(told)).toEqual(Option.some({ _tag: 'Restored', world: past }));
+    }),
+  );
+});
+
 describe('commands', () => {
   /** Where health is kept outside the world: it says whether it kept an amount, or breaks. */
   const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(
@@ -578,5 +639,20 @@ describe('what a client keeps for itself', () => {
         expect(new Set(ticks).size).toBe(ticks.length);
         expect(ticks.at(-1)).toBe(mine.tick);
       }),
+  );
+
+  it.effect('is shown as the client kept it at the tick of a past world it is shown', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* walk;
+      yield* advance(100);
+      const past = yield* host.world;
+      const keptThen = World.query(yield* client.world, Footprint);
+      yield* advance(200);
+
+      yield* host.show(past);
+      yield* Effect.yieldNow;
+
+      expect(World.query(yield* client.world, Footprint)).toEqual(keptThen);
+    }),
   );
 });
