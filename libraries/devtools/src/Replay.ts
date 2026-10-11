@@ -1,4 +1,4 @@
-import { type Event, Game, Input, type Host, type World } from '@lightocean/core';
+import { type Event, Game, Input, type Host, World } from '@lightocean/core';
 import { Data, Effect, Option, Result, Schema, type Scope, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 import * as Recording from '#src/Recording.ts';
@@ -74,6 +74,10 @@ const taking = (setup: Setup, options: { readonly trace: boolean }) => {
   ): Effect.Effect<Result.Result<Taken, Divergence>, Unreadable> =>
     Effect.gen(function* () {
       if (entry._tag === 'Joined') {
+        // A join that gives back an entity the world holds already, as a page that came again is given its player, changes nothing.
+        if (World.entities(world).includes(entry.entity)) {
+          return Result.succeed({ entry, world, trace: [] });
+        }
         const [joined, entity] = setup.join(world);
         return entity === entry.entity
           ? Result.succeed({ entry, world: joined, trace: [] })

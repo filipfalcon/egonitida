@@ -1,4 +1,4 @@
-import type { Host } from '@lightocean/core';
+import { type Host, World } from '@lightocean/core';
 import { Effect, Option, type Scope } from 'effect';
 import * as Bridge from '#src/Bridge.ts';
 import * as Inspect from '#src/Inspect.ts';
@@ -74,16 +74,33 @@ export const host = <Services = never, E = never, R = never>(
       onNone: () => Effect.succeedNone,
       onSome: (found) => Keep.load(found, options.game, devtools.id),
     });
+    const players = Option.match(kept, { onNone: () => [], onSome: (taken) => taken.players });
+    // The players of the kept world, given back one to each client that joins, the first first, while the world holds them.
+    const waiting = [...players];
+    const join = (world: World.World): readonly [World.World, World.Entity] => {
+      const player = waiting.shift();
+      return player !== undefined && World.entities(world).includes(player)
+        ? [world, player]
+        : options.join(world);
+    };
     yield* Reload.host(
       devtools.kept,
-      { ...options, world: Option.getOrElse(kept, () => options.world) },
+      {
+        ...options,
+        join,
+        world: Option.match(kept, { onNone: () => options.world, onSome: (taken) => taken.world }),
+      },
       (hosted) =>
         Effect.gen(function* () {
           yield* serve(hosted, options, { name: devtools.name, id: devtools.id });
           yield* Option.match(store, {
             onNone: () => Effect.void,
             onSome: (found) =>
-              Keep.serve(found, hosted, options.game, { key: devtools.id, everyMillis: 1000 }),
+              Keep.serve(found, hosted, options.game, {
+                key: devtools.id,
+                everyMillis: 1000,
+                players,
+              }),
           });
           yield* serving(hosted);
         }),

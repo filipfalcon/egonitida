@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { World } from '@lightocean/core';
+import { Transport } from '@lightocean/core/internal';
 import { Effect, Option } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Keep from '#src/Keep.ts';
@@ -17,7 +18,7 @@ describe('a world kept across reloads of the page', () => {
 
       const kept = yield* Keep.load(store, Fixtures.game, 'tab-1');
 
-      expect(Option.map(kept, ({ tick }) => tick)).toEqual(Option.some(now.tick));
+      expect(Option.map(kept, ({ world }) => world.tick)).toEqual(Option.some(now.tick));
       expect(yield* Keep.load(store, Fixtures.game, 'tab-2')).toEqual(Option.none());
     }),
   );
@@ -41,8 +42,27 @@ describe('a world kept across reloads of the page', () => {
 
       const kept = yield* Keep.load(store, Fixtures.brisk, 'tab-1');
 
-      expect(Option.map(kept, (world) => World.entities(world))).toEqual(Option.some([]));
-      expect(Option.map(kept, ({ tick }) => tick > 0)).toEqual(Option.some(true));
+      expect(Option.map(kept, ({ world }) => World.entities(world))).toEqual(Option.some([]));
+      expect(Option.map(kept, ({ world }) => world.tick > 0)).toEqual(Option.some(true));
     }),
+  );
+
+  it.effect(
+    'keeps which players joined through a client and are still there, and none joined beside',
+    () =>
+      Effect.gen(function* () {
+        const store = Keep.memory();
+        const hosted = yield* Fixtures.host();
+        yield* Keep.serve(store, hosted, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
+        const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+        const player = yield* hosted.connect(hostEnd);
+        void clientEnd;
+        yield* hosted.join;
+        yield* Fixtures.advance(100);
+
+        const kept = yield* Keep.load(store, Fixtures.game, 'tab-1');
+
+        expect(Option.map(kept, ({ players }) => players)).toEqual(Option.some([player]));
+      }),
   );
 });

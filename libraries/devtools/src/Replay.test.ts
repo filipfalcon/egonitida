@@ -67,6 +67,23 @@ describe('replaying a recording in which the host went back in time', () => {
   );
 });
 
+describe('replaying a join that gives back a player the world holds', () => {
+  it.effect(
+    'takes it as changing nothing, as when a page that came again is given its player',
+    () =>
+      Effect.gen(function* () {
+        const { recording, entity } = yield* Fixtures.recorded();
+        const back: Recording.Entry = { _tag: 'Joined', entity };
+        const given = {
+          ...recording,
+          entries: [...recording.entries.filter(({ _tag }) => _tag !== 'Left'), back],
+        };
+
+        expect(yield* Replay.check(Fixtures.setup(), given)).toEqual(Option.none());
+      }),
+  );
+});
+
 describe('replaying beside a host', () => {
   it.effect('tells nothing while the game replays as it is played', () =>
     Effect.gen(function* () {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { World } from '@lightocean/core';
+import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Queue, Stream } from 'effect';
 import * as Beside from '#src/Beside.ts';
 import type * as Bridge from '#src/Bridge.ts';
@@ -61,5 +62,33 @@ describe('the devtools beside a host', () => {
 
       expect(served).toEqual([left.tick]);
     }),
+  );
+
+  it.effect(
+    'give the client that joins first the player kept for it, if the world still holds it',
+    () =>
+      Effect.gen(function* () {
+        const store = Keep.memory();
+        const first = yield* Fixtures.host();
+        yield* Keep.serve(store, first, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
+        const [, firstEnd] = yield* Transport.memoryPair;
+        const player = yield* first.connect(firstEnd);
+        yield* Fixtures.advance(100);
+        const joined: Array<number> = [];
+
+        yield* Beside.host(
+          { ...Fixtures.setup(), world: World.empty({ seed: 7 }), mayHold: true },
+          { name: 'test', id: 'tab-1', kept: {}, store: Option.some(store) },
+          (hosted) =>
+            Effect.gen(function* () {
+              const [, again] = yield* Transport.memoryPair;
+              const [, another] = yield* Transport.memoryPair;
+              joined.push(yield* hosted.connect(again), yield* hosted.connect(another));
+            }),
+        );
+
+        expect(joined[0]).toBe(player);
+        expect(joined[1]).not.toBe(player);
+      }),
   );
 });

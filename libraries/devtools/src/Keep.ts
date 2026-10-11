@@ -1,10 +1,10 @@
-import { Game, type Host, type World } from '@lightocean/core';
+import { Game, type Host, World } from '@lightocean/core';
 import { Duration, Effect, Option, Schema, type Scope, Stream } from 'effect';
 
 /**
  * A hosted world kept across reloads of the page, in development: the host's world, as its game encodes it, kept every so often under a key, such as the id a tab gives its host, and read back by the game when the page comes again, so a change to any code, the page's as much as the game's, goes on from the world it was at. A world the game cannot read is not taken up, and the game starts afresh, saying why.
  *
- * What was played after the world was last kept, up to a second, is lost.
+ * The players that joined through a client are kept with it, so a page that comes again can be given its own player back. What was played after the world was last kept, up to a second, is lost.
  */
 
 /** Where kept worlds are: by key, each as its game encodes it. */
@@ -66,45 +66,68 @@ export const indexedDb: Option.Option<Store> =
           Effect.asVoid(transact('readwrite', (worlds) => worlds.put(value, key))),
       });
 
-/** The world kept under `key`, as `game` reads it, if one is kept and the game can read it. */
+/** A world as it is kept: as its game encodes it, with the players that joined through a client. */
+const Kept = Schema.Struct({ world: Schema.Unknown, players: Schema.Array(Schema.Int) });
+
+/** A kept world read back: the world, and the players of it that joined through a client and are still in it. */
+export interface Taken {
+  readonly world: World.World;
+  readonly players: ReadonlyArray<World.Entity>;
+}
+
+/** The world kept under `key`, as `game` reads it, with its players, if one is kept and the game can read it. */
 export const load = (
   store: Store,
   game: Game.Game,
   key: string,
-): Effect.Effect<Option.Option<World.World>> =>
+): Effect.Effect<Option.Option<Taken>> =>
   Effect.flatMap(store.get(key), (kept) =>
     Option.match(kept, {
-      onNone: () => Effect.succeed(Option.none<World.World>()),
-      onSome: (encoded) =>
-        Schema.decodeUnknownEffect(Game.schema(game))(encoded).pipe(
+      onNone: () => Effect.succeedNone,
+      onSome: (value) =>
+        Effect.gen(function* () {
+          const { world: encoded, players } = yield* Schema.decodeUnknownEffect(Kept)(value);
+          const world = yield* Schema.decodeUnknownEffect(Game.schema(game))(encoded);
+          const present = new Set(World.entities(world));
+          return { world, players: players.filter((player) => present.has(player)) };
+        }).pipe(
           Effect.asSome,
           Effect.catch((issue) =>
             Effect.as(
               Effect.logWarning(
                 `The world kept from before cannot be taken up, so the game starts afresh: ${issue.message}`,
               ),
-              Option.none<World.World>(),
+              Option.none<Taken>(),
             ),
           ),
         ),
     }),
   );
 
-/** Keeps the world `host` is at under `key`, every `everyMillis`, as the build it plays encodes it, from `game` on, until the scope closes. */
+/** Keeps the world `host` is at under `key`, every `everyMillis`, as the build it plays encodes it, from `game` on, with the players that joined through a client since, until the scope closes. */
 export const serve = (
   store: Store,
   host: Host.Host,
   game: Game.Game,
-  options: { readonly key: string; readonly everyMillis: number },
+  options: {
+    readonly key: string;
+    readonly everyMillis: number;
+    /** Players that joined before keeping began, such as those taken up from a kept world. */
+    readonly players?: ReadonlyArray<World.Entity>;
+  },
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const state = { game };
+    const state = { game, players: new Set<World.Entity>(options.players ?? []) };
     const watching = yield* host.watch;
     yield* watching.happenings.pipe(
       Stream.runForEach((happening) =>
         Effect.sync(() => {
           if (happening._tag === 'Reloaded') {
             state.game = happening.game;
+          } else if (happening._tag === 'Joined' && happening.client) {
+            state.players.add(happening.entity);
+          } else if (happening._tag === 'Left') {
+            state.players.delete(happening.entity);
           }
         }),
       ),
@@ -115,7 +138,9 @@ export const serve = (
       const world = yield* host.world;
       // A world its own game cannot encode is a bug in the engine; keeping goes on with the next.
       yield* Schema.encodeEffect(Game.schema(state.game))(world).pipe(
-        Effect.flatMap((encoded) => store.set(options.key, encoded)),
+        Effect.flatMap((encoded) =>
+          store.set(options.key, { world: encoded, players: [...state.players] }),
+        ),
         Effect.ignore,
       );
     }).pipe(Effect.forever, Effect.forkScoped);
