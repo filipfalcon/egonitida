@@ -199,3 +199,15 @@ const main = Effect.gen(function* () {
 );
 
 Effect.runFork(main);
+
+// In development, a change to the game reaches the worker, which takes it up and plays on; the page goes on drawing with the views it has, until it is reloaded.
+import.meta.hot?.accept(
+  [
+    '#src/body.ts',
+    '#src/game.ts',
+    '#src/horde.view.ts',
+    '#src/survivor.ts',
+    '#src/survivor.view.ts',
+  ],
+  () => {},
+);
