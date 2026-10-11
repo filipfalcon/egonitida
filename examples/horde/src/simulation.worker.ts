@@ -1,25 +1,27 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { WorkerTransport, World } from '@lightocean/core';
-import { Beside, Reload } from '@lightocean/devtools';
+import { Host, WorkerTransport, World } from '@lightocean/core';
+import { Beside } from '@lightocean/devtools';
 import { Effect } from 'effect';
 import * as Game from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 
-// The local server: the arena stepped off the main thread, with a survivor for every page that joins. In development the game is replayed beside it, and the first step where the replay comes apart from it is reported; the last thirty seconds are kept, for the page to go back in, and for an agent to ask after through the development server; and when the game's code changes, this module runs again and hands the host the new build, which plays on from the world it was at. A build that cannot take that world up reloads the page, and the game starts over.
-const setup = { game: Game.game, join: Survivor.join, leave: World.despawn };
+// The local server: the arena stepped off the main thread, with a survivor for every page that joins. In development it goes on from the world kept for the tab, whatever code changed: a change to the game hands the host the new build, which plays on from the world it was at, and any other change reloads the page, which comes back to the world kept a moment before; a build that cannot take that world up starts afresh, saying why. The devtools run beside it, by the id the page named this worker with.
+const options = {
+  game: Game.game,
+  join: Survivor.join,
+  leave: World.despawn,
+  world: Game.world,
+  mayHold: true,
+};
 
 Effect.runFork(
-  Reload.host(import.meta.hot?.data, { ...setup, world: Game.world, mayHold: true }, (host) =>
-    Effect.gen(function* () {
-      if (import.meta.env.DEV) {
-        // The page that started this worker named it by the id the devtools know its host by, so the page can name the host it draws.
-        yield* Beside.serve(host, setup, {
-          name: 'horde',
-          id: self.name === '' ? undefined : self.name,
-        });
-      }
-      yield* WorkerTransport.serveHost(host);
-    }),
+  (import.meta.env.DEV
+    ? Beside.host(
+        options,
+        { name: 'horde', id: self.name, kept: import.meta.hot?.data },
+        WorkerTransport.serveHost,
+      )
+    : Effect.flatMap(Host.make(options), WorkerTransport.serveHost)
   ).pipe(
     Effect.catchTag('Unreadable', ({ reason }) =>
       Effect.andThen(

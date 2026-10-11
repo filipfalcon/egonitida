@@ -1,5 +1,5 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Drawing, View, Viewport } from '@lightocean/client';
+import { Drawing, Tab, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page, Rewind } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
@@ -59,8 +59,8 @@ const listen = <K extends keyof WindowEventMap>(
     () => Effect.sync(() => window.removeEventListener(type, handler)),
   );
 
-/** The id the devtools know this page's host by, given to its worker as its name, so the page can say which host it draws. */
-const host = `horde-${crypto.randomUUID().slice(0, 8)}`;
+/** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the world kept for the tab. */
+const host = Tab.id('horde');
 
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');

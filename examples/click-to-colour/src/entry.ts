@@ -1,5 +1,5 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Clicking, Drawing, View, Viewport } from '@lightocean/client';
+import { Clicking, Drawing, Tab, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
@@ -8,8 +8,8 @@ import * as Colour from '#src/colour.ts';
 import * as ColourView from '#src/colour.view.ts';
 
 // The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked. In development, it shows an agent what it draws.
-/** The id the devtools know this page's host by, given to its worker as its name, so the page can say which host it draws. */
-const host = `cubes-${crypto.randomUUID().slice(0, 8)}`;
+/** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the world kept for the tab. */
+const host = Tab.id('cubes');
 
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');
