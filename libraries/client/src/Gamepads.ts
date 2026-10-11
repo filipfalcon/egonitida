@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import * as Devices from '#src/Devices.ts';
 
 /**
@@ -44,13 +45,37 @@ const padOf = (gamepad: Gamepad, layout: Layout): Devices.Pad => {
   return { buttons, axes };
 };
 
-/** The pads among `gamepads`, read by the standard layout or one of `layouts`; empty slots, pads gone, and pads of no layout known are left out. */
+/** The vendor and product a gamepad's id names, as Chrome writes them (`Vendor: 054c Product: 0ce6`) or Firefox does (`054c-0ce6-…`). */
+const modelOf = (
+  id: string,
+): Option.Option<{ readonly vendorId: number; readonly productId: number }> => {
+  const found =
+    /Vendor: ([0-9a-f]{4}) Product: ([0-9a-f]{4})/i.exec(id) ??
+    /^([0-9a-f]{4})-([0-9a-f]{4})-/i.exec(id);
+  return found === null || found[1] === undefined || found[2] === undefined
+    ? Option.none()
+    : Option.some({
+        vendorId: Number.parseInt(found[1], 16),
+        productId: Number.parseInt(found[2], 16),
+      });
+};
+
+/** The pads among `gamepads`, read by the standard layout or one of `layouts`; empty slots, pads gone, pads of no layout known, and pads of `elsewhere`, read some other way such as through WebHID, are left out. */
 export const read = (
   gamepads: ReadonlyArray<Gamepad | null>,
   layouts: ReadonlyArray<Layout> = [],
+  elsewhere: ReadonlyArray<{ readonly vendorId: number; readonly productId: number }> = [],
 ): ReadonlyArray<Devices.Pad> =>
   gamepads.flatMap((gamepad) => {
     if (gamepad === null || !gamepad.connected) {
+      return [];
+    }
+    const read = Option.exists(modelOf(gamepad.id), (model) =>
+      elsewhere.some(
+        ({ vendorId, productId }) => vendorId === model.vendorId && productId === model.productId,
+      ),
+    );
+    if (read) {
       return [];
     }
     const layout =
@@ -59,7 +84,10 @@ export const read = (
   });
 
 /** The pads connected now, read off the browser; none where it has no Gamepad API. */
-export const poll = (layouts: ReadonlyArray<Layout> = []): ReadonlyArray<Devices.Pad> =>
+export const poll = (
+  layouts: ReadonlyArray<Layout> = [],
+  elsewhere: ReadonlyArray<{ readonly vendorId: number; readonly productId: number }> = [],
+): ReadonlyArray<Devices.Pad> =>
   typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function'
     ? []
-    : read(navigator.getGamepads(), layouts);
+    : read(navigator.getGamepads(), layouts, elsewhere);

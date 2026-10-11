@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@types/three": "0.186.0",
+    "@types/w3c-web-hid": "1.0.7",
     "happy-dom": "20.14.5"
   }
 }

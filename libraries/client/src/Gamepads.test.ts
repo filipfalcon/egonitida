@@ -67,4 +67,14 @@ describe('gamepads', () => {
     expect(pad?.buttons).toEqual({ ...Devices.idlePad.buttons, South: 1 });
     expect(pad?.axes).toEqual({ ...Devices.idlePad.axes, LeftX: 0.3, LeftY: -0.6 });
   });
+
+  it('leave out pads read some other way, such as a DualSense through WebHID, by their vendor and product', () => {
+    const read = Gamepads.read(
+      [gamepad({}), gamepad({ id: '054c-0ce6-Wireless Controller' })],
+      [],
+      [{ vendorId: 0x054c, productId: 0x0ce6 }],
+    );
+
+    expect(read).toEqual([]);
+  });
 });
