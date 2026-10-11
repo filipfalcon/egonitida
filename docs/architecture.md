@@ -297,6 +297,8 @@ Border, played on a local server in a Web Worker at 60 Hz and drawn a step behin
 
 Border's whole fight runs in the simulation: her body, the lab's progress and doors, the undead with their senses, chase, and blows, her shots, her knife, and every blast. The game only draws it, and keeps for itself what happens round her body once she is dead. With a wave of 22 of the undead up, a whole snapshot is 11.5 kB of JSON; applying one takes 0.18 ms and a step 0.24 ms, measured in Node, so snapshots carrying only what changed can wait.
 
+Split into eight domains, Border grew by 3 % and from ten events to fifteen; no domain writes another's components any more, where sixteen systems and rules did, and what a hit does to one of the undead is one rule instead of three slightly different ones. Asking who changes a component is answered by one line of `Game.changes`. Two costs are known and watched rather than fixed: some events only relay a decision to the domain that owns what it changes, such as `Fell` and `Rose` setting whether a body is in the way; and an event emitted by a system is handled after every system has run, so what it starts happens a step later, as a tank lit by a round now goes up one step (a sixtieth of a second) after it is hit. If relays multiply, components derived from others may answer them; if a step's delay shows, so may handling some events between systems.
+
 ## Open questions
 
 - Whether Foldkit can apply game rules synchronously inside a step, or whether rules need their own loop with Foldkit kept for UI.
