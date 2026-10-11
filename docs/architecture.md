@@ -99,6 +99,18 @@ It is measured, not assumed:
 - An in-editor overlay shows the frame-time histogram, missed vsyncs, and long frames, through the Long Animation Frames API.
 - Browser tests run a scene for a fixed time and fail when the 99th percentile frame time exceeds the budget or more than a few vsyncs are missed, the way a determinism check fails on divergence.
 
+### 7. Devices: every device a PC has, the gamepad first
+
+A game is played with whatever a player has, and its own state never knows which. The gamepad is preferred, the mouse and keyboard are full peers, and every other device a PC can reach is supported, output as much as input.
+
+- **The rules know no device.** A device's state becomes a game's input components, and what a player does with it becomes the game's actions, through bindings the game declares as data, which a player can change. An action says what the player did whatever did it, so nothing in the simulation changes with a device.
+- **The gamepad first.** Bindings are made for the gamepad before anything else; the device a player last used is the one the game answers to and shows the controls of; and everything a pointer reaches, the accessible mirror and the UI included, can be reached with a pad: the directional pad moves focus, one button presses, another goes back.
+- **The mouse and keyboard in full.** Pointer lock with raw movement, every button and the wheel, keys by their place on the keyboard whatever its layout, labels by its layout, and the keyboard held in full screen.
+- **Every other device.** The Gamepad API reaches pads, wheels, and flight sticks, those with no standard layout through a layout given as data; WebHID reaches the rest, each through a driver that reads a device's reports into the shapes the engine knows.
+- **Output too.** Rumble and haptics, and a peripheral's lights, such as a keyboard's or a mouse's RGB, are drawn from the state of the game the way the scene is: a function of what is drawn, with what happens at a moment, such as a hit, shown once through `View.on`. Lights are reached through WebHID drivers, or through a vendor's own software where it holds the device, as Razer's Chroma does.
+- **Where a browser falls short, the game plays on.** WebHID is Chromium's only and asks the player's leave once for each device; what a browser cannot reach is a capability the engine reports, and a game is playable without it.
+- Devices are services, so a test gives recorded devices and expects what came of them, with no mocks and no browser.
+
 ## Decisions
 
 ### Rendering
@@ -274,9 +286,10 @@ The API above is built in this order, each step test-first, and each breaking on
 8. The lint plugin, and `AGENTS.md`.
 9. Devtools: recording, the log, rewinding, the determinism check, and reloading with the world kept, with the horde example.
 10. The agent bridge.
-11. Applications as worlds: the playground and the editor, the accessible mirror, and `engine` gone, with their examples.
-12. Skills, and the example that saves a score.
-13. Hosting in a Durable Object and prediction, as experimental, with the example over the network.
+11. Devices: bindings as data, the gamepad, the mouse and keyboard, WebHID, rumble and haptics, and lights, with the horde played on a pad.
+12. Applications as worlds: picking and the `Pointing` domain, the accessible mirror (both built ahead of devices), then the playground and the editor, and `engine` gone, with their examples.
+13. Skills, and the example that saves a score.
+14. Hosting in a Durable Object and prediction, as experimental, with the example over the network.
 
 Border is eight domains (Level, Body, Player, Progress, Undead, Shooting, Knife, Explosives), and none writes what another owns: what one domain does to another's state goes by an event the other declared, such as a weapon's `Hit` that the undead decide on, and only where bodies are and how they move is shared. Border's seams close along the way, once what each rests on is in the simulation: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`); and pillars and crates become shapes with height, so rounds stop at them.
 
