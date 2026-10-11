@@ -61,6 +61,8 @@ export interface Mouse {
   readonly dx: number;
   readonly dy: number;
   readonly wheel: number;
+  /** How many notches the wheel turned, down as positive, each turn one notch however far it went. */
+  readonly notches: number;
   readonly at: Option.Option<{ readonly x: number; readonly y: number }>;
 }
 
@@ -100,5 +102,5 @@ export const idlePad: Pad = {
 export const idle: State = {
   pads: [],
   keys: new Set(),
-  mouse: { buttons: new Set(), dx: 0, dy: 0, wheel: 0, at: Option.none() },
+  mouse: { buttons: new Set(), dx: 0, dy: 0, wheel: 0, notches: 0, at: Option.none() },
 };

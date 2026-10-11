@@ -1,4 +1,4 @@
-import { Data, Effect, Option, type Scope } from 'effect';
+import { Data, Effect, Option, PubSub, type Scope, Stream } from 'effect';
 import type * as Devices from '#src/Devices.ts';
 
 /**
@@ -32,15 +32,52 @@ const listen = <K extends keyof WindowEventMap>(
     () => Effect.sync(() => target.removeEventListener(type, handler)),
   );
 
-/** The keyboard and mouse of `target`, a window, until the scope closes. */
-export const make = (target: Window): Effect.Effect<Source, never, Scope.Scope> =>
+/** Listens to `type` on `target`, an element, until the scope closes. */
+const listenOn = (target: EventTarget, type: string, handler: (event: Event) => void) =>
+  Effect.acquireRelease(
+    Effect.sync(() => target.addEventListener(type, handler)),
+    () => Effect.sync(() => target.removeEventListener(type, handler)),
+  );
+
+/** Whether `event` is typing into a field, which is the field's and no game's. */
+export const typing = (event: KeyboardEvent): boolean => {
+  const into = event.target;
+  return (
+    into instanceof HTMLInputElement ||
+    into instanceof HTMLTextAreaElement ||
+    into instanceof HTMLSelectElement ||
+    (into instanceof HTMLElement && into.isContentEditable)
+  );
+};
+
+/** How a page has the keyboard and mouse heard: mouse presses only from `buttonsFrom`, so a click on a menu over the game is the menu's; keys it `ignore`s, typing into a field unless it says; keys it keeps the browser from doing what it does with, such as Tab moving focus; and the menu a right click opens, kept shut by `contextMenu: false`. */
+export interface Options {
+  readonly buttonsFrom?: Element;
+  readonly ignore?: (event: KeyboardEvent) => boolean;
+  readonly preventDefault?: ReadonlyArray<string>;
+  readonly contextMenu?: boolean;
+}
+
+/** The keyboard and mouse of `target`, a window, as `options` say, until the scope closes. */
+export const make = (
+  target: Window,
+  options: Options = {},
+): Effect.Effect<Source, never, Scope.Scope> =>
   Effect.gen(function* () {
     const keys = { held: new Set<string>(), tapped: new Set<string>() };
     const buttons = { held: new Set<number>(), tapped: new Set<number>() };
-    const moved = { dx: 0, dy: 0, wheel: 0 };
+    const moved = { dx: 0, dy: 0, wheel: 0, notches: 0 };
     const pointer = { at: Option.none<{ readonly x: number; readonly y: number }>() };
+    const ignore = options.ignore ?? typing;
+    const kept = new Set(options.preventDefault ?? []);
 
     yield* listen(target, 'keydown', (event) => {
+      if (ignore(event)) {
+        return;
+      }
+      if (kept.has(event.code)) {
+        event.preventDefault();
+      }
       keys.held.add(event.code);
       keys.tapped.add(event.code);
     });
@@ -49,12 +86,20 @@ export const make = (target: Window): Effect.Effect<Source, never, Scope.Scope> 
       keys.held.clear();
       buttons.held.clear();
     });
-    yield* listen(target, 'pointerdown', (event) => {
+    yield* listenOn(options.buttonsFrom ?? target, 'pointerdown', (event) => {
+      if (!(event instanceof MouseEvent)) {
+        return;
+      }
       buttons.held.add(event.button);
       buttons.tapped.add(event.button);
       // A press says where the mouse is too, as a click made with no move before it, such as the first, does.
       pointer.at = Option.some({ x: event.clientX, y: event.clientY });
     });
+    if (options.contextMenu === false) {
+      yield* listenOn(options.buttonsFrom ?? target, 'contextmenu', (event) =>
+        event.preventDefault(),
+      );
+    }
     yield* listen(target, 'pointerup', (event) => buttons.held.delete(event.button));
     yield* listen(target, 'pointermove', (event) => {
       moved.dx += event.movementX;
@@ -63,6 +108,7 @@ export const make = (target: Window): Effect.Effect<Source, never, Scope.Scope> 
     });
     yield* listen(target, 'wheel', (event) => {
       moved.wheel += event.deltaY;
+      moved.notches += Math.sign(event.deltaY);
     });
 
     return {
@@ -74,6 +120,7 @@ export const make = (target: Window): Effect.Effect<Source, never, Scope.Scope> 
             dx: moved.dx,
             dy: moved.dy,
             wheel: moved.wheel,
+            notches: moved.notches,
             at: pointer.at,
           },
         };
@@ -82,6 +129,7 @@ export const make = (target: Window): Effect.Effect<Source, never, Scope.Scope> 
         moved.dx = 0;
         moved.dy = 0;
         moved.wheel = 0;
+        moved.notches = 0;
         return read;
       },
     };
@@ -153,6 +201,70 @@ export const lockPointer = (element: Element): Effect.Effect<void, Refused, Scop
         }
       }),
   );
+
+/** A document as far as locking the pointer goes, as `document` is. */
+export interface Locking extends EventTarget {
+  readonly pointerLockElement: Element | null;
+  readonly exitPointerLock: () => void;
+}
+
+/** The pointer locked to an element, as a page locks and lets it go: asked for in answer to a click or a key, let go when the page says, and what the page hears when the player let it go instead, as by Escape, such as to pause. */
+export interface PointerLock {
+  readonly request: Effect.Effect<void, Refused>;
+  readonly release: Effect.Effect<void>;
+  readonly locked: () => boolean;
+  /** Every time the lock ends without the page letting it go. */
+  readonly lost: Stream.Stream<void>;
+}
+
+/** The pointer lock of `element`, in `locking`, the document unless given, until the scope closes, when it is let go of; its movement raw, with no acceleration, where the browser can, unless `raw` is false. */
+export const pointerLock = (
+  element: Element,
+  locking: Locking = document,
+  options: { readonly raw?: boolean } = {},
+): Effect.Effect<PointerLock, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const lost = yield* PubSub.unbounded<void>();
+    const state = { held: false, letting: false };
+    const run = Effect.runForkWith(yield* Effect.context<never>());
+    yield* listenOn(locking, 'pointerlockchange', () => {
+      const held = locking.pointerLockElement === element;
+      if (state.held && !held && !state.letting) {
+        run(PubSub.publish(lost, undefined));
+      }
+      state.held = held;
+      state.letting = false;
+    });
+    const release = Effect.sync(() => {
+      if (locking.pointerLockElement === element) {
+        state.letting = true;
+        locking.exitPointerLock();
+      }
+    });
+    yield* Effect.addFinalizer(() => release);
+    return {
+      request: Effect.tryPromise({
+        try: async () => {
+          if (options.raw === false) {
+            await element.requestPointerLock();
+            return;
+          }
+          try {
+            await element.requestPointerLock({ unadjustedMovement: true });
+          } catch {
+            await element.requestPointerLock();
+          }
+        },
+        catch: (cause) =>
+          new Refused({
+            reason: cause instanceof Error ? cause.message : 'The pointer was not locked.',
+          }),
+      }),
+      release,
+      locked: () => locking.pointerLockElement === element,
+      lost: Stream.fromPubSub(lost),
+    };
+  });
 
 /** Holds the keyboard whole, `codes` or every key, so the game hears keys the browser would take, such as Escape, until the scope closes; it holds only in full screen, and only where the browser can. */
 export const lockKeyboard = (
