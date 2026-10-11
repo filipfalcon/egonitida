@@ -99,8 +99,11 @@ export const plugin = (): Plugin => ({
     const printUrls = server.printUrls.bind(server);
     server.printUrls = () => {
       printUrls();
-      banner.listening = true;
-      sayBanner();
+      // The command line prints how to ask for help right after the addresses; the banner comes after that, last.
+      setImmediate(() => {
+        banner.listening = true;
+        sayBanner();
+      });
     };
 
     Effect.runFork(
