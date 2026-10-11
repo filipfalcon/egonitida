@@ -62,13 +62,36 @@ export const domain = Domain.make({
 });
 
 export const game = Game.make({ stepRate: 60, domains: [domain] });
+
+export const [world, cube] = World.spawn(World.empty({ seed: 1 }), [
+  Spin.of({ angle: 0, speed: 0.25 }),
+]);
 ```
 
 A view draws every entity that has a `Spin`. It lives in its own module, so the server never imports Three.js:
 
 ```ts
+import { View } from '@lightocean/client';
+import { Effect } from 'effect';
+import * as Three from 'three/webgpu';
+import * as Cube from '#src/cube.ts';
+
 export const cubes = View.each([Cube.Spin], {
-  acquire: () => Effect.acquireRelease(makeMesh, disposeMesh),
+  acquire: () =>
+    Effect.acquireRelease(
+      Effect.sync(
+        () =>
+          new Three.Mesh(
+            new Three.BoxGeometry(1, 1, 1),
+            new Three.MeshStandardNodeMaterial({ color: 0x3fa7d6 }),
+          ),
+      ),
+      (mesh) =>
+        Effect.sync(() => {
+          mesh.geometry.dispose();
+          mesh.material.dispose();
+        }),
+    ),
   draw: (mesh, held) => {
     mesh.rotation.y = held(Cube.Spin).angle;
   },
@@ -94,10 +117,10 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 
 ## What the structure buys
 
-- **One owner for every field.** A component says whether the rules or the simulation own it, and whether it is sent to clients, predicted, kept on the client, or kept on the server. A system that writes what it does not own does not compile.
+- **One owner for every field.** A component says whether the rules or the simulation own it, and whether it is sent to clients, kept on the client, or kept on the server. A system that writes what it does not own does not compile.
 - **Domains instead of a pile of code.** A game is a list of domains. A domain writes only its own components and changes another's state by emitting an event that domain declares. Asking who changes a component is one call to `Game.changes`.
-- **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same build and the same inputs give the same world, which is what prediction, rewinding, recordings, and the determinism check in development rest on.
-- **One shape for one player and many.** A singleplayer game runs its server in a Web Worker. Hosting the same game in a Durable Object is configuration, not a rewrite.
+- **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same build and the same inputs give the same world, which is what rewinding, recordings, and the determinism check in development rest on.
+- **One shape for one player and many.** A singleplayer game runs its server in a Web Worker. The same game can be hosted for players across a network in a Durable Object; that hosting is experimental, and prediction for it is planned.
 - **Effects at the edges.** Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the world, such as saving a score.
 - **Tools for agents.** In development, the `lightocean-devtools` MCP server lets an agent read the running world, hold and step time, play as one player or several, take screenshots, and turn what it played into a test.
 
@@ -133,6 +156,7 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 | `libraries/oxlint-plugin`  | Lint rules for what the types cannot enforce                                   |
 | `applications/editor`      | The editor: a document that is a world, played and debugged in the browser     |
 | `applications/playground`  | Cubes a player asks for and paints, with the page around them in Foldkit       |
+| `applications/net-spike`   | The spike that hosted a world in a Durable Object                              |
 | `examples/spinning-cube`   | A cube that turns                                                              |
 | `examples/click-to-colour` | Cubes a click paints                                                           |
 | `examples/save-score`      | A round whose score a rule saves through a command, to a Worker over KV        |
@@ -159,7 +183,7 @@ Run every test:
 npm test
 ```
 
-Serve the playground, the editor, and the save-score example through Alchemy:
+Serve the playground, the editor, the save-score example with its Worker, and the network spike through Alchemy:
 
 ```bash
 npm run dev
