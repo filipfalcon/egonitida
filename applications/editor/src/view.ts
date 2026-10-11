@@ -15,6 +15,11 @@ import { colours } from './tokens.stylex.ts';
 
 const styles = stylex.create({
   editor: {
+    backgroundColor: colours.page,
+    color: colours.text,
+    fontFamily: 'system-ui, sans-serif',
+    fontSize: 14,
+    lineHeight: 1.4,
     display: 'grid',
     gridTemplateColumns: '240px 1fr 300px',
     // One row, as tall as the window: a row sized by its content would grow with the canvas, which sizes itself by the row.
@@ -171,6 +176,7 @@ const viewSidePanel = (model: Model, h: HtmlBuilder<Message>): Html =>
         ],
   );
 
+/** The editor's page: the outliner, the canvas with Play and Stop, and the details of what is selected or the debugger. */
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Editor',
   body: h.div(Styled.attributes(h, styles.editor), [

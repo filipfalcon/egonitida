@@ -1,13 +1,7 @@
-/* The document itself, which StyleX cannot reach: the page fills the window, with the playground's ground and type. Everything the playground draws is styled with StyleX beside its view, and StyleX adds its rules to this sheet when it builds. */
+/* The document itself, which StyleX cannot reach: the page fills the window. Everything the playground draws, its ground and type too, is styled with StyleX beside its view, and StyleX adds its rules to this sheet when it builds. */
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
-}
-
-body {
-  background: #0b1020;
-  color: #e8ecf4;
-  font-family: system-ui, sans-serif;
 }

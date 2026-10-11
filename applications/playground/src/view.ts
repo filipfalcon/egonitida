@@ -8,7 +8,13 @@ import { CANVAS_ID, MountCanvas } from '#src/world.ts';
 import { colours } from './tokens.stylex.ts';
 
 const styles = stylex.create({
-  playground: { position: 'relative', height: '100%' },
+  playground: {
+    position: 'relative',
+    height: '100%',
+    backgroundColor: colours.page,
+    color: colours.text,
+    fontFamily: 'system-ui, sans-serif',
+  },
   viewport: { display: 'block', width: '100%', height: '100%' },
   overlay: {
     position: 'absolute',
@@ -35,6 +41,7 @@ const styles = stylex.create({
   error: { color: colours.danger },
 });
 
+/** The playground's page: the canvas, and over it the button that asks for a cube and the count of them. */
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Playground',
   body: h.main(Styled.attributes(h, styles.playground), [
