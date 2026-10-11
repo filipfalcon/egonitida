@@ -14,10 +14,10 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node and npm as the package.json's devEngines say, and the dependencies installed and cached.
       - name: Set up Vite+, Node, and npm
         uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
-          # Node and npm as the package.json's devEngines say.
           cache: true
       # Formatting, lint, and types, as the pre-commit hook runs them, but over every file.
       - name: Check
