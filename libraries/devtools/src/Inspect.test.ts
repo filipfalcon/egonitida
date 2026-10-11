@@ -62,6 +62,10 @@ describe('inspecting a hosted game', () => {
         entities: { [entity]: { Position: { x: 2 }, Health: { current: 50 }, Stick: { move: 1 } } },
       });
       expect(one).toEqual({ tick: 5, entities: { [entity]: { Health: { current: 50 } } } });
+      expect(yield* inspector.answer({ _tag: 'World', tick: 5, component: 'Splat' })).toEqual({
+        tick: 5,
+        entities: {},
+      });
     }),
   );
 

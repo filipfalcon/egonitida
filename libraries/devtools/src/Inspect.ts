@@ -16,7 +16,7 @@ export const Request = Schema.Union([
   Schema.TaggedStruct('Describe', {}),
   /** The ticks kept, oldest and newest. */
   Schema.TaggedStruct('Span', {}),
-  /** The world at a tick, entity by entity: all of it, or one entity, or one component. */
+  /** The world at a tick, entity by entity: all of it, or one entity, or the entities that hold one component. */
   Schema.TaggedStruct('World', {
     tick: OptionalInt,
     entity: OptionalInt,
@@ -190,10 +190,17 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
               onNone: () => values,
               onSome: (name) => (name in values ? { [name]: values[name] } : {}),
             });
+          // Asked for one component, an entity that does not hold it is left out.
           const entities = Object.fromEntries(
             Object.entries(byEntity(game, world))
               .filter(([entity]) => wanted(entity))
-              .map(([entity, values]) => [entity, picked(values)]),
+              .map(([entity, values]): readonly [string, Record<string, unknown>] => [
+                entity,
+                picked(values),
+              ])
+              .filter(
+                ([, values]) => Option.isNone(request.component) || Object.keys(values).length > 0,
+              ),
           );
           return { tick: world.tick, entities };
         }
