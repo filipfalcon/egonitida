@@ -277,6 +277,10 @@ export const world =
 
 // READING
 
+/** The entity named `name` where `simulation`, a story told, ended: for finding it elsewhere, such as in what a scene drew. */
+export const named = (simulation: Simulation, name: string): World.Entity =>
+  entityOf(simulation, name);
+
 /** What the entity named `name` holds of `component` where `simulation`, a story told, ended: for comparing one story with another. */
 export const valueOf = <Value>(simulation: Simulation, name: string, component: Of<Value>): Value =>
   Option.match(World.get(simulation.world, entityOf(simulation, name), component), {

@@ -20,16 +20,18 @@ type Of<Value> = Component.Component<string, Value, Component.Owner>;
 /** What an entity a view is drawn for holds, of the components the view asks for: every one of them is there. */
 export type Held<C extends Component.Any> = <Value>(component: Of<Value> & C) => Value;
 
-export interface Each<R> {
+export interface Each<R, Built extends Three.Object3D = Three.Object3D> {
   readonly _tag: 'Each';
   readonly components: ReadonlyArray<Component.Any>;
   /** Builds what stands for `entity`, within the scope it is held for. */
   readonly acquire: (
     entity: World.Entity,
     frame: Drawing.Frame,
-  ) => Effect.Effect<Three.Object3D, never, R | Scope.Scope>;
-  /** Draws it as `frame` has the entity. */
-  readonly draw: (object: Three.Object3D, entity: World.Entity, frame: Drawing.Frame) => void;
+  ) => Effect.Effect<Built, never, R | Scope.Scope>;
+  /** Draws what this view built, as `frame` has the entity; any other object it leaves alone. */
+  draw(object: Three.Object3D, entity: World.Entity, frame: Drawing.Frame): void;
+  /** `object`, as the type this view built it, if this view built it. */
+  own(object: Three.Object3D): Option.Option<Built>;
 }
 
 export interface On<R> {
@@ -45,7 +47,7 @@ export interface During<R> {
   readonly acquire: Effect.Effect<unknown, never, R | Scope.Scope>;
 }
 
-export type View<R = never> = Each<R> | On<R> | During<R>;
+export type View<R = never> = Each<R, Three.Object3D> | On<R> | During<R>;
 
 /** What `entity` holds in `frame`, of components it is known to hold. */
 const heldIn =
@@ -70,9 +72,10 @@ export const each = <
     ) => Effect.Effect<Built, never, R | Scope.Scope>;
     readonly draw: (object: Built, held: Held<Components[number]>, frame: Drawing.Frame) => void;
   },
-): View<R> => {
+): Each<R, Built> => {
   // What this view built, as the type it built it: the runner keeps objects of any view, and hands each back to the view that built it.
   const built = new WeakMap<Three.Object3D, Built>();
+  const own = (object: Three.Object3D) => Option.fromNullishOr(built.get(object));
   return {
     _tag: 'Each',
     components,
@@ -85,9 +88,10 @@ export const each = <
         },
       ),
     draw: (object, entity, frame) =>
-      Option.map(Option.fromNullishOr(built.get(object)), (own) =>
-        spec.draw(own, heldIn<Components[number]>(frame, entity), frame),
+      Option.map(own(object), (mine) =>
+        spec.draw(mine, heldIn<Components[number]>(frame, entity), frame),
       ),
+    own,
   };
 };
 
@@ -118,6 +122,11 @@ export const during = <R = never>(
 /** A game's views at work: their objects under `root`, drawn with every frame. */
 export interface Views<R = never> {
   readonly root: Three.Group;
+  /** What `view` built for `entity` and draws now, if anything. */
+  readonly find: <Built extends Three.Object3D>(
+    view: Each<R, Built>,
+    entity: World.Entity,
+  ) => Option.Option<Built>;
   /** Draws `frame`: builds and lets go of what entities coming and going need, draws every object, and reacts to what just happened. */
   readonly frame: (frame: Drawing.Frame) => Effect.Effect<void, never, R>;
 }
@@ -135,7 +144,7 @@ export const make = <R = never>(
     const root = new Three.Group();
     const scope = yield* Effect.scope;
     // What each `each` view keeps, by entity: its identity is the view and the entity together.
-    const kept = new Map<Each<R>, Map<World.Entity, Kept>>();
+    const kept = new Map<Each<R, Three.Object3D>, Map<World.Entity, Kept>>();
     // The scope each `during` view holds open, while its condition holds.
     const held = new Map<During<R>, Scope.Closeable>();
 
@@ -156,7 +165,7 @@ export const make = <R = never>(
       }),
     );
 
-    const drawEach = (view: Each<R>, frame: Drawing.Frame) =>
+    const drawEach = (view: Each<R, Three.Object3D>, frame: Drawing.Frame) =>
       Effect.gen(function* () {
         const keeping = kept.get(view) ?? new Map<World.Entity, Kept>();
         kept.set(view, keeping);
@@ -203,6 +212,10 @@ export const make = <R = never>(
 
     return {
       root,
+      find: (view, entity) =>
+        Option.flatMap(Option.fromNullishOr(kept.get(view)?.get(entity)), ({ object }) =>
+          view.own(object),
+        ),
       frame: (frame) =>
         Effect.forEach(
           views,
