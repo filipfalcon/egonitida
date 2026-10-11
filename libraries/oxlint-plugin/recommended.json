@@ -1,0 +1,11 @@
+{
+  "jsPlugins": [{ "name": "lightocean", "specifier": "@lightocean/oxlint-plugin" }],
+  "rules": {
+    "lightocean/pure-steps": "error",
+    "lightocean/no-nullable-components": "error",
+    "lightocean/views-keep-nothing": "error",
+    "lightocean/no-index-keys": "error",
+    "lightocean/no-three-in-domains": "error",
+    "lightocean/redacted-command-secrets": "error"
+  }
+}

@@ -1,4 +1,5 @@
 import { recommended } from '@effect/tsgo/oxlint-presets';
+import lightocean from '@lightocean/oxlint-plugin/recommended.json' with { type: 'json' };
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
@@ -6,7 +7,8 @@ export default defineConfig({
     singleQuote: true,
   },
   lint: {
-    extends: [recommended],
+    // The engine's own conventions come after Effect's, and hold for the engine as for any game on it.
+    extends: [recommended, lightocean],
     rules: {
       // Types are proven where values are made, never claimed where they are used: no `any`, no type assertions, and no non-null assertions, which are the same claim spelled `!`.
       'typescript/no-explicit-any': 'error',
