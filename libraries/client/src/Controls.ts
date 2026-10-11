@@ -16,19 +16,27 @@ export interface Keys {
   readonly right: string;
 }
 
-/** A control worked as a stick: by a pad's sticks, or by sets of four keys, any of them. */
+/** How far a pad's stick must lean before it counts, so a resting stick's drift moves nothing, and how far it leans at most, as far as a worn stick reaches: between them it is stretched from nothing to a full tilt. */
+export interface DeadZone {
+  readonly inner: number;
+  readonly outer: number;
+}
+
+/** A control worked as a stick: by a pad's sticks, or by sets of four keys, any of them; a pad's within its dead zone. */
 export interface Stick {
   readonly _tag: 'Stick';
   readonly pad: ReadonlyArray<PadStick>;
   readonly keys: ReadonlyArray<Keys>;
+  readonly deadZone: DeadZone;
 }
 
-/** A control worked as a button: by a pad's buttons, keys, or mouse buttons, any of them. */
+/** A control worked as a button: by a pad's buttons, keys, or mouse buttons, any of them; a pad's held once pressed as far as `heldAt`. */
 export interface Button {
   readonly _tag: 'Button';
   readonly pad: ReadonlyArray<Devices.PadButton>;
   readonly key: ReadonlyArray<string>;
   readonly mouse: ReadonlyArray<number>;
+  readonly heldAt: number;
 }
 
 export type Binding = Stick | Button;
@@ -45,24 +53,30 @@ const isString = (value: Some<string>): value is string => typeof value === 'str
 const isNumber = (value: Some<number>): value is number => typeof value === 'number';
 const isKeys = (value: Some<Keys>): value is Keys => 'up' in value;
 
+/** A control worked as a stick, by `pad`'s sticks and `keys`; a pad's within `deadZone`, a little drift to a full tilt unless given. */
 export const stick = (bound: {
   readonly pad?: Some<PadStick>;
   readonly keys?: Some<Keys>;
+  readonly deadZone?: DeadZone;
 }): Stick => ({
   _tag: 'Stick',
   pad: all(bound.pad, (value): value is PadStick => typeof value === 'string'),
   keys: all(bound.keys, isKeys),
+  deadZone: bound.deadZone ?? DEAD_ZONE,
 });
 
+/** A control worked as a button, by `pad`'s buttons, a `key`, or a `mouse` button; a pad's held once pressed as far as `heldAt`, halfway unless given, as a trigger may be wanted held sooner. */
 export const button = (bound: {
   readonly pad?: Some<Devices.PadButton>;
   readonly key?: Some<string>;
   readonly mouse?: Some<number>;
+  readonly heldAt?: number;
 }): Button => ({
   _tag: 'Button',
   pad: all(bound.pad, (value): value is Devices.PadButton => typeof value === 'string'),
   key: all(bound.key, isString),
   mouse: all(bound.mouse, isNumber),
+  heldAt: bound.heldAt ?? PRESSED,
 });
 
 /** The kind of device a player uses. */
@@ -74,10 +88,11 @@ export interface Direction {
   readonly y: number;
 }
 
-/** A button: whether it is held, and whether it went down just now. */
+/** A button: whether it is held, whether it went down just now, and how far it is pressed, from 0 to 1, a key or a mouse button all the way. */
 export interface Press {
   readonly held: boolean;
   readonly pressed: boolean;
+  readonly value: number;
 }
 
 /** The names of the controls of `Bindings` worked as `Kind`. */
@@ -97,30 +112,30 @@ export interface Read<Bindings extends Readonly<Record<string, Binding>>> {
   readonly held: ReadonlySet<string>;
 }
 
-/** How far a stick must lean before it counts, so a resting stick's drift moves nothing. */
-const DEAD_ZONE = 0.15;
-/** How far a pad's button must be pressed to count as held. */
+/** How far a stick must lean before it counts, so a resting stick's drift moves nothing; a full tilt counts all of it. */
+const DEAD_ZONE: DeadZone = { inner: 0.15, outer: 1 };
+/** How far a pad's button must be pressed to count as held, unless its binding says. */
 const PRESSED = 0.5;
 
 const still: Direction = { x: 0, y: 0 };
 
-/** `x`, `y` with the dead zone taken out and the rest stretched to fill it, never longer than 1. */
-const shaped = (x: number, y: number): Direction => {
+/** `x`, `y` with `zone`'s inner part taken out and the rest stretched to its outer edge, never longer than 1. */
+const shaped = (x: number, y: number, zone: DeadZone): Direction => {
   const length = Math.hypot(x, y);
-  if (length <= DEAD_ZONE) {
+  if (length <= zone.inner) {
     return still;
   }
-  const scale = Math.min((length - DEAD_ZONE) / (1 - DEAD_ZONE), 1) / length;
+  const scale = Math.min((length - zone.inner) / (zone.outer - zone.inner), 1) / length;
   return { x: x * scale, y: y * scale };
 };
 
 const longer = (a: Direction, b: Direction) =>
   Math.hypot(b.x, b.y) > Math.hypot(a.x, a.y) ? b : a;
 
-const padStick = (pad: Devices.Pad, side: PadStick): Direction =>
+const padStick = (pad: Devices.Pad, side: PadStick, zone: DeadZone): Direction =>
   side === 'LeftStick'
-    ? shaped(pad.axes.LeftX, -pad.axes.LeftY)
-    : shaped(pad.axes.RightX, -pad.axes.RightY);
+    ? shaped(pad.axes.LeftX, -pad.axes.LeftY, zone)
+    : shaped(pad.axes.RightX, -pad.axes.RightY, zone);
 
 const keysStick = (
   keys: ReadonlySet<string>,
@@ -140,8 +155,8 @@ const keysStick = (
 /** Whether a pad is being used: a button pressed, or a stick leaning past its dead zone. */
 const padUsed = (pad: Devices.Pad) =>
   Object.values(pad.buttons).some((pressed) => pressed > PRESSED) ||
-  Math.hypot(pad.axes.LeftX, pad.axes.LeftY) > DEAD_ZONE ||
-  Math.hypot(pad.axes.RightX, pad.axes.RightY) > DEAD_ZONE;
+  Math.hypot(pad.axes.LeftX, pad.axes.LeftY) > DEAD_ZONE.inner ||
+  Math.hypot(pad.axes.RightX, pad.axes.RightY) > DEAD_ZONE.inner;
 
 const keyboardAndMouseUsed = (devices: Devices.State) =>
   devices.keys.size > 0 ||
@@ -154,7 +169,7 @@ const keyboardAndMouseUsed = (devices: Devices.State) =>
 export const start = <Bindings extends Readonly<Record<string, Binding>>>(
   _bindings: Bindings,
 ): Read<Bindings> => ({
-  values: { stick: () => still, button: () => ({ held: false, pressed: false }) },
+  values: { stick: () => still, button: () => ({ held: false, pressed: false, value: 0 }) },
   active: Option.none(),
   held: new Set(),
 });
@@ -167,22 +182,25 @@ export const read = <Bindings extends Readonly<Record<string, Binding>>>(
 ): Read<Bindings> => {
   const sticks = new Map<string, Direction>();
   const held = new Set<string>();
+  const pressedAs = new Map<string, number>();
   for (const [name, binding] of Object.entries(bindings)) {
     if (binding._tag === 'Stick') {
       const fromPads = binding.pad
-        .flatMap((side) => devices.pads.map((pad) => padStick(pad, side)))
+        .flatMap((side) => devices.pads.map((pad) => padStick(pad, side, binding.deadZone)))
         .reduce(longer, still);
       const fromKeys = binding.keys
         .map((keys) => keysStick(devices.keys, keys))
         .reduce(longer, still);
       sticks.set(name, longer(fromKeys, fromPads));
     } else {
-      const onPad = binding.pad.some((bound) =>
-        devices.pads.some((pad) => pad.buttons[bound] > PRESSED),
-      );
+      const onPad = binding.pad
+        .flatMap((bound) => devices.pads.map((pad) => pad.buttons[bound]))
+        .reduce((most, value) => Math.max(most, value), 0);
       const onKey = binding.key.some((key) => devices.keys.has(key));
       const onMouse = binding.mouse.some((bound) => devices.mouse.buttons.has(bound));
-      if (onPad || onKey || onMouse) {
+      const value = onKey || onMouse ? 1 : onPad;
+      pressedAs.set(name, value);
+      if (onKey || onMouse || onPad >= binding.heldAt) {
         held.add(name);
       }
     }
@@ -198,9 +216,28 @@ export const read = <Bindings extends Readonly<Record<string, Binding>>>(
       button: (name) => ({
         held: held.has(name),
         pressed: held.has(name) && !previous.held.has(name),
+        value: pressedAs.get(name) ?? 0,
       }),
     },
     active,
     held,
   };
 };
+
+/** Whether a trigger is ready to fire: let back far enough since it last fired. */
+export interface Latch {
+  readonly armed: boolean;
+}
+
+/** A trigger that has not fired yet. */
+export const armed: Latch = { armed: true };
+
+/** Whether a trigger pressed as far as `value` fires now, after `latch`: pulled past `breakAt` while armed, it fires once, and is armed again only once let back past `resetAt`, as a gun's trigger breaks and resets, so holding it fires nothing more and a trembling finger does not fire twice. */
+export const latched = (
+  latch: Latch,
+  value: number,
+  at: { readonly breakAt: number; readonly resetAt: number },
+): { readonly fired: boolean; readonly latch: Latch } =>
+  latch.armed && value >= at.breakAt
+    ? { fired: true, latch: { armed: false } }
+    : { fired: false, latch: !latch.armed && value <= at.resetAt ? armed : latch };

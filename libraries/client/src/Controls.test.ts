@@ -48,10 +48,10 @@ describe('controls', () => {
     const second = read(onPad({ buttons: { ...Devices.idlePad.buttons, RightTrigger: 1 } }), first);
     const clicked = read({ ...idle, mouse: { ...idle.mouse, buttons: new Set([0]) } });
 
-    expect(first.values.button('fire')).toEqual({ held: true, pressed: true });
-    expect(second.values.button('fire')).toEqual({ held: true, pressed: false });
-    expect(clicked.values.button('fire')).toEqual({ held: true, pressed: true });
-    expect(first.values.button('restart')).toEqual({ held: false, pressed: false });
+    expect(first.values.button('fire')).toEqual({ held: true, pressed: true, value: 1 });
+    expect(second.values.button('fire')).toEqual({ held: true, pressed: false, value: 1 });
+    expect(clicked.values.button('fire')).toEqual({ held: true, pressed: true, value: 1 });
+    expect(first.values.button('restart')).toEqual({ held: false, pressed: false, value: 0 });
   });
 
   it('answer to the device last used, the pad when both are used at once', () => {
@@ -99,5 +99,54 @@ describe('controls', () => {
       reading(onPad({ buttons: { ...Devices.idlePad.buttons, South: 1 } })).values.button('fire')
         .held,
     ).toBe(true);
+  });
+
+  it('read how far a pad button is pressed, held from where its binding says', () => {
+    const triggers = {
+      fire: Controls.button({ pad: 'RightTrigger', mouse: 0 }),
+      aim: Controls.button({ pad: 'LeftTrigger', heldAt: 0.3 }),
+    };
+    const halfway = Controls.read(
+      triggers,
+      onPad({ buttons: { ...Devices.idlePad.buttons, RightTrigger: 0.4, LeftTrigger: 0.4 } }),
+      Controls.start(triggers),
+    );
+
+    expect(halfway.values.button('fire')).toEqual({ held: false, pressed: false, value: 0.4 });
+    expect(halfway.values.button('aim')).toEqual({ held: true, pressed: true, value: 0.4 });
+  });
+
+  it('take a dead zone of a stick from its binding, stretching the rest to its outer edge', () => {
+    const shaped = {
+      look: Controls.stick({ pad: 'RightStick', deadZone: { inner: 0.2, outer: 0.8 } }),
+    };
+    const lookAt = (x: number) =>
+      Controls.read(
+        shaped,
+        onPad({ axes: { ...Devices.idlePad.axes, RightX: x } }),
+        Controls.start(shaped),
+      ).values.stick('look').x;
+
+    expect(lookAt(0.2)).toBe(0);
+    expect(lookAt(0.5)).toBeCloseTo(0.5);
+    expect(lookAt(0.8)).toBeCloseTo(1);
+    expect(lookAt(1)).toBeCloseTo(1);
+  });
+});
+
+describe('a trigger latched', () => {
+  it('fires once it is pulled past where it breaks, and again only once let back past where it resets', () => {
+    const at = { breakAt: 0.68, resetAt: 0.35 };
+    const pulls = [0, 0.5, 0.7, 0.9, 0.5, 0.7, 0.3, 0.8];
+
+    const fired = pulls.reduce(
+      ({ latch, shots }, value) => {
+        const next = Controls.latched(latch, value, at);
+        return { latch: next.latch, shots: [...shots, next.fired] };
+      },
+      { latch: Controls.armed, shots: new Array<boolean>() },
+    ).shots;
+
+    expect(fired).toEqual([false, false, true, false, false, false, false, true]);
   });
 });
