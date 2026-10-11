@@ -1,4 +1,4 @@
-import { type Inspect, Relay } from '@lightocean/devtools';
+import { type Inspect, Page, Relay } from '@lightocean/devtools';
 import { Data, Duration, Effect, Option, Schema } from 'effect';
 import WebSocket from 'ws';
 
@@ -98,6 +98,32 @@ export const request = (
     switch (answer._tag) {
       case 'Answer':
         return answer.answer;
+      case 'Refusal':
+        return yield* new Failed({ reason: answer.reason });
+      case 'Hosts':
+        return yield* new Failed({ reason: 'the relay answered something it was not asked' });
+    }
+  });
+
+/** A shot of what the newest page drawing the host named `host`, or the newest, shows now, at most `width` pixels across if given; or why there is none. */
+export const capture = (
+  relays: ReadonlyArray<Relay.Record>,
+  options: { readonly host?: string | undefined; readonly width?: number | undefined },
+): Effect.Effect<Page.Shot, Failed> =>
+  Effect.gen(function* () {
+    const named = Option.fromNullishOr(options.host);
+    const record = yield* relayFor(relays, named);
+    const answer = yield* send(record, {
+      _tag: 'Capture',
+      id: 1,
+      ...Option.match(named, { onNone: () => ({}), onSome: (only) => ({ host: only }) }),
+      ...(options.width === undefined ? {} : { width: options.width }),
+    });
+    switch (answer._tag) {
+      case 'Answer':
+        return yield* Schema.decodeUnknownEffect(Page.Shot)(answer.answer).pipe(
+          Effect.mapError(() => new Failed({ reason: 'the page answered with no shot' })),
+        );
       case 'Refusal':
         return yield* new Failed({ reason: answer.reason });
       case 'Hosts':

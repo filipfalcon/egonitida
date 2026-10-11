@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from '@effect/vitest';
 import { Relay } from '@lightocean/devtools';
 import { Effect } from 'effect';
-import { served } from '#src/fixtures.ts';
+import { PIXEL, served } from '#src/fixtures.ts';
 import * as Tools from '#src/Tools.ts';
 
 /** A workspace with a relay running in it, and the tools as an agent started inside it has them. */
@@ -25,7 +25,7 @@ describe('the tools', () => {
       yield* tools.lightocean_advance({ steps: 2 });
       const world = yield* tools.lightocean_world({ component: 'Count' });
 
-      expect(hosts).toEqual([{ host: expect.stringMatching(/^counting-/), name: 'counting' }]);
+      expect(hosts).toEqual([{ host: 'counting', name: 'counting' }]);
       expect(world).toEqual({ tick: 2, entities: { 0: { Count: { value: 2 } } } });
     }),
   );
@@ -77,4 +77,24 @@ describe('the tools', () => {
       ].toSorted(),
     );
   });
+
+  it.live('show what a page draws, as an image', () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'lightocean-tools-')));
+      yield* served(['counting'], join(root, ...Relay.RECORDS));
+
+      const shown = yield* Tools.screenshot(root)({ width: 64 });
+      const refused = yield* Tools.screenshot(root)({ host: 'nowhere' });
+
+      expect(shown.isError).not.toBe(true);
+      expect(shown.content).toMatchObject([
+        { type: 'image', mimeType: 'image/png', data: Buffer.from(PIXEL, 'base64') },
+        { type: 'text', text: 'a shot 64 by 1 pixels' },
+      ]);
+      expect(refused).toMatchObject({
+        isError: true,
+        content: [{ type: 'text', text: expect.stringContaining('no host is called nowhere') }],
+      });
+    }),
+  );
 });

@@ -1,6 +1,6 @@
 import type { Inspect } from '@lightocean/devtools';
 import { Effect, Schema } from 'effect';
-import { Tool, Toolkit } from 'effect/ai';
+import { McpSchema, Tool, Toolkit } from 'effect/ai';
 import * as Ask from '#src/Ask.ts';
 import * as Discovery from '#src/Discovery.ts';
 
@@ -221,3 +221,63 @@ export const handlers = (from: string) => {
     lightocean_act: ({ host, ...asked }) => ask({ _tag: 'Act', ...asked }, host),
   });
 };
+
+// SCREENSHOT
+// A tool of its own, since it answers with an image, which a toolkit's tools, answering in JSON, cannot.
+
+const ScreenshotParameters = Schema.Struct({
+  host: Schema.optionalKey(Schema.String),
+  width: Schema.optionalKey(Schema.Int),
+});
+
+/** The tool that shows an agent what a page draws now, as a person sees it. */
+export const screenshotTool = new McpSchema.Tool({
+  name: 'lightocean_screenshot',
+  description:
+    'Shows what the newest page drawing a host shows now, as an image, as a person sees it: to check how something looks, rather than asking. Seek to a past tick first to see the past. It needs the page open in a browser.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      host: {
+        type: 'string',
+        description:
+          'The host whose page to show, as lightocean_hosts lists it; the newest if left out.',
+      },
+      width: {
+        type: 'integer',
+        description: 'The most pixels across the image may be; as the page draws if left out.',
+      },
+    },
+  },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+});
+
+/** What the screenshot tool answers, finding the relays from the workspace `from` is in on every call. */
+export const screenshot =
+  (from: string) =>
+  (payload: unknown): Effect.Effect<McpSchema.CallToolResult> =>
+    Schema.decodeUnknownEffect(ScreenshotParameters)(payload).pipe(
+      Effect.mapError(({ message }) => new Ask.Failed({ reason: message })),
+      Effect.flatMap((asked) =>
+        Effect.flatMap(Discovery.relays(from), (relays) => Ask.capture(relays, asked)),
+      ),
+      Effect.match({
+        onSuccess: (shot) =>
+          new McpSchema.CallToolResult({
+            content: [
+              { type: 'image', data: Buffer.from(shot.png, 'base64'), mimeType: 'image/png' },
+              { type: 'text', text: `a shot ${shot.width} by ${shot.height} pixels` },
+            ],
+          }),
+        onFailure: ({ reason }) =>
+          new McpSchema.CallToolResult({
+            isError: true,
+            content: [{ type: 'text', text: reason }],
+          }),
+      }),
+    );

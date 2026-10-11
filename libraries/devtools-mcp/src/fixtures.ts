@@ -2,13 +2,17 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Component, Domain, Game, Host, System, World } from '@lightocean/core';
-import { Bridge, Inspect, Relay, Rewind } from '@lightocean/devtools';
+import { Bridge, Inspect, Page, Relay, Rewind } from '@lightocean/devtools';
 import { Listener } from '@lightocean/vite-plugin';
-import { Effect, Queue, Schema, Stream } from 'effect';
+import { Effect, Option, Queue, Schema, Stream } from 'effect';
 
 /**
  * What the MCP server's tests share: a game that counts its steps, and a relay with hosts of it, as a development server would have them.
  */
+
+/** The smallest PNG there is, one transparent pixel, as base64. */
+export const PIXEL =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 export const Count = Component.make('Count', Schema.Struct({ value: Schema.Int }), {
   owner: 'simulation',
@@ -43,7 +47,7 @@ export const counting = Game.make({
   ],
 });
 
-/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time held. */
+/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time held, and each drawn by a page whose every shot is one pixel. */
 export const served = (names: ReadonlyArray<string>, directory?: string) =>
   Effect.gen(function* () {
     const relay = yield* Relay.make;
@@ -71,7 +75,23 @@ export const served = (names: ReadonlyArray<string>, directory?: string) =>
         send: (message) => relay.fromHost(peer, Schema.encodeSync(Bridge.FromHost)(message)),
         received: Stream.fromQueue(toHost),
       };
-      yield* Bridge.serve(channel, Inspect.make(host, rewind), { name });
+      yield* Bridge.serve(channel, Inspect.make(host, rewind), { name, id: name });
+      // A page drawing the host, whose every shot is the smallest PNG, as wide as asked.
+      const toPage = yield* Queue.unbounded<unknown>();
+      const pagePeer: Relay.Peer<Bridge.ToHost> = {
+        send: (message) => Queue.offer(toPage, Schema.encodeSync(Bridge.ToHost)(message)),
+      };
+      yield* Page.serve(
+        {
+          send: (message) => relay.fromHost(pagePeer, Schema.encodeSync(Bridge.FromHost)(message)),
+          received: Stream.fromQueue(toPage),
+        },
+        {
+          host: name,
+          capture: (width) =>
+            Effect.succeed({ png: PIXEL, width: Option.getOrElse(width, () => 1), height: 1 }),
+        },
+      );
     }
     return listening;
   });
