@@ -18,6 +18,7 @@
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@lightocean/vite-plugin": "*",
     "@types/three": "0.186.0"
   }
 }
