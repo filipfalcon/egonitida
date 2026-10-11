@@ -85,6 +85,12 @@ export interface Host<Services = never> {
   readonly world: Effect.Effect<World.World>;
   /** The controls clients send, such as a development tool's, from now on, as they come; a host that lets no client hold time passes on none. */
   readonly controls: Stream.Stream<Control>;
+  /** Holds time for whatever runs beside the host, such as a development tool, as a client may hold it for itself. */
+  readonly hold: Effect.Effect<void>;
+  /** Lets go of time held beside the host; it runs on once no client holds it either. */
+  readonly release: Effect.Effect<void>;
+  /** Takes `steps` steps at once, beside those real time owes, and shows them to every client: how time held is stepped through. */
+  readonly advance: (steps: number) => Effect.Effect<void>;
   /** Shows every client `world` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
   readonly show: (world: World.World) => Effect.Effect<void>;
   /** Plays `setup` from now on, such as a new build of the game, from the world the host holds, read by the new game; refuses one that cannot read it, and plays on as it was. */
@@ -122,12 +128,16 @@ export const make = <Services = never>(
       done: 0,
       /** The clients holding time now; time stands while there is any. */
       holders: new Set<World.Entity>(),
+      /** Whether whatever runs beside the host, such as a development tool, holds time. */
+      heldBeside: false,
       /** The players' actions waiting for the next step, in the order they came. */
       acted: new Array<Event.Tagged>(),
       heldSince: Option.none<number>(),
       /** Counts every time the host showed its clients another world than the one it stepped to, so they take it even if it is older. */
       era: 0,
     };
+    // What the host was made with, so steps taken at a tool's word run their commands as the host's own do.
+    const made = yield* Effect.context<Services | Scope.Scope>();
     const happened = yield* PubSub.unbounded<Happening>();
     const controlled = yield* PubSub.unbounded<Control>();
     // Open while time runs; the loop waits here while it is held.
@@ -136,10 +146,11 @@ export const make = <Services = never>(
     /** Stops or lets go of time to match whether anyone holds it; on letting go, the time held is never owed. */
     const settleHold = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      if (state.holders.size > 0 && Option.isNone(state.heldSince)) {
+      const held = state.heldBeside || state.holders.size > 0;
+      if (held && Option.isNone(state.heldSince)) {
         state.heldSince = Option.some(now);
         yield* Latch.close(running);
-      } else if (state.holders.size === 0 && Option.isSome(state.heldSince)) {
+      } else if (!held && Option.isSome(state.heldSince)) {
         state.pace = Pace.resume(state.pace, now - state.heldSince.value);
         state.heldSince = Option.none();
         yield* Latch.open(running);
@@ -171,6 +182,28 @@ export const make = <Services = never>(
         );
       });
 
+    /** Takes `count` steps: the waiting input and actions go into the first, the rest only move time on. */
+    const takeSteps = (count: number) =>
+      Effect.gen(function* () {
+        const inputs = [...state.pending.values()].flat();
+        state.pending.clear();
+        const actions = state.acted.splice(0);
+        const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
+        for (let step = 0; step < count; step += 1) {
+          const taken = step === 0 ? { inputs, actions } : { inputs: [], actions: [] };
+          const next = Game.step(
+            state.setup.game,
+            state.world,
+            taken.inputs,
+            taken.actions,
+            stepping,
+          );
+          state.world = next.world;
+          PubSub.publishUnsafe(happened, { _tag: 'Stepped', world: next.world, ...taken });
+          yield* Effect.forEach(next.commands, run, { discard: true });
+        }
+      });
+
     // Every step real time owes: the waiting input goes into the first, the rest only move time on.
     const takeDueSteps = Effect.gen(function* () {
       if (Option.isSome(state.heldSince)) {
@@ -182,23 +215,7 @@ export const make = <Services = never>(
         return;
       }
       state.done += steps;
-      const inputs = [...state.pending.values()].flat();
-      state.pending.clear();
-      const actions = state.acted.splice(0);
-      const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
-      for (let step = 0; step < steps; step += 1) {
-        const taken = step === 0 ? { inputs, actions } : { inputs: [], actions: [] };
-        const next = Game.step(
-          state.setup.game,
-          state.world,
-          taken.inputs,
-          taken.actions,
-          stepping,
-        );
-        state.world = next.world;
-        PubSub.publishUnsafe(happened, { _tag: 'Stepped', world: next.world, ...taken });
-        yield* Effect.forEach(next.commands, run, { discard: true });
-      }
+      yield* takeSteps(steps);
       yield* broadcast(state.world);
     });
 
@@ -306,6 +323,19 @@ export const make = <Services = never>(
       connect,
       world: Effect.sync(() => state.world),
       controls: Stream.fromPubSub(controlled),
+      hold: Effect.suspend(() => {
+        state.heldBeside = true;
+        return settleHold;
+      }),
+      release: Effect.suspend(() => {
+        state.heldBeside = false;
+        return settleHold;
+      }),
+      advance: (steps) =>
+        Effect.andThen(
+          Effect.provideContext(takeSteps(steps), made),
+          Effect.suspend(() => broadcast(state.world)),
+        ),
       show: (world) =>
         Effect.suspend(() => {
           state.era += 1;

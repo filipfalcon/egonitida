@@ -535,6 +535,33 @@ describe('reloading a game', () => {
   );
 });
 
+describe('time held beside the host', () => {
+  it.effect('stands while held, steps only as far as it is told, and runs on once let go', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      yield* client.send([Controls.of({ move: 1, fire: false })]);
+      yield* advance(100);
+
+      yield* host.hold;
+      const held = yield* host.world;
+      yield* advance(500);
+      const stood = yield* host.world;
+      yield* host.advance(4);
+      const stepped = yield* host.world;
+      yield* host.release;
+      yield* advance(100);
+
+      expect(stood.tick).toBe(held.tick);
+      expect(stepped.tick).toBe(held.tick + 4);
+      expect(positionIn(stepped, client.entity)).toEqual(
+        Option.map(positionIn(held, client.entity), (x) => x + 4),
+      );
+      expect((yield* client.world).tick).toBeGreaterThan(stepped.tick);
+      expect((yield* host.world).tick).toBe(stepped.tick + 3);
+    }),
+  );
+});
+
 describe('controls', () => {
   it.effect('reach whatever listens beside the host, from the client that sent them', () =>
     Effect.gen(function* () {
