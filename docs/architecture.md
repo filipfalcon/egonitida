@@ -189,7 +189,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 **Conventions.**
 
 - Nothing is wired implicitly: no automatic registration, decorators, wiring by file name, or global registries. All wiring is in `Game.make` and domains' `requires`.
-- `AGENTS.md` holds the rules an agent follows and the exemplar files it reads first; `CLAUDE.md` links to it. This document holds why. Agents reach for the runtime's inspection before adding logs.
+- `AGENTS.md` holds the rules an agent follows and the exemplar files it reads first, under the one name agents' tools read. This document holds why. Agents reach for the runtime's inspection before adding logs.
 - A barrel exports only the public API; what only a host or a test needs is under `/internal`, and what is not settled under `/experimental`.
 - A domain lives in a folder: `index.ts` as the barrel, `name.ts` with its core part, `name.view.ts` with its client part, and its Story and Scene tests. A domain's file has the sections `COMPONENTS`, `ACTIONS`, `EVENTS`, `COMMANDS`, `RULES`, `SYSTEMS`, and `DOMAIN`.
 - Every public export has a doc comment saying what it is and why. Code, tests, and documents carry no notes about discarded attempts.
