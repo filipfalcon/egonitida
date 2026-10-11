@@ -20,11 +20,12 @@ export interface Report {
   readonly data: DataView;
 }
 
-/** What a device is asked to make felt and seen at one moment, all of it: how hard its motors turn, from 0 to 1, how its triggers push back, and the colour of its light, if it is asked to have one rather than its own. A driver writes all of it in every report, as devices such as the DualSense take it. */
+/** What a device is asked to make felt and seen at one moment, all of it: how hard its motors turn, from 0 to 1, how its triggers push back, the colour of its light, and how many of its player lights are lit, from none to all five, each if it is asked to have one rather than its own. A driver writes all of it in every report, as devices such as the DualSense take it. */
 export interface Output {
   readonly motors: { readonly strong: number; readonly weak: number };
   readonly triggers: Haptics.Triggers;
   readonly light: Option.Option<Lighting.Colour>;
+  readonly players: Option.Option<number>;
 }
 
 /** Nothing felt, and nothing lit: the motors still, the triggers free, and the light the device's own. */
@@ -32,6 +33,7 @@ export const still: Output = {
   motors: { strong: 0, weak: 0 },
   triggers: Haptics.freeTriggers,
   light: Option.none(),
+  players: Option.none(),
 };
 
 /** An output report a device takes: its id, and how many bytes it is after the id, where the device says. A browser sends only a report of the length the device says. */
@@ -231,6 +233,8 @@ export const connect = (
       lit: {
         colour: (colour) =>
           Effect.suspend(() => write({ ...written.output, light: Option.some(colour) })),
+        players: (count) =>
+          Effect.suspend(() => write({ ...written.output, players: Option.some(count) })),
       },
     };
   });

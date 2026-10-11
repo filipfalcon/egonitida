@@ -71,6 +71,8 @@ export const connect = (
       Effect.forkScoped,
     );
     return {
+      // A keyboard and a mouse have no player lights.
+      players: () => Effect.void,
       colour: (colour) => {
         const effect = { effect: 'CHROMA_STATIC', param: { color: colourOf(colour) } };
         return Effect.forEach(

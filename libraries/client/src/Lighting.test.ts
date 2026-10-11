@@ -6,13 +6,18 @@ import * as Lighting from '#src/Lighting.ts';
 /** A device whose lights keep the colours they are lit, in order. */
 const recorded = () => {
   const lit: Array<Lighting.Colour> = [];
+  const players: Array<number> = [];
   const device: Lighting.Lit = {
     colour: (colour) =>
       Effect.sync(() => {
         lit.push(colour);
       }),
+    players: (count) =>
+      Effect.sync(() => {
+        players.push(count);
+      }),
   };
-  return { lit, device };
+  return { lit, players, device };
 };
 
 describe('lighting', () => {
@@ -48,5 +53,26 @@ describe('lighting', () => {
 
       expect(pad.lit).toEqual([red]);
     }),
+  );
+
+  it.effect(
+    "lights as many of the player lights of the page's own player's devices as asked, again too",
+    () =>
+      Effect.gen(function* () {
+        const [one, own] = World.spawn(World.empty({ seed: 1 }), []);
+        const [, other] = World.spawn(one, []);
+        const pad = recorded();
+        const devices = { lit: [pad.device] };
+        const lighting = Lighting.make({ player: own, lit: () => devices.lit });
+
+        yield* lighting.players(own, 3);
+        yield* lighting.players(other, 5);
+        const later = recorded();
+        devices.lit.push(later.device);
+        yield* lighting.again;
+
+        expect(pad.players).toEqual([3, 3]);
+        expect(later.players).toEqual([3]);
+      }),
   );
 });

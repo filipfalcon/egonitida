@@ -89,6 +89,7 @@ const OUTPUT = {
   left: 21,
   newerFlags: 38,
   lightSetup: 41,
+  players: 43,
   light: 44,
 };
 /** That the motors, as the DualShock 4 had them, and both triggers are written. */
@@ -97,6 +98,10 @@ const WRITTEN = 0x01 | 0x02 | 0x04 | 0x08;
 const NEWER_WRITTEN = 0x04;
 /** That the lightbar is written. */
 const LIGHT_WRITTEN = 0x04;
+/** That the player lights are written, and that they switch at once rather than fade. */
+const PLAYERS_WRITTEN = { flag: 0x10, atOnce: 0x20 };
+/** How many player lights the pad has. */
+const PLAYER_LIGHTS = 5;
 /** That the light the pad shows as it starts is to end, so the lightbar can be lit. */
 const LIGHT_SHOW_ENDS = { flag: 0x02, setup: 0x02 };
 
@@ -147,17 +152,23 @@ const triggerOf = (trigger: Haptics.Trigger): ReadonlyArray<number> => {
 const writeShared = (
   bytes: Uint8Array,
   at: number,
-  { motors, triggers, light }: Hid.Output,
+  { motors, triggers, light, players }: Hid.Output,
   sent: number,
 ) => {
   const first = sent === 0;
   bytes[at + OUTPUT.flags] = WRITTEN;
   bytes[at + OUTPUT.newerFlags] = NEWER_WRITTEN | (first ? LIGHT_SHOW_ENDS.flag : 0);
   bytes[at + OUTPUT.lightSetup] = first ? LIGHT_SHOW_ENDS.setup : 0;
+  bytes[at + OUTPUT.lightFlags] =
+    (Option.isSome(light) ? LIGHT_WRITTEN : 0) |
+    (Option.isSome(players) ? PLAYERS_WRITTEN.flag : 0);
   if (Option.isSome(light)) {
     const { red, green, blue } = light.value;
-    bytes[at + OUTPUT.lightFlags] = LIGHT_WRITTEN;
     bytes.set([byteOf(red), byteOf(green), byteOf(blue)], at + OUTPUT.light);
+  }
+  if (Option.isSome(players)) {
+    const lit = Math.max(0, Math.min(PLAYER_LIGHTS, Math.round(players.value)));
+    bytes[at + OUTPUT.players] = ((1 << lit) - 1) | PLAYERS_WRITTEN.atOnce;
   }
   bytes[at + OUTPUT.weak] = byteOf(motors.weak);
   bytes[at + OUTPUT.strong] = byteOf(motors.strong);

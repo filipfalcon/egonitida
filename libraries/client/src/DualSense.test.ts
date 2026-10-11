@@ -89,6 +89,7 @@ describe('a DualSense', () => {
           right: { _tag: 'Clicking', from: 0.2, to: 0.5, strength: 1 },
         },
         light: Option.none(),
+        players: Option.none(),
       },
       { outputs: [{ reportId: 0x02, length: Option.none() }], sent: 1 },
     );
@@ -157,6 +158,26 @@ describe('a DualSense', () => {
     );
     expect(bytesOf(later, [1, 38, 41])).toEqual(Option.some([0x04, 0x04, 0]));
     expect(bytesOf(unlit, [1, 44])).toEqual(Option.some([0, 0]));
+  });
+
+  it('lights as many of its player lights as asked, at once, and leaves them be unless asked', () => {
+    const usb = [{ reportId: 0x02, length: Option.none() }];
+    const bytesOf = (report: Option.Option<Hid.Report>) =>
+      Option.map(report, ({ data }) => [data.getUint8(1) & 0x10, data.getUint8(43)]);
+
+    const three = DualSense.driver.write(
+      { ...Hid.still, players: Option.some(3) },
+      { outputs: usb, sent: 1 },
+    );
+    const none = DualSense.driver.write(
+      { ...Hid.still, players: Option.some(0) },
+      { outputs: usb, sent: 1 },
+    );
+    const own = DualSense.driver.write(Hid.still, { outputs: usb, sent: 1 });
+
+    expect(bytesOf(three)).toEqual(Option.some([0x10, 0b00111 | 0x20]));
+    expect(bytesOf(none)).toEqual(Option.some([0x10, 0x20]));
+    expect(bytesOf(own)).toEqual(Option.some([0, 0]));
   });
 
   it('asks for its calibration once it opens, which over Bluetooth starts its full reports', () => {

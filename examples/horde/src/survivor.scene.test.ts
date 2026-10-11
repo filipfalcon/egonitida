@@ -36,6 +36,7 @@ const lighting = (
     Effect.sync(() => {
       lit.push({ entity, colour });
     }),
+  players: () => Effect.void,
 });
 
 /** A survivor with twenty health, standing; then bitten for ten; then bitten for the last ten: the worlds of each. */
