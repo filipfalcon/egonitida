@@ -32,10 +32,10 @@ export const connect: Effect.Effect<
   return connection;
 });
 
-/** The worker's side: hosts a game for every page that connects, until the scope closes. */
-export const serve = (
-  options: Host.Options,
-): Effect.Effect<void, WorkerError, WorkerRunner.WorkerRunnerPlatform | Scope.Scope> =>
+/** The worker's side: hosts a game for every page that connects, until the scope closes, running its commands with the `Services` it is given. */
+export const serve = <Services = never>(
+  options: Host.Options<Services>,
+): Effect.Effect<void, WorkerError, WorkerRunner.WorkerRunnerPlatform | Scope.Scope | Services> =>
   Effect.gen(function* () {
     const host = yield* Host.make(options);
     const runner = yield* (yield* WorkerRunner.WorkerRunnerPlatform).start<

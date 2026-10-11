@@ -1,7 +1,19 @@
 import { BrowserWorker, BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Game, Domain, System, WorkerTransport, World } from '@lightocean/core';
-import { Effect, Option, Schema } from 'effect';
+import {
+  Action,
+  Client,
+  Command,
+  Component,
+  Domain,
+  Event,
+  Game,
+  Rule,
+  System,
+  WorkerTransport,
+  World,
+} from '@lightocean/core';
+import { Context, Effect, Option, Schema } from 'effect';
 
 const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }), {
   owner: 'simulation',
@@ -73,6 +85,71 @@ describe('a local server', () => {
       const moved = Option.map(World.get(world, client.entity, Position), (position) => position.x);
       expect(world.tick).toBeGreaterThan(0);
       expect(Option.getOrElse(moved, () => 0)).toBeGreaterThan(0);
+    }),
+  );
+
+  it.live('runs the commands its rules issue with the services it is given', () =>
+    Effect.gen(function* () {
+      const said: Array<string> = [];
+      /** Where a greeting goes outside the world; this one keeps what it was told. */
+      const Mouth = Context.Service<{ readonly say: (words: string) => Effect.Effect<void> }>(
+        'Mouth',
+      );
+      const Waved = Action.make('Waved', {});
+      const Greeted = Event.make('Greeted', { player: Schema.Int });
+      const Greet = Command.make('Greet', {
+        args: { player: Schema.Int },
+        results: [Greeted],
+        execute: ({ player }) =>
+          Effect.gen(function* () {
+            yield* (yield* Mouth).say(`hello, ${player}`);
+            const greeted: Event.ValueOf<typeof Greeted> = { _tag: 'Greeted', player };
+            return greeted;
+          }),
+      });
+      const greet = Rule.on(Waved, {
+        writes: [],
+        emits: [],
+        commands: [Greet],
+        run: (context, waved) => {
+          context.command(Greet.of({ player: waved.player }));
+        },
+      });
+      const polite = Game.make({
+        stepRate: 30,
+        domains: [
+          Domain.make({
+            name: 'Polite',
+            requires: [],
+            components: [Position, Controls],
+            actions: [Waved],
+            events: [Greeted],
+            commands: [Greet],
+            systems: [],
+            rules: [greet],
+          }),
+        ],
+      });
+      const channel = new MessageChannel();
+
+      yield* WorkerTransport.serve({ ...hostOptions, game: polite }).pipe(
+        Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)),
+        Effect.provideService(Mouth, {
+          say: (words) =>
+            Effect.sync(() => {
+              said.push(words);
+            }),
+        }),
+        Effect.forkScoped,
+      );
+      const connection = yield* WorkerTransport.connect.pipe(
+        Effect.provide(BrowserWorker.layer(() => channel.port1)),
+      );
+      const client = yield* Client.connect(connection, { game: polite });
+      yield* client.act(Waved, {});
+      yield* Effect.sleep('300 millis');
+
+      expect(said).toEqual([`hello, ${client.entity}`]);
     }),
   );
 });
