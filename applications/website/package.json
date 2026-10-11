@@ -1,0 +1,34 @@
+{
+  "name": "@lightocean/website",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0",
+    "@lightocean/client": "*",
+    "@lightocean/core": "*",
+    "@lightocean/devtools": "*",
+    "@lightocean/foldkit": "*",
+    "@stylexjs/stylex": "0.19.0",
+    "effect": "4.0.0",
+    "foldkit": "0.167.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@foldkit/devtools": "0.167.0",
+    "@foldkit/ui": "0.167.0",
+    "@foldkit/vite-plugin": "0.27.0",
+    "@lightocean/vite-plugin": "*",
+    "@stylexjs/unplugin": "0.19.0",
+    "@types/three": "0.186.0"
+  }
+}
