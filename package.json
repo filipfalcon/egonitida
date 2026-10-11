@@ -5,7 +5,8 @@
   "description": "An engine for web applications, rendered by Three.js on WebGPU and written in Effect.",
   "workspaces": [
     "applications/*",
-    "libraries/*"
+    "libraries/*",
+    "examples/*"
   ],
   "type": "module",
   "scripts": {

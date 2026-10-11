@@ -1,0 +1,22 @@
+{
+  "name": "@lightocean/example-spinning-cube",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vp dev"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0",
+    "@lightocean/client": "*",
+    "@lightocean/core": "*",
+    "effect": "4.0.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "0.186.0"
+  }
+}

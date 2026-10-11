@@ -22,6 +22,6 @@ export default defineConfig({
     '*': 'vp check --fix',
   },
   test: {
-    projects: ['applications/*', 'libraries/*'],
+    projects: ['applications/*', 'examples/*', 'libraries/*'],
   },
 });
