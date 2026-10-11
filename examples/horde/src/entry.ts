@@ -2,7 +2,9 @@ import { BrowserWorker } from '@effect/platform-browser';
 import {
   type Devices,
   Drawing,
+  DualSense,
   Gamepads,
+  Hid,
   KeyboardAndMouse,
   Tab,
   View,
@@ -10,7 +12,7 @@ import {
 } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page, Rewind } from '@lightocean/devtools';
-import { Effect, Option } from 'effect';
+import { Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
 import * as HordeControls from '#src/controls.ts';
@@ -84,6 +86,25 @@ const main = Effect.gen(function* () {
   viewport.camera.lookAt(0, 0, 0);
 
   const keyboardAndMouse = yield* KeyboardAndMouse.make(window);
+  // Pads through WebHID: those the player gave leave for before, and more at H, a key being the gesture a browser asks for.
+  const drivers = [DualSense.driver];
+  const hid = { connections: [...(yield* Hid.granted(drivers))] };
+  // What a key starts runs within the page's scope, so a device connected at it stays connected while the page is open.
+  const run = Effect.runForkWith(yield* Effect.context<Scope.Scope>());
+  yield* listen('keydown', (event) => {
+    if (event.code === 'KeyH' && Hid.available()) {
+      run(
+        Hid.request(drivers).pipe(
+          Effect.tap((connected) =>
+            Effect.sync(() => {
+              hid.connections.push(...connected);
+            }),
+          ),
+          Effect.catch(({ reason }) => Effect.logWarning(reason)),
+        ),
+      );
+    }
+  });
   const done = { asked: new Array<Asked>() };
   if (import.meta.env.DEV) {
     yield* listen('keydown', (event) => {
@@ -133,7 +154,17 @@ const main = Effect.gen(function* () {
       onNone: () => Effect.void,
       onSome: (frame) =>
         Effect.gen(function* () {
-          const devices: Devices.State = { pads: Gamepads.poll(), ...keyboardAndMouse.read() };
+          // A pad read through WebHID is left out of the Gamepad API's, so it does not count twice.
+          const devices: Devices.State = {
+            pads: [
+              ...hid.connections.flatMap((connection) => Option.toArray(connection.pad())),
+              ...Gamepads.poll(
+                [],
+                hid.connections.map(({ model }) => model),
+              ),
+            ],
+            ...keyboardAndMouse.read(),
+          };
           const at = Option.getOrElse(frame.get(client.entity, Body.Position), () => ({
             x: 0,
             z: 0,
@@ -185,6 +216,9 @@ const main = Effect.gen(function* () {
                     : import.meta.env.DEV
                       ? ['', 'P pauses']
                       : []),
+                  ...(Hid.available() && hid.connections.length === 0
+                    ? ['H connects a DualSense through WebHID']
+                    : []),
                 ].join('\n'),
             },
           );
