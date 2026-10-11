@@ -269,7 +269,7 @@ The API above is built in this order, each step test-first, and each breaking on
 12. Skills, and the example that saves a score.
 13. Hosting in a Durable Object and prediction, as experimental, with the example over the network.
 
-Border is one plugin now; it is split into plugins that each own a part of it, one cut at a time and each discussed, since where to cut is Border's design. Border's seams close along the way, once what each rests on is in the simulation: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`); and pillars and crates become shapes with height, so rounds stop at them.
+Border is eight plugins (Level, Body, Player, Progress, Undead, Shooting, Knife, Explosives), and none writes what another owns: what one plugin does to another's state goes by an event the other declared, such as a weapon's `Hit` that the undead decide on, and only where bodies are and how they move is shared. Border's seams close along the way, once what each rests on is in the simulation: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`); and pillars and crates become shapes with height, so rounds stop at them.
 
 Later, for the editor:
 
