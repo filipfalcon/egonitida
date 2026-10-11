@@ -1,0 +1,9 @@
+/* The document itself, which StyleX cannot reach: no margin round the page, dark controls and scrollbars, and a smooth scroll to a section a link names. Everything the website draws, its ground and type too, is styled with StyleX beside its view, and StyleX adds its rules to this sheet when it builds. */
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+}
