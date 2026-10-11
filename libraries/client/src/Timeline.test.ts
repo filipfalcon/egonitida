@@ -77,6 +77,15 @@ describe('Timeline', () => {
     expect(Option.getOrElse(drawn(timeline), () => 0)).toBeCloseTo(59, 0);
   });
 
+  it('draws an older world at once when one arrives, as when the host goes back in time', () => {
+    const steady = Timeline.advance(receiveAll(start, [10, 11, 12]), STEP);
+
+    const back = Timeline.receive(steady, worldAt(5));
+
+    expect(drawn(back)).toEqual(Option.some(5));
+    expect(back.history.map(({ tick }) => tick)).toEqual([5]);
+  });
+
   it('shows an entity from the moment the world it appears in is reached', () => {
     const [withOther] = World.spawn(worldAt(2), [Position.of({ x: 100 })]);
     const timeline = Timeline.advance(

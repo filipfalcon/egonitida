@@ -75,11 +75,13 @@ const span = (timeline: Timeline) => {
     : Option.some({ oldest: timeOf(timeline, oldest), newest: timeOf(timeline, newest) });
 };
 
-/** Keeps `world` if it is newer than every world kept, and forgets what has grown older than kept worlds are. */
+/**
+ * Keeps `world`, and forgets what has grown older than kept worlds are. A world no newer than every world kept is one the host went back to, since a client hands on no world that arrived late: drawing starts over from it, at once.
+ */
 export const receive = (timeline: Timeline, world: World.World): Timeline => {
   const newest = timeline.history.at(-1);
   if (newest !== undefined && world.tick <= newest.tick) {
-    return timeline;
+    return { ...timeline, history: [world], cursor: timeOf(timeline, world) };
   }
   const since = timeOf(timeline, world) - timeline.keepSeconds;
   const history = [...timeline.history, world].filter((kept) => timeOf(timeline, kept) >= since);
