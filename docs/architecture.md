@@ -256,11 +256,10 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `skills/`: the agent skills, `lightocean`, `generate-domain`, and `audit-game`.
 - `applications/editor`: the editor: a document that is a world, edited by its editors' actions; played in a worker of its own; and debugged while it plays.
 - `applications/playground`: cubes a player asks for and paints: a world in a worker, drawn on a canvas, with the page around it Foldkit's, and the first application built of the two together.
-- `applications/net-spike`: the spike that hosted a world in a Durable Object.
 - `examples/spinning-cube`: the first example, a cube that turns: one component, one system, one domain, one view, told as a story and as a scene, and drawn in a browser from a local server in a worker.
 - `examples/click-to-colour`: cubes a click paints the next colour of a palette: a world changed by clicking what is drawn, through the `Pointing` domain the engine gives.
 - `examples/save-score`: a round against the clock whose score is saved: a rule that issues a command, the `Scores` service it needs, a Worker that keeps every score in Cloudflare KV, deployed by Alchemy with the namespace bound to it, and a page on Foldkit that says how the round goes.
-- `examples/shared-room`: walkers in a room many players share, steered by the keys: a Worker that sends a page to its room, a Durable Object for each room hosting it with `Room`, and a page that opens it over a WebSocket, deployed by Alchemy. Nothing is predicted yet.
+- `examples/shared-room`: walkers in a room many players share, steered by the keys: a Worker that sends a page to its room, a Durable Object for each room hosting it with `Room`, and a page that opens it over a WebSocket and predicts its own player with `Prediction`, deployed by Alchemy.
 - `examples/horde`: survivors in an arena against a horde that keeps rising: three domains requiring one another and sharing where bodies are, input and actions, events between domains, randomness, and entities spawned and despawned; what the devtools are shown on.
 
 The packages are to become `core` (adding commands, domains, and `Story`), `client` (adding local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object, and persistence), `reflection`, `devtools`, `devtools-mcp`, and `oxlint-plugin`. `engine` goes, its `Viewport` moving to `client`.
@@ -303,7 +302,7 @@ Optimization waits until the raw engine works: an interpolation buffer, binary e
 
 ## Findings
 
-The Durable Object spike (`applications/net-spike`) answered whether Durable Objects can host a fixed-step server. They can.
+A spike that hosted a world in a Durable Object answered whether Durable Objects can host a fixed-step server. They can.
 
 - Stepping once per timer firing ran the world 9 % slow, because a timer always fires late and stalls swallow whole intervals. Taking as many steps as real time owes, capped at five, keeps the world at its real rate.
 - Deployed on Cloudflare, two clients over 20 seconds: the room took every step on time and gave none up, round trips had a median of 25 ms, and snapshots arrived 33 ms apart at the median. The stalls of about 300 ms seen under `alchemy dev` did not happen.

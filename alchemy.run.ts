@@ -2,7 +2,6 @@ import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
-import NetSpike from './applications/net-spike/src/Server.ts';
 import Scores, { ScoresKV } from './examples/save-score/src/server.ts';
 import SharedRooms from './examples/shared-room/src/server.ts';
 
@@ -29,9 +28,6 @@ export default Alchemy.Stack(
       },
     });
 
-    // The network spike: a Worker in front of one Durable Object per room.
-    const netSpike = yield* NetSpike;
-
     // Where the save-score example keeps the best score: a Worker over a KV namespace, which is made first.
     yield* ScoresKV;
     const scores = yield* Scores;
@@ -56,7 +52,6 @@ export default Alchemy.Stack(
     return {
       playground: playground.urls,
       editor: editor.urls,
-      netSpike: netSpike.url,
       scores: scores.url,
       saveScore: saveScore.url,
       sharedRooms: sharedRooms.url,

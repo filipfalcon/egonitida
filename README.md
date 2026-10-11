@@ -156,11 +156,11 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 | `libraries/oxlint-plugin`  | Lint rules for what the types cannot enforce                                   |
 | `applications/editor`      | The editor: a document that is a world, played and debugged in the browser     |
 | `applications/playground`  | Cubes a player asks for and paints, with the page around them in Foldkit       |
-| `applications/net-spike`   | The spike that hosted a world in a Durable Object                              |
 | `examples/spinning-cube`   | A cube that turns                                                              |
 | `examples/click-to-colour` | Cubes a click paints                                                           |
 | `examples/save-score`      | A round whose score a rule saves through a command, to a Worker over KV        |
 | `examples/horde`           | Survivors against a horde: several domains, input, randomness, spawning        |
+| `examples/shared-room`     | Walkers in a room many share across the network, each player's own predicted   |
 | `skills`                   | Agent skills for starting out, adding a domain, and auditing a game            |
 
 ## Running it
