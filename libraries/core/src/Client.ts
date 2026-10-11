@@ -1,4 +1,4 @@
-import { Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
+import { Data, Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
@@ -34,12 +34,17 @@ export interface Client {
   readonly release: Effect.Effect<void>;
   /** Sends the host a control, such as a development tool's, which whatever listens beside the host reads; the game never sees it. */
   readonly control: (payload: unknown) => Effect.Effect<void>;
+  /** Asks whatever answers beside the host a question, such as a debugger's, and waits for its answer; the game never sees it. */
+  readonly ask: (question: unknown) => Effect.Effect<unknown, Unanswered>;
   /** Takes an action, which the host hands to the rules at its next step, as from this client's player. */
   readonly act: <Sent>(
     action: Action.Action<string, Sent, Event.Tagged>,
     value: Sent,
   ) => Effect.Effect<void>;
 }
+
+/** Why a question went unanswered: nothing beside the host answers, it refused, or the host answers no client's questions. */
+export class Unanswered extends Data.TaggedError('Unanswered')<{ readonly reason: string }> {}
 
 type SentInput = Protocol.Inputs['inputs'][number];
 
@@ -101,11 +106,28 @@ export const connect = (
     };
 
     // A snapshot of an earlier era, or older than the world already held in this one, arrived out of order, and is of no use.
+    // The questions asked and not yet answered, by their ids.
+    const asked = { next: 0, waiting: new Map<number, Deferred.Deferred<unknown, Unanswered>>() };
+    const answered = ({ id, outcome }: Protocol.Answer) =>
+      Effect.suspend(() => {
+        const waiting = asked.waiting.get(id);
+        asked.waiting.delete(id);
+        return waiting === undefined
+          ? Effect.void
+          : outcome._tag === 'Answered'
+            ? Deferred.succeed(waiting, outcome.answer)
+            : Deferred.fail(waiting, new Unanswered({ reason: outcome.reason }));
+      });
+
     const receive = (frame: Transport.Frame) =>
       frame.channel === 'reliable'
-        ? Option.match(Protocol.decodeWelcome(frame.payload), {
-            onNone: () => Effect.void,
-            onSome: (received) => Deferred.succeed(welcome, received).pipe(Effect.asVoid),
+        ? Option.match(Protocol.decodeAnswer(frame.payload), {
+            onSome: (answer) => Effect.asVoid(answered(answer)),
+            onNone: () =>
+              Option.match(Protocol.decodeWelcome(frame.payload), {
+                onNone: () => Effect.void,
+                onSome: (received) => Deferred.succeed(welcome, received).pipe(Effect.asVoid),
+              }),
           })
         : Option.match(Snapshot.apply(state.world, frame.payload, options.game), {
             onNone: () => Effect.void,
@@ -146,8 +168,18 @@ export const connect = (
         });
       });
 
-    const ask = (message: Protocol.ClientReliable) =>
+    const tell = (message: Protocol.ClientReliable) =>
       connection.send({ channel: 'reliable', payload: Protocol.encodeClientReliable(message) });
+
+    const ask = (question: unknown) =>
+      Effect.gen(function* () {
+        const waiting = yield* Deferred.make<unknown, Unanswered>();
+        const id = asked.next;
+        asked.next += 1;
+        asked.waiting.set(id, waiting);
+        yield* tell({ _tag: 'Ask', id, question });
+        return yield* Deferred.await(waiting);
+      });
 
     return {
       entity,
@@ -155,9 +187,10 @@ export const connect = (
       world: Effect.sync(() => state.world),
       worlds: Stream.fromPubSub(received),
       send,
-      hold: ask({ _tag: 'Hold' }),
-      release: ask({ _tag: 'Release' }),
-      act: (action, value) => ask({ _tag: 'Act', action: action.encode(value) }),
-      control: (payload) => ask({ _tag: 'Control', payload }),
+      hold: tell({ _tag: 'Hold' }),
+      release: tell({ _tag: 'Release' }),
+      act: (action, value) => tell({ _tag: 'Act', action: action.encode(value) }),
+      control: (payload) => tell({ _tag: 'Control', payload }),
+      ask,
     };
   });

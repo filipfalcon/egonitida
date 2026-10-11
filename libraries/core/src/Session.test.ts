@@ -689,6 +689,55 @@ describe('controls', () => {
   );
 });
 
+describe('questions', () => {
+  /** Why a question went unanswered; that it was answered, if it was. */
+  const reasonOf = (asking: Effect.Effect<unknown, Client.Unanswered>) =>
+    asking.pipe(
+      Effect.as('answered'),
+      Effect.catchTag('Unanswered', ({ reason }) => Effect.succeed(reason)),
+    );
+
+  it.effect('are answered by whatever answers beside the host, knowing which player asked', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      yield* host.answering((question, entity) =>
+        Effect.succeed({ heard: question, from: entity }),
+      );
+
+      const answer = yield* client.ask({ _tag: 'Span' });
+
+      expect(answer).toEqual({ heard: { _tag: 'Span' }, from: client.entity });
+    }),
+  );
+
+  it.effect('go unanswered with nothing to answer them, or what refused them', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      const unanswered = yield* reasonOf(client.ask({ _tag: 'Span' }));
+      const scope = yield* Scope.make();
+      yield* host.answering(() => Effect.fail('Nothing is kept yet.')).pipe(Scope.provide(scope));
+      const refused = yield* reasonOf(client.ask({ _tag: 'Span' }));
+
+      expect(unanswered).toBe('Nothing beside the host answers questions.');
+      expect(refused).toBe('Nothing is kept yet.');
+    }),
+  );
+
+  it.effect('go unanswered by a host that lets no client hold time', () =>
+    Effect.gen(function* () {
+      const host = yield* Host.make(hostOptions(false));
+      const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+      yield* host.connect(hostEnd);
+      const client = yield* Client.connect(clientEnd, { game });
+      yield* host.answering(() => Effect.succeed('an answer'));
+
+      const unanswered = yield* reasonOf(client.ask({ _tag: 'Span' }));
+
+      expect(unanswered).toBe('This host answers no client’s questions.');
+    }),
+  );
+});
+
 describe('commands', () => {
   /** Where health is kept outside the world: it says whether it kept an amount, or breaks. */
   const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(

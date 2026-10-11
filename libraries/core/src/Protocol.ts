@@ -3,10 +3,10 @@ import { Option, Schema } from 'effect';
 /**
  * What a host and its clients say to each other, apart from the snapshots themselves.
  *
- * - Reliable, host to client: `Welcome`, naming the entity the client controls.
+ * - Reliable, host to client: `Welcome`, naming the entity the client controls, and `Answer`, to a question the client asked.
  * - Unreliable, host to client: snapshots, as `Snapshot` encodes them.
  * - Unreliable, client to host: `Inputs`, the client's latest inputs repeated, so one lost message loses none of them.
- * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again, and `Act`, an action the player takes, encoded by its own schema.
+ * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again, `Act`, an action the player takes, encoded by its own schema, `Control`, for whatever listens beside the host, and `Ask`, a question for whatever answers beside it, which the answer names by its `id`.
  */
 
 /** How many of its latest inputs a client repeats in each message. */
@@ -31,10 +31,26 @@ const ClientReliable = Schema.Union([
   Schema.TaggedStruct('Release', {}),
   Schema.TaggedStruct('Act', { action: Schema.Unknown }),
   Schema.TaggedStruct('Control', { payload: Schema.Unknown }),
+  Schema.TaggedStruct('Ask', { id: Schema.Int, question: Schema.Unknown }),
 ]);
 export type ClientReliable = typeof ClientReliable.Type;
 
+/** The answer to the question a client asked as `id`: what was answered, or why nothing was. */
+const Answer = Schema.TaggedStruct('Answer', {
+  id: Schema.Int,
+  outcome: Schema.Union([
+    Schema.TaggedStruct('Answered', { answer: Schema.Unknown }),
+    Schema.TaggedStruct('Unanswered', { reason: Schema.String }),
+  ]),
+});
+export type Answer = typeof Answer.Type;
+
 const WelcomeJson = Schema.fromJsonString(Welcome);
+const AnswerJson = Schema.fromJsonString(Answer);
+
+export const encodeAnswer = (answer: Answer): string => Schema.encodeSync(AnswerJson)(answer);
+export const decodeAnswer = (text: string): Option.Option<Answer> =>
+  Schema.decodeOption(AnswerJson)(text);
 const ClientReliableJson = Schema.fromJsonString(ClientReliable);
 
 export const encodeClientReliable = (message: ClientReliable): string =>

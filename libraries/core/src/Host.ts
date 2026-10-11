@@ -86,6 +86,10 @@ export interface Host<Services = never> {
   readonly world: Effect.Effect<World.World>;
   /** The controls clients send, such as a development tool's, from now on, as they come; a host that lets no client hold time passes on none. */
   readonly controls: Stream.Stream<Control>;
+  /** Answers the questions clients ask, such as a debugger's, by `answer`, until the scope closes, as from the player of the entity that asked; what it fails with is the reason a question goes unanswered. A host that lets no client hold time answers none. */
+  readonly answering: (
+    answer: (question: unknown, entity: World.Entity) => Effect.Effect<unknown, string>,
+  ) => Effect.Effect<void, never, Scope.Scope>;
   /** Joins a player with no client, from beside the host, such as one an agent plays: the game's own `join` makes its entity, as it does for a client. */
   readonly join: Effect.Effect<World.Entity>;
   /** Lets go of the player of `entity`, by the game's own `leave`, whoever joined it. */
@@ -154,6 +158,19 @@ export const make = <Services = never>(
     const made = yield* Effect.context<Services | Scope.Scope>();
     const happened = yield* PubSub.unbounded<Happening>();
     const controlled = yield* PubSub.unbounded<Control>();
+    // What answers the questions clients ask, while something does.
+    const answers = {
+      answer:
+        Option.none<(question: unknown, entity: World.Entity) => Effect.Effect<unknown, string>>(),
+    };
+    /** The answer to `question`, asked by the player of `entity`, or why there is none. */
+    const answerOf = (question: unknown, entity: World.Entity) =>
+      !options.mayHold
+        ? Effect.fail('This host answers no client’s questions.')
+        : Option.match(answers.answer, {
+            onNone: () => Effect.fail('Nothing beside the host answers questions.'),
+            onSome: (answer) => answer(question, entity),
+          });
     // Open while time runs; the loop waits here while it is held.
     const running = yield* Latch.make(true);
 
@@ -243,8 +260,13 @@ export const make = <Services = never>(
       yield* takeDueSteps;
     }).pipe(Effect.forever, Effect.forkScoped);
 
-    /** Holds or lets go of time for a client, if the host allows holding at all. */
-    const receiveReliable = (entity: World.Entity, frame: Transport.Frame) =>
+    /** Holds or lets go of time for a client, if the host allows holding at all, and answers its questions in `scope`, apart from its frames, so a slow answer holds nothing up. */
+    const receiveReliable = (
+      entity: World.Entity,
+      frame: Transport.Frame,
+      connection: Transport.Connection,
+      scope: Scope.Scope,
+    ) =>
       Option.match(Protocol.decodeClientReliable(frame.payload), {
         onNone: () => Effect.void,
         onSome: (message) =>
@@ -257,6 +279,25 @@ export const make = <Services = never>(
                 );
               }
               return Effect.void;
+            }
+            if (message._tag === 'Ask') {
+              return answerOf(message.question, entity).pipe(
+                Effect.match({
+                  onSuccess: (answer): Protocol.Answer['outcome'] => ({ _tag: 'Answered', answer }),
+                  onFailure: (reason): Protocol.Answer['outcome'] => ({
+                    _tag: 'Unanswered',
+                    reason,
+                  }),
+                }),
+                Effect.flatMap((outcome) =>
+                  connection.send({
+                    channel: 'reliable',
+                    payload: Protocol.encodeAnswer({ _tag: 'Answer', id: message.id, outcome }),
+                  }),
+                ),
+                Effect.forkIn(scope),
+                Effect.asVoid,
+              );
             }
             if (!options.mayHold) {
               return Effect.void;
@@ -323,10 +364,11 @@ export const make = <Services = never>(
           channel: 'reliable',
           payload: Protocol.encodeWelcome({ entity, stepRate: state.setup.game.stepRate }),
         });
+        const scope = yield* Effect.scope;
         yield* connection.frames.pipe(
           Stream.runForEach((frame) =>
             frame.channel === 'reliable'
-              ? receiveReliable(entity, frame)
+              ? receiveReliable(entity, frame, connection, scope)
               : Effect.sync(() => receive(entity, frame)),
           ),
           Effect.forkScoped,
@@ -338,6 +380,16 @@ export const make = <Services = never>(
       connect,
       world: Effect.sync(() => state.world),
       controls: Stream.fromPubSub(controlled),
+      answering: (answer) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            answers.answer = Option.some(answer);
+          }),
+          () =>
+            Effect.sync(() => {
+              answers.answer = Option.none();
+            }),
+        ),
       join: Effect.sync(() => {
         const [world, entity] = state.setup.join(state.world);
         state.world = world;
