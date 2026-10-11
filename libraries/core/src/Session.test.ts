@@ -141,6 +141,24 @@ describe('a session between a host and its clients', () => {
     }),
   );
 
+  it.effect('tells a client which of its inputs each world took in, by their numbers', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+
+      const first = yield* client.send([Controls.of({ move: 1, fire: false })]);
+      yield* advance(100);
+      const second = yield* client.send([Controls.of({ move: 0, fire: false })]);
+      const before = yield* client.world;
+      yield* advance(100);
+      const after = yield* client.world;
+
+      expect([first, second]).toEqual([1, 2]);
+      expect(client.ackedAt(before.tick)).toEqual(Option.some(1));
+      expect(client.ackedAt(after.tick)).toEqual(Option.some(2));
+      expect((yield* host.world).tick).toBe(after.tick);
+    }),
+  );
+
   it.effect('ignores what a client sends for anything but input', () =>
     Effect.gen(function* () {
       const { host, client, clientEnd } = yield* session;

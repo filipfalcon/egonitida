@@ -26,8 +26,10 @@ export interface Client {
   readonly world: Effect.Effect<World.World>;
   /** Every world the client receives from now on that is newer than the one before, in order. */
   readonly worlds: Stream.Stream<World.World>;
-  /** Sends the player's input, as values of input components. */
-  readonly send: (values: ReadonlyArray<Component.Instance>) => Effect.Effect<void>;
+  /** Sends the player's input, as values of input components, and gives the number it was sent as. */
+  readonly send: (values: ReadonlyArray<Component.Instance>) => Effect.Effect<number>;
+  /** The number of the newest input of this client's that the world at `tick` took in, if the host said so: 0 for none yet. Inputs numbered above it are yet to be, which a client predicting its own player plays ahead. */
+  readonly ackedAt: (tick: number) => Option.Option<number>;
   /** Asks the host to hold time; a host that does not allow it goes on. */
   readonly hold: Effect.Effect<void>;
   /** Lets go of time this client held. */
@@ -77,12 +79,15 @@ export const connect = (
       kept: ReadonlyArray<World.World>;
       seq: number;
       history: ReadonlyArray<SentInput>;
+      /** The number of the newest input each lately received world took in, by its tick. */
+      acked: Map<number, number>;
     } = {
       world: World.empty({ seed: 0 }),
       era: 0,
       kept: [],
       seq: 0,
       history: [],
+      acked: new Map(),
     };
 
     /**
@@ -129,26 +134,40 @@ export const connect = (
                 onSome: (received) => Deferred.succeed(welcome, received).pipe(Effect.asVoid),
               }),
           })
-        : Option.match(Snapshot.apply(state.world, frame.payload, options.game), {
-            onNone: () => Effect.void,
-            onSome: ({ era, world }) =>
-              Effect.suspend(() => {
-                if (era < state.era || (era === state.era && world.tick <= state.world.tick)) {
-                  return Effect.void;
+        : Option.match(Protocol.decodeAcked(frame.payload), {
+            onSome: ({ tick, seq }) =>
+              Effect.sync(() => {
+                state.acked.set(tick, seq);
+                // As many as the worlds kept, the oldest let go first.
+                for (const old of state.acked.keys()) {
+                  if (state.acked.size <= KEPT_WORLDS) {
+                    break;
+                  }
+                  state.acked.delete(old);
                 }
-                const next =
-                  era > state.era
-                    ? backTo(frame.payload, world.tick)
-                    : Option.some(keepUp(world, state.world.tick));
-                return Option.match(next, {
-                  onNone: () => Effect.void,
-                  onSome: (arrived) => {
-                    state.era = era;
-                    state.world = arrived;
-                    state.kept = [...state.kept, arrived].slice(-KEPT_WORLDS);
-                    return PubSub.publish(received, arrived).pipe(Effect.asVoid);
-                  },
-                });
+              }),
+            onNone: () =>
+              Option.match(Snapshot.apply(state.world, frame.payload, options.game), {
+                onNone: () => Effect.void,
+                onSome: ({ era, world }) =>
+                  Effect.suspend(() => {
+                    if (era < state.era || (era === state.era && world.tick <= state.world.tick)) {
+                      return Effect.void;
+                    }
+                    const next =
+                      era > state.era
+                        ? backTo(frame.payload, world.tick)
+                        : Option.some(keepUp(world, state.world.tick));
+                    return Option.match(next, {
+                      onNone: () => Effect.void,
+                      onSome: (arrived) => {
+                        state.era = era;
+                        state.world = arrived;
+                        state.kept = [...state.kept, arrived].slice(-KEPT_WORLDS);
+                        return PubSub.publish(received, arrived).pipe(Effect.asVoid);
+                      },
+                    });
+                  }),
               }),
           });
 
@@ -162,10 +181,12 @@ export const connect = (
           0,
           Protocol.MAX_REPEATED_INPUTS,
         );
-        return connection.send({
-          channel: 'unreliable',
-          payload: Protocol.encodeInputs({ inputs: state.history }),
-        });
+        return connection
+          .send({
+            channel: 'unreliable',
+            payload: Protocol.encodeInputs({ inputs: state.history }),
+          })
+          .pipe(Effect.as(state.seq));
       });
 
     const tell = (message: Protocol.ClientReliable) =>
@@ -187,6 +208,7 @@ export const connect = (
       world: Effect.sync(() => state.world),
       worlds: Stream.fromPubSub(received),
       send,
+      ackedAt: (tick) => Option.fromNullishOr(state.acked.get(tick)),
       hold: tell({ _tag: 'Hold' }),
       release: tell({ _tag: 'Release' }),
       act: (action, value) => tell({ _tag: 'Act', action: action.encode(value) }),

@@ -132,7 +132,8 @@ export const make = <Services = never>(
       setup: { game: options.game, join: options.join, leave: options.leave },
       inputComponents: inputsOf(options.game),
       world: options.world,
-      connections: new Set<Transport.Connection>(),
+      /** Every client's connection, with the entity it controls. */
+      connections: new Map<Transport.Connection, World.Entity>(),
       /** The newest input of each client, waiting for the next step. */
       pending: new Map<World.Entity, ReadonlyArray<Input.Input>>(),
       /** The newest input given from beside the host for each entity, which goes in after its client's. */
@@ -202,13 +203,24 @@ export const make = <Services = never>(
         Effect.forkScoped,
       );
 
-    /** Sends every client `world`, in the era it is now. */
+    /** Sends every client `world`, in the era it is now, and the number of its newest input the world took in. */
     const broadcast = (world: World.World) =>
       Effect.suspend(() => {
         const payload = Snapshot.encode(world, state.setup.game, state.era);
         return Effect.forEach(
           state.connections,
-          (connection) => connection.send({ channel: 'unreliable', payload }),
+          ([connection, entity]) =>
+            Effect.andThen(
+              connection.send({ channel: 'unreliable', payload }),
+              connection.send({
+                channel: 'unreliable',
+                payload: Protocol.encodeAcked({
+                  _tag: 'Acked',
+                  tick: world.tick,
+                  seq: state.lastSeq.get(entity) ?? 0,
+                }),
+              }),
+            ),
           { discard: true },
         );
       });
@@ -347,7 +359,7 @@ export const make = <Services = never>(
         const [world, entity] = state.setup.join(state.world);
         state.world = world;
         PubSub.publishUnsafe(happened, { _tag: 'Joined', entity, client: true });
-        state.connections.add(connection);
+        state.connections.set(connection, entity);
         yield* Effect.addFinalizer(() =>
           Effect.suspend(() => {
             state.connections.delete(connection);

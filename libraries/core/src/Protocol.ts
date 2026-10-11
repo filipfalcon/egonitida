@@ -4,7 +4,7 @@ import { Option, Schema } from 'effect';
  * What a host and its clients say to each other, apart from the snapshots themselves.
  *
  * - Reliable, host to client: `Welcome`, naming the entity the client controls, and `Answer`, to a question the client asked.
- * - Unreliable, host to client: snapshots, as `Snapshot` encodes them.
+ * - Unreliable, host to client: snapshots, as `Snapshot` encodes them, each followed by `Acked`, the number of the client's newest input the world took in, so a client predicting its own player knows which of its inputs are yet to be.
  * - Unreliable, client to host: `Inputs`, the client's latest inputs repeated, so one lost message loses none of them.
  * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again, `Act`, an action the player takes, encoded by its own schema, `Control`, for whatever listens beside the host, and `Ask`, a question for whatever answers beside it, which the answer names by its `id`.
  */
@@ -25,6 +25,17 @@ const Inputs = Schema.Struct({
   ),
 });
 export type Inputs = typeof Inputs.Type;
+
+/** The number of the newest input of a client's that the world at `tick` took in; none taken yet is 0. */
+const Acked = Schema.TaggedStruct('Acked', { tick: Schema.Int, seq: Schema.Int });
+export type Acked = typeof Acked.Type;
+const AckedJson = Schema.fromJsonString(Acked);
+
+/** What the world took in of a client's inputs, as it travels to the client. */
+export const encodeAcked = (acked: Acked): string => Schema.encodeSync(AckedJson)(acked);
+/** What the world took in of this client's inputs; `None` for anything else, such as a snapshot. */
+export const decodeAcked = (text: string): Option.Option<Acked> =>
+  Schema.decodeOption(AckedJson)(text);
 
 const ClientReliable = Schema.Union([
   Schema.TaggedStruct('Hold', {}),
