@@ -6,6 +6,8 @@ import {
   Message,
   type Model,
   OpenPlay,
+  type Past,
+  type PlayingState,
   SendEdit,
   ShowPast,
   initialModel,
@@ -172,8 +174,8 @@ describe('the editor', () => {
 
   /** The page with the document playing, its world joined, with `steps` told and `maybePast` shown. */
   const playingWith = (
-    steps: Extract<Model['play'], { readonly _tag: 'Playing' }>['steps'] = [],
-    maybePast: Option.Option<{ readonly tick: number; readonly world: string }> = Option.none(),
+    steps: PlayingState['steps'] = [],
+    maybePast: Option.Option<typeof Past.Type> = Option.none(),
   ): Model => ({
     ...selecting,
     play: { _tag: 'Playing', opening: 'the document', world: 'Joined', steps, maybePast },
