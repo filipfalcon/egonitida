@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // Foldkit renders the DOM, and the world it shows is hosted in a worker the page starts.
+    "lib": ["esnext", "dom", "dom.iterable"]
+  }
+}

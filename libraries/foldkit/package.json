@@ -1,0 +1,19 @@
+{
+  "name": "@lightocean/foldkit",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0",
+    "@lightocean/client": "*",
+    "@lightocean/core": "*",
+    "effect": "4.0.0",
+    "foldkit": "0.167.0"
+  }
+}
