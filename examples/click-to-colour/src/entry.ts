@@ -1,5 +1,5 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Clicking, Drawing, Tab, View, Viewport } from '@lightocean/client';
+import { Clicking, Drawing, Mirror, Tab, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
@@ -7,7 +7,7 @@ import * as Three from 'three/webgpu';
 import * as Colour from '#src/colour.ts';
 import * as ColourView from '#src/colour.view.ts';
 
-// The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked. In development, it shows an agent what it draws.
+// The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked; the cubes are mirrored as buttons for the keyboard and a screen reader. In development, it shows an agent what it draws.
 /** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the world kept for the tab. */
 const host = Tab.id('cubes');
 
@@ -30,6 +30,13 @@ const main = Effect.gen(function* () {
   viewport.camera.lookAt(0, 0, 0);
 
   yield* Clicking.serve({ clicks: viewport.clicks, camera: viewport.camera, views, client });
+  // The cubes stand in a list read out by their labels too, so they can be reached and clicked from the keyboard.
+  const mirror = yield* Mirror.make({
+    container: document.body,
+    views,
+    scene: viewport.scene,
+    client,
+  });
   // In development, an agent asking through the development server can see what this page draws.
   if (import.meta.env.DEV) {
     yield* Option.match(Bridge.vite, {
@@ -42,7 +49,10 @@ const main = Effect.gen(function* () {
     });
   }
   yield* viewport.loop((seconds) =>
-    Option.match(drawing.frame(seconds), { onNone: () => Effect.void, onSome: views.frame }),
+    Option.match(drawing.frame(seconds), {
+      onNone: () => Effect.void,
+      onSome: (frame) => Effect.andThen(views.frame(frame), mirror.frame(frame)),
+    }),
   );
   return yield* Effect.never;
 }).pipe(
