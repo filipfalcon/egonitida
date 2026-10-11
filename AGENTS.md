@@ -53,6 +53,7 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 
 - A game's behaviour is told as a story (`Story.story`), stepping the game itself, in a `*.story.test.ts` file. A command never runs in a story: expect it, then resolve it with one of its results.
 - What views draw is told as a scene (`Scene.make`, `scene.show`, `scene.find`), in a `*.scene.test.ts` file, found by view and entity, never by walking the scene graph.
+- An application's page is told with Foldkit's own `Story` over its `update`, its Commands expected and resolved, never run; the world it shows is told by the world's stories.
 - No mocks and no fake timers: time is the world's step, effects are values, and services are given as Layers that record.
 
 ## A running game
@@ -75,5 +76,6 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 - A scene: `examples/spinning-cube/src/cube.scene.test.ts`
 - A local server and a page drawing from it: `examples/spinning-cube/src/simulation.worker.ts`, `examples/spinning-cube/src/entry.ts`
 - A local server with the devtools beside it in development, and the Vite config that serves them: `examples/horde/src/simulation.worker.ts`, `examples/horde/vite.config.ts`
+- An application built of a world and Foldkit: its page's Model, Messages, and Commands in `applications/playground/src/main.ts`, told in `main.test.ts`; the world joined, shown, and projected in `applications/playground/src/world.ts`
 - The engine's own tests: `libraries/core/src/Game.test.ts`, `libraries/client/src/View.test.ts`
 - A lint rule and its test: `libraries/oxlint-plugin/src/rules/pureSteps.ts`, `pureSteps.test.ts`

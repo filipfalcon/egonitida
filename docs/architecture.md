@@ -133,26 +133,21 @@ Everything that lives in 3D, an application as much as a game, is a world made o
 - The editor's documents are entities with components, its low-code rules are rules on actions, and Play-in-Editor runs a local server, as a game does.
 - A world with no systems need not step at its rate while nothing happens; when its host steps it is decided when it is built.
 
-What is built now is the first iteration, from before the principles above: the Elm Architecture over the whole application, which the playground and Play-in-Editor run on. It goes once worlds and views can carry them; the reconciler may stay inside as an implementation.
-
-- One program has one Model and one `update`, and two views of the Model:
-  - `view: Model → Html`, rendered by Foldkit into the DOM.
-  - `viewScene: Model → Scene`, rendered by LightOcean into Three.js.
-- `Scene` is a declarative tree of keyed nodes. A reconciler applies the difference between two trees to the live Three.js graph, keeping objects whose keys survive.
-- A click in the 3D world comes back as a Message: the nearest object under the pointer decides it, an object without a handler blocks it, and a click that hits nothing produces the scene's `onClickNothing`.
+The editor and Play-in-Editor still run on the first iteration, from before the principles above: the Elm Architecture over the whole application, with a second view of the Model, `viewScene: Model → Scene`, that a reconciler in `libraries/engine` applies to Three.js. They move onto worlds next, and `engine` goes with them.
 
 ### The frame loop
 
-- The scene is rebuilt when the Model changes, not every frame.
-- Continuous motion is declared as data on a node, such as a spin. The engine advances it every frame without touching the Model, so the Model holds intent and the engine produces motion.
+- Views draw every frame from the frame drawn; continuous motion, such as a spin, is a function of the frame's time or a local component, never data the engine advances outside the world.
 - The per-frame work is tight synchronous code inside one Effect, with no Effect operation per object.
 
 ### UI
 
 - Foldkit renders the DOM layer of every application and the editor itself. Forms, text, links, and accessibility come from the DOM, the way Unreal layers UMG over its world.
-- The 3D viewport joins Foldkit through two of its own mechanisms:
-  - A **Mount** on the canvas acquires the renderer for exactly as long as the canvas is in the DOM.
-  - A **Subscription** that stays alive across Model changes runs the frame loop, draws the latest scene, and turns clicks into Messages.
+- An application meets its world through `@lightocean/foldkit`, and through three of Foldkit's own mechanisms:
+  - The world is a **Managed Resource** (`World.managed`): joined in a worker while the Model wants it, and left once it does not. Commands reach it through the resource, to take the player's actions, such as asking for a cube.
+  - The canvas is in the DOM because `view` puts it there; a **Mount** says when it is, and a **Subscription** (`Stage.stream`) shows the world on it: the game's views every frame, a click as `Pointing.Clicked`, and the accessible mirror beside it. A Mount reaches nothing but its element, never a Managed Resource, so showing the world is a Subscription's work.
+  - What the page shows of the world is a **projection** (`Projection.stream`): a value read off the world and its player, described by a schema, and told in a Message only when it changes. The Model holds no more of the world than the DOM shows, so `view` stays a function of the Model and Foldkit's DevTools show what changed in what is shown.
+- Foldkit's DevTools stay in Inspect mode: going back in time is the rewind beside the host, which the page draws. In development an agent reaches both halves: Foldkit's own MCP relay answers for the page's Model and Messages, and `lightocean-devtools` for the world.
 
 ### API
 
@@ -254,13 +249,13 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `libraries/core`: the world, components, actions, events, systems, rules, the game, the host, the client, transports, and snapshots.
 - `libraries/client`: the timeline, interpolation, and the drawing.
 - `libraries/foldkit`: a world in an application built on Foldkit: `World`, joined in a worker the page starts and held as a Foldkit Managed Resource while the application's Model wants it; and `Stage`, the world shown on a canvas Foldkit keeps, through the game's views, played by a click, and mirrored for the keyboard, while a Subscription runs; and `Projection`, what an application shows of a world kept in its Model, told as it is and again only when it changes.
-- `libraries/engine`: the `Scene` description, `SceneHost` (reconciler, picking, motion, resource lifetimes), and `Viewport` (the renderer on a canvas).
+- `libraries/engine`: the `Scene` description, `SceneHost` (reconciler, picking, motion, resource lifetimes), and `Viewport` (the renderer on a canvas), which the editor runs on until it moves onto worlds.
 - `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a world told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent asks of a hosted game, answered as data; and `Bridge` and `Relay`, the way such requests travel from a tool to a host and back.
 - `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is.
 - `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio, reaching its hosts through the development server's relay; `.mcp.json` offers it.
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
 - `applications/editor`: the editor.
-- `applications/playground`: the first proof that one Model drives both the DOM and the 3D world.
+- `applications/playground`: cubes a player asks for and paints: a world in a worker, drawn on a canvas, with the page around it Foldkit's, and the first application built of the two together.
 - `applications/net-spike`: the spike that hosted a world in a Durable Object.
 - `examples/spinning-cube`: the first example, a cube that turns: one component, one system, one domain, one view, told as a story and as a scene, and drawn in a browser from a local server in a worker.
 - `examples/click-to-colour`: cubes a click paints the next colour of a palette: a world changed by clicking what is drawn, through the `Pointing` domain the engine gives.
@@ -319,7 +314,8 @@ Border's whole fight runs in the simulation: her body, the lab's progress and do
 
 Split into eight domains, Border grew by 3 % and from ten events to fifteen; no domain writes another's components any more, where sixteen systems and rules did, and what a hit does to one of the undead is one rule instead of three slightly different ones. Asking who changes a component is answered by one line of `Game.changes`. Two costs are known and watched rather than fixed: some events only relay a decision to the domain that owns what it changes, such as `Fell` and `Rose` setting whether a body is in the way; and an event emitted by a system is handled after every system has run, so what it starts happens a step later, as a tank lit by a round now goes up one step (a sixtieth of a second) after it is hit. If relays multiply, components derived from others may answer them; if a step's delay shows, so may handling some events between systems.
 
+The playground answered how Foldkit and a world meet. Rules keep their own loop, in a host, and Foldkit keeps the UI: its `update` decides what the page does and asks the world through Commands, never steps it. Of Foldkit's mechanisms, a Mount reaches only its element, so the canvas Mount says only that the canvas is there, and a Subscription, which reaches Managed Resources, shows the world; what the page shows of the world arrives as projections, a Message only when a value changes, so the page's Model stays as small as what it shows.
+
 ## Open questions
 
-- Whether Foldkit can apply game rules synchronously inside a step, or whether rules need their own loop with Foldkit kept for UI.
 - How simulation components are stored so per-step work does not copy immutable data, while their schemas still describe them.
