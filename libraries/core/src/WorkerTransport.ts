@@ -36,8 +36,13 @@ export const connect: Effect.Effect<
 export const serve = <Services = never>(
   options: Host.Options<Services>,
 ): Effect.Effect<void, WorkerError, WorkerRunner.WorkerRunnerPlatform | Scope.Scope | Services> =>
+  Effect.flatMap(Host.make(options), serveHost);
+
+/** The worker's side, for a host made beforehand, so the worker may also watch it, as development tools do: connects every page to `host`, until the scope closes. */
+export const serveHost = (
+  host: Host.Host,
+): Effect.Effect<void, WorkerError, WorkerRunner.WorkerRunnerPlatform | Scope.Scope> =>
   Effect.gen(function* () {
-    const host = yield* Host.make(options);
     const runner = yield* (yield* WorkerRunner.WorkerRunnerPlatform).start<
       Transport.Frame,
       Transport.Frame

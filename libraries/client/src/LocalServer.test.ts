@@ -8,12 +8,13 @@ import {
   Domain,
   Event,
   Game,
+  Host,
   Rule,
   System,
   WorkerTransport,
   World,
 } from '@lightocean/core';
-import { Context, Effect, Option, Schema } from 'effect';
+import { Context, Effect, Fiber, Option, Schema, Stream } from 'effect';
 
 const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }), {
   owner: 'simulation',
@@ -150,6 +151,32 @@ describe('a local server', () => {
       yield* Effect.sleep('300 millis');
 
       expect(said).toEqual([`hello, ${client.entity}`]);
+    }),
+  );
+
+  it.live('serves a host made beforehand, which the worker may watch as it serves', () =>
+    Effect.gen(function* () {
+      const channel = new MessageChannel();
+      const host = yield* Host.make(hostOptions);
+      const watching = yield* host.watch;
+      const joined = yield* watching.happenings.pipe(
+        Stream.take(1),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+
+      yield* WorkerTransport.serveHost(host).pipe(
+        Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)),
+        Effect.forkScoped,
+      );
+      const connection = yield* WorkerTransport.connect.pipe(
+        Effect.provide(BrowserWorker.layer(() => channel.port1)),
+      );
+      const client = yield* Client.connect(connection, { game });
+
+      expect(yield* Fiber.join(joined)).toEqual(
+        Option.some({ _tag: 'Joined', entity: client.entity }),
+      );
     }),
   );
 });
