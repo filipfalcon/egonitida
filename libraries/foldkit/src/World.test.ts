@@ -12,6 +12,7 @@ import {
 } from '@lightocean/core';
 import { Effect, Option, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
+import * as Held from '#src/Held.ts';
 import * as World from '#src/World.ts';
 
 /** A tally a player adds to, one at a time. */
@@ -165,7 +166,7 @@ describe('a world from Foldkit', () => {
 
       const told = yield* World.whenJoined({ resource, onJoined: () => 'joined' }).pipe(
         Stream.runCollect,
-        Effect.provideService(resource._tag, held),
+        Held.holding(resource, held),
       );
 
       expect(told).toEqual(['joined']);

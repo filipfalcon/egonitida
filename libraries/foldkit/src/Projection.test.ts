@@ -12,6 +12,7 @@ import {
 } from '@lightocean/core';
 import { Effect, Option, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
+import * as Held from '#src/Held.ts';
 import * as Projection from '#src/Projection.ts';
 import * as World from '#src/World.ts';
 
@@ -127,7 +128,7 @@ describe('a projection', () => {
         }).pipe(
           Stream.runCollect,
           // As Foldkit holds a resource it has not acquired, such as one a Model restored after a reload says is.
-          Effect.provideService(resource._tag, yield* Ref.make(Option.none<World.Joined>())),
+          Held.holding(resource, yield* Ref.make(Option.none<World.Joined>())),
         );
 
         expect(told).toEqual(['not joined']);
