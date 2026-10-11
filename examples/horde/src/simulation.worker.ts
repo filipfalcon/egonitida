@@ -1,11 +1,11 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { WorkerTransport, World } from '@lightocean/core';
-import { Reload, Replay, Rewind } from '@lightocean/devtools';
-import { Effect } from 'effect';
+import { Bridge, Inspect, Reload, Replay, Rewind } from '@lightocean/devtools';
+import { Effect, Option } from 'effect';
 import * as Game from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 
-// The local server: the arena stepped off the main thread, with a survivor for every page that joins. In development the game is replayed beside it, and the first step where the replay comes apart from it is reported; the last thirty seconds are kept, for the page to go back in; and when the game's code changes, this module runs again and hands the host the new build, which plays on from the world it was at. A build that cannot take that world up reloads the page, and the game starts over.
+// The local server: the arena stepped off the main thread, with a survivor for every page that joins. In development the game is replayed beside it, and the first step where the replay comes apart from it is reported; the last thirty seconds are kept, for the page to go back in, and for an agent to ask after through the development server; and when the game's code changes, this module runs again and hands the host the new build, which plays on from the world it was at. A build that cannot take that world up reloads the page, and the game starts over.
 const setup = { game: Game.game, join: Survivor.join, leave: World.despawn };
 
 Effect.runFork(
@@ -19,7 +19,12 @@ Effect.runFork(
           Effect.catch((unreadable) => Effect.logError('The horde cannot be replayed', unreadable)),
           Effect.forkScoped,
         );
-        yield* Rewind.serve(host, yield* Rewind.make(host, setup, { every: 30, keepSeconds: 30 }));
+        const rewind = yield* Rewind.make(host, setup, { every: 30, keepSeconds: 30 });
+        yield* Rewind.serve(host, rewind);
+        yield* Option.match(Bridge.vite, {
+          onNone: () => Effect.void,
+          onSome: (channel) => Bridge.serve(channel, Inspect.make(host, rewind), { name: 'horde' }),
+        });
       }
       yield* WorkerTransport.serveHost(host);
     }),
