@@ -11,9 +11,16 @@ import * as Cubes from '#src/cubes.ts';
 
 // MODEL
 
+/** The world as far as the page has it: being joined, or joined, with the canvas it is shown on waiting to be in the page or mounted there. */
+export const WorldState = Schema.Union([
+  Schema.TaggedStruct('Joining', {}),
+  Schema.TaggedStruct('Joined', { canvas: Schema.Literals(['Waiting', 'Mounted']) }),
+]);
+export type WorldState = typeof WorldState.Type;
+
+/** The playground's page: the world as far as it has it, how many cubes it holds, and what last went wrong. */
 export const Model = Schema.Struct({
-  isWorldJoined: Schema.Boolean,
-  isCanvasMounted: Schema.Boolean,
+  world: WorldState,
   cubeCount: Schema.Int,
   maybeError: Schema.Option(Schema.String),
 });
@@ -21,6 +28,7 @@ export type Model = typeof Model.Type;
 
 // MESSAGE
 
+/** What happens on the page: the world joined and left, what it tells, and what the player does. */
 export const Message = defineMessageUnion({
   JoinedWorld: {},
   LeftWorld: {},
@@ -63,15 +71,23 @@ export const AskForCube = Command.define('AskForCube', {
 const failed = (model: Model, reason: string) =>
   modifyFields(model, { maybeError: () => Option.some(reason) });
 
+/** The page after `message`, and the Commands it sends: a cube asked of the world. */
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, Services>>(message, {
-    JoinedWorld: () => ({ model: modifyFields(model, { isWorldJoined: () => true }) }),
+    JoinedWorld: () => ({
+      model: modifyFields(model, { world: () => ({ _tag: 'Joined', canvas: 'Waiting' }) }),
+    }),
     // The canvas goes with the world, so a world joined again waits for its own canvas.
     LeftWorld: () => ({
-      model: modifyFields(model, { isWorldJoined: () => false, isCanvasMounted: () => false }),
+      model: modifyFields(model, { world: () => ({ _tag: 'Joining' }) }),
     }),
     FailedJoinWorld: ({ reason }) => ({ model: failed(model, reason) }),
-    MountedCanvas: () => ({ model: modifyFields(model, { isCanvasMounted: () => true }) }),
+    MountedCanvas: () => ({
+      model:
+        model.world._tag === 'Joined'
+          ? modifyFields(model, { world: () => ({ _tag: 'Joined', canvas: 'Mounted' }) })
+          : model,
+    }),
     FailedShowWorld: ({ reason }) => ({ model: failed(model, reason) }),
     CountedCubes: ({ count }) => ({ model: modifyFields(model, { cubeCount: () => count }) }),
     ClickedSpawnCube: () => ({ model, commands: [AskForCube()] }),
@@ -81,11 +97,12 @@ export const update = (model: Model, message: Message) =>
 
 // INIT
 
+/** The page as it opens: joining the world, no cubes counted. */
 export const initialModel: Model = {
-  isWorldJoined: false,
-  isCanvasMounted: false,
+  world: { _tag: 'Joining' },
   cubeCount: 0,
   maybeError: Option.none(),
 };
 
+/** The page as it opens. */
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({ model: initialModel });

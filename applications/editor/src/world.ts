@@ -128,13 +128,13 @@ const selectedBy = (world: Worlds.World, editor: Worlds.Entity): Option.Option<S
 
 /** What the canvas shows: nothing until it and the document are there, then the document being edited, or the document playing once its world is joined. */
 const shownBy = (model: Model): 'Nothing' | 'Editing' | 'Playing' => {
-  if (!model.isDocumentJoined || !model.isCanvasMounted) {
+  if (model.document._tag !== 'Joined' || model.document.canvas !== 'Mounted') {
     return 'Nothing';
   }
   if (model.play._tag === 'Editing') {
     return 'Editing';
   }
-  return model.isPlayJoined ? 'Playing' : 'Nothing';
+  return model.play.world === 'Joined' ? 'Playing' : 'Nothing';
 };
 
 /** The ticks the debugger of the document playing keeps. */
@@ -200,14 +200,16 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
   steps: entry(
     { isPlayJoined: Schema.Boolean },
     {
-      modelToDependencies: ({ isPlayJoined }) => ({ isPlayJoined }),
+      modelToDependencies: ({ play }) => ({
+        isPlayJoined: play._tag === 'Playing' && play.world === 'Joined',
+      }),
       dependenciesToStream: ({ isPlayJoined }) => (isPlayJoined ? stepsTold : Stream.empty),
     },
   ),
   outline: entry(
     { isDocumentJoined: Schema.Boolean },
     {
-      modelToDependencies: ({ isDocumentJoined }) => ({ isDocumentJoined }),
+      modelToDependencies: ({ document }) => ({ isDocumentJoined: document._tag === 'Joined' }),
       dependenciesToStream: ({ isDocumentJoined }) =>
         isDocumentJoined
           ? Projection.stream({
@@ -222,7 +224,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
   selection: entry(
     { isDocumentJoined: Schema.Boolean },
     {
-      modelToDependencies: ({ isDocumentJoined }) => ({ isDocumentJoined }),
+      modelToDependencies: ({ document }) => ({ isDocumentJoined: document._tag === 'Joined' }),
       dependenciesToStream: ({ isDocumentJoined }) =>
         isDocumentJoined
           ? Projection.stream({

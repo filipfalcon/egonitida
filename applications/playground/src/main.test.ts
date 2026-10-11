@@ -6,8 +6,7 @@ import { AskForCube, Message, initialModel, update } from '#src/main.ts';
 describe('the playground', () => {
   it('starts joining the world, with nothing shown and no cubes counted', () => {
     expect(initialModel).toEqual({
-      isWorldJoined: false,
-      isCanvasMounted: false,
+      world: { _tag: 'Joining' },
       cubeCount: 0,
       maybeError: Option.none(),
     });
@@ -20,11 +19,11 @@ describe('the playground', () => {
       Story.message(Message.JoinedWorld()),
       Story.message(Message.MountedCanvas()),
       Story.model((model) => {
-        expect([model.isWorldJoined, model.isCanvasMounted]).toEqual([true, true]);
+        expect(model.world).toEqual({ _tag: 'Joined', canvas: 'Mounted' });
       }),
       Story.message(Message.LeftWorld()),
       Story.model((model) => {
-        expect([model.isWorldJoined, model.isCanvasMounted]).toEqual([false, false]);
+        expect(model.world).toEqual({ _tag: 'Joining' });
       }),
     );
   });
@@ -32,7 +31,7 @@ describe('the playground', () => {
   it('asks the world for a cube when Spawn cube is clicked, and leaves the count to the world', () => {
     Story.story(
       update,
-      Story.given({ ...initialModel, isWorldJoined: true }),
+      Story.given({ ...initialModel, world: { _tag: 'Joined', canvas: 'Mounted' } }),
       Story.message(Message.ClickedSpawnCube()),
       Story.Command.expectExact(AskForCube),
       Story.Command.resolve(AskForCube, Message.AskedWorldForCube()),

@@ -37,30 +37,44 @@ export const Selected = Schema.Struct({
 });
 export type Selected = typeof Selected.Type;
 
-/** Whether the document is being edited, or plays from `opening`, the document as it was when Play was pressed. */
+/** The document as far as the page has it: being joined, or joined, with the canvas it is shown on waiting to be in the page or mounted there. */
+export const DocumentState = Schema.Union([
+  Schema.TaggedStruct('Joining', {}),
+  Schema.TaggedStruct('Joined', { canvas: Schema.Literals(['Waiting', 'Mounted']) }),
+]);
+export type DocumentState = typeof DocumentState.Type;
+
+/** What the debugger shows of the document playing: the world as it was after `tick`, entity by entity as JSON. */
+export const Past = Schema.Struct({ tick: Schema.Int, world: Schema.String });
+
+/**
+ * Whether the document is being edited, or plays from `opening`, the document as it was when Play was pressed: its world being opened or joined, the steps its debugger told of in which something happened, and the past it shows, if not the live world.
+ */
 export const Play = Schema.Union([
   Schema.TaggedStruct('Editing', {}),
-  Schema.TaggedStruct('Playing', { opening: Schema.String }),
+  Schema.TaggedStruct('Playing', {
+    opening: Schema.String,
+    world: Schema.Literals(['Opening', 'Joined']),
+    steps: Schema.Array(Log.Step),
+    maybePast: Schema.Option(Past),
+  }),
 ]);
 export type Play = typeof Play.Type;
+export type PlayingState = Extract<Play, { readonly _tag: 'Playing' }>;
 
+/** The editor's page: the document as far as it has it, its objects as the outliner lists them, the one selected, whether the document plays, and what last went wrong. */
 export const Model = Schema.Struct({
-  isDocumentJoined: Schema.Boolean,
-  isCanvasMounted: Schema.Boolean,
+  document: DocumentState,
   outline: Schema.Array(OutlineEntry),
   maybeSelected: Schema.Option(Selected),
   play: Play,
-  isPlayJoined: Schema.Boolean,
-  /** The steps of the document playing in which something happened, as its debugger tells them. */
-  steps: Schema.Array(Log.Step),
-  /** The tick the debugger shows the world after, and the world then, entity by entity as JSON; none while it shows the live world. */
-  maybePast: Schema.Option(Schema.Struct({ tick: Schema.Int, world: Schema.String })),
   maybeError: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
 
 // MESSAGE
 
+/** What happens on the page: the document and the world playing joined and left, what they tell, and what the editor does. */
 export const Message = defineMessageUnion({
   JoinedDocument: {},
   LeftDocument: {},
@@ -281,26 +295,41 @@ const sending = (
   edit: Option.Option<Edit>,
 ): Update.Return<Model, Message, Services> =>
   Option.match(
-    Option.filter(edit, () => model.play._tag === 'Editing'),
+    Option.filter(edit, () => isEditing(model)),
     {
       onNone: () => ({ model }),
       onSome: (sent) => ({ model, commands: [SendEdit({ edit: sent })] }),
     },
   );
 
+/** Whether the document is being edited, rather than played. */
+const isEditing = (model: Model) => model.play._tag === 'Editing';
+
+/** `model` with what plays changed by `change`, while the document plays; as it is otherwise. */
+const whilePlaying = (model: Model, change: (playing: PlayingState) => PlayingState): Model => {
+  const { play } = model;
+  return play._tag === 'Playing' ? modifyFields(model, { play: () => change(play) }) : model;
+};
+
 /** An edit of the selected object, if one is selected. */
 const ofSelected = (model: Model, edit: (entity: number) => Option.Option<Edit>) =>
   Option.flatMap(model.maybeSelected, ({ entity }) => edit(entity));
 
+/** The page after `message`, and the Commands it sends: edits to the document, what Play and the debugger ask of the world playing. */
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, Services>>(message, {
-    JoinedDocument: () => ({ model: modifyFields(model, { isDocumentJoined: () => true }) }),
-    // The canvas goes with the document, so a document joined again waits for its own canvas.
-    LeftDocument: () => ({
-      model: modifyFields(model, { isDocumentJoined: () => false, isCanvasMounted: () => false }),
+    JoinedDocument: () => ({
+      model: modifyFields(model, { document: () => ({ _tag: 'Joined', canvas: 'Waiting' }) }),
     }),
+    // The canvas goes with the document, so a document joined again waits for its own canvas.
+    LeftDocument: () => ({ model: modifyFields(model, { document: () => ({ _tag: 'Joining' }) }) }),
     FailedJoinDocument: ({ reason }) => ({ model: failed(model, reason) }),
-    MountedCanvas: () => ({ model: modifyFields(model, { isCanvasMounted: () => true }) }),
+    MountedCanvas: () => ({
+      model:
+        model.document._tag === 'Joined'
+          ? modifyFields(model, { document: () => ({ _tag: 'Joined', canvas: 'Mounted' }) })
+          : model,
+    }),
     FailedShowDocument: ({ reason }) => ({ model: failed(model, reason) }),
     ProjectedOutline: ({ objects }) => ({ model: modifyFields(model, { outline: () => objects }) }),
     ProjectedSelection: ({ maybeSelected }) => ({
@@ -373,45 +402,56 @@ export const update = (model: Model, message: Message) =>
     FailedSendEdit: ({ reason }) => ({ model: failed(model, reason) }),
     ClickedPlay: () => ({
       model,
-      commands: model.play._tag === 'Editing' && model.isDocumentJoined ? [OpenPlay()] : [],
+      commands: isEditing(model) && model.document._tag === 'Joined' ? [OpenPlay()] : [],
     }),
     ReadDocumentForPlay: ({ opening }) => ({
-      model: modifyFields(model, { play: () => ({ _tag: 'Playing', opening }) }),
-    }),
-    FailedOpenPlay: ({ reason }) => ({ model: failed(model, reason) }),
-    JoinedPlay: () => ({ model: modifyFields(model, { isPlayJoined: () => true }) }),
-    LeftPlay: () => ({ model: modifyFields(model, { isPlayJoined: () => false }) }),
-    FailedJoinPlay: ({ reason }) => ({ model: failed(model, reason) }),
-    // The worker playing goes with it, and everything that happened while it played.
-    ClickedStop: () => ({
       model: modifyFields(model, {
-        play: () => ({ _tag: 'Editing' }),
-        steps: () => [],
-        maybePast: () => Option.none(),
+        play: () => ({
+          _tag: 'Playing',
+          opening,
+          world: 'Opening',
+          steps: [],
+          maybePast: Option.none(),
+        }),
       }),
     }),
-    ToldSteps: ({ steps }) => ({ model: modifyFields(model, { steps: () => steps }) }),
+    FailedOpenPlay: ({ reason }) => ({ model: failed(model, reason) }),
+    JoinedPlay: () => ({
+      model: whilePlaying(model, (playing) => ({ ...playing, world: 'Joined' })),
+    }),
+    LeftPlay: () => ({
+      model: whilePlaying(model, (playing) => ({ ...playing, world: 'Opening' })),
+    }),
+    FailedJoinPlay: ({ reason }) => ({ model: failed(model, reason) }),
+    // The worker playing goes with it, and everything that happened while it played.
+    ClickedStop: () => ({ model: modifyFields(model, { play: () => ({ _tag: 'Editing' }) }) }),
+    ToldSteps: ({ steps }) => ({
+      model: whilePlaying(model, (playing) => ({ ...playing, steps })),
+    }),
     InspectedStep: ({ tick }) => ({ model, commands: [ShowPast({ tick })] }),
     ShowedPast: ({ tick, world }) => ({
-      model: modifyFields(model, { maybePast: () => Option.some({ tick, world }) }),
+      model: whilePlaying(model, (playing) => ({
+        ...playing,
+        maybePast: Option.some({ tick, world }),
+      })),
     }),
     ClickedLive: () => ({ model, commands: [GoLive()] }),
-    WentLive: () => ({ model: modifyFields(model, { maybePast: () => Option.none() }) }),
+    WentLive: () => ({
+      model: whilePlaying(model, (playing) => ({ ...playing, maybePast: Option.none() })),
+    }),
     FailedDebug: ({ reason }) => ({ model: failed(model, reason) }),
   });
 
 // INIT
 
+/** The page as it opens: joining the document, with nothing outlined or selected, editing. */
 export const initialModel: Model = {
-  isDocumentJoined: false,
-  isCanvasMounted: false,
+  document: { _tag: 'Joining' },
   outline: [],
   maybeSelected: Option.none(),
   play: { _tag: 'Editing' },
-  isPlayJoined: false,
-  steps: [],
-  maybePast: Option.none(),
   maybeError: Option.none(),
 };
 
+/** The page as it opens. */
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({ model: initialModel });

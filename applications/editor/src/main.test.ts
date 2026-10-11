@@ -15,7 +15,7 @@ import {
 /** The page with the document joined, and a box selected. */
 const selecting: Model = {
   ...initialModel,
-  isDocumentJoined: true,
+  document: { _tag: 'Joined', canvas: 'Mounted' },
   outline: [
     { entity: 1, name: 'Box 1', kind: 'Box', reacts: false },
     { entity: 2, name: 'Sphere 2', kind: 'Sphere', reacts: false },
@@ -48,14 +48,10 @@ const sends = (message: Message, edit: Parameters<typeof SendEdit>[0]['edit']) =
 describe('the editor', () => {
   it('starts joining its document, with nothing shown, outlined, or selected', () => {
     expect(initialModel).toEqual({
-      isDocumentJoined: false,
-      isCanvasMounted: false,
+      document: { _tag: 'Joining' },
       outline: [],
       maybeSelected: Option.none(),
       play: { _tag: 'Editing' },
-      isPlayJoined: false,
-      steps: [],
-      maybePast: Option.none(),
       maybeError: Option.none(),
     });
   });
@@ -67,11 +63,11 @@ describe('the editor', () => {
       Story.message(Message.JoinedDocument()),
       Story.message(Message.MountedCanvas()),
       Story.model((model) => {
-        expect([model.isDocumentJoined, model.isCanvasMounted]).toEqual([true, true]);
+        expect(model.document).toEqual({ _tag: 'Joined', canvas: 'Mounted' });
       }),
       Story.message(Message.LeftDocument()),
       Story.model((model) => {
-        expect([model.isDocumentJoined, model.isCanvasMounted]).toEqual([false, false]);
+        expect(model.document).toEqual({ _tag: 'Joining' });
       }),
     );
   });
@@ -80,9 +76,9 @@ describe('the editor', () => {
     const projected = [
       Message.ProjectedOutline({ objects: selecting.outline }),
       Message.ProjectedSelection({ maybeSelected: selecting.maybeSelected }),
-    ].reduce((model, message) => update(model, message).model, {
+    ].reduce((model: Model, message) => update(model, message).model, {
       ...initialModel,
-      isDocumentJoined: true,
+      document: { _tag: 'Joined', canvas: 'Mounted' },
     });
 
     expect(projected).toEqual(selecting);
@@ -151,14 +147,17 @@ describe('the editor', () => {
       Story.Command.expectExact(OpenPlay),
       Story.Command.resolve(OpenPlay, Message.ReadDocumentForPlay({ opening: 'the document' })),
       Story.model((model) => {
-        expect([model.play, model.isPlayJoined]).toEqual([
-          { _tag: 'Playing', opening: 'the document' },
-          false,
-        ]);
+        expect(model.play).toEqual({
+          _tag: 'Playing',
+          opening: 'the document',
+          world: 'Opening',
+          steps: [],
+          maybePast: Option.none(),
+        });
       }),
       Story.message(Message.JoinedPlay()),
       Story.model((model) => {
-        expect(model.isPlayJoined).toBe(true);
+        expect(model.play).toMatchObject({ _tag: 'Playing', world: 'Joined' });
       }),
       Story.message(Message.ClickedStop()),
       Story.model((model) => {
@@ -166,13 +165,22 @@ describe('the editor', () => {
       }),
       Story.message(Message.LeftPlay()),
       Story.model((model) => {
-        expect(model.isPlayJoined).toBe(false);
+        expect(model.play).toEqual({ _tag: 'Editing' });
       }),
     );
   });
 
+  /** The page with the document playing, its world joined, with `steps` told and `maybePast` shown. */
+  const playingWith = (
+    steps: Extract<Model['play'], { readonly _tag: 'Playing' }>['steps'] = [],
+    maybePast: Option.Option<{ readonly tick: number; readonly world: string }> = Option.none(),
+  ): Model => ({
+    ...selecting,
+    play: { _tag: 'Playing', opening: 'the document', world: 'Joined', steps, maybePast },
+  });
+
   it('edits nothing while the document plays', () => {
-    const playing: Model = { ...selecting, play: { _tag: 'Playing', opening: 'the document' } };
+    const playing = playingWith();
     for (const edit of [
       Message.ClickedAddObject({ shape: 'Box' }),
       Message.ClickedObject({ entity: 2 }),
@@ -185,12 +193,7 @@ describe('the editor', () => {
   });
 
   describe('the debugger', () => {
-    /** The document playing, with a click on the box told. */
-    const playing: Model = {
-      ...selecting,
-      play: { _tag: 'Playing', opening: 'the document' },
-      isPlayJoined: true,
-    };
+    /** A click on the box, as the debugger tells it. */
     const clicked = {
       tick: 40,
       actions: [{ tag: 'Clicked', fields: '{"entity":1,"player":3}' }],
@@ -198,37 +201,39 @@ describe('the editor', () => {
     };
 
     it('keeps the steps the document playing tells of', () => {
-      const told = update(playing, Message.ToldSteps({ steps: [clicked] })).model;
+      const told = update(playingWith(), Message.ToldSteps({ steps: [clicked] })).model;
 
-      expect(told.steps).toEqual([clicked]);
+      expect(told.play).toMatchObject({ steps: [clicked] });
     });
 
     it('shows the world as it was after a step, the canvas too, and the live world again', () => {
       Story.story(
         update,
-        Story.given({ ...playing, steps: [clicked] }),
+        Story.given(playingWith([clicked])),
         Story.message(Message.InspectedStep({ tick: 40 })),
         Story.Command.expectExact(ShowPast({ tick: 40 })),
         Story.Command.resolve(ShowPast, Message.ShowedPast({ tick: 40, world: '{"1":{}}' })),
         Story.model((model) => {
-          expect(model.maybePast).toEqual(Option.some({ tick: 40, world: '{"1":{}}' }));
+          expect(model.play).toMatchObject({
+            maybePast: Option.some({ tick: 40, world: '{"1":{}}' }),
+          });
         }),
         Story.message(Message.ClickedLive()),
         Story.Command.expectExact(GoLive),
         Story.Command.resolve(GoLive, Message.WentLive()),
         Story.model((model) => {
-          expect(model.maybePast).toEqual(Option.none());
+          expect(model.play).toMatchObject({ maybePast: Option.none() });
         }),
       );
     });
 
     it('forgets what it was told once playing stops', () => {
       const stopped = update(
-        { ...playing, steps: [clicked], maybePast: Option.some({ tick: 40, world: '{}' }) },
+        playingWith([clicked], Option.some({ tick: 40, world: '{}' })),
         Message.ClickedStop(),
       ).model;
 
-      expect([stopped.steps, stopped.maybePast]).toEqual([[], Option.none()]);
+      expect(stopped.play).toEqual({ _tag: 'Editing' });
     });
   });
 });

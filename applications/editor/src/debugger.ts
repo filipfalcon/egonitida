@@ -3,7 +3,7 @@ import { Styled } from '@lightocean/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Option, Schema } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';
-import { Message, type Model } from '#src/main.ts';
+import { Message, type Model, type PlayingState } from '#src/main.ts';
 import { ui } from '#src/ui.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from './tokens.stylex.ts';
@@ -78,10 +78,14 @@ const changesOf = (model: Model, step: Log.Step): ReadonlyArray<string> =>
   ]);
 
 /** What the document playing has been through: what happened at each step, what it changed, and the world after any of them. */
-export const viewDebugger = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const shownTick = Option.map(model.maybePast, ({ tick }) => tick);
+export const viewDebugger = (
+  model: Model,
+  playing: PlayingState,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const shownTick = Option.map(playing.maybePast, ({ tick }) => tick);
   const shown = Option.flatMap(shownTick, (tick) =>
-    Option.fromNullishOr(model.steps.find((step) => step.tick === tick)),
+    Option.fromNullishOr(playing.steps.find((step) => step.tick === tick)),
   );
   return h.section(
     [],
@@ -103,11 +107,11 @@ export const viewDebugger = (model: Model, h: HtmlBuilder<Message>): Html => {
           ]),
       }),
       h.h2(Styled.attributes(h, ui.heading), ['Events']),
-      model.steps.length === 0
+      playing.steps.length === 0
         ? h.p(Styled.attributes(h, ui.hint), ['Click objects to make them react.'])
         : h.ol(
             Styled.attributes(h, styles.list),
-            model.steps.map((step) => {
+            playing.steps.map((step) => {
               const isShown = Option.contains(shownTick, step.tick);
               return h.li(
                 [h.Key(String(step.tick))],
@@ -142,7 +146,7 @@ export const viewDebugger = (model: Model, h: HtmlBuilder<Message>): Html => {
               ),
         ],
       }),
-      ...Option.match(model.maybePast, {
+      ...Option.match(playing.maybePast, {
         onNone: () => [],
         onSome: ({ world }) => [
           h.h2(Styled.attributes(h, ui.heading), ['World']),

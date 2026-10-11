@@ -61,7 +61,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
     { isShown: Schema.Boolean },
     {
       modelToDependencies: (model) => ({
-        isShown: model.isWorldJoined && model.isCanvasMounted,
+        isShown: model.world._tag === 'Joined' && model.world.canvas === 'Mounted',
       }),
       dependenciesToStream: ({ isShown }) =>
         isShown
@@ -78,7 +78,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
   cubes: entry(
     { isWorldJoined: Schema.Boolean },
     {
-      modelToDependencies: ({ isWorldJoined }) => ({ isWorldJoined }),
+      modelToDependencies: ({ world }) => ({ isWorldJoined: world._tag === 'Joined' }),
       dependenciesToStream: ({ isWorldJoined }) =>
         isWorldJoined
           ? Projection.stream({

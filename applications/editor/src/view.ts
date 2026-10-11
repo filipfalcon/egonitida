@@ -39,6 +39,9 @@ const styles = stylex.create({
 /** Whether the document is being edited, rather than played. */
 const isEditing = (model: Model) => model.play._tag === 'Editing';
 
+/** Whether the document is joined. */
+const isJoined = (model: Model) => model.document._tag === 'Joined';
+
 /** An object's name, as the Details panel edits it: its label's text. */
 const NameFields = Schema.Struct({
   text: Schema.String.annotate({ title: 'Name', inspector: Inspector.text() }),
@@ -71,7 +74,7 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html =>
         [
           h.Type('button'),
           ...Styled.attributes(h, ui.button),
-          h.Disabled(!model.isDocumentJoined || !isEditing(model)),
+          h.Disabled(!isJoined(model) || !isEditing(model)),
           h.OnClick(Message.ClickedAddObject({ shape: 'Box' })),
         ],
         ['+ Box'],
@@ -80,7 +83,7 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html =>
         [
           h.Type('button'),
           ...Styled.attributes(h, ui.button),
-          h.Disabled(!model.isDocumentJoined || !isEditing(model)),
+          h.Disabled(!isJoined(model) || !isEditing(model)),
           h.OnClick(Message.ClickedAddObject({ shape: 'Sphere' })),
         ],
         ['+ Sphere'],
@@ -156,16 +159,16 @@ const viewSelected = (model: Model, selected: Selected, h: HtmlBuilder<Message>)
 const viewSidePanel = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.aside(
     Styled.attributes(h, styles.panel),
-    isEditing(model)
-      ? [
+    model.play._tag === 'Playing'
+      ? [viewDebugger(model, model.play, h)]
+      : [
           h.h2(Styled.attributes(h, ui.heading), ['Details']),
           Option.match(model.maybeSelected, {
             onNone: () => h.p(Styled.attributes(h, ui.hint), ['Select an object to edit it.']),
             // Keyed by object, so switching selection replaces the form instead of patching one object's inputs into another's.
             onSome: (selected) => viewSelected(model, selected, h),
           }),
-        ]
-      : [viewDebugger(model, h)],
+        ],
   );
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
@@ -174,7 +177,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
     viewOutliner(model, h),
     h.main(Styled.attributes(h, styles.stage, !isEditing(model) && styles.playing), [
       // The canvas is in the page while the document is joined, and goes with it.
-      ...(model.isDocumentJoined
+      ...(isJoined(model)
         ? [
             h.canvas(
               [
@@ -193,7 +196,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
               [
                 h.Type('button'),
                 ...Styled.attributes(h, ui.button, styles.play),
-                h.Disabled(!model.isDocumentJoined),
+                h.Disabled(!isJoined(model)),
                 h.OnClick(Message.ClickedPlay()),
               ],
               ['▶ Play'],

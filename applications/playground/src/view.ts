@@ -39,7 +39,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Playground',
   body: h.main(Styled.attributes(h, styles.playground), [
     // The canvas is in the page while the world is joined, and goes with it.
-    ...(model.isWorldJoined
+    ...(model.world._tag === 'Joined'
       ? [
           h.canvas(
             [h.Id(CANVAS_ID), ...Styled.attributes(h, styles.viewport), h.OnMount(MountCanvas())],
@@ -52,7 +52,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
         [
           h.Type('button'),
           ...Styled.attributes(h, styles.button),
-          h.Disabled(!model.isWorldJoined),
+          h.Disabled(model.world._tag !== 'Joined'),
           h.OnClick(Message.ClickedSpawnCube()),
         ],
         ['Spawn cube'],
