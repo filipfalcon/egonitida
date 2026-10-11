@@ -47,4 +47,19 @@ describe('the MCP server over HTTP', () => {
       expect(listed).toContain('lightocean_screenshot');
     }).pipe(Effect.scoped),
   );
+
+  it.live(
+    'refuses a request from a page in a browser, so only tools on this machine reach it',
+    () =>
+      Effect.gen(function* () {
+        const { handler, dispose } = Server.webHandler(process.cwd());
+        yield* Effect.addFinalizer(() => Effect.promise(dispose));
+        const fromAPage = post({ id: 1, method: 'tools/list', params: {} });
+        fromAPage.headers.set('origin', 'http://localhost:5173');
+
+        const refused = yield* Effect.promise(() => handler(fromAPage));
+
+        expect(refused.status).toBe(403);
+      }).pipe(Effect.scoped),
+  );
 });
