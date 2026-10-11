@@ -22,7 +22,7 @@ export interface Scene<R = never> {
 /** A scene drawn through `views`, until the scope closes. */
 export const make = <R = never>(
   views: ReadonlyArray<View.View<R>>,
-): Effect.Effect<Scene<R>, never, R | Scope.Scope> =>
+): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
     const working = yield* View.make(views);
     const state = { previous: Option.none<Timeline.View>() };

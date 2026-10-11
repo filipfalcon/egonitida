@@ -124,7 +124,7 @@ export interface Views<R = never> {
   readonly root: Three.Group;
   /** What `view` built for `entity` and draws now, if anything. */
   readonly find: <Built extends Three.Object3D>(
-    view: Each<R, Built>,
+    view: Each<unknown, Built>,
     entity: World.Entity,
   ) => Option.Option<Built>;
   /** Draws `frame`: builds and lets go of what entities coming and going need, draws every object, and reacts to what just happened. */
@@ -136,15 +136,15 @@ interface Kept {
   readonly scope: Scope.Closeable;
 }
 
-/** `views` at work, until the scope closes, which lets go of everything they hold. */
+/** `views` at work, until the scope closes, which lets go of everything they hold. Each view is given its own scope for what it acquires, so a frame needs no scope of its own. */
 export const make = <R = never>(
   views: ReadonlyArray<View<R>>,
-): Effect.Effect<Views<R>, never, R | Scope.Scope> =>
+): Effect.Effect<Views<Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
     const root = new Three.Group();
     const scope = yield* Effect.scope;
     // What each `each` view keeps, by entity: its identity is the view and the entity together.
-    const kept = new Map<Each<R, Three.Object3D>, Map<World.Entity, Kept>>();
+    const kept = new Map<object, Map<World.Entity, Kept>>();
     // The scope each `during` view holds open, while its condition holds.
     const held = new Map<During<R>, Scope.Closeable>();
 
@@ -192,7 +192,7 @@ export const make = <R = never>(
     const react = (view: On<R>, frame: Drawing.Frame) =>
       Effect.forEach(
         [...frame.gained(view.component), ...frame.changed(view.component)],
-        (entity) => Effect.forkIn(view.react(entity, frame), scope),
+        (entity) => Effect.forkIn(Scope.provide(view.react(entity, frame), scope), scope),
         { discard: true },
       );
 
