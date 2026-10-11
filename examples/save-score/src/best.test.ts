@@ -60,22 +60,28 @@ describe('the best score', () => {
       }),
   );
 
-  it.effect('lets a page ask first whether it may post, and refuses what is no score', () =>
-    Effect.gen(function* () {
-      const { store } = inMemory();
+  it.effect(
+    'lets a page ask first whether it may post, with the headers its client sends, and refuses what is no score',
+    () =>
+      Effect.gen(function* () {
+        const { store } = inMemory();
 
-      const preflight = yield* answer(
-        store,
-        new Request('http://scores.test/scores', { method: 'OPTIONS' }),
-      );
-      const refused = yield* answer(
-        store,
-        new Request('http://scores.test/scores', { method: 'POST', body: '{"score":"many"}' }),
-      );
+        const preflight = yield* answer(
+          store,
+          new Request('http://scores.test/scores', { method: 'OPTIONS' }),
+        );
+        const refused = yield* answer(
+          store,
+          new Request('http://scores.test/scores', { method: 'POST', body: '{"score":"many"}' }),
+        );
 
-      expect(preflight.status).toBe(204);
-      expect(preflight.headers.get('access-control-allow-methods')).toBe('POST, OPTIONS');
-      expect(refused.status).toBe(400);
-    }),
+        expect(preflight.status).toBe(204);
+        expect(preflight.headers.get('access-control-allow-methods')).toBe('POST, OPTIONS');
+        // What the page's HTTP client sends with every post: its JSON, and where its trace goes on.
+        expect(preflight.headers.get('access-control-allow-headers')).toBe(
+          'content-type, traceparent, b3',
+        );
+        expect(refused.status).toBe(400);
+      }),
   );
 });

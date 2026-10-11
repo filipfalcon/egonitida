@@ -34,11 +34,11 @@ export const keep = <E, R>(store: Store<E, R>, score: number): Effect.Effect<num
 /** What a page posts: the score of a round. */
 const Saved = Schema.Struct({ score: Schema.Int });
 
-/** What a page may send from anywhere, as a browser asks before it posts. */
+/** What a page may send from anywhere, as a browser asks before it posts: a score, with the trace headers an Effect HTTP client adds. */
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'POST, OPTIONS',
-  'access-control-allow-headers': 'content-type',
+  'access-control-allow-headers': 'content-type, traceparent, b3',
 };
 
 /** Answers a page: a POST of a score with the best kept so far; a browser's asking first with what it may send; anything else, or what is no score, refused. */
