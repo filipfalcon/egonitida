@@ -5,11 +5,14 @@ import { Option } from 'effect';
  * How a survivor is played, with whatever the player holds: the controls bound to every kind of device, the pad's way first, and what a moment of them comes to in the horde's own input and actions.
  */
 
-/** Walking and aiming as sticks, firing and rising again as buttons; on a pad, Start rises again, as Options on a DualSense. */
+/** Walking and aiming as sticks, firing and rising again as buttons; walking by WASD or the arrows, and on a pad, Start rises again, as Options on a DualSense. */
 export const bindings = {
   move: Controls.stick({
     pad: 'LeftStick',
-    keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' },
+    keys: [
+      { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' },
+      { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' },
+    ],
   }),
   aim: Controls.stick({ pad: 'RightStick' }),
   fire: Controls.button({ pad: 'RightTrigger', mouse: 0 }),

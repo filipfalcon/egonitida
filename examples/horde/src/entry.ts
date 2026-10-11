@@ -1,5 +1,13 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { type Devices, Drawing, Gamepads, Tab, View, Viewport } from '@lightocean/client';
+import {
+  type Devices,
+  Drawing,
+  Gamepads,
+  KeyboardAndMouse,
+  Tab,
+  View,
+  Viewport,
+} from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page, Rewind } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
@@ -75,38 +83,13 @@ const main = Effect.gen(function* () {
   viewport.camera.position.set(0, 18, 13);
   viewport.camera.lookAt(0, 0, 0);
 
-  // What the keyboard and the mouse hold, and what was pressed since the last frame, so a tap shorter than a frame still counts.
-  const keys = { held: new Set<string>(), tapped: new Set<string>() };
-  const buttons = { held: new Set<number>(), tapped: new Set<number>() };
-  const pointer = new Three.Vector2();
+  const keyboardAndMouse = yield* KeyboardAndMouse.make(window);
   const done = { asked: new Array<Asked>() };
-  yield* listen('keydown', (event) => {
-    keys.held.add(event.code);
-    keys.tapped.add(event.code);
-    if (import.meta.env.DEV) {
+  if (import.meta.env.DEV) {
+    yield* listen('keydown', (event) => {
       done.asked.push(...Option.toArray(asked(event)));
-    }
-  });
-  yield* listen('keyup', (event) => keys.held.delete(event.code));
-  yield* listen('pointermove', (event) => {
-    pointer.set((event.clientX / innerWidth) * 2 - 1, -(event.clientY / innerHeight) * 2 + 1);
-  });
-  yield* listen('pointerdown', (event) => {
-    buttons.held.add(event.button);
-    buttons.tapped.add(event.button);
-  });
-  yield* listen('pointerup', (event) => buttons.held.delete(event.button));
-  /** Every device as it is this frame: the pads read off the browser, and the keyboard and mouse as they were held or tapped. */
-  const devices = (): Devices.State => {
-    const state: Devices.State = {
-      pads: Gamepads.poll(),
-      keys: new Set([...keys.held, ...keys.tapped]),
-      mouse: { buttons: new Set([...buttons.held, ...buttons.tapped]), dx: 0, dy: 0, wheel: 0 },
-    };
-    keys.tapped.clear();
-    buttons.tapped.clear();
-    return state;
-  };
+    });
+  }
   const played = { last: HordeControls.start };
 
   const ground = new Three.Plane(new Three.Vector3(0, 1, 0), 0);
@@ -150,16 +133,23 @@ const main = Effect.gen(function* () {
       onNone: () => Effect.void,
       onSome: (frame) =>
         Effect.gen(function* () {
-          ray.setFromCamera(pointer, viewport.camera);
+          const devices: Devices.State = { pads: Gamepads.poll(), ...keyboardAndMouse.read() };
           const at = Option.getOrElse(frame.get(client.entity, Body.Position), () => ({
             x: 0,
             z: 0,
           }));
-          const mouseAim =
-            ray.ray.intersectPlane(ground, aimed) === null
+          // Where the mouse points on the floor, as an angle from the survivor.
+          const mouseAim = Option.flatMap(devices.mouse.at, (point) => {
+            const { x, y } = Viewport.pointOf(
+              { clientX: point.x, clientY: point.y },
+              canvas.getBoundingClientRect(),
+            );
+            ray.setFromCamera(new Three.Vector2(x, y), viewport.camera);
+            return ray.ray.intersectPlane(ground, aimed) === null
               ? Option.none()
               : Option.some(Math.atan2(aimed.z - at.z, aimed.x - at.x));
-          const now = HordeControls.play(devices(), played.last, mouseAim);
+          });
+          const now = HordeControls.play(devices, played.last, mouseAim);
           played.last = now;
           yield* Effect.forEach(done.asked.splice(0), answer, { discard: true });
           if (!time.paused) {
