@@ -5,6 +5,7 @@ import {
   Component,
   Domain,
   Game,
+  Host,
   Rule,
   WorkerTransport,
   World as Worlds,
@@ -109,6 +110,47 @@ describe('a world from Foldkit', () => {
         _tag: 'FailedToJoin',
         reason: 'no worker',
       });
+    }).pipe(Effect.scoped),
+  );
+
+  it.live('is opened with what the Model holds, which the worker makes its host from', () =>
+    Effect.gen(function* () {
+      const channel = new MessageChannel();
+      yield* WorkerTransport.serveOpened((opening) =>
+        Host.make({
+          game,
+          world: Worlds.empty({ seed: 1 }),
+          join: (world: Worlds.World) =>
+            Worlds.spawn(world, [Tally.of({ count: Number(opening) })]),
+          leave: Worlds.despawn,
+          mayHold: false,
+        }),
+      ).pipe(
+        Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)),
+        Effect.forkScoped,
+      );
+      const opened = World.opened({
+        resource: ManagedResource.tag<World.Joined>()('Counting'),
+        game,
+        worker: () => channel.port1,
+        opens: ({ startingAt }: { readonly startingAt: Option.Option<string> }) => startingAt,
+        onJoined: () => 'joined',
+        onLeft: () => 'left',
+        onFailed: (reason) => reason,
+      });
+
+      const joined = yield* opened.acquire('5');
+      yield* Effect.sleep('200 millis');
+
+      expect(opened.modelToMaybeRequirements({ startingAt: Option.some('5') })).toEqual(
+        Option.some('5'),
+      );
+      expect(
+        Option.map(
+          Worlds.get(yield* joined.client.world, joined.client.entity, Tally),
+          ({ count }) => count,
+        ),
+      ).toEqual(Option.some(5));
     }).pipe(Effect.scoped),
   );
 });

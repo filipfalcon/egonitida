@@ -18,14 +18,17 @@ export interface Joined {
 /** How long a drawing keeps the worlds it was sent, in seconds, unless told. */
 const KEEP_SECONDS = 1;
 
-/** Joins the world of `game`, hosted in the worker `worker` starts, until the scope closes. */
+/** Joins the world of `game`, hosted in the worker `worker` starts, until the scope closes; opening with `opening`, if the worker makes its host from what a page opens with. */
 export const join = (
   game: Game.Game,
   worker: () => Worker | MessagePort,
-  options: { readonly keepSeconds?: number | undefined } = {},
+  options: {
+    readonly keepSeconds?: number | undefined;
+    readonly opening?: string | undefined;
+  } = {},
 ): Effect.Effect<Joined, WorkerError, Scope.Scope> =>
   Effect.gen(function* () {
-    const connection = yield* WorkerTransport.connect;
+    const connection = yield* WorkerTransport.connectOpening(options.opening ?? '');
     const client = yield* Client.connect(connection, { game });
     const drawing = yield* Drawing.make(client, {
       keepSeconds: options.keepSeconds ?? KEEP_SECONDS,
@@ -53,6 +56,34 @@ export const managed = <Model, Message, Service>(options: {
   modelToMaybeRequirements: (model: Model): Option.Option<null> =>
     options.joins(model) ? Option.some(null) : Option.none(),
   acquire: () => join(options.game, options.worker, { keepSeconds: options.keepSeconds }),
+  // The scope the world was joined in lets go of it.
+  release: () => Effect.void,
+  onAcquired: options.onJoined,
+  onReleased: options.onLeft,
+  onAcquireError: (error: unknown) =>
+    options.onFailed(error instanceof Error ? error.message : String(error)),
+});
+
+/** What a world opened by the Model asks of it: what to open with, while it is wanted. */
+export const Opening = Schema.Option(Schema.String);
+
+/**
+ * A world as a Foldkit Managed Resource opened with what the Model holds, for `entry(World.Opening, World.opened(…))`: joined while `opens` gives what to open the worker with, such as the world its host is to start from; opened anew when that changes, and left once it gives nothing.
+ */
+export const opened = <Model, Message, Service>(options: {
+  readonly resource: ManagedResource.ManagedResource<Joined, Service>;
+  readonly game: Game.Game;
+  readonly worker: () => Worker | MessagePort;
+  readonly keepSeconds?: number | undefined;
+  readonly opens: (model: Model) => Option.Option<string>;
+  readonly onJoined: (joined: Joined) => Message;
+  readonly onLeft: () => Message;
+  readonly onFailed: (reason: string) => Message;
+}) => ({
+  resource: options.resource,
+  modelToMaybeRequirements: options.opens,
+  acquire: (opening: string) =>
+    join(options.game, options.worker, { keepSeconds: options.keepSeconds, opening }),
   // The scope the world was joined in lets go of it.
   release: () => Effect.void,
   onAcquired: options.onJoined,
