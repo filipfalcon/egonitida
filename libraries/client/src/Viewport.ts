@@ -41,6 +41,38 @@ export const secondsBetween = (previous: Option.Option<number>, now: number): nu
     onSome: (then) => Math.min(Math.max((now - then) / 1000, 0), LONGEST_FRAME),
   });
 
+/** A shot of what `canvas` holds now, as a PNG in base64, at most `width` pixels across if given, over the canvas's own background as the page styles it. A canvas holds what was drawn only until the task that drew it ends, so a shot is taken in the same task as the drawing: for a page that draws with a renderer of its own rather than a viewport. */
+export const shot = (
+  canvas: HTMLCanvasElement,
+  width: Option.Option<number>,
+): Effect.Effect<
+  { readonly png: string; readonly width: number; readonly height: number },
+  ViewportError
+> =>
+  Effect.suspend(() => {
+    const scale = Option.match(width, {
+      onNone: () => 1,
+      onSome: (most) => Math.min(1, most / Math.max(canvas.width, 1)),
+    });
+    const taken = document.createElement('canvas');
+    taken.width = Math.max(1, Math.round(canvas.width * scale));
+    taken.height = Math.max(1, Math.round(canvas.height * scale));
+    const drawing = taken.getContext('2d');
+    if (drawing === null) {
+      return Effect.fail(new ViewportError({ reason: 'A shot cannot be drawn here.' }));
+    }
+    // What shows through where nothing is drawn is the canvas's own background, as the page styles it.
+    drawing.fillStyle = getComputedStyle(canvas).backgroundColor;
+    drawing.fillRect(0, 0, taken.width, taken.height);
+    drawing.drawImage(canvas, 0, 0, taken.width, taken.height);
+    const url = taken.toDataURL('image/png');
+    return Effect.succeed({
+      png: url.slice(url.indexOf(',') + 1),
+      width: taken.width,
+      height: taken.height,
+    });
+  });
+
 const startRenderer = (canvas: HTMLCanvasElement) =>
   Effect.acquireRelease(
     Effect.tryPromise({
@@ -151,27 +183,7 @@ export const make = (
           );
         }
         renderer.render(scene, camera);
-        const scale = Option.match(width, {
-          onNone: () => 1,
-          onSome: (most) => Math.min(1, most / Math.max(canvas.width, 1)),
-        });
-        const shot = document.createElement('canvas');
-        shot.width = Math.max(1, Math.round(canvas.width * scale));
-        shot.height = Math.max(1, Math.round(canvas.height * scale));
-        const drawing = shot.getContext('2d');
-        if (drawing === null) {
-          return Effect.fail(new ViewportError({ reason: 'A shot cannot be drawn here.' }));
-        }
-        // What shows through where nothing is drawn is the canvas's own background, as the page styles it.
-        drawing.fillStyle = getComputedStyle(canvas).backgroundColor;
-        drawing.fillRect(0, 0, shot.width, shot.height);
-        drawing.drawImage(canvas, 0, 0, shot.width, shot.height);
-        const url = shot.toDataURL('image/png');
-        return Effect.succeed({
-          png: url.slice(url.indexOf(',') + 1),
-          width: shot.width,
-          height: shot.height,
-        });
+        return shot(canvas, width);
       });
 
     return { canvas, scene, camera, clicks, render, capture, loop };
