@@ -9,11 +9,12 @@ import * as Fingerprint from '#src/Fingerprint.ts';
  */
 
 /** An input that reached a step: the entity it was aimed at, its component's name, and its value as the component encodes it. */
-const Input = Schema.Struct({
+export const Input = Schema.Struct({
   entity: Schema.Int,
   component: Schema.String,
   value: Schema.Unknown,
 });
+export type Input = typeof Input.Type;
 
 /** One thing that changed the world: a client joining or leaving, between steps, or a step taken, with the input that reached it, the actions the rules took in it, as their events encode them, and the fingerprint of the world it led to, which a replay must come to. */
 export const Entry = Schema.Union([
@@ -43,8 +44,8 @@ export interface Recorder {
   readonly recording: Effect.Effect<Recording>;
 }
 
-/** Encodes `action` by the schema of the action or event of `game` it is, found by its tag. */
-const encoderOf = (game: Game.Game) => {
+/** Encodes an action or event of `game` by its own schema, found by its tag. */
+export const encoderOf = (game: Game.Game) => {
   const byTag = new Map(
     [...game.actions, ...game.events].map((event) => [
       event.tag,

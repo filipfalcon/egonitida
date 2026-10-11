@@ -38,8 +38,15 @@ const tagOf = (encoded: unknown): Option.Option<string> =>
     ? Option.some(encoded._tag)
     : Option.none();
 
+/** What a replay came to after one entry: the world, and what each part did, if the replay is traced. */
+export interface Taken {
+  readonly entry: Recording.Entry;
+  readonly world: World.World;
+  readonly trace: ReadonlyArray<Game.Trace>;
+}
+
 /** How `setup` takes one entry after another, from a world to the next, or to where it came apart. */
-const taking = (setup: Setup) => {
+const taking = (setup: Setup, options: { readonly trace: boolean }) => {
   const inputs = new Map(
     setup.game.components
       .filter((component): component is Input.InputComponent => component.owner === 'input')
@@ -64,19 +71,19 @@ const taking = (setup: Setup) => {
   return (
     world: World.World,
     entry: Recording.Entry,
-  ): Effect.Effect<Result.Result<World.World, Divergence>, Unreadable> =>
+  ): Effect.Effect<Result.Result<Taken, Divergence>, Unreadable> =>
     Effect.gen(function* () {
       if (entry._tag === 'Joined') {
         const [joined, entity] = setup.join(world);
         return entity === entry.entity
-          ? Result.succeed(joined)
+          ? Result.succeed({ entry, world: joined, trace: [] })
           : Result.fail({
               tick: world.tick,
               where: { _tag: 'Joined', recorded: entry.entity, replayed: entity },
             });
       }
       if (entry._tag === 'Left') {
-        return Result.succeed(setup.leave(world, entry.entity));
+        return Result.succeed({ entry, world: setup.leave(world, entry.entity), trace: [] });
       }
       const given = yield* Effect.forEach(entry.inputs, ({ entity, component, value }) =>
         read(
@@ -97,12 +104,15 @@ const taking = (setup: Setup) => {
           () => 'an action the game cannot read',
         ),
       );
-      const stepped = Game.step(setup.game, world, given, taken, { freeze: false });
+      const stepped = Game.step(setup.game, world, given, taken, {
+        freeze: false,
+        trace: options.trace,
+      });
       return Option.match(
         Fingerprint.difference(entry.fingerprint, Fingerprint.of(setup.game, stepped.world)),
         {
-          onNone: () => Result.succeed(stepped.world),
-          onSome: (where): Result.Result<World.World, Divergence> =>
+          onNone: () => Result.succeed({ entry, world: stepped.world, trace: stepped.trace }),
+          onSome: (where): Result.Result<Taken, Divergence> =>
             Result.fail({ tick: entry.tick, where }),
         },
       );
@@ -115,23 +125,36 @@ const firstOf = (game: Game.Game, first: unknown) =>
     Effect.mapError((issue) => new Unreadable({ reason: issue.message })),
   );
 
+/** Replays `recording` with `setup`, traced if asked: what every entry came to, up to where it first came apart, if it did. */
+export const steps = (
+  setup: Setup,
+  recording: Recording.Recording,
+  options: { readonly trace?: boolean } = {},
+): Effect.Effect<
+  { readonly taken: ReadonlyArray<Taken>; readonly divergence: Option.Option<Divergence> },
+  Unreadable
+> =>
+  Effect.gen(function* () {
+    const take = taking(setup, { trace: options.trace ?? false });
+    const taken: Array<Taken> = [];
+    let world = yield* firstOf(setup.game, recording.first);
+    for (const entry of recording.entries) {
+      const next = yield* take(world, entry);
+      if (Result.isFailure(next)) {
+        return { taken, divergence: Option.some(next.failure) };
+      }
+      taken.push(next.success);
+      world = next.success.world;
+    }
+    return { taken, divergence: Option.none() };
+  });
+
 /** Replays `recording` with `setup`: where it first came apart, if it did. */
 export const check = (
   setup: Setup,
   recording: Recording.Recording,
 ): Effect.Effect<Option.Option<Divergence>, Unreadable> =>
-  Effect.gen(function* () {
-    const take = taking(setup);
-    let world = yield* firstOf(setup.game, recording.first);
-    for (const entry of recording.entries) {
-      const taken = yield* take(world, entry);
-      if (Result.isFailure(taken)) {
-        return Option.some(taken.failure);
-      }
-      world = taken.success;
-    }
-    return Option.none();
-  });
+  Effect.map(steps(setup, recording), ({ divergence }) => divergence);
 
 /**
  * Replays what `host` plays, beside it, from now until the scope closes, through a recording of it as it is made: it comes to where the replay first came apart, and never does while the game replays as it is played. For development, since it steps the game twice.
@@ -142,7 +165,7 @@ export const alongside = (
 ): Effect.Effect<Divergence, Unreadable, Scope.Scope> =>
   Effect.gen(function* () {
     const watching = yield* host.watch;
-    const take = taking(setup);
+    const take = taking(setup, { trace: false });
     const toEntry = Recording.entryOf(setup.game);
     // The replay starts from the world as a recording keeps it, encoded and read back, so it checks what a recording would.
     const encoded = yield* Schema.encodeEffect(Game.schema(setup.game))(watching.world).pipe(
@@ -155,7 +178,7 @@ export const alongside = (
         if (Result.isFailure(taken)) {
           return Result.succeed(taken.failure);
         }
-        state.world = taken.success;
+        state.world = taken.success.world;
         return Result.failVoid;
       }),
       Stream.runHead,
