@@ -8,51 +8,61 @@ import type * as Devices from '#src/Devices.ts';
 /** A stick of a pad, by the side it is on. */
 export type PadStick = 'LeftStick' | 'RightStick';
 
-/** A control worked as a stick: a pad's, or four keys. */
-export interface Stick {
-  readonly _tag: 'Stick';
-  readonly pad: Option.Option<PadStick>;
-  readonly keys: Option.Option<{
-    readonly up: string;
-    readonly down: string;
-    readonly left: string;
-    readonly right: string;
-  }>;
+/** Four keys that work a stick. */
+export interface Keys {
+  readonly up: string;
+  readonly down: string;
+  readonly left: string;
+  readonly right: string;
 }
 
-/** A control worked as a button: a pad's, a key, or a mouse button. */
+/** A control worked as a stick: by a pad's sticks, or by sets of four keys, any of them. */
+export interface Stick {
+  readonly _tag: 'Stick';
+  readonly pad: ReadonlyArray<PadStick>;
+  readonly keys: ReadonlyArray<Keys>;
+}
+
+/** A control worked as a button: by a pad's buttons, keys, or mouse buttons, any of them. */
 export interface Button {
   readonly _tag: 'Button';
-  readonly pad: Option.Option<Devices.PadButton>;
-  readonly key: Option.Option<string>;
-  readonly mouse: Option.Option<number>;
+  readonly pad: ReadonlyArray<Devices.PadButton>;
+  readonly key: ReadonlyArray<string>;
+  readonly mouse: ReadonlyArray<number>;
 }
 
 export type Binding = Stick | Button;
 
+/** One of something, or several. */
+type Some<A> = A | ReadonlyArray<A>;
+
+const all = <A>(
+  some: Some<A> | undefined,
+  one: (value: Some<A>) => value is A,
+): ReadonlyArray<A> => (some === undefined ? [] : one(some) ? [some] : some);
+
+const isString = (value: Some<string>): value is string => typeof value === 'string';
+const isNumber = (value: Some<number>): value is number => typeof value === 'number';
+const isKeys = (value: Some<Keys>): value is Keys => 'up' in value;
+
 export const stick = (bound: {
-  readonly pad?: PadStick;
-  readonly keys?: {
-    readonly up: string;
-    readonly down: string;
-    readonly left: string;
-    readonly right: string;
-  };
+  readonly pad?: Some<PadStick>;
+  readonly keys?: Some<Keys>;
 }): Stick => ({
   _tag: 'Stick',
-  pad: Option.fromNullishOr(bound.pad),
-  keys: Option.fromNullishOr(bound.keys),
+  pad: all(bound.pad, (value): value is PadStick => typeof value === 'string'),
+  keys: all(bound.keys, isKeys),
 });
 
 export const button = (bound: {
-  readonly pad?: Devices.PadButton;
-  readonly key?: string;
-  readonly mouse?: number;
+  readonly pad?: Some<Devices.PadButton>;
+  readonly key?: Some<string>;
+  readonly mouse?: Some<number>;
 }): Button => ({
   _tag: 'Button',
-  pad: Option.fromNullishOr(bound.pad),
-  key: Option.fromNullishOr(bound.key),
-  mouse: Option.fromNullishOr(bound.mouse),
+  pad: all(bound.pad, (value): value is Devices.PadButton => typeof value === 'string'),
+  key: all(bound.key, isString),
+  mouse: all(bound.mouse, isNumber),
 });
 
 /** The kind of device a player uses. */
@@ -159,21 +169,19 @@ export const read = <Bindings extends Readonly<Record<string, Binding>>>(
   const held = new Set<string>();
   for (const [name, binding] of Object.entries(bindings)) {
     if (binding._tag === 'Stick') {
-      const fromPads = Option.match(binding.pad, {
-        onNone: () => still,
-        onSome: (side) => devices.pads.map((pad) => padStick(pad, side)).reduce(longer, still),
-      });
-      const fromKeys = Option.match(binding.keys, {
-        onNone: () => still,
-        onSome: (keys) => keysStick(devices.keys, keys),
-      });
+      const fromPads = binding.pad
+        .flatMap((side) => devices.pads.map((pad) => padStick(pad, side)))
+        .reduce(longer, still);
+      const fromKeys = binding.keys
+        .map((keys) => keysStick(devices.keys, keys))
+        .reduce(longer, still);
       sticks.set(name, longer(fromKeys, fromPads));
     } else {
-      const onPad = Option.exists(binding.pad, (bound) =>
+      const onPad = binding.pad.some((bound) =>
         devices.pads.some((pad) => pad.buttons[bound] > PRESSED),
       );
-      const onKey = Option.exists(binding.key, (key) => devices.keys.has(key));
-      const onMouse = Option.exists(binding.mouse, (bound) => devices.mouse.buttons.has(bound));
+      const onKey = binding.key.some((key) => devices.keys.has(key));
+      const onMouse = binding.mouse.some((bound) => devices.mouse.buttons.has(bound));
       if (onPad || onKey || onMouse) {
         held.add(name);
       }

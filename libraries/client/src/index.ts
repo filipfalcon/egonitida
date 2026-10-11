@@ -4,6 +4,7 @@ export * as Devices from '#src/Devices.ts';
 export * as Drawing from '#src/Drawing.ts';
 export * as Gamepads from '#src/Gamepads.ts';
 export * as Interpolate from '#src/Interpolate.ts';
+export * as KeyboardAndMouse from '#src/KeyboardAndMouse.ts';
 export * as Mirror from '#src/Mirror.ts';
 export * as Scene from '#src/Scene.ts';
 export * as Tab from '#src/Tab.ts';

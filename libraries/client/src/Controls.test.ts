@@ -69,4 +69,35 @@ describe('controls', () => {
     expect(drift.active).toEqual(Option.some('KeyboardAndMouse'));
     expect(read(idle).active).toEqual(Option.none());
   });
+
+  it('read a control bound to several keys, buttons, and pads alike', () => {
+    const many = {
+      move: Controls.stick({
+        keys: [
+          { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' },
+          { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' },
+        ],
+      }),
+      fire: Controls.button({
+        pad: ['RightTrigger', 'South'],
+        key: ['Space', 'Enter'],
+        mouse: [0, 2],
+      }),
+    };
+    const reading = (devices: Devices.State) => Controls.read(many, devices, Controls.start(many));
+
+    expect(reading({ ...idle, keys: new Set(['ArrowUp']) }).values.stick('move')).toEqual({
+      x: 0,
+      y: 1,
+    });
+    expect(reading({ ...idle, keys: new Set(['Enter']) }).values.button('fire').held).toBe(true);
+    expect(
+      reading({ ...idle, mouse: { ...idle.mouse, buttons: new Set([2]) } }).values.button('fire')
+        .held,
+    ).toBe(true);
+    expect(
+      reading(onPad({ buttons: { ...Devices.idlePad.buttons, South: 1 } })).values.button('fire')
+        .held,
+    ).toBe(true);
+  });
 });

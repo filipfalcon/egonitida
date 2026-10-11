@@ -1,3 +1,5 @@
+import { Option } from 'effect';
+
 /**
  * What every device a player holds is doing at one moment, in shapes no device has of its own: pads with the buttons and sticks of a standard pad, keys by their place on the keyboard, whatever its layout, and the mouse's buttons, its movement, and its wheel. Sources fill it, such as the Gamepad API or a WebHID driver; controls read it.
  */
@@ -53,12 +55,13 @@ export interface Pad {
   readonly axes: Readonly<Record<PadAxis, number>>;
 }
 
-/** The mouse: its buttons held, by number, and how far it and its wheel moved since the moment before. */
+/** The mouse: its buttons held, by number, how far it and its wheel moved since the moment before, and where it is on the page, once it has been there. */
 export interface Mouse {
   readonly buttons: ReadonlySet<number>;
   readonly dx: number;
   readonly dy: number;
   readonly wheel: number;
+  readonly at: Option.Option<{ readonly x: number; readonly y: number }>;
 }
 
 /** Every device at one moment. */
@@ -97,5 +100,5 @@ export const idlePad: Pad = {
 export const idle: State = {
   pads: [],
   keys: new Set(),
-  mouse: { buttons: new Set(), dx: 0, dy: 0, wheel: 0 },
+  mouse: { buttons: new Set(), dx: 0, dy: 0, wheel: 0, at: Option.none() },
 };
