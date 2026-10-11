@@ -52,6 +52,8 @@ export const make = (target: Window): Effect.Effect<Source, never, Scope.Scope> 
     yield* listen(target, 'pointerdown', (event) => {
       buttons.held.add(event.button);
       buttons.tapped.add(event.button);
+      // A press says where the mouse is too, as a click made with no move before it, such as the first, does.
+      pointer.at = Option.some({ x: event.clientX, y: event.clientY });
     });
     yield* listen(target, 'pointerup', (event) => buttons.held.delete(event.button));
     yield* listen(target, 'pointermove', (event) => {

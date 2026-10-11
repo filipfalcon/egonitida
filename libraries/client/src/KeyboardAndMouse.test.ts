@@ -67,6 +67,16 @@ describe('the keyboard and mouse', () => {
       }),
   );
 
+  it.effect('tell where the mouse is from a press too, made with no move before it', () =>
+    Effect.gen(function* () {
+      const source = yield* KeyboardAndMouse.make(window);
+
+      pointer('pointerdown', { button: 0, clientX: 70, clientY: 20 });
+
+      expect(source.read().mouse.at).toEqual(Option.some({ x: 70, y: 20 }));
+    }),
+  );
+
   it.effect('stop listening once its scope closes', () =>
     Effect.gen(function* () {
       const source = yield* Effect.scoped(KeyboardAndMouse.make(window));
