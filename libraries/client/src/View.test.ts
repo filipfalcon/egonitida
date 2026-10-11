@@ -236,3 +236,30 @@ describe('picking', () => {
     }),
   );
 });
+
+describe('objects of an entity', () => {
+  it.effect('are what every view built for it', () =>
+    Effect.gen(function* () {
+      const boxes = View.each([Crate], {
+        acquire: () => Effect.succeed(new Three.Group()),
+        draw: () => {},
+      });
+      const marks = View.each([Position], {
+        acquire: () => Effect.succeed(new Three.Group()),
+        draw: () => {},
+      });
+      const views = yield* View.make([boxes, marks]);
+      const [world, crate] = World.spawn(World.empty({ seed: 1 }), crateAt(1));
+      const [, loose] = World.spawn(world, [Position.of({ x: 2 })]);
+
+      yield* play(views, [World.spawn(world, [Position.of({ x: 2 })])[0]]);
+
+      expect(views.objectsOf(crate)).toEqual([
+        Option.getOrThrow(views.find(boxes, crate)),
+        Option.getOrThrow(views.find(marks, crate)),
+      ]);
+      expect(views.objectsOf(loose)).toHaveLength(1);
+      expect(views.objectsOf(99)).toEqual([]);
+    }),
+  );
+});

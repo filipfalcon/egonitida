@@ -141,6 +141,8 @@ export interface Views<R = never> {
     camera: Three.Camera,
     point: { readonly x: number; readonly y: number },
   ) => Option.Option<Picked>;
+  /** Every object the views built for `entity` and draw now, in the order of the views. */
+  readonly objectsOf: (entity: World.Entity) => ReadonlyArray<Three.Object3D>;
   /** Draws `frame`: builds and lets go of what entities coming and going need, draws every object, and reacts to what just happened. */
   readonly frame: (frame: Drawing.Frame) => Effect.Effect<void, never, R>;
 }
@@ -262,6 +264,14 @@ export const make = <R = never>(
           })),
         );
       },
+      objectsOf: (entity) =>
+        views.flatMap((view) =>
+          view._tag === 'Each'
+            ? Option.toArray(Option.fromNullishOr(kept.get(view)?.get(entity))).map(
+                ({ object }) => object,
+              )
+            : [],
+        ),
       find: (view, entity) =>
         Option.flatMap(Option.fromNullishOr(kept.get(view)?.get(entity)), ({ object }) =>
           view.own(object),
