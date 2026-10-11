@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Option, Schema } from 'effect';
+import { Effect, Option, Schema } from 'effect';
 import * as Action from '#src/Action.ts';
+import * as Command from '#src/Command.ts';
 import * as Component from '#src/Component.ts';
 import * as Event from '#src/Event.ts';
 import {
@@ -1005,5 +1006,128 @@ describe('a component holding a state', () => {
     );
 
     expect(World.get(back, second, Mood)).toEqual(World.get(world, second, Mood));
+  });
+});
+
+describe('commands', () => {
+  const SavedHealth = Event.make('SavedHealth', { entity: Schema.Int });
+  const FailedToSaveHealth = Event.make('FailedToSaveHealth', { entity: Schema.Int });
+  const ran: Array<number> = [];
+  const SaveHealth = Command.make('SaveHealth', {
+    args: { entity: Schema.Int, current: Schema.Int },
+    results: [SavedHealth, FailedToSaveHealth],
+    execute: ({ entity }) =>
+      Effect.sync(() => {
+        ran.push(entity);
+        return { _tag: 'SavedHealth', entity };
+      }),
+  });
+  const Saved = Component.make('Saved', Schema.Struct({}), { owner: 'rules', network: 'server' });
+  const save = Rule.on(Died, {
+    writes: [],
+    emits: [],
+    commands: [SaveHealth],
+    run: (context, died) => context.command(SaveHealth.of({ entity: died.entity, current: 0 })),
+  });
+  const mark = Rule.on(SavedHealth, {
+    writes: [Saved],
+    emits: [],
+    run: (context, saved) => context.set(saved.entity, Saved, {}),
+  });
+  const Saver = Domain.make({
+    name: 'Saver',
+    requires: [Fixture],
+    components: [Saved],
+    actions: [],
+    events: [SavedHealth, FailedToSaveHealth],
+    commands: [SaveHealth],
+    systems: [],
+    rules: [save, mark],
+  });
+  const saving = Game.make({ stepRate: 10, domains: [Fixture, Saver] });
+
+  it('are issued by the rules as values, and never run in a step', () => {
+    ran.length = 0;
+    Story.story(
+      saving,
+      Story.spawn('her', [Health.of({ current: 10 })]),
+      Story.happen(Bitten, { entity: 0, damage: 30 }),
+      Story.step(),
+      Story.expectCommand(SaveHealth, (issued) =>
+        expect(issued).toEqual([{ entity: 0, current: 0 }]),
+      ),
+    );
+
+    expect(ran).toEqual([]);
+  });
+
+  it('come back as one of their results, which the rules handle at a later step', () => {
+    Story.story(
+      saving,
+      Story.spawn('her', [Health.of({ current: 10 })]),
+      Story.resolve(SaveHealth, SavedHealth, { entity: 0 }),
+      Story.step(),
+      Story.expectEqual('her', Saved, {}),
+    );
+
+    expect(() =>
+      Story.story(
+        saving,
+        // @ts-expect-error Bitten is not what SaveHealth comes to.
+        Story.resolve(SaveHealth, Bitten, { entity: 0, damage: 1 }),
+      ),
+    ).toThrow('Bitten is not what SaveHealth comes to');
+  });
+
+  it('fail a story that expects one not issued', () => {
+    expect(() => Story.story(saving, Story.step(), Story.expectCommand(SaveHealth))).toThrow(
+      'no SaveHealth was issued',
+    );
+  });
+
+  it('are issued only by rules, and only those a rule and its domain declare', () => {
+    const Elsewhere = Command.make('Elsewhere', {
+      args: {},
+      results: [Bitten],
+      execute: () =>
+        Effect.succeed({ _tag: 'Bitten', entity: 0, damage: 0 } satisfies Event.ValueOf<
+          typeof Bitten
+        >),
+    });
+    const Foreign = Event.make('Foreign', {});
+    const Unknown = Command.make('Unknown', {
+      args: {},
+      results: [Foreign],
+      execute: () => Effect.succeed({ _tag: 'Foreign' } satisfies Event.ValueOf<typeof Foreign>),
+    });
+
+    Rule.on(Died, {
+      writes: [],
+      emits: [],
+      commands: [SaveHealth],
+      // @ts-expect-error Elsewhere is not among what this rule issues.
+      run: (context) => context.command(Elsewhere.of({})),
+    });
+    System.make({
+      name: 'issuing',
+      reads: [],
+      writes: [],
+      emits: [],
+      run: (context) => {
+        // @ts-expect-error A system issues no commands.
+        context.command(SaveHealth.of({ entity: 0, current: 0 }));
+      },
+    });
+    Domain.make({
+      name: 'Strange',
+      requires: [Fixture],
+      components: [],
+      actions: [],
+      events: [],
+      // @ts-expect-error Foreign is not an event of the domain or of one it requires.
+      commands: [Unknown],
+      systems: [],
+      rules: [],
+    });
   });
 });

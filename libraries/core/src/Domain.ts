@@ -1,4 +1,5 @@
 import type * as Action from '#src/Action.ts';
+import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type * as Rule from '#src/Rule.ts';
@@ -28,6 +29,8 @@ export interface Domain<
   Emits extends string = string,
   /** The components of its own that the domains requiring it may write too. */
   Shares extends Component.Any = Component.Any,
+  /** The commands its rules may issue. */
+  Commands extends Command.Any = Command.Any,
 > extends Required<Name> {
   /** Carries what it handles and emits in its type; never set. */
   readonly '~parts'?: { readonly handles: Handles; readonly emits: Emits };
@@ -36,6 +39,7 @@ export interface Domain<
   readonly shares: ReadonlyArray<Shares>;
   readonly actions: ReadonlyArray<Actions>;
   readonly events: ReadonlyArray<Events>;
+  readonly commands: ReadonlyArray<Commands>;
   readonly systems: ReadonlyArray<System.System>;
   readonly rules: ReadonlyArray<Rule.Rule>;
 }
@@ -71,6 +75,9 @@ export const make = <
   const Components extends ReadonlyArray<Component.Any>,
   const Actions extends ReadonlyArray<Action.Any>,
   const Events extends ReadonlyArray<Event.Any>,
+  const Commands extends ReadonlyArray<
+    Command.Command<string, unknown, Says<Events, Requires>, unknown>
+  > = [],
   const Systems extends ReadonlyArray<
     System.System<
       Reads<Components, Requires>,
@@ -78,15 +85,16 @@ export const make = <
       Says<Events, Requires>,
       Reads<Components, Requires>
     >
-  >,
+  > = [],
   const Rules extends ReadonlyArray<
     Rule.Rule<
       Hears<Actions, Events, Requires>,
       Extract<Writes<Components, Requires>, Rule.RulesComponent>,
       Says<Events, Requires>,
-      Reads<Components, Requires>
+      Reads<Components, Requires>,
+      Commands[number]
     >
-  >,
+  > = [],
   const Shares extends ReadonlyArray<Components[number]> = [],
 >(domain: {
   readonly name: Name;
@@ -96,6 +104,8 @@ export const make = <
   readonly shares?: Shares;
   readonly actions: Actions;
   readonly events: Events;
+  /** The commands its rules may issue, whose results are events it or a domain it requires declares; none if left out. */
+  readonly commands?: Commands;
   readonly systems: Systems;
   readonly rules: Rules;
 }): Domain<
@@ -105,6 +115,9 @@ export const make = <
   Events[number],
   Requires[number]['name'],
   Rules[number]['on']['tag'],
-  Systems[number]['emits'][number]['tag'] | Rules[number]['emits'][number]['tag'],
-  Shares[number]
-> => ({ _tag: 'Domain', ...domain, shares: domain.shares ?? [] });
+  | Systems[number]['emits'][number]['tag']
+  | Rules[number]['emits'][number]['tag']
+  | Commands[number]['results'][number]['tag'],
+  Shares[number],
+  Commands[number]
+> => ({ _tag: 'Domain', ...domain, shares: domain.shares ?? [], commands: domain.commands ?? [] });

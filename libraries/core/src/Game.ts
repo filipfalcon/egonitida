@@ -1,5 +1,6 @@
 import { Option } from 'effect';
 import type * as Action from '#src/Action.ts';
+import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type * as Input from '#src/Input.ts';
@@ -19,12 +20,14 @@ export interface Game<
   Components extends Component.Any = Component.Any,
   Actions extends Action.Any = Action.Any,
   Events extends Event.Any = Event.Any,
+  Commands extends Command.Any = Command.Any,
 > {
   readonly stepRate: number;
   readonly domains: ReadonlyArray<Domain.Any>;
   readonly components: ReadonlyArray<Components>;
   readonly actions: ReadonlyArray<Actions>;
   readonly events: ReadonlyArray<Events>;
+  readonly commands: ReadonlyArray<Commands>;
   readonly systems: ReadonlyArray<System.System>;
   readonly rules: ReadonlyArray<Rule.Rule>;
 }
@@ -69,13 +72,15 @@ export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
 ): Game<
   Domains[number]['components'][number],
   Domains[number]['actions'][number],
-  Domains[number]['events'][number]
+  Domains[number]['events'][number],
+  Domains[number]['commands'][number]
 > => ({
   stepRate: game.stepRate,
   domains: game.domains,
   components: game.domains.flatMap((domain) => domain.components),
   actions: game.domains.flatMap((domain) => domain.actions),
   events: game.domains.flatMap((domain) => domain.events),
+  commands: game.domains.flatMap((domain) => domain.commands),
   systems: game.domains.flatMap((domain) => domain.systems),
   rules: game.domains.flatMap((domain) => domain.rules),
 });
@@ -87,8 +92,9 @@ export const only = <
   Components extends Component.Any,
   Actions extends Action.Any,
   Events extends Event.Any,
+  Commands extends Command.Any,
 >(
-  game: Game<Components, Actions, Events>,
+  game: Game<Components, Actions, Events, Commands>,
   parts: {
     readonly systems: ReadonlyArray<
       System.System<
@@ -103,16 +109,23 @@ export const only = <
         NoInfer<Actions> | NoInfer<Events>,
         NoInfer<Extract<Components, Rule.RulesComponent>>,
         NoInfer<Events>,
-        NoInfer<Components>
+        NoInfer<Components>,
+        NoInfer<Commands>
       >
     >;
   },
-): Game<Components, Actions, Events> => ({ ...game, systems: parts.systems, rules: parts.rules });
+): Game<Components, Actions, Events, Commands> => ({
+  ...game,
+  systems: parts.systems,
+  rules: parts.rules,
+});
 
 export interface Step {
   readonly world: World.World;
   /** Every event of the step, in the order it happened. */
   readonly events: ReadonlyArray<Event.Tagged>;
+  /** Every command the rules issued, in the order they issued them; none of them has run. */
+  readonly commands: ReadonlyArray<Command.Issued>;
 }
 
 export interface StepOptions {
@@ -145,6 +158,8 @@ export const step = (
   }
   // Everything that happens in the step, in order: the actions first, then what systems and rules emit.
   const line: Array<Event.Tagged> = [...actions];
+  // What the rules decided should be done outside the world, in the order they decided it.
+  const commands: Array<Command.Issued> = [];
   const handled = { count: 0 };
   /** Hands every event not yet handled to the rules that handle it, including events those rules emit meanwhile. */
   const settle = () => {
@@ -163,7 +178,7 @@ export const step = (
 
   // Systems and rules share one context at run time; their types are what keep each to what it declared.
   const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> &
-    Rule.Context<Component.Any, Event.Any, Component.Any, true> = {
+    Rule.Context<Component.Any, Event.Any, Component.Any, true, Command.Any> = {
     time: { tick: draft.tick, stepSeconds: 1 / game.stepRate },
     random: () => {
       const [value, state] = Random.next(draft.random);
@@ -179,6 +194,9 @@ export const step = (
     emit: (event: Event.Tagged) => {
       line.push(event);
     },
+    command: (issued) => {
+      commands.push(issued);
+    },
     spawn: (instances) => World.spawnInto(draft, instances),
     despawn: (entity) => World.despawnFrom(draft, entity),
   };
@@ -193,6 +211,7 @@ export const step = (
   return {
     world: World.finish(draft, freezing),
     events: line,
+    commands,
   };
 };
 

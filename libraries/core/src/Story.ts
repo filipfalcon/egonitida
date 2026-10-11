@@ -1,5 +1,6 @@
 import { Option, Schema } from 'effect';
 import type * as Action from '#src/Action.ts';
+import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
@@ -25,6 +26,8 @@ export interface Simulation {
   readonly actions: ReadonlyArray<Event.Tagged>;
   /** Every event of the steps last taken, in the order it happened. */
   readonly events: ReadonlyArray<Event.Tagged>;
+  /** Every command the rules issued in the steps last taken, in order; a story never runs one. */
+  readonly commands: ReadonlyArray<Command.Issued>;
 }
 
 /** One part of a story: what it does to the simulation told so far. */
@@ -47,6 +50,7 @@ export const story = (game: Game.Game, ...steps: ReadonlyArray<Step>): Simulatio
     inputs: [],
     actions: [],
     events: [],
+    commands: [],
   });
 
 // SETTING THE SCENE
@@ -113,15 +117,17 @@ export const steps =
   (count: number): Step =>
   (simulation) => {
     const events: Array<Event.Tagged> = [];
+    const commands: Array<Command.Issued> = [];
     const world = Array.from({ length: count }).reduce<World.World>((current, _, index) => {
       const step =
         index === 0
           ? Game.step(simulation.game, current, simulation.inputs, simulation.actions, frozen)
           : Game.step(simulation.game, current, [], [], frozen);
       events.push(...step.events);
+      commands.push(...step.commands);
       return step.world;
     }, simulation.world);
-    return { ...simulation, world, inputs: [], actions: [], events };
+    return { ...simulation, world, inputs: [], actions: [], events, commands };
   };
 
 /**
@@ -136,15 +142,17 @@ export const until =
     const limit = options.limit ?? 600;
     const named = (name: string) => entityOf(simulation, name);
     const events: Array<Event.Tagged> = [];
+    const commands: Array<Command.Issued> = [];
     const go = (current: Simulation, taken: number): Simulation => {
       if (holds(current.world, named)) {
-        return { ...current, events };
+        return { ...current, events, commands };
       }
       if (taken === limit) {
         throw new Error(`it did not come to pass within ${limit} steps`);
       }
       const next = steps(1)(current);
       events.push(...next.events);
+      commands.push(...next.commands);
       return go(next, taken + 1);
     };
     return go(simulation, 0);
@@ -218,6 +226,35 @@ export const expectEvent =
     assert(values);
     return simulation;
   };
+
+/** Expects `command` among the commands the rules issued in the steps last taken, and hands the arguments of every one of them, in order, to `assert`. A story never runs a command; it has its result happen with `resolve`. */
+export const expectCommand =
+  <Args>(
+    command: Command.Command<string, Args, Event.Any, unknown>,
+    assert: (args: ReadonlyArray<Args>) => void = () => {},
+  ): Step =>
+  (simulation) => {
+    const issued = simulation.commands.flatMap((one) =>
+      Option.match(command.read(one), { onNone: () => [], onSome: (args) => [args] }),
+    );
+    if (issued.length === 0) {
+      throw new Error(`no ${command.name} was issued`);
+    }
+    assert(issued);
+    return simulation;
+  };
+
+/** Has `result`, one of the events `command` may come to, happen at the next step with `fields`, as if the command had run and come to it. */
+export const resolve = <Results extends Event.Any, Value extends Event.Tagged>(
+  command: Command.Command<string, unknown, Results, unknown>,
+  result: Results & Event.Event<string, Value>,
+  fields: Omit<Value, '_tag'>,
+): Step => {
+  if (!command.results.some((one) => one.tag === result.tag)) {
+    throw new Error(`${result.tag} is not what ${command.name} comes to`);
+  }
+  return happen(result, fields);
+};
 
 /** Expects no `event` among the events of the steps last taken. */
 export const expectNoEvent =
