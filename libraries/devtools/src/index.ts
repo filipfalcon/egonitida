@@ -2,6 +2,7 @@ export * as Beside from '#src/Beside.ts';
 export * as Bridge from '#src/Bridge.ts';
 export * as Fingerprint from '#src/Fingerprint.ts';
 export * as Inspect from '#src/Inspect.ts';
+export * as Keep from '#src/Keep.ts';
 export * as Log from '#src/Log.ts';
 export * as Page from '#src/Page.ts';
 export * as Recording from '#src/Recording.ts';

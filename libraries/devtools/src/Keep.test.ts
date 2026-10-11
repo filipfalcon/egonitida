@@ -1,0 +1,48 @@
+import { describe, expect, it } from '@effect/vitest';
+import { World } from '@lightocean/core';
+import { Effect, Option } from 'effect';
+import * as Fixtures from '#src/fixtures.ts';
+import * as Keep from '#src/Keep.ts';
+
+describe('a world kept across reloads of the page', () => {
+  it.effect('is the world the host was at when last kept, read back by the game', () =>
+    Effect.gen(function* () {
+      const store = Keep.memory();
+      const hosted = yield* Fixtures.host();
+      yield* Keep.serve(store, hosted, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
+      yield* Fixtures.visit(hosted);
+      yield* hosted.hold;
+      yield* Fixtures.advance(100);
+      const now = yield* hosted.world;
+
+      const kept = yield* Keep.load(store, Fixtures.game, 'tab-1');
+
+      expect(Option.map(kept, ({ tick }) => tick)).toEqual(Option.some(now.tick));
+      expect(yield* Keep.load(store, Fixtures.game, 'tab-2')).toEqual(Option.none());
+    }),
+  );
+
+  it.effect('is not taken up by a game that cannot read it, which starts afresh', () =>
+    Effect.gen(function* () {
+      const store = Keep.memory();
+      yield* store.set('tab-1', { tick: 'soon' });
+
+      expect(yield* Keep.load(store, Fixtures.game, 'tab-1')).toEqual(Option.none());
+    }),
+  );
+
+  it.effect('keeps the world the host plays, as the build it takes up encodes it', () =>
+    Effect.gen(function* () {
+      const store = Keep.memory();
+      const hosted = yield* Fixtures.host();
+      yield* Keep.serve(store, hosted, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
+      yield* hosted.reload(Fixtures.setup(Fixtures.brisk));
+      yield* Fixtures.advance(100);
+
+      const kept = yield* Keep.load(store, Fixtures.brisk, 'tab-1');
+
+      expect(Option.map(kept, (world) => World.entities(world))).toEqual(Option.some([]));
+      expect(Option.map(kept, ({ tick }) => tick > 0)).toEqual(Option.some(true));
+    }),
+  );
+});
