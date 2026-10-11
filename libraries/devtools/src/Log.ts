@@ -35,8 +35,8 @@ export type Line =
   /** Where the replay the log is told from came apart, after which it tells nothing. */
   | ({ readonly _tag: 'CameApart' } & Replay.Divergence);
 
-/** How a part is named in a log. */
-const nameOf = (part: Game.Part): string => {
+/** How a part is named in a log, and wherever devtools name one: by its domain and name, a rule by what it answers. */
+export const nameOf = (part: Game.Part): string => {
   const domain = Option.getOrElse(part.domain, () => 'Game');
   if (part._tag !== 'Rule') {
     return `${domain}: ${part.name}`;
@@ -47,15 +47,16 @@ const nameOf = (part: Game.Part): string => {
   });
 };
 
-/** The log of `recording`, replayed with `setup`; with the input of every step if `inputs` is asked for. */
-export const of = (
+/** The log of `entries`, replayed with `setup` from `world`; with the input of every step if `inputs` is asked for. */
+export const from = (
   setup: Replay.Setup,
-  recording: Recording.Recording,
+  world: World.World,
+  entries: ReadonlyArray<Recording.Entry>,
   options: { readonly inputs?: boolean } = {},
 ): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
   Effect.gen(function* () {
     const encode = encoderOf(setup.game);
-    const { taken, divergence } = yield* Replay.steps(setup, recording, { trace: true });
+    const { taken, divergence } = yield* Replay.from(setup, world, entries, { trace: true });
     const lines = taken.map(({ entry, world, trace }): Line => {
       // Joining, leaving, and going back take no step, so the world after one is at the tick it came to.
       if (entry._tag === 'Restored') {
@@ -91,6 +92,16 @@ export const of = (
       onSome: (apart) => [...lines, { _tag: 'CameApart', ...apart }],
     });
   });
+
+/** The log of `recording`, replayed with `setup`; with the input of every step if `inputs` is asked for. */
+export const of = (
+  setup: Replay.Setup,
+  recording: Recording.Recording,
+  options: { readonly inputs?: boolean } = {},
+): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
+  Effect.flatMap(Replay.first(setup.game, recording.first), (world) =>
+    from(setup, world, recording.entries, options),
+  );
 
 /** The tag of an encoded event or action, and its other fields as JSON. */
 const partsOf = (encoded: unknown): readonly [string, string] => {

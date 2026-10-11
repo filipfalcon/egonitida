@@ -34,6 +34,19 @@ export interface Rewind {
   readonly span: Effect.Effect<{ readonly oldest: number; readonly newest: number }>;
   /** The world the host was at, at `tick`, if it keeps that tick. */
   readonly worldAt: (tick: number) => Effect.Effect<Option.Option<World.World>, Replay.Unreadable>;
+  /** The world at `from`, and everything that happened after it up to the world at `to`, if it keeps both. */
+  readonly between: (
+    from: number,
+    to: number,
+  ) => Effect.Effect<
+    Option.Option<{
+      readonly world: World.World;
+      readonly entries: ReadonlyArray<Recording.Entry>;
+    }>,
+    Replay.Unreadable
+  >;
+  /** The build of the game it goes back in now. */
+  readonly setup: Effect.Effect<Replay.Setup>;
   /** Goes back to the world at `tick` and plays on from it: what came after it is gone. */
   readonly playFrom: (tick: number) => Effect.Effect<void, Replay.Unreadable>;
   readonly host: Host.Host;
@@ -148,6 +161,22 @@ export const make = (
 
     return {
       host,
+      setup: Effect.sync(() => state.setup),
+      between: (from, to) =>
+        Effect.gen(function* () {
+          const world = yield* worldAt(from);
+          const start = placeOf(from);
+          const end = placeOf(to);
+          if (Option.isNone(world) || Option.isNone(start) || Option.isNone(end)) {
+            return Option.none();
+          }
+          return Option.some({
+            world: world.value,
+            entries: state.moments
+              .slice(start.value - state.forgotten, end.value - state.forgotten)
+              .map(({ entry }) => entry),
+          });
+        }),
       span: Effect.sync(() => ({
         oldest: state.keyframes[0]?.world.tick ?? state.newest,
         newest: state.newest,

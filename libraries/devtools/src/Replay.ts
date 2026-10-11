@@ -83,7 +83,7 @@ const taking = (setup: Setup, options: { readonly trace: boolean }) => {
             });
       }
       if (entry._tag === 'Restored') {
-        return Result.succeed({ entry, world: yield* firstOf(setup.game, entry.world), trace: [] });
+        return Result.succeed({ entry, world: yield* first(setup.game, entry.world), trace: [] });
       }
       if (entry._tag === 'Left') {
         return Result.succeed({ entry, world: setup.leave(world, entry.entity), trace: [] });
@@ -123,7 +123,7 @@ const taking = (setup: Setup, options: { readonly trace: boolean }) => {
 };
 
 /** A world of a recording, as `game` reads it. */
-const firstOf = (game: Game.Game, first: unknown) =>
+export const first = (game: Game.Game, first: unknown) =>
   Schema.decodeUnknownEffect(Game.schema(game))(first).pipe(
     Effect.mapError((issue) => new Unreadable({ reason: issue.message })),
   );
@@ -159,8 +159,8 @@ export const steps = (
   recording: Recording.Recording,
   options: { readonly trace?: boolean } = {},
 ) =>
-  Effect.flatMap(firstOf(setup.game, recording.first), (first) =>
-    from(setup, first, recording.entries, options),
+  Effect.flatMap(first(setup.game, recording.first), (world) =>
+    from(setup, world, recording.entries, options),
   );
 
 /** Replays `recording` with `setup`: where it first came apart, if it did. */
@@ -188,7 +188,7 @@ export const alongside = (
         return {
           take: taking(played, { trace: false }),
           toEntry: Recording.entryOf(played.game),
-          world: yield* firstOf(played.game, encoded),
+          world: yield* first(played.game, encoded),
         };
       });
     const state = { now: yield* begin(setup, watching.world) };
