@@ -179,4 +179,33 @@ describe('a local server', () => {
       );
     }),
   );
+
+  it.live(
+    'makes its host from what the page opens with, as a page hands a worker where to start',
+    () =>
+      Effect.gen(function* () {
+        const channel = new MessageChannel();
+        /** A world whose one player stands where the page said, opening with a number. */
+        const startingAt = (opening: string) =>
+          Host.make({
+            ...hostOptions,
+            join: (world: World.World) =>
+              World.spawn(world, [Position.of({ x: Number(opening) }), Controls.of({ move: 0 })]),
+          });
+
+        yield* WorkerTransport.serveOpened(startingAt).pipe(
+          Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)),
+          Effect.forkScoped,
+        );
+        const connection = yield* WorkerTransport.connectOpening('7').pipe(
+          Effect.provide(BrowserWorker.layer(() => channel.port1)),
+        );
+        const client = yield* Client.connect(connection, { game });
+        yield* Effect.sleep('200 millis');
+
+        expect(World.get(yield* client.world, client.entity, Position)).toEqual(
+          Option.some({ x: 7 }),
+        );
+      }),
+  );
 });
