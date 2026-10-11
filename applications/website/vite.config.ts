@@ -1,3 +1,4 @@
+import { markdown } from '@foldkit/markdown/vite';
 import { foldkit } from '@foldkit/vite-plugin';
 import { Devtools } from '@lightocean/vite-plugin';
 import stylex from '@stylexjs/unplugin';
@@ -19,6 +20,8 @@ export default defineConfig({
     // StyleX compiles the website's styles; tests take its Rolldown entry, which compiles them the same without the development server's timer that would keep a test run from ending.
     process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),
     ...foldkit(),
+    // Every `.md` file imported, read into a typed document at build time; the browser is sent data, never a parser.
+    markdown(),
     Devtools.plugin(),
     pinAlchemyDevPort(5294),
   ],
