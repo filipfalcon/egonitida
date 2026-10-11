@@ -109,4 +109,18 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
           : Stream.empty,
     },
   ),
+  // While the Model says the world is not joined, it may already be: joined a moment before the stage found it was not.
+  joining: entry(
+    { isJoining: Schema.Boolean },
+    {
+      modelToDependencies: ({ world }) => ({ isJoining: world._tag === 'Joining' }),
+      dependenciesToStream: ({ isJoining }) =>
+        isJoining
+          ? World.whenJoined({
+              resource: RoundWorld,
+              onJoined: (): Message => Message.JoinedWorld(),
+            })
+          : Stream.empty,
+    },
+  ),
 }));

@@ -261,4 +261,30 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
           : Stream.empty,
     },
   ),
+  // While the Model says the document, or the world playing it, is not joined, it may already be: joined a moment before the stage found it was not.
+  documentJoining: entry(
+    { isJoining: Schema.Boolean },
+    {
+      modelToDependencies: ({ document }) => ({ isJoining: document._tag === 'Joining' }),
+      dependenciesToStream: ({ isJoining }) =>
+        isJoining
+          ? World.whenJoined({
+              resource: Document,
+              onJoined: (): Message => Message.JoinedDocument(),
+            })
+          : Stream.empty,
+    },
+  ),
+  playJoining: entry(
+    { isJoining: Schema.Boolean },
+    {
+      modelToDependencies: ({ play }) => ({
+        isJoining: play._tag === 'Playing' && play.world === 'Opening',
+      }),
+      dependenciesToStream: ({ isJoining }) =>
+        isJoining
+          ? World.whenJoined({ resource: Played, onJoined: (): Message => Message.JoinedPlay() })
+          : Stream.empty,
+    },
+  ),
 }));

@@ -10,7 +10,7 @@ import {
   WorkerTransport,
   World as Worlds,
 } from '@lightocean/core';
-import { Effect, Option, Schema } from 'effect';
+import { Effect, Option, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as World from '#src/World.ts';
 
@@ -151,6 +151,24 @@ describe('a world from Foldkit', () => {
           ({ count }) => count,
         ),
       ).toEqual(Option.some(5));
+    }).pipe(Effect.scoped),
+  );
+
+  // Real time: the world is joined a while after the Model says it is not, as a worker joins.
+  it.live('says once that a world is joined, however long after the Model said it was not', () =>
+    Effect.gen(function* () {
+      const resource = ManagedResource.tag<World.Joined>()('Late');
+      // As Foldkit holds a resource, acquired a while after the Stream starts looking.
+      const held = yield* Ref.make(Option.none<World.Joined>());
+      const joined = yield* hosted.pipe(Effect.flatMap((worker) => World.join(game, worker)));
+      yield* Ref.set(held, Option.some(joined)).pipe(Effect.delay('150 millis'), Effect.forkScoped);
+
+      const told = yield* World.whenJoined({ resource, onJoined: () => 'joined' }).pipe(
+        Stream.runCollect,
+        Effect.provideService(resource._tag, held),
+      );
+
+      expect(told).toEqual(['joined']);
     }).pipe(Effect.scoped),
   );
 });

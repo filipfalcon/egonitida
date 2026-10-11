@@ -1,7 +1,7 @@
 import { BrowserWorker } from '@effect/platform-browser';
 import { Drawing } from '@lightocean/client';
 import { Client, type Game, WorkerTransport } from '@lightocean/core';
-import { Effect, Option, Schema, type Scope } from 'effect';
+import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import type { WorkerError } from 'effect/workers/WorkerError';
 import type { ManagedResource } from 'foldkit';
 
@@ -63,6 +63,25 @@ export const managed = <Model, Message, Service>(options: {
   onAcquireError: (error: unknown) =>
     options.onFailed(error instanceof Error ? error.message : String(error)),
 });
+
+/** How often a page that believes its world is not joined looks whether it is. */
+const LOOKED_EVERY = '50 millis';
+
+/**
+ * The moment a world is joined, as a Foldkit Subscription's Stream, for a Model that says it is not: `onJoined` once `resource` holds the world, looked for until it does. A world may be joined before a page hears that it is not, as when a stage finds it not joined a moment before it is, and the world joined says so only once; this says it again, so the page never waits for a world it has.
+ */
+export const whenJoined = <Message, Service>(options: {
+  readonly resource: ManagedResource.ManagedResource<Joined, Service>;
+  readonly onJoined: () => Message;
+}): Stream.Stream<Message, never, Service> =>
+  Stream.fromEffect(
+    options.resource.get.pipe(
+      // Not joined yet: looked for again after a while.
+      Effect.tapError(() => Effect.sleep(LOOKED_EVERY)),
+      Effect.eventually,
+      Effect.map(() => options.onJoined()),
+    ),
+  );
 
 /** What a world opened by the Model asks of it: what to open with, while it is wanted. */
 export const Opening = Schema.Option(Schema.String);
