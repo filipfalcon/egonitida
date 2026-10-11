@@ -182,6 +182,20 @@ export const ReactionEdited = Event.make('ReactionEdited', {
   edit: ReactionEdit,
 });
 
+/** An object of `kind` is to be made, the `index`th, read out as `name`, for whoever `by` is, which `Made` tells back. */
+export const Added = Event.make('Added', {
+  kind: ShapeFields.fields.kind,
+  index: Schema.Int,
+  name: Schema.String,
+  by: Schema.Int,
+});
+
+/** An object was made, as `Added` asked, for whoever `by` is. */
+export const Made = Event.make('Made', { entity: Schema.Int, by: Schema.Int });
+
+/** An object is to be gone. */
+export const Removed = Event.make('Removed', { entity: Schema.Int });
+
 /** An object is to be `hex` in colour. */
 export const Recoloured = Event.make('Recoloured', { entity: Schema.Int, hex: Schema.Int });
 /** An object is to move by `offset` from where it is. */
@@ -280,6 +294,29 @@ const editReactions = Rule.on(ReactionEdited, {
   },
 });
 
+/** An object added is made as asked, and said to have been made. */
+const add = Rule.on(Added, {
+  writes: [],
+  emits: [Made],
+  spawns: [Shape, Transform, Colour, Spin, Behaviour, Pointing.Label],
+  run: (context, { kind, index, name, by }) => {
+    const entity = context.spawn(objectOf(kind, index, name));
+    context.emit({ _tag: 'Made', entity, by });
+  },
+});
+
+/** An object removed is gone; anything else is left be. */
+const remove = Rule.on(Removed, {
+  writes: [],
+  emits: [],
+  despawns: true,
+  run: (context, { entity }) => {
+    if (Option.isSome(context.get(entity, Shape))) {
+      context.despawn(entity);
+    }
+  },
+});
+
 const recolour = Rule.on(Recoloured, {
   writes: [Colour],
   emits: [],
@@ -338,8 +375,8 @@ export const domain = Domain.make({
   requires: [Pointing.domain],
   components: [Shape, Transform, Colour, Spin, Behaviour, Turn],
   actions: [],
-  events: [Edited, ReactionEdited, Recoloured, Moved, SpinChanged],
+  events: [Added, Made, Removed, Edited, ReactionEdited, Recoloured, Moved, SpinChanged],
   systems: [],
-  rules: [edit, editReactions, recolour, move, changeSpin],
+  rules: [add, remove, edit, editReactions, recolour, move, changeSpin],
   localSystems: [turning],
 });

@@ -65,37 +65,44 @@ export const ChangedReactionSetting = Action.make('ChangedReactionSetting', {
 
 // RULES
 
-/** An object added is named by the next number, stands in the next place, and is selected by whoever added it. */
+/** An object added is named by the next number and stands in the next place, which the `Objects` domain makes. */
 const addObject = Rule.on(AddedObject, {
-  writes: [Numbering, Selection],
-  emits: [],
-  spawns: [
-    Objects.Shape,
-    Objects.Transform,
-    Objects.Colour,
-    Objects.Spin,
-    Objects.Behaviour,
-    Pointing.Label,
-  ],
+  writes: [Numbering],
+  emits: [Objects.Added],
   run: (context, { player, shape }) => {
     for (const [document, { next }] of context.query(Numbering)) {
-      const object = context.spawn(Objects.objectOf(shape, next - 1, `${shape} ${next}`));
+      context.emit({
+        _tag: 'Added',
+        kind: shape,
+        index: next - 1,
+        name: `${shape} ${next}`,
+        by: player,
+      });
       context.set(document, Numbering, { next: next + 1 });
-      context.set(player, Selection, { selected: Option.some(object) });
     }
   },
 });
 
-/** An object removed is gone, and let go of by every editor who had it selected. */
-const removeObject = Rule.on(RemovedObject, {
+/** An object made for an editor is the one they have selected. */
+const selectMade = Rule.on(Objects.Made, {
   writes: [Selection],
   emits: [],
-  despawns: true,
+  run: (context, { entity, by }) => {
+    if (Option.isSome(context.get(by, Selection))) {
+      context.set(by, Selection, { selected: Option.some(entity) });
+    }
+  },
+});
+
+/** An object removed is the `Objects` domain's to let go of, and every editor who had it selected lets go of it too. */
+const removeObject = Rule.on(RemovedObject, {
+  writes: [Selection],
+  emits: [Objects.Removed],
   run: (context, { entity }) => {
     if (Option.isNone(context.get(entity, Objects.Shape))) {
       return;
     }
-    context.despawn(entity);
+    context.emit({ _tag: 'Removed', entity });
     for (const [editor, { selected }] of context.query(Selection)) {
       if (Option.contains(selected, entity)) {
         context.set(editor, Selection, { selected: Option.none() });
@@ -212,6 +219,7 @@ export const domain = Domain.make({
   systems: [],
   rules: [
     addObject,
+    selectMade,
     removeObject,
     editProperty,
     select,
