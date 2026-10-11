@@ -5,5 +5,6 @@ export const colours = stylex.defineVars({
   page: '#0b1020',
   text: '#e8ecf4',
   accent: '#4f8cff',
+  onAccent: '#ffffff',
   danger: '#ff6b6b',
 });

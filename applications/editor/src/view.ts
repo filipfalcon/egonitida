@@ -30,7 +30,7 @@ const styles = stylex.create({
   toolbar: { display: 'flex', gap: 6 },
   objects: { margin: 0, padding: 0, listStyle: 'none' },
   object: { width: '100%', marginBottom: 2, backgroundColor: 'transparent', textAlign: 'left' },
-  selected: { backgroundColor: colours.accent, color: 'white' },
+  selected: { backgroundColor: colours.accent, color: colours.onAccent },
   badge: { float: 'right', opacity: 0.7 },
   stage: { position: 'relative', minWidth: 0, minHeight: 0, overflow: 'hidden' },
   viewport: { display: 'block', width: '100%', height: '100%' },

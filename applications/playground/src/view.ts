@@ -30,7 +30,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderRadius: 6,
     backgroundColor: colours.accent,
-    color: 'white',
+    color: colours.onAccent,
     fontFamily: 'inherit',
     fontSize: 'inherit',
     lineHeight: 'inherit',

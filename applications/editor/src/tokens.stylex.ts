@@ -9,6 +9,7 @@ export const colours = stylex.defineVars({
   control: '#253055',
   controlHover: '#2f3c6b',
   accent: '#4f8cff',
+  onAccent: '#ffffff',
   danger: '#ff6b6b',
   play: '#2f9e44',
   stop: '#e03131',
