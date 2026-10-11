@@ -1,28 +1,17 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Drawing, Tab, View, Viewport } from '@lightocean/client';
+import { type Devices, Drawing, Gamepads, Tab, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page, Rewind } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
+import * as HordeControls from '#src/controls.ts';
 import * as Game from '#src/game.ts';
 import * as HordeView from '#src/horde.view.ts';
 import * as Survivor from '#src/survivor.ts';
 import * as SurvivorView from '#src/survivor.view.ts';
 
-// The page: joins the local server in a worker as a survivor, sends what the keyboard and the mouse hold and do, and draws the arena through the game's views at every frame the display shows. In development, keys drive the rewind beside the host.
-
-/** Which way each key walks, on the floor as the camera looks at it. */
-const WALKS: Readonly<Record<string, readonly [number, number]>> = {
-  KeyW: [0, -1],
-  KeyS: [0, 1],
-  KeyA: [-1, 0],
-  KeyD: [1, 0],
-  ArrowUp: [0, -1],
-  ArrowDown: [0, 1],
-  ArrowLeft: [-1, 0],
-  ArrowRight: [1, 0],
-};
+// The page: joins the local server in a worker as a survivor, sends what the player does with a pad, or the keyboard and the mouse, and draws the arena through the game's views at every frame the display shows. In development, keys drive the rewind beside the host.
 
 /** What each key asks of the rewind beside the host, in development: to hold time, to step back or forth, to play on from the tick shown, or to go live. */
 type Asked =
@@ -86,24 +75,39 @@ const main = Effect.gen(function* () {
   viewport.camera.position.set(0, 18, 13);
   viewport.camera.lookAt(0, 0, 0);
 
-  // What the player holds and has done since the last frame.
-  const held = new Set<string>();
+  // What the keyboard and the mouse hold, and what was pressed since the last frame, so a tap shorter than a frame still counts.
+  const keys = { held: new Set<string>(), tapped: new Set<string>() };
+  const buttons = { held: new Set<number>(), tapped: new Set<number>() };
   const pointer = new Three.Vector2();
-  const done = { fired: false, restarted: false, asked: new Array<Asked>() };
+  const done = { asked: new Array<Asked>() };
   yield* listen('keydown', (event) => {
-    held.add(event.code);
-    done.restarted ||= event.code === 'KeyR';
+    keys.held.add(event.code);
+    keys.tapped.add(event.code);
     if (import.meta.env.DEV) {
       done.asked.push(...Option.toArray(asked(event)));
     }
   });
-  yield* listen('keyup', (event) => held.delete(event.code));
+  yield* listen('keyup', (event) => keys.held.delete(event.code));
   yield* listen('pointermove', (event) => {
     pointer.set((event.clientX / innerWidth) * 2 - 1, -(event.clientY / innerHeight) * 2 + 1);
   });
-  yield* listen('pointerdown', () => {
-    done.fired = true;
+  yield* listen('pointerdown', (event) => {
+    buttons.held.add(event.button);
+    buttons.tapped.add(event.button);
   });
+  yield* listen('pointerup', (event) => buttons.held.delete(event.button));
+  /** Every device as it is this frame: the pads read off the browser, and the keyboard and mouse as they were held or tapped. */
+  const devices = (): Devices.State => {
+    const state: Devices.State = {
+      pads: Gamepads.poll(),
+      keys: new Set([...keys.held, ...keys.tapped]),
+      mouse: { buttons: new Set([...buttons.held, ...buttons.tapped]), dx: 0, dy: 0, wheel: 0 },
+    };
+    keys.tapped.clear();
+    buttons.tapped.clear();
+    return state;
+  };
+  const played = { last: HordeControls.start };
 
   const ground = new Three.Plane(new Three.Vector3(0, 1, 0), 0);
   const ray = new Three.Raycaster();
@@ -146,34 +150,27 @@ const main = Effect.gen(function* () {
       onNone: () => Effect.void,
       onSome: (frame) =>
         Effect.gen(function* () {
-          const walk = [...held].reduce(
-            (sum, code) => {
-              const [x, z] = WALKS[code] ?? [0, 0];
-              return { x: sum.x + x, z: sum.z + z };
-            },
-            { x: 0, z: 0 },
-          );
           ray.setFromCamera(pointer, viewport.camera);
           const at = Option.getOrElse(frame.get(client.entity, Body.Position), () => ({
             x: 0,
             z: 0,
           }));
-          const aim =
+          const mouseAim =
             ray.ray.intersectPlane(ground, aimed) === null
-              ? 0
-              : Math.atan2(aimed.z - at.z, aimed.x - at.x);
+              ? Option.none()
+              : Option.some(Math.atan2(aimed.z - at.z, aimed.x - at.x));
+          const now = HordeControls.play(devices(), played.last, mouseAim);
+          played.last = now;
           yield* Effect.forEach(done.asked.splice(0), answer, { discard: true });
           if (!time.paused) {
-            yield* client.send([Survivor.Stick.of({ ...walk, aim })]);
+            yield* client.send([Survivor.Stick.of(now.stick)]);
           }
-          if (done.fired && !time.paused) {
+          if (now.fired && !time.paused) {
             yield* client.act(Survivor.PulledTrigger, {});
           }
-          if (done.restarted && !time.paused) {
+          if (now.restarted && !time.paused) {
             yield* client.act(Survivor.ChoseRestart, {});
           }
-          done.fired = false;
-          done.restarted = false;
           yield* views.frame(frame);
           hud.textContent = Option.match(
             Option.all({
@@ -184,7 +181,9 @@ const main = Effect.gen(function* () {
               onNone: () => '',
               onSome: ({ life, tally }) =>
                 [
-                  life._tag === 'Alive' ? `health ${life.health}` : 'dead: R to rise again',
+                  life._tag === 'Alive'
+                    ? `health ${life.health}`
+                    : `dead: ${Option.contains(played.last.controls.active, 'Pad') ? 'Start' : 'R'} to rise again`,
                   `kills ${tally.kills}`,
                   ...(time.paused
                     ? [
