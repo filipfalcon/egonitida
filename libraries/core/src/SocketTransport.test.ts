@@ -29,7 +29,13 @@ const socketPair = Effect.gen(function* () {
           ).pipe(Effect.asVoid),
       }),
     });
-  return [end(toFirst, toSecond), end(toSecond, toFirst), () => Queue.end(toSecond)] as const;
+  return [
+    end(toFirst, toSecond),
+    end(toSecond, toFirst),
+    () => Queue.end(toSecond),
+    /** What the first socket has to read. */
+    () => Queue.size(toFirst),
+  ] as const;
 });
 
 describe('a connection over a socket', () => {
@@ -87,6 +93,19 @@ describe('a connection over a socket', () => {
       );
 
       expect(received).toEqual(Option.some([]));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect('sends nothing more once the other end has closed', () =>
+    Effect.gen(function* () {
+      const [, second, closeFirst, waitingForFirst] = yield* socketPair;
+      const receiving = yield* SocketTransport.fromSocket(second);
+
+      yield* closeFirst();
+      yield* receiving.frames.pipe(Stream.runDrain);
+      yield* receiving.send({ channel: 'unreliable', payload: 'too late' });
+
+      expect(yield* waitingForFirst()).toBe(0);
     }).pipe(Effect.scoped),
   );
 });
