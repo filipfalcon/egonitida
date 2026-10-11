@@ -39,7 +39,7 @@ export const fromSocket = (
     return {
       send: (frame) =>
         writer.write(Transport.encodeFrame(frame)).pipe(
-          // A socket that cannot be written to is broken: the connection ends, so the other side lets go of it.
+          // A socket that cannot be written to is broken: what it reads ends, so whoever reads it sees the connection is over.
           Effect.catch(() => Queue.end(inbox)),
           Effect.asVoid,
         ),

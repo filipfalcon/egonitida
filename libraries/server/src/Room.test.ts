@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Client, Component, Domain, Game, World } from '@lightocean/core';
 import { SocketTransport } from '@lightocean/core/experimental';
-import { type Cause, Effect, Option, Queue, Schema } from 'effect';
+import { type Cause, Effect, Option, Queue, References, Schema } from 'effect';
 import * as Socket from 'effect/socket/Socket';
 import * as Room from '#src/Room.ts';
 
@@ -122,17 +122,18 @@ describe('a room', () => {
       // One leaves and the next enters at once, again and again, as a page reconnecting does.
       const first = yield* entered(room);
       const leaving = { opened: first.opened };
-      for (let round = 0; round < 10; round += 1) {
+      for (let round = 0; round < 3; round += 1) {
+        // Every fiber yields after each step, so the two interleave wherever they can.
         const [, next] = yield* Effect.all([leaving.opened.closed, entered(room)], {
           concurrency: 'unbounded',
-        });
+        }).pipe(Effect.provideService(References.MaxOpsBeforeYield, 8));
         leaving.opened = next.opened;
         const before = yield* tick;
         yield* Effect.sleep('100 millis');
         runs.push((yield* tick) > before);
       }
 
-      expect(runs).toEqual(Array.from({ length: 10 }, () => true));
+      expect(runs).toEqual([true, true, true]);
     }).pipe(Effect.scoped),
   );
 

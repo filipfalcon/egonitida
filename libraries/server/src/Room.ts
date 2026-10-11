@@ -1,6 +1,6 @@
 import { Host } from '@lightocean/core';
 import { Transport } from '@lightocean/core/internal';
-import { type Cause, Effect, Exit, Option, Queue, Schema, Scope, Stream } from 'effect';
+import { type Cause, Effect, Exit, Option, Queue, Schema, Scope, Semaphore, Stream } from 'effect';
 
 /**
  * A world hosted for the players who reach it across a network, as a Cloudflare Durable Object hosts one room: one host, joined by every socket that opens to it, one player each, and let go of when its socket closes. It knows nothing of Cloudflare: whatever runs it hands it each socket as it opens, the text each one receives, and when each closes, as a Durable Object's WebSocket handlers do.
@@ -8,7 +8,7 @@ import { type Cause, Effect, Exit, Option, Queue, Schema, Scope, Stream } from '
  * Time stands while no one is in it, so a room with no one in it takes no steps and keeps nothing awake. What it holds lives as long as whatever runs it: a Durable Object that sleeps forgets its world.
  */
 
-/** The room's side of a socket: how it sends a player text. */
+/** The room's side of a socket: how it sends a player text, at once, as a Durable Object's WebSocket does, since a socket opening is not cut short while it waits. */
 export interface Socket {
   readonly send: (text: string) => Effect.Effect<void>;
 }
@@ -36,23 +36,38 @@ export const make = <Services = never>(
     const parent = yield* Effect.scope;
     const host = yield* Host.make(options);
     const state = { inside: 0 };
+    const turns = yield* Semaphore.make(1);
     yield* host.hold;
 
-    /** Holds time while no one is in the room, and lets it run while someone is, by how many are in it now, whatever came between. */
-    const settle = Effect.suspend(() => (state.inside === 0 ? host.hold : host.release));
+    /** Holds time while no one is in the room, and lets it run while someone is, by how many are in it now; one at a time, so what one finds is what it does, and the last to settle finds the room as it is. */
+    const settle = turns.withPermit(
+      Effect.suspend(() => (state.inside === 0 ? host.hold : host.release)),
+    );
 
     const open = (socket: Socket): Effect.Effect<Opened> =>
       Effect.gen(function* () {
         const scope = yield* Scope.fork(parent);
         const inbox = yield* Queue.unbounded<Transport.Frame, Cause.Done>();
         state.inside += 1;
-        yield* settle;
-        yield* host
-          .connect({
-            send: (frame) => socket.send(Transport.encodeFrame(frame)),
-            frames: Stream.fromQueue(inbox),
-          })
-          .pipe(Scope.provide(scope));
+        yield* Effect.andThen(
+          settle,
+          host
+            .connect({
+              send: (frame) => socket.send(Transport.encodeFrame(frame)),
+              frames: Stream.fromQueue(inbox),
+            })
+            .pipe(Scope.provide(scope)),
+        ).pipe(
+          // A player who could not be joined is not in the room.
+          Effect.onError(() =>
+            Effect.andThen(
+              Effect.sync(() => {
+                state.inside -= 1;
+              }),
+              Effect.andThen(Scope.close(scope, Exit.void), settle),
+            ),
+          ),
+        );
         const left = { closed: false };
         return {
           received: (text: string) =>
@@ -67,7 +82,8 @@ export const make = <Services = never>(
             }
             left.closed = true;
             state.inside -= 1;
-            return Effect.andThen(Scope.close(scope, Exit.void), settle);
+            // Let go of and settled, even if what closed it is cut short.
+            return Effect.uninterruptible(Effect.andThen(Scope.close(scope, Exit.void), settle));
           }),
         };
         // Counted in and joined, or neither: an open cut short leaves no one counted who is not there.
