@@ -6,17 +6,11 @@ import type { Html, HtmlBuilder } from 'foldkit/html';
 import cubeStory from '../../../../examples/spinning-cube/src/cube.story.test.ts?raw';
 import cube from '../../../../examples/spinning-cube/src/cube.ts?raw';
 import cubeView from '../../../../examples/spinning-cube/src/cube.view.ts?raw';
+import { DISCORD, REPOSITORY, inRepository } from '#src/links.ts';
 import type { Message, Model } from '#src/main.ts';
 import { CANVAS_ID, MountCanvas } from '#src/world.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from '../tokens.stylex.ts';
-
-/** Where the engine's code is, and where its people talk. */
-const REPOSITORY = 'https://github.com/filipfalcon/lightocean';
-const DISCORD = 'https://discord.gg/F3YkynckH';
-
-/** A file of the repository, as GitHub shows it. */
-const inRepository = (path: string) => `${REPOSITORY}/blob/main/${path}`;
 
 const NARROW = '@media (max-width: 720px)';
 
