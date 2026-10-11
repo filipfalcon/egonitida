@@ -29,7 +29,14 @@ const styles = stylex.create({
   stage: { position: 'relative', minWidth: 0, minHeight: 0, overflow: 'hidden' },
   viewport: { display: 'block', width: '100%', height: '100%' },
   error: { position: 'absolute', top: 12, left: 12, margin: 0, color: colours.danger },
+  playing: { boxShadow: `inset 0 0 0 3px ${colours.play}` },
+  controls: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)' },
+  play: { backgroundColor: colours.play },
+  stop: { backgroundColor: colours.stop },
 });
+
+/** Whether the document is being edited, rather than played. */
+const isEditing = (model: Model) => model.play._tag === 'Editing';
 
 /** An object's name, as the Details panel edits it: its label's text. */
 const NameFields = Schema.Struct({
@@ -63,7 +70,7 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html =>
         [
           h.Type('button'),
           ...Styled.attributes(h, ui.button),
-          h.Disabled(!model.isDocumentJoined),
+          h.Disabled(!model.isDocumentJoined || !isEditing(model)),
           h.OnClick(Message.ClickedAddObject({ shape: 'Box' })),
         ],
         ['+ Box'],
@@ -72,7 +79,7 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html =>
         [
           h.Type('button'),
           ...Styled.attributes(h, ui.button),
-          h.Disabled(!model.isDocumentJoined),
+          h.Disabled(!model.isDocumentJoined || !isEditing(model)),
           h.OnClick(Message.ClickedAddObject({ shape: 'Sphere' })),
         ],
         ['+ Sphere'],
@@ -81,7 +88,7 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html =>
         [
           h.Type('button'),
           ...Styled.attributes(h, ui.button),
-          h.Disabled(Option.isNone(model.maybeSelected)),
+          h.Disabled(Option.isNone(model.maybeSelected) || !isEditing(model)),
           h.OnClick(Message.ClickedDeleteSelected()),
         ],
         ['Delete'],
@@ -103,6 +110,7 @@ const viewOutliner = (model: Model, h: HtmlBuilder<Message>): Html =>
                 h.Type('button'),
                 ...Styled.attributes(h, ui.button, styles.object, isSelected && styles.selected),
                 h.AriaPressed(String(isSelected)),
+                h.Disabled(!isEditing(model)),
                 h.OnClick(Message.ClickedObject({ entity })),
               ],
               [
@@ -146,18 +154,22 @@ const viewSelected = (model: Model, selected: Selected, h: HtmlBuilder<Message>)
 const viewDetailsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.aside(Styled.attributes(h, styles.panel), [
     h.h2(Styled.attributes(h, ui.heading), ['Details']),
-    Option.match(model.maybeSelected, {
-      onNone: () => h.p(Styled.attributes(h, ui.hint), ['Select an object to edit it.']),
-      // Keyed by object, so switching selection replaces the form instead of patching one object's inputs into another's.
-      onSome: (selected) => viewSelected(model, selected, h),
-    }),
+    isEditing(model)
+      ? Option.match(model.maybeSelected, {
+          onNone: () => h.p(Styled.attributes(h, ui.hint), ['Select an object to edit it.']),
+          // Keyed by object, so switching selection replaces the form instead of patching one object's inputs into another's.
+          onSome: (selected) => viewSelected(model, selected, h),
+        })
+      : h.p(Styled.attributes(h, ui.hint), [
+          'The document is playing: click objects to make them react. Stop to edit it again.',
+        ]),
   ]);
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Editor',
   body: h.div(Styled.attributes(h, styles.editor), [
     viewOutliner(model, h),
-    h.main(Styled.attributes(h, styles.stage), [
+    h.main(Styled.attributes(h, styles.stage, !isEditing(model) && styles.playing), [
       // The canvas is in the page while the document is joined, and goes with it.
       ...(model.isDocumentJoined
         ? [
@@ -172,6 +184,26 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             ),
           ]
         : []),
+      h.div(Styled.attributes(h, styles.controls), [
+        isEditing(model)
+          ? h.button(
+              [
+                h.Type('button'),
+                ...Styled.attributes(h, ui.button, styles.play),
+                h.Disabled(!model.isDocumentJoined),
+                h.OnClick(Message.ClickedPlay()),
+              ],
+              ['▶ Play'],
+            )
+          : h.button(
+              [
+                h.Type('button'),
+                ...Styled.attributes(h, ui.button, styles.stop),
+                h.OnClick(Message.ClickedStop()),
+              ],
+              ['■ Stop'],
+            ),
+      ]),
       ...Option.match(model.maybeError, {
         onNone: () => [],
         onSome: (reason) => [h.p(Styled.attributes(h, styles.error), [reason])],

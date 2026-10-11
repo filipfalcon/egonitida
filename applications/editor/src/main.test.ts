@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
 import { Story } from 'foldkit';
-import { Message, type Model, SendEdit, initialModel, update } from '#src/main.ts';
+import { Message, type Model, OpenPlay, SendEdit, initialModel, update } from '#src/main.ts';
 
 /** The page with the document joined, and a box selected. */
 const selecting: Model = {
@@ -11,6 +11,7 @@ const selecting: Model = {
     { entity: 1, name: 'Box 1', kind: 'Box', reacts: false },
     { entity: 2, name: 'Sphere 2', kind: 'Sphere', reacts: false },
   ],
+  play: { _tag: 'Editing' },
   maybeSelected: Option.some({
     entity: 1,
     name: 'Box 1',
@@ -42,6 +43,8 @@ describe('the editor', () => {
       isCanvasMounted: false,
       outline: [],
       maybeSelected: Option.none(),
+      play: { _tag: 'Editing' },
+      isPlayJoined: false,
       maybeError: Option.none(),
     });
   });
@@ -127,5 +130,46 @@ describe('the editor', () => {
     ].map((failed) => update(initialModel, failed).model.maybeError);
 
     expect(reasons).toEqual(['No worker.', 'No GPU.', 'Not joined.'].map(Option.some));
+  });
+
+  it('plays the document as it is when Play is pressed, and goes back to editing it at Stop', () => {
+    Story.story(
+      update,
+      Story.given(selecting),
+      Story.message(Message.ClickedPlay()),
+      Story.Command.expectExact(OpenPlay),
+      Story.Command.resolve(OpenPlay, Message.ReadDocumentForPlay({ opening: 'the document' })),
+      Story.model((model) => {
+        expect([model.play, model.isPlayJoined]).toEqual([
+          { _tag: 'Playing', opening: 'the document' },
+          false,
+        ]);
+      }),
+      Story.message(Message.JoinedPlay()),
+      Story.model((model) => {
+        expect(model.isPlayJoined).toBe(true);
+      }),
+      Story.message(Message.ClickedStop()),
+      Story.model((model) => {
+        expect(model.play).toEqual({ _tag: 'Editing' });
+      }),
+      Story.message(Message.LeftPlay()),
+      Story.model((model) => {
+        expect(model.isPlayJoined).toBe(false);
+      }),
+    );
+  });
+
+  it('edits nothing while the document plays', () => {
+    const playing: Model = { ...selecting, play: { _tag: 'Playing', opening: 'the document' } };
+    for (const edit of [
+      Message.ClickedAddObject({ shape: 'Box' }),
+      Message.ClickedObject({ entity: 2 }),
+      Message.ClickedDeleteSelected(),
+      Message.ChangedProperty({ component: 'Colour', field: 'hex', value: 0 }),
+      Message.ClickedAddReaction(),
+    ]) {
+      Story.story(update, Story.given(playing), Story.message(edit), Story.Command.expectNone());
+    }
   });
 });

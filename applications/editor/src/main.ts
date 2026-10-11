@@ -6,9 +6,10 @@ import { defineMessageUnion } from 'foldkit/message';
 import { modifyFields } from 'foldkit/struct';
 import * as Editing from '#src/editing.ts';
 import * as Objects from '#src/objects.ts';
+import * as Playing from '#src/playing.ts';
 
 /**
- * The editor's page. The document is a world, joined in a worker; the page holds no more of it than its panels show, the objects in the outliner and the one the editor has selected, and sends the document every edit as the editor's action, which the document checks and decides on.
+ * The editor's page. The document is a world, joined in a worker; the page holds no more of it than its panels show, the objects in the outliner and the one the editor has selected, and sends the document every edit as the editor's action, which the document checks and decides on. Play opens a second worker from the document as it is, and the canvas shows that world until Stop ends it; nothing is edited meanwhile.
  */
 
 // MODEL
@@ -35,11 +36,20 @@ export const Selected = Schema.Struct({
 });
 export type Selected = typeof Selected.Type;
 
+/** Whether the document is being edited, or plays from `opening`, the document as it was when Play was pressed. */
+export const Play = Schema.Union([
+  Schema.TaggedStruct('Editing', {}),
+  Schema.TaggedStruct('Playing', { opening: Schema.String }),
+]);
+export type Play = typeof Play.Type;
+
 export const Model = Schema.Struct({
   isDocumentJoined: Schema.Boolean,
   isCanvasMounted: Schema.Boolean,
   outline: Schema.Array(OutlineEntry),
   maybeSelected: Schema.Option(Selected),
+  play: Play,
+  isPlayJoined: Schema.Boolean,
   maybeError: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
@@ -69,6 +79,13 @@ export const Message = defineMessageUnion({
   ChangedReactionSetting: { index: Schema.Int, field: Schema.String, value: Schema.Unknown },
   SentEdit: {},
   FailedSendEdit: { reason: Schema.String },
+  ClickedPlay: {},
+  ReadDocumentForPlay: { opening: Schema.String },
+  FailedOpenPlay: { reason: Schema.String },
+  JoinedPlay: {},
+  LeftPlay: {},
+  FailedJoinPlay: { reason: Schema.String },
+  ClickedStop: {},
 });
 export type Message = typeof Message.Type;
 
@@ -77,8 +94,13 @@ export type Message = typeof Message.Type;
 /** The document, joined while the editor is open. */
 export const Document = ManagedResource.tag<World.Joined>()('Document');
 
-/** What the editor's Commands and Subscriptions reach: its document. */
-export type Services = ManagedResource.ServiceOf<typeof Document>;
+/** The document playing, joined while it plays. */
+export const Played = ManagedResource.tag<World.Joined>()('Played');
+
+/** What the editor's Commands and Subscriptions reach: its document, and the document playing. */
+export type Services =
+  | ManagedResource.ServiceOf<typeof Document>
+  | ManagedResource.ServiceOf<typeof Played>;
 
 // COMMANDS
 
@@ -172,6 +194,18 @@ export const SendEdit = Command.define('SendEdit', {
     ),
 });
 
+/** Reads the document as it is, as a worker playing it is opened with. */
+export const OpenPlay = Command.define('OpenPlay', {
+  messages: [Message.ReadDocumentForPlay, Message.FailedOpenPlay],
+  execute: Document.get.pipe(
+    Effect.flatMap(({ client }) => client.world),
+    Effect.map((world) => Message.ReadDocumentForPlay({ opening: Playing.opening(world) })),
+    Effect.catch(({ resource }) =>
+      Effect.succeed(Message.FailedOpenPlay({ reason: `The document ${resource} is not joined.` })),
+    ),
+  ),
+});
+
 // UPDATE
 
 /** A typed value as it can travel: whole numbers, text, and lists of them; none while a number is not yet typed whole. */
@@ -197,15 +231,18 @@ const targetOf = (chosen: string): Option.Option<Objects.Target> =>
 const failed = (model: Model, reason: string) =>
   modifyFields(model, { maybeError: () => Option.some(reason) });
 
-/** Sends `edit`, if there is one; the page changes only once the document says what came of it. */
+/** Sends `edit`, if there is one and the document is being edited, not played; the page changes only once the document says what came of it. */
 const sending = (
   model: Model,
   edit: Option.Option<Edit>,
 ): Update.Return<Model, Message, Services> =>
-  Option.match(edit, {
-    onNone: () => ({ model }),
-    onSome: (sent) => ({ model, commands: [SendEdit({ edit: sent })] }),
-  });
+  Option.match(
+    Option.filter(edit, () => model.play._tag === 'Editing'),
+    {
+      onNone: () => ({ model }),
+      onSome: (sent) => ({ model, commands: [SendEdit({ edit: sent })] }),
+    },
+  );
 
 /** An edit of the selected object, if one is selected. */
 const ofSelected = (model: Model, edit: (entity: number) => Option.Option<Edit>) =>
@@ -290,6 +327,19 @@ export const update = (model: Model, message: Message) =>
       ),
     SentEdit: () => ({ model }),
     FailedSendEdit: ({ reason }) => ({ model: failed(model, reason) }),
+    ClickedPlay: () => ({
+      model,
+      commands: model.play._tag === 'Editing' && model.isDocumentJoined ? [OpenPlay()] : [],
+    }),
+    ReadDocumentForPlay: ({ opening }) => ({
+      model: modifyFields(model, { play: () => ({ _tag: 'Playing', opening }) }),
+    }),
+    FailedOpenPlay: ({ reason }) => ({ model: failed(model, reason) }),
+    JoinedPlay: () => ({ model: modifyFields(model, { isPlayJoined: () => true }) }),
+    LeftPlay: () => ({ model: modifyFields(model, { isPlayJoined: () => false }) }),
+    FailedJoinPlay: ({ reason }) => ({ model: failed(model, reason) }),
+    // The worker playing goes with it, and everything that happened while it played.
+    ClickedStop: () => ({ model: modifyFields(model, { play: () => ({ _tag: 'Editing' }) }) }),
   });
 
 // INIT
@@ -299,6 +349,8 @@ export const initialModel: Model = {
   isCanvasMounted: false,
   outline: [],
   maybeSelected: Option.none(),
+  play: { _tag: 'Editing' },
+  isPlayJoined: false,
   maybeError: Option.none(),
 };
 

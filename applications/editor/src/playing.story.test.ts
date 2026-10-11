@@ -1,5 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Pointing, Story, World } from '@lightocean/core';
+import { Option } from 'effect';
+import * as Editing from '#src/editing.ts';
 import * as Objects from '#src/objects.ts';
 import * as Playing from '#src/playing.ts';
 
@@ -64,6 +66,34 @@ describe('a document playing', () => {
         expect(angle).toBeCloseTo(3.5, 0);
       }),
     );
+  });
+
+  it('starts from the document as it is edited, its objects where they were, without what only editing keeps', () => {
+    const edited = Story.story(
+      Editing.game,
+      Story.given(Editing.joined.world, { editor: Editing.joined.editor }),
+      Story.act('editor', Pointing.Clicked, { entity: Editing.box }),
+      Story.act('editor', Editing.AddedReaction, { entity: Editing.box }),
+      Story.step(),
+    ).world;
+
+    const played = Playing.fromOpening(Playing.opening(edited));
+
+    expect(Option.map(played, (world) => World.entities(world))).toEqual(
+      Option.some([Editing.box, Editing.sphere]),
+    );
+    expect(
+      Option.flatMap(played, (world) => World.get(world, Editing.box, Objects.Behaviour)),
+    ).toEqual(World.get(edited, Editing.box, Objects.Behaviour));
+    expect(
+      Option.flatMap(played, (world) => World.get(world, Editing.joined.editor, Editing.Selection)),
+    ).toEqual(Option.none());
+    // How far each object has turned is only a client's, and the world playing turns it for itself.
+    expect(Option.isSome(World.get(edited, Editing.box, Objects.Turn))).toBe(true);
+    expect(Option.flatMap(played, (world) => World.get(world, Editing.box, Objects.Turn))).toEqual(
+      Option.none(),
+    );
+    expect(Playing.fromOpening('not a document')).toEqual(Option.none());
   });
 
   it('takes no edits: a document playing is not one being edited', () => {

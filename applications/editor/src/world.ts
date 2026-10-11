@@ -6,11 +6,20 @@ import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
 import * as Editing from '#src/editing.ts';
 import * as EditingView from '#src/editing.view.ts';
-import { Document, Message, type Model, OutlineEntry, Selected, type Services } from '#src/main.ts';
+import {
+  Document,
+  Message,
+  type Model,
+  OutlineEntry,
+  Played,
+  Selected,
+  type Services,
+} from '#src/main.ts';
 import * as Objects from '#src/objects.ts';
 import * as ObjectsView from '#src/objects.view.ts';
+import * as Playing from '#src/playing.ts';
 
-// Where the document meets the page: joined in a worker while the editor is open, shown on the canvas once Foldkit has it in the page, and read for the outliner and the panels of what is selected.
+// Where the document meets the page: joined in a worker while the editor is open, shown on the canvas once Foldkit has it in the page, and read for the outliner and the panels of what is selected. While it plays, a second worker plays it, and the canvas shows that world instead.
 
 /** The id the devtools know the editor's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the document kept for the tab. */
 const host = Tab.id('editor');
@@ -33,6 +42,22 @@ export const managedResources = ManagedResource.make<Model, Message>()((entry) =
       onJoined: () => Message.JoinedDocument(),
       onLeft: () => Message.LeftDocument(),
       onFailed: (reason) => Message.FailedJoinDocument({ reason }),
+    }),
+  ),
+  played: entry(
+    World.Opening,
+    World.opened<Model, Message, Services>({
+      resource: Played,
+      game: Playing.game,
+      worker: () =>
+        new Worker(new URL('./play.worker.ts', import.meta.url), {
+          type: 'module',
+          name: `${host}-playing`,
+        }),
+      opens: ({ play }) => (play._tag === 'Playing' ? Option.some(play.opening) : Option.none()),
+      onJoined: () => Message.JoinedPlay(),
+      onLeft: () => Message.LeftPlay(),
+      onFailed: (reason) => Message.FailedJoinPlay({ reason }),
     }),
   ),
 }));
@@ -100,23 +125,45 @@ const selectedBy = (world: Worlds.World, editor: Worlds.Entity): Option.Option<S
       ),
   );
 
+/** What the canvas shows: nothing until it and the document are there, then the document being edited, or the document playing once its world is joined. */
+const shownBy = (model: Model): 'Nothing' | 'Editing' | 'Playing' => {
+  if (!model.isDocumentJoined || !model.isCanvasMounted) {
+    return 'Nothing';
+  }
+  if (model.play._tag === 'Editing') {
+    return 'Editing';
+  }
+  return model.isPlayJoined ? 'Playing' : 'Nothing';
+};
+
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
+  // The canvas shows the document being edited, with what is selected outlined, or the document playing, once its world is joined.
   stage: entry(
-    { isShown: Schema.Boolean },
+    { shown: Schema.Literals(['Nothing', 'Editing', 'Playing']) },
     {
-      modelToDependencies: (model) => ({
-        isShown: model.isDocumentJoined && model.isCanvasMounted,
-      }),
-      dependenciesToStream: ({ isShown }) =>
-        isShown
-          ? Stage.stream({
+      modelToDependencies: (model) => ({ shown: shownBy(model) }),
+      dependenciesToStream: ({ shown }) => {
+        switch (shown) {
+          case 'Nothing':
+            return Stream.empty;
+          case 'Editing':
+            return Stage.stream({
               resource: Document,
               canvasId: CANVAS_ID,
               views: [...ObjectsView.views, ...EditingView.views],
               setup: setUp,
               onFailed: (reason) => Message.FailedShowDocument({ reason }),
-            })
-          : Stream.empty,
+            });
+          case 'Playing':
+            return Stage.stream({
+              resource: Played,
+              canvasId: CANVAS_ID,
+              views: ObjectsView.views,
+              setup: setUp,
+              onFailed: (reason) => Message.FailedShowDocument({ reason }),
+            });
+        }
+      },
     },
   ),
   outline: entry(

@@ -10,4 +10,6 @@ export const colours = stylex.defineVars({
   controlHover: '#2f3c6b',
   accent: '#4f8cff',
   danger: '#ff6b6b',
+  play: '#2f9e44',
+  stop: '#e03131',
 });
