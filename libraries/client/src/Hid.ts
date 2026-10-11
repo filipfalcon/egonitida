@@ -1,5 +1,5 @@
 /// <reference types="w3c-web-hid" />
-import { Data, Effect, Option, type Scope } from 'effect';
+import { Data, Effect, Option, type Scope, Semaphore } from 'effect';
 import type * as Devices from '#src/Devices.ts';
 import * as Haptics from '#src/Haptics.ts';
 import type * as Lighting from '#src/Lighting.ts';
@@ -98,6 +98,9 @@ const driverOf = (drivers: ReadonlyArray<Driver>, device: Device) =>
     ),
   );
 
+/** Whether two outputs make a device feel and show the same. */
+const sameOutput = (a: Output, b: Output) => JSON.stringify(a) === JSON.stringify(b);
+
 /** Reads `device` through `driver`, and makes it felt and lit, until the scope closes. */
 export const connect = (
   device: Device,
@@ -152,28 +155,52 @@ export const connect = (
           : [{ reportId, length: bits > 0 ? Option.some(Math.ceil(bits / 8)) : Option.none() }];
       }),
     );
-    const written = { output: still, sent: 0 };
-    /** Makes `output` felt, as the driver writes it; a report the device does not take is let go. */
+    const written = {
+      /** What the device is to feel and show, as last asked. */
+      output: still,
+      /** What it was last sent, if anything. */
+      sent: Option.none<Output>(),
+      /** How many reports it was sent. */
+      reports: 0,
+    };
+    // One report at a time: what is asked while one is on its way waits for it, and only the newest of it goes after.
+    const sending = yield* Semaphore.make(1);
+    /** Sends the device what it is to feel and show, until it has the newest; nothing for what it already has. A report the device does not take is let go. */
+    const sendNewest: Effect.Effect<void> = Effect.suspend(() => {
+      const output = written.output;
+      if (Option.exists(written.sent, (sent) => sameOutput(sent, output))) {
+        return Effect.void;
+      }
+      return Option.match(driver.write(output, { outputs, sent: written.reports }), {
+        onNone: () => Effect.void,
+        onSome: ({ reportId, data }) => {
+          written.reports += 1;
+          written.sent = Option.some(output);
+          return Effect.ignore(
+            Effect.tryPromise(() =>
+              device.sendReport(
+                reportId,
+                Uint8Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)),
+              ),
+            ),
+          ).pipe(Effect.andThen(sendNewest));
+        },
+      });
+    });
+    /** Makes `output` felt and shown, as the driver writes it: at once if nothing is on its way, else once what is has gone. */
     const write = (output: Output) =>
       Effect.suspend(() => {
         written.output = output;
-        return Option.match(driver.write(output, { outputs, sent: written.sent }), {
-          onNone: () => Effect.void,
-          onSome: ({ reportId, data }) => {
-            written.sent += 1;
-            return Effect.ignore(
-              Effect.tryPromise(() =>
-                device.sendReport(
-                  reportId,
-                  Uint8Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)),
-                ),
-              ),
-            );
-          },
-        });
+        return sending.withPermitsIfAvailable(1)(sendNewest).pipe(Effect.asVoid);
       });
     // Left still as it is let go, so nothing goes on rumbling or pushing back once the page is done with it; its light is given back to it.
-    yield* Effect.addFinalizer(() => write(still));
+    yield* Effect.addFinalizer(() =>
+      Effect.suspend(() => {
+        written.output = still;
+        // After whatever is on its way.
+        return sending.withPermit(sendNewest);
+      }),
+    );
     const felt: Haptics.Felt = {
       // The motors turn until the rumble's time is up, unless something else has turned them since.
       rumble: ({ strong, weak, seconds }) =>

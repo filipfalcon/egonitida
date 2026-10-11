@@ -36,6 +36,34 @@ class Recorded extends EventTarget {
   }
 }
 
+/** A DualSense that takes each report only when a test lets it, as a device over Bluetooth takes its time. */
+class Slow extends Recorded {
+  private waiting: Array<() => void> = [];
+  private flowing = false;
+  override async sendReport(reportId: number, data: BufferSource) {
+    if (!this.flowing) {
+      await new Promise<void>((done) => this.waiting.push(done));
+    }
+    await super.sendReport(reportId, data);
+  }
+  /** Lets every report through from now on, as when the test is done holding them up. */
+  flow() {
+    this.flowing = true;
+    this.letThrough();
+  }
+  /** Lets every report on its way through. */
+  letThrough() {
+    const waiting = this.waiting;
+    this.waiting = [];
+    for (const done of waiting) {
+      done();
+    }
+  }
+  get onTheWay() {
+    return this.waiting.length;
+  }
+}
+
 /** A report over USB with Cross pressed and the sticks at rest. */
 const crossPressed = [
   128,
@@ -123,5 +151,50 @@ describe('a device through WebHID', () => {
         expect(device.sent.map(({ bytes }) => bytes.length)).toEqual([47, 47, 47]);
         expect(device.sent.map(({ reportId }) => reportId)).toEqual([0x02, 0x02, 0x02]);
       }).pipe(Effect.scoped),
+  );
+
+  it.effect('sends nothing for what the device already has', () =>
+    Effect.gen(function* () {
+      const device = new Recorded();
+      const connection = yield* Hid.connect(device, DualSense.driver);
+      const resisting = {
+        left: Haptics.free,
+        right: { _tag: 'Resisting', from: 0, strength: 1 },
+      } as const;
+
+      yield* connection.felt.triggers(resisting);
+      yield* connection.felt.triggers(resisting);
+      yield* connection.lit.colour({ red: 0, green: 0, blue: 1 });
+      yield* connection.lit.colour({ red: 0, green: 0, blue: 1 });
+
+      expect(device.sent).toHaveLength(2);
+    }).pipe(Effect.scoped),
+  );
+
+  it.live('sends one report at a time, and after it only the newest of what came meanwhile', () =>
+    Effect.gen(function* () {
+      const device = new Slow();
+      const connection = yield* Hid.connect(device, DualSense.driver);
+      const blue = (shade: number) => connection.lit.colour({ red: 0, green: 0, blue: shade / 10 });
+
+      // The first goes on its way; the nine after it come while it is.
+      yield* Effect.forkChild(blue(1));
+      yield* Effect.sleep('10 millis');
+      for (let shade = 2; shade <= 10; shade += 1) {
+        yield* Effect.forkChild(blue(shade));
+      }
+      yield* Effect.sleep('10 millis');
+      const onTheWay = device.onTheWay;
+      device.letThrough();
+      yield* Effect.sleep('10 millis');
+      device.letThrough();
+      yield* Effect.sleep('10 millis');
+
+      const shades = device.sent.map(({ bytes }) => bytes[46]);
+      device.flow();
+
+      expect(onTheWay).toBe(1);
+      expect(shades).toEqual([26, 255]);
+    }).pipe(Effect.scoped),
   );
 });
