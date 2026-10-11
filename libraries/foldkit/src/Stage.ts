@@ -12,6 +12,10 @@ export interface Options<R> {
   readonly views: ReadonlyArray<View.View<R>>;
   /** Sets the scene up before the first frame, such as where the camera looks from and what lights it. */
   readonly setup?: ((viewport: Viewport.Viewport) => void) | undefined;
+  /** What runs beside the stage while it is shown, given its viewport, such as the devtools' `Page.serve`, which captures the canvas for an agent to see what is drawn. */
+  readonly alongside?:
+    | ((viewport: Viewport.Viewport) => Effect.Effect<void, never, R | Scope.Scope>)
+    | undefined;
 }
 
 /** Shows `joined` on `viewport` through `options.views` until the scope closes: every click on the canvas acts on what is under it, and every labelled entity stands as a button in `mirror`. */
@@ -36,6 +40,9 @@ export const show = <R>(
       scene: viewport.scene,
       client: joined.client,
     });
+    if (options.alongside !== undefined) {
+      yield* options.alongside(viewport);
+    }
     yield* viewport.loop((seconds) =>
       Option.match(joined.drawing.frame(seconds), {
         onNone: () => Effect.void,

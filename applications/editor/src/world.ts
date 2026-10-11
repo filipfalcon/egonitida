@@ -1,7 +1,7 @@
-import { Tab } from '@lightocean/client';
+import { Tab, type Viewport } from '@lightocean/client';
 import { Pointing, World as Worlds } from '@lightocean/core';
 import { Projection, Stage, World } from '@lightocean/foldkit';
-import { Inspect, Log } from '@lightocean/devtools';
+import { Bridge, Inspect, Log, Page } from '@lightocean/devtools';
 import { Effect, Option, Schedule, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
@@ -27,6 +27,20 @@ const host = Tab.id('editor');
 
 /** The id of the canvas the document is shown on. */
 export const CANVAS_ID = 'viewport';
+
+/** In development, the canvas `viewport` draws on, captured for an agent asking through the development server as the page drawing `host`, so it sees what a person would. */
+const capturedAs = (host: string) => (viewport: Viewport.Viewport) =>
+  import.meta.env.DEV
+    ? Option.match(Bridge.vite, {
+        onNone: () => Effect.void,
+        onSome: (channel) =>
+          Page.serve(channel, {
+            host,
+            capture: (width) =>
+              viewport.capture(width).pipe(Effect.mapError(({ reason }) => reason)),
+          }),
+      })
+    : Effect.void;
 
 /** The document, joined while the editor is open, and the document playing, opened with the document as it was, while it plays. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
@@ -185,6 +199,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               canvasId: CANVAS_ID,
               views: [...ObjectsView.views, ...EditingView.views],
               setup: setUp,
+              alongside: capturedAs(host),
               onFailed: (reason) => Message.FailedShowDocument({ reason }),
             });
           case 'Playing':
@@ -193,6 +208,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               canvasId: CANVAS_ID,
               views: ObjectsView.views,
               setup: setUp,
+              alongside: capturedAs(`${host}-playing`),
               onFailed: (reason) => Message.FailedShowDocument({ reason }),
             });
         }

@@ -1,6 +1,7 @@
-import { Tab } from '@lightocean/client';
+import { Tab, type Viewport } from '@lightocean/client';
+import { Bridge, Page } from '@lightocean/devtools';
 import { Projection, Stage, World } from '@lightocean/foldkit';
-import { Effect, Schema, Stream } from 'effect';
+import { Effect, Option, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
 import { Message, type Model, RoundWorld, type Services, Told, told } from '#src/main.ts';
@@ -14,6 +15,20 @@ const host = Tab.id('save-score');
 
 /** The id of the canvas the round is shown on. */
 export const CANVAS_ID = 'viewport';
+
+/** In development, the canvas `viewport` draws on, captured for an agent asking through the development server as the page drawing `host`, so it sees what a person would. */
+const capturedAs = (host: string) => (viewport: Viewport.Viewport) =>
+  import.meta.env.DEV
+    ? Option.match(Bridge.vite, {
+        onNone: () => Effect.void,
+        onSome: (channel) =>
+          Page.serve(channel, {
+            host,
+            capture: (width) =>
+              viewport.capture(width).pipe(Effect.mapError(({ reason }) => reason)),
+          }),
+      })
+    : Effect.void;
 
 /** The round's world, joined while the page is open. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
@@ -71,6 +86,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               canvasId: CANVAS_ID,
               views: ScoreView.views,
               setup: setUp,
+              alongside: capturedAs(host),
               onFailed: (reason) => Message.FailedShowWorld({ reason }),
             })
           : Stream.empty,

@@ -130,4 +130,31 @@ describe('a stage', () => {
         expect(pressedOff).toEqual(Option.some({ on: false }));
       }).pipe(Effect.scoped),
   );
+
+  it.live(
+    'runs what the application asks beside it, given its viewport, until it is shown no more',
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        const besides: Array<string> = [];
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps],
+          mirror: document.createElement('div'),
+          alongside: (given) =>
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                besides.push(given === viewport ? 'began on the viewport' : 'began elsewhere');
+              }),
+              () =>
+                Effect.sync(() => {
+                  besides.push('ended');
+                }),
+            ),
+        }).pipe(Effect.scoped);
+
+        expect(besides).toEqual(['began on the viewport', 'ended']);
+      }).pipe(Effect.scoped),
+  );
 });
