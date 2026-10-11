@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import * as Devices from '#src/Devices.ts';
 import * as Gamepads from '#src/Gamepads.ts';
 
@@ -118,5 +118,16 @@ describe('gamepads', () => {
     );
 
     expect(read).toEqual([]);
+  });
+
+  it('read only pads of the models asked for, when asked', () => {
+    const pads = [
+      gamepad({}),
+      gamepad({ id: 'Xbox Wireless Controller (Vendor: 045e Product: 0b13)' }),
+    ];
+    const dualSense = [{ vendorId: 0x054c, productId: 0x0ce6 }];
+
+    expect(Gamepads.read(pads, [], [], Option.some(dualSense))).toHaveLength(1);
+    expect(Gamepads.read(pads)).toHaveLength(2);
   });
 });

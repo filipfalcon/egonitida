@@ -26,28 +26,115 @@ const LEANING = 0.5;
 /** How long a direction is held before focus goes on moving, and how often it moves then, in seconds. */
 const REPEAT = { after: 0.4, every: 0.12 };
 
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+/** Steps through a menu, each way apart: down or right as 1, up or left as -1, none as 0. */
+export interface Steps {
+  readonly vertical: number;
+  readonly horizontal: number;
+}
 
-/** Which way focus is asked to move this frame: on through the order, back through it, or neither. */
-const wayOf = (read: Controls.Read<typeof bindings>): number => {
-  const { x, y } = read.values.stick('move');
-  const pressed = (name: 'up' | 'down' | 'left' | 'right') => read.values.button(name).held;
-  if (pressed('down') || pressed('right') || y < -LEANING || x > LEANING) {
-    return 1;
-  }
-  if (pressed('up') || pressed('left') || y > LEANING || x < -LEANING) {
-    return -1;
-  }
-  return 0;
+/** Steps through a menu a game keeps itself, rather than through focus. */
+export interface Stepper {
+  /** The steps the pad takes this frame, `seconds` after the frame before. */
+  readonly step: (devices: Devices.State, seconds: number) => Steps;
+}
+
+/** One way of stepping, along one axis: the way held, how long, and how many steps it took since. */
+interface Held {
+  readonly way: number;
+  readonly seconds: number;
+  readonly moved: number;
+}
+
+/** The bindings a stepper reads: the stick as it leans, since how far it must lean is the stepper's own. */
+const stepping = {
+  ...bindings,
+  move: Controls.stick({ pad: 'LeftStick', deadZone: { inner: 0, outer: 1 } }),
 };
+
+const notHeld: Held = { way: 0, seconds: 0, moved: 0 };
+
+/**
+ * Steps through a menu a game keeps, as its Model does, with the directional pad and the left stick: up and down apart from left and right, a step at a press, and on while a direction is held unless `repeat` is false. The stick steps once it leans as far as `lean`, and holds that way until it comes back within `rearm`, so a flick steps once.
+ */
+export const stepper = (
+  options: {
+    readonly repeat?: { readonly after: number; readonly every: number } | false;
+    readonly lean?: number;
+    readonly rearm?: number;
+  } = {},
+): Stepper => {
+  const repeat = options.repeat ?? REPEAT;
+  const lean = options.lean ?? LEANING;
+  const rearm = options.rearm ?? lean;
+  const state = {
+    read: Controls.start(stepping),
+    vertical: notHeld,
+    horizontal: notHeld,
+  };
+  /** The way along an axis this frame: the directional pad's, else the stick's, held until it comes back within `rearm`. */
+  const wayOf = (pad: number, leaning: number, before: Held) =>
+    pad !== 0
+      ? pad
+      : Math.abs(leaning) >= lean
+        ? Math.sign(leaning)
+        : before.way !== 0 && Math.sign(leaning) === before.way && Math.abs(leaning) > rearm
+          ? before.way
+          : 0;
+  /** The steps along an axis taken `way` this frame, and how it is held after. */
+  const along = (
+    way: number,
+    before: Held,
+    seconds: number,
+  ): { readonly steps: number; readonly held: Held } => {
+    if (way === 0) {
+      return { steps: 0, held: notHeld };
+    }
+    if (way !== before.way) {
+      return { steps: 1, held: { way, seconds: 0, moved: 0 } };
+    }
+    if (repeat === false) {
+      return { steps: 0, held: before };
+    }
+    const heldFor = before.seconds + seconds;
+    // Steps owed by now: one at `after`, and one every `every` after it.
+    const owed =
+      heldFor < repeat.after ? 0 : 1 + Math.floor((heldFor - repeat.after) / repeat.every);
+    return {
+      steps: Math.max(owed - before.moved, 0),
+      held: { way, seconds: heldFor, moved: Math.max(owed, before.moved) },
+    };
+  };
+  return {
+    step: (devices, seconds) => {
+      state.read = Controls.read(stepping, devices, state.read);
+      const held = (name: 'up' | 'down' | 'left' | 'right') => state.read.values.button(name).held;
+      const { x, y } = state.read.values.stick('move');
+      const vertical = along(
+        wayOf((held('down') ? 1 : 0) - (held('up') ? 1 : 0), -y, state.vertical),
+        state.vertical,
+        seconds,
+      );
+      const horizontal = along(
+        wayOf((held('right') ? 1 : 0) - (held('left') ? 1 : 0), x, state.horizontal),
+        state.horizontal,
+        seconds,
+      );
+      state.vertical = vertical.held;
+      state.horizontal = horizontal.held;
+      return {
+        vertical: vertical.steps === 0 ? 0 : vertical.held.way * vertical.steps,
+        horizontal: horizontal.steps === 0 ? 0 : horizontal.held.way * horizontal.steps,
+      };
+    },
+  };
+};
+
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 /** Navigation within `container`. */
 export const make = (container: HTMLElement): Navigation => {
-  const state = {
-    read: Controls.start(bindings),
-    /** The way held, and for how long. */
-    held: { way: 0, seconds: 0, moved: 0 },
-  };
+  const steps = stepper();
+  const state = { read: Controls.start(bindings) };
 
   const focusables = () =>
     [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
@@ -76,21 +163,11 @@ export const make = (container: HTMLElement): Navigation => {
   return {
     frame: (devices, seconds) => {
       state.read = Controls.read(bindings, devices, state.read);
-      const way = wayOf(state.read);
-      if (way === 0) {
-        state.held = { way: 0, seconds: 0, moved: 0 };
-      } else if (way !== state.held.way) {
-        state.held = { way, seconds: 0, moved: 0 };
-        step(way);
-      } else {
-        const heldFor = state.held.seconds + seconds;
-        // Moves owed by now: one at the press, then one at `after`, and one every `every` after it.
-        const owed =
-          heldFor < REPEAT.after ? 0 : 1 + Math.floor((heldFor - REPEAT.after) / REPEAT.every);
-        for (let move = state.held.moved; move < owed; move += 1) {
-          step(way);
-        }
-        state.held = { way, seconds: heldFor, moved: Math.max(owed, state.held.moved) };
+      // Focus goes through one order, so up and left go back through it, down and right on.
+      const { vertical, horizontal } = steps.step(devices, seconds);
+      const way = vertical !== 0 ? vertical : horizontal;
+      for (let taken = 0; taken < Math.abs(way); taken += 1) {
+        step(Math.sign(way));
       }
       if (state.read.values.button('press').pressed) {
         focused()?.click();

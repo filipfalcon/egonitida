@@ -91,3 +91,51 @@ describe('navigating with a pad', () => {
     expect(document.activeElement).toBe(outside);
   });
 });
+
+/** A pad leaning its left stick `y` up, and nothing else held. */
+const leaning = (y: number): Devices.State => ({
+  ...Devices.idle,
+  pads: [{ ...Devices.idlePad, axes: { ...Devices.idlePad.axes, LeftY: -y } }],
+});
+
+describe('stepping through a menu a game keeps', () => {
+  it('steps each way apart, a step at each press of the directional pad, none more while it is held', () => {
+    const stepper = Navigation.stepper({ repeat: false });
+
+    const steps = [
+      holding('Down'),
+      holding('Down'),
+      Devices.idle,
+      holding('Right'),
+      holding('Up'),
+    ].map((devices) => stepper.step(devices, 1));
+
+    expect(steps).toEqual([
+      { vertical: 1, horizontal: 0 },
+      { vertical: 0, horizontal: 0 },
+      { vertical: 0, horizontal: 0 },
+      { vertical: 0, horizontal: 1 },
+      { vertical: -1, horizontal: 0 },
+    ]);
+  });
+
+  it('steps at a flick of the stick, and again only once it came back near the middle', () => {
+    const stepper = Navigation.stepper({ repeat: false, lean: 0.6, rearm: 0.3 });
+
+    const steps = [0.7, 0.9, 0.4, 0.7, 0.2, 0.7].map(
+      (y) => stepper.step(leaning(y), FRAME).vertical,
+    );
+
+    expect(steps).toEqual([-1, 0, 0, 0, 0, -1]);
+  });
+
+  it('goes on stepping while a direction is held, when it repeats', () => {
+    const stepper = Navigation.stepper();
+
+    const steps = [0, 0.3, 0.1, 0.12].map(
+      (seconds) => stepper.step(holding('Down'), seconds).vertical,
+    );
+
+    expect(steps).toEqual([1, 0, 1, 1]);
+  });
+});

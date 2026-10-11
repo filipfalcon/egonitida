@@ -76,14 +76,24 @@ const isOf = (gamepad: Gamepad, models: Models) =>
     ),
   );
 
-/** The pads among `gamepads`, read by the standard layout or one of `layouts`; empty slots, pads gone, pads of no layout known, and pads of `elsewhere`, read some other way such as through WebHID, are left out. */
+/** Whether `gamepad` may be read, of `only` those models if asked. */
+const isAllowed = (gamepad: Gamepad, only: Option.Option<Models>) =>
+  Option.match(only, { onNone: () => true, onSome: (models) => isOf(gamepad, models) });
+
+/** The pads among `gamepads`, read by the standard layout or one of `layouts`; empty slots, pads gone, pads of no layout known, pads of `elsewhere`, read some other way such as through WebHID, and pads of no model among `only`, if asked, are left out. */
 export const read = (
   gamepads: ReadonlyArray<Gamepad | null>,
   layouts: ReadonlyArray<Layout> = [],
   elsewhere: Models = [],
+  only: Option.Option<Models> = Option.none(),
 ): ReadonlyArray<Devices.Pad> =>
   gamepads.flatMap((gamepad) => {
-    if (gamepad === null || !gamepad.connected || isOf(gamepad, elsewhere)) {
+    if (
+      gamepad === null ||
+      !gamepad.connected ||
+      isOf(gamepad, elsewhere) ||
+      !isAllowed(gamepad, only)
+    ) {
       return [];
     }
     const layout =
@@ -91,22 +101,24 @@ export const read = (
     return layout === undefined ? [] : [padOf(gamepad, layout)];
   });
 
-/** The pads connected now, read off the browser; none where it has no Gamepad API. */
+/** The pads connected now, read off the browser, of `only` those models if asked; none where it has no Gamepad API. */
 export const poll = (
   layouts: ReadonlyArray<Layout> = [],
   elsewhere: Models = [],
+  only: Option.Option<Models> = Option.none(),
 ): ReadonlyArray<Devices.Pad> =>
   typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function'
     ? []
-    : read(navigator.getGamepads(), layouts, elsewhere);
+    : read(navigator.getGamepads(), layouts, elsewhere, only);
 
 /** How long a pad's motors are asked to turn each time, which the page turns them again before, as often as its frames go. */
 const TURNED_FOR_MILLIS = 250;
 
-/** The pads among `gamepads` that rumble, felt through their motors; pads of `elsewhere`, felt some other way such as through WebHID, are left out. */
+/** The pads among `gamepads` that rumble, felt through their motors; pads of `elsewhere`, felt some other way such as through WebHID, and pads of no model among `only`, if asked, are left out. */
 export const felt = (
   gamepads: ReadonlyArray<Gamepad | null>,
   elsewhere: Models = [],
+  only: Option.Option<Models> = Option.none(),
 ): ReadonlyArray<Haptics.Felt> =>
   gamepads.flatMap((gamepad) => {
     const actuator = gamepad?.vibrationActuator;
@@ -115,7 +127,8 @@ export const felt = (
       !gamepad.connected ||
       actuator === null ||
       actuator === undefined ||
-      isOf(gamepad, elsewhere)
+      isOf(gamepad, elsewhere) ||
+      !isAllowed(gamepad, only)
     ) {
       return [];
     }
@@ -141,7 +154,10 @@ export const felt = (
   });
 
 /** The pads connected now that rumble, read off the browser; none where it has no Gamepad API. */
-export const feltNow = (elsewhere: Models = []): ReadonlyArray<Haptics.Felt> =>
+export const feltNow = (
+  elsewhere: Models = [],
+  only: Option.Option<Models> = Option.none(),
+): ReadonlyArray<Haptics.Felt> =>
   typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function'
     ? []
-    : felt(navigator.getGamepads(), elsewhere);
+    : felt(navigator.getGamepads(), elsewhere, only);
