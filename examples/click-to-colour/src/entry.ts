@@ -1,12 +1,16 @@
 import { BrowserWorker } from '@effect/platform-browser';
 import { Clicking, Drawing, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
+import { Bridge, Page } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Colour from '#src/colour.ts';
 import * as ColourView from '#src/colour.view.ts';
 
-// The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked.
+// The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked. In development, it shows an agent what it draws.
+/** The id the devtools know this page's host by, given to its worker as its name, so the page can say which host it draws. */
+const host = `cubes-${crypto.randomUUID().slice(0, 8)}`;
+
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');
   if (!(canvas instanceof HTMLCanvasElement)) {
@@ -26,6 +30,17 @@ const main = Effect.gen(function* () {
   viewport.camera.lookAt(0, 0, 0);
 
   yield* Clicking.serve({ clicks: viewport.clicks, camera: viewport.camera, views, client });
+  // In development, an agent asking through the development server can see what this page draws.
+  if (import.meta.env.DEV) {
+    yield* Option.match(Bridge.vite, {
+      onNone: () => Effect.void,
+      onSome: (channel) =>
+        Page.serve(channel, {
+          host,
+          capture: (width) => viewport.capture(width).pipe(Effect.mapError(({ reason }) => reason)),
+        }),
+    });
+  }
   yield* viewport.loop((seconds) =>
     Option.match(drawing.frame(seconds), { onNone: () => Effect.void, onSome: views.frame }),
   );
@@ -33,7 +48,11 @@ const main = Effect.gen(function* () {
 }).pipe(
   Effect.provide(
     BrowserWorker.layer(
-      () => new Worker(new URL('./simulation.worker.ts', import.meta.url), { type: 'module' }),
+      () =>
+        new Worker(new URL('./simulation.worker.ts', import.meta.url), {
+          type: 'module',
+          name: host,
+        }),
     ),
   ),
   Effect.scoped,

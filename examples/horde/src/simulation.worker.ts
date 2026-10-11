@@ -1,7 +1,7 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { WorkerTransport, World } from '@lightocean/core';
-import { Bridge, Inspect, Reload, Replay, Rewind } from '@lightocean/devtools';
-import { Effect, Option } from 'effect';
+import { Beside, Reload } from '@lightocean/devtools';
+import { Effect } from 'effect';
 import * as Game from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 
@@ -12,18 +12,10 @@ Effect.runFork(
   Reload.host(import.meta.hot?.data, { ...setup, world: Game.world, mayHold: true }, (host) =>
     Effect.gen(function* () {
       if (import.meta.env.DEV) {
-        yield* Replay.alongside(host, setup).pipe(
-          Effect.flatMap((divergence) =>
-            Effect.logError('The horde does not replay as it was played', divergence),
-          ),
-          Effect.catch((unreadable) => Effect.logError('The horde cannot be replayed', unreadable)),
-          Effect.forkScoped,
-        );
-        const rewind = yield* Rewind.make(host, setup, { every: 30, keepSeconds: 30 });
-        yield* Rewind.serve(host, rewind);
-        yield* Option.match(Bridge.vite, {
-          onNone: () => Effect.void,
-          onSome: (channel) => Bridge.serve(channel, Inspect.make(host, rewind), { name: 'horde' }),
+        // The page that started this worker named it by the id the devtools know its host by, so the page can name the host it draws.
+        yield* Beside.serve(host, setup, {
+          name: 'horde',
+          id: self.name === '' ? undefined : self.name,
         });
       }
       yield* WorkerTransport.serveHost(host);

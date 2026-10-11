@@ -1,7 +1,7 @@
 import { BrowserWorker } from '@effect/platform-browser';
 import { Drawing, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
-import { Rewind } from '@lightocean/devtools';
+import { Bridge, Page, Rewind } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
@@ -59,6 +59,9 @@ const listen = <K extends keyof WindowEventMap>(
     () => Effect.sync(() => window.removeEventListener(type, handler)),
   );
 
+/** The id the devtools know this page's host by, given to its worker as its name, so the page can say which host it draws. */
+const host = `horde-${crypto.randomUUID().slice(0, 8)}`;
+
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');
   const hud = document.querySelector('#hud');
@@ -106,6 +109,17 @@ const main = Effect.gen(function* () {
   const ray = new Three.Raycaster();
   const aimed = new Three.Vector3();
   const rewind = Rewind.controls(client);
+  // In development, an agent asking through the development server can see what this page draws.
+  if (import.meta.env.DEV) {
+    yield* Option.match(Bridge.vite, {
+      onNone: () => Effect.void,
+      onSome: (channel) =>
+        Page.serve(channel, {
+          host,
+          capture: (width) => viewport.capture(width).pipe(Effect.mapError(({ reason }) => reason)),
+        }),
+    });
+  }
   const time = { paused: false };
   /** Does what a key asked of the rewind; while time is held, the player does nothing else. */
   const answer = (asking: Asked) => {
@@ -192,7 +206,11 @@ const main = Effect.gen(function* () {
 }).pipe(
   Effect.provide(
     BrowserWorker.layer(
-      () => new Worker(new URL('./simulation.worker.ts', import.meta.url), { type: 'module' }),
+      () =>
+        new Worker(new URL('./simulation.worker.ts', import.meta.url), {
+          type: 'module',
+          name: host,
+        }),
     ),
   ),
   Effect.scoped,
