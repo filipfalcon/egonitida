@@ -145,6 +145,13 @@ const notSaved = Rule.on(ScoreNotSaved, {
   },
 });
 
+/** A round with no hits yet, playing for its time from `tick`, at steps `stepSeconds` apart. */
+const playingFrom = (tick: number, stepSeconds: number): typeof Round.schema.Type => ({
+  _tag: 'Playing',
+  endsAt: tick + Math.round(ROUND_SECONDS / stepSeconds),
+  hits: 0,
+});
+
 /** A new round, once the last is over, plays for its time from now. */
 const newRound = Rule.on(ChoseNewRound, {
   writes: [Round],
@@ -152,11 +159,7 @@ const newRound = Rule.on(ChoseNewRound, {
   run: (context) => {
     for (const [round, state] of context.query(Round)) {
       if (state._tag === 'Saved' || state._tag === 'Unsaved') {
-        context.set(round, Round, {
-          _tag: 'Playing',
-          endsAt: context.time.tick + Math.round(ROUND_SECONDS / context.time.stepSeconds),
-          hits: 0,
-        });
+        context.set(round, Round, playingFrom(context.time.tick, context.time.stepSeconds));
       }
     }
   },
@@ -197,7 +200,7 @@ export const domain = Domain.make({
 export const game = Game.make({ stepRate: STEP_RATE, domains: [Pointing.domain, domain] });
 
 const [withRound, round] = World.spawn(World.empty({ seed: 1 }), [
-  Round.of({ _tag: 'Playing', endsAt: ROUND_SECONDS * STEP_RATE, hits: 0 }),
+  Round.of(playingFrom(0, 1 / STEP_RATE)),
 ]);
 const [withFirst, firstTarget] = World.spawn(withRound, [
   Target.of({ x: -2, z: 0 }),
