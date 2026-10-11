@@ -246,10 +246,17 @@ export interface EventChanges {
   readonly handledBy: ReadonlyArray<Part>;
 }
 
-/** How a game's state changes, read off what its systems and rules declare: by component, by event or action, and what may despawn. */
+export interface CommandChanges {
+  readonly issuedBy: ReadonlyArray<Part>;
+  /** The tags of the events it may come to. */
+  readonly results: ReadonlyArray<string>;
+}
+
+/** How a game's state changes, read off what its systems and rules declare: by component, by event or action, by command, and what may despawn. */
 export interface Changes {
   readonly components: ReadonlyMap<string, ComponentChanges>;
   readonly events: ReadonlyMap<string, EventChanges>;
+  readonly commands: ReadonlyMap<string, CommandChanges>;
   readonly despawnedBy: ReadonlyArray<Part>;
 }
 
@@ -274,6 +281,7 @@ export const changes = (game: Game): Changes => {
       spawns: system.spawns,
       emits: system.emits,
       handles: [],
+      issues: [],
       despawns: system.despawns,
     })),
     ...game.rules.map((rule) => ({
@@ -288,6 +296,7 @@ export const changes = (game: Game): Changes => {
       spawns: rule.spawns,
       emits: rule.emits,
       handles: [rule.on],
+      issues: rule.commands,
       despawns: rule.despawns,
     })),
   ];
@@ -310,6 +319,15 @@ export const changes = (game: Game): Changes => {
         {
           emittedBy: by(({ emits }) => emits.some(({ tag }) => tag === event.tag)),
           handledBy: by(({ handles }) => handles.some(({ tag }) => tag === event.tag)),
+        },
+      ]),
+    ),
+    commands: new Map(
+      game.commands.map((command) => [
+        command.name,
+        {
+          issuedBy: by(({ issues }) => issues.some(({ name }) => name === command.name)),
+          results: command.results.map(({ tag }) => tag),
         },
       ]),
     ),

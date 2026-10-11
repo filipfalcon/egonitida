@@ -1079,6 +1079,13 @@ describe('commands', () => {
     ).toThrow('Bitten is not what SaveHealth comes to');
   });
 
+  it('are in the map of a game’s changes: which rules issue them, and what they come to', () => {
+    expect(Game.changes(saving).commands.get('SaveHealth')).toEqual({
+      issuedBy: [{ _tag: 'Rule', on: 'Died', name: Option.none(), domain: Option.some('Saver') }],
+      results: ['SavedHealth', 'FailedToSaveHealth'],
+    });
+  });
+
   it('fail a story that expects one not issued', () => {
     expect(() => Story.story(saving, Story.step(), Story.expectCommand(SaveHealth))).toThrow(
       'no SaveHealth was issued',
