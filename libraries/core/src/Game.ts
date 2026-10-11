@@ -120,12 +120,12 @@ export const only = <
   rules: parts.rules,
 });
 
-export interface Step {
+export interface Step<Commands extends Command.Any = Command.Any> {
   readonly world: World.World;
   /** Every event of the step, in the order it happened. */
   readonly events: ReadonlyArray<Event.Tagged>;
   /** Every command the rules issued, in the order they issued them; none of them has run. */
-  readonly commands: ReadonlyArray<Command.Issued>;
+  readonly commands: ReadonlyArray<Command.IssuedOf<Commands>>;
 }
 
 export interface StepOptions {
@@ -133,13 +133,13 @@ export interface StepOptions {
   readonly freeze?: boolean;
 }
 
-export const step = (
-  game: Game,
+export const step = <Commands extends Command.Any>(
+  game: Game<Component.Any, Action.Any, Event.Any, Commands>,
   world: World.World,
   inputs: ReadonlyArray<Input.Input> = [],
   actions: ReadonlyArray<Event.Tagged> = [],
   options: StepOptions = {},
-): Step => {
+): Step<Commands> => {
   // The world a step is given is frozen too, so even what it was spawned with fails at once when changed in place.
   const freezing = options.freeze === true ? game.components : [];
   for (const component of freezing) {
@@ -159,7 +159,7 @@ export const step = (
   // Everything that happens in the step, in order: the actions first, then what systems and rules emit.
   const line: Array<Event.Tagged> = [...actions];
   // What the rules decided should be done outside the world, in the order they decided it.
-  const commands: Array<Command.Issued> = [];
+  const commands: Array<Command.IssuedOf<Commands>> = [];
   const handled = { count: 0 };
   /** Hands every event not yet handled to the rules that handle it, including events those rules emit meanwhile. */
   const settle = () => {
@@ -178,7 +178,7 @@ export const step = (
 
   // Systems and rules share one context at run time; their types are what keep each to what it declared.
   const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> &
-    Rule.Context<Component.Any, Event.Any, Component.Any, true, Command.Any> = {
+    Rule.Context<Component.Any, Event.Any, Component.Any, true, Commands> = {
     time: { tick: draft.tick, stepSeconds: 1 / game.stepRate },
     random: () => {
       const [value, state] = Random.next(draft.random);
@@ -194,7 +194,7 @@ export const step = (
     emit: (event: Event.Tagged) => {
       line.push(event);
     },
-    command: (issued) => {
+    command(issued) {
       commands.push(issued);
     },
     spawn: (instances) => World.spawnInto(draft, instances),

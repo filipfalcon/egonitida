@@ -25,8 +25,8 @@ export interface Context<
   readonly query: World.Query<Component.Any>;
   readonly set: <Value>(entity: World.Entity, component: Of<Value> & Writes, value: Value) => void;
   readonly emit: (event: Event.ValueOf<Emits>) => void;
-  /** Issues a command it declared, to be done once the step is over. */
-  readonly command: (issued: Command.IssuedOf<Commands>) => void;
+  /** Issues a command it declared, to be done once the step is over. A method, so a step can hand a rule written for any commands one that knows its game's. */
+  command(issued: Command.IssuedOf<Commands>): void;
 }
 
 export type RulesComponent = Component.Component<string, unknown, 'rules'>;

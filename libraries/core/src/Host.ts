@@ -1,4 +1,7 @@
 import { Clock, Effect, Latch, Option, Schema, type Scope, Stream } from 'effect';
+import type * as Action from '#src/Action.ts';
+import type * as Command from '#src/Command.ts';
+import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
@@ -10,10 +13,18 @@ import type * as World from '#src/World.ts';
 
 /**
  * Hosts a game: steps its world at the game's rate, takes the input its clients send, and sends every client the world after each step. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
+ *
+ * It also runs the commands the game's rules issue, once the step that issued them is over, with the services of the Layers it is given; so hosting a game that saves needs whatever it saves to. A command's result enters the world at the next step taken after it comes, as actions do. A command that breaks is reported, has no result, and stops nothing.
  */
 
-export interface Options {
-  readonly game: Game.Game;
+/** What it takes to host a game whose commands need `Services`. */
+export interface Options<Services = never> {
+  readonly game: Game.Game<
+    Component.Any,
+    Action.Any,
+    Event.Any,
+    Command.Command<string, unknown, Event.Any, Services>
+  >;
   readonly world: World.World;
   /** Spawns the entity a joining client will control. */
   readonly join: (world: World.World) => readonly [World.World, World.Entity];
@@ -37,7 +48,9 @@ export interface Host {
   readonly world: Effect.Effect<World.World>;
 }
 
-export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> =>
+export const make = <Services = never>(
+  options: Options<Services>,
+): Effect.Effect<Host, never, Scope.Scope | Services> =>
   Effect.gen(function* () {
     const inputComponents = new Map(
       options.game.components
@@ -78,6 +91,20 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       }
     });
 
+    /** Runs a command on its own, its result waiting for the next step with the players' actions; one that breaks is reported and comes to nothing. */
+    const run = (issued: Command.Issued<string, Services>) =>
+      issued.execute.pipe(
+        Effect.flatMap((result) =>
+          Effect.sync(() => {
+            state.acted.push(result);
+          }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.logError(`${issued.name} broke and came to nothing`, cause),
+        ),
+        Effect.forkScoped,
+      );
+
     // Every step real time owes: the waiting input goes into the first, the rest only move time on.
     const takeDueSteps = Effect.gen(function* () {
       if (Option.isSome(state.heldSince)) {
@@ -93,9 +120,13 @@ export const make = (options: Options): Effect.Effect<Host, never, Scope.Scope> 
       state.pending.clear();
       const actions = state.acted.splice(0);
       const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
-      state.world = Game.step(options.game, state.world, inputs, actions, stepping).world;
+      const first = Game.step(options.game, state.world, inputs, actions, stepping);
+      state.world = first.world;
+      yield* Effect.forEach(first.commands, run, { discard: true });
       for (let step = 1; step < steps; step += 1) {
-        state.world = Game.step(options.game, state.world, [], [], stepping).world;
+        const next = Game.step(options.game, state.world, [], [], stepping);
+        state.world = next.world;
+        yield* Effect.forEach(next.commands, run, { discard: true });
       }
       const payload = Snapshot.encode(state.world, options.game);
       yield* Effect.forEach(

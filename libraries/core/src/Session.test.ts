@@ -1,9 +1,12 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Exit, Fiber, Option, Schema, Scope, Stream } from 'effect';
+import { Context, Effect, Exit, Fiber, Option, Schema, Scope, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Action from '#src/Action.ts';
 import * as Client from '#src/Client.ts';
+import * as Command from '#src/Command.ts';
+import * as Component from '#src/Component.ts';
 import { Controls, Health, Position } from '#src/fixtures.ts';
+import * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
 import * as Domain from '#src/Domain.ts';
 import * as Host from '#src/Host.ts';
@@ -317,4 +320,144 @@ describe('a session between a host and its clients', () => {
       }),
     );
   });
+});
+
+describe('commands', () => {
+  /** Where health is kept outside the world: it says whether it kept an amount, or breaks. */
+  const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(
+    'Vault',
+  );
+  const KeptHealth = Event.make('KeptHealth', { player: Schema.Int });
+  const FailedToKeepHealth = Event.make('FailedToKeepHealth', { player: Schema.Int });
+  const KeepHealth = Command.make('KeepHealth', {
+    args: { player: Schema.Int, amount: Schema.Int },
+    results: [KeptHealth, FailedToKeepHealth],
+    execute: ({ player, amount }) =>
+      Effect.gen(function* () {
+        const vault = yield* Vault;
+        const kept = yield* vault.keep(amount);
+        const done: Event.ValueOf<typeof KeptHealth> = { _tag: 'KeptHealth', player };
+        const failed: Event.ValueOf<typeof FailedToKeepHealth> = {
+          _tag: 'FailedToKeepHealth',
+          player,
+        };
+        return kept ? done : failed;
+      }),
+  });
+  const Kept = Component.make(
+    'Kept',
+    Schema.Union([Schema.TaggedStruct('Yes', {}), Schema.TaggedStruct('No', {})]),
+    { owner: 'rules', network: 'server' },
+  );
+  const keepGame = Game.make({
+    stepRate: 30,
+    domains: [
+      Domain.make({
+        name: 'Keeping',
+        requires: [],
+        components: [Health, Kept],
+        actions: [AskedToHeal],
+        events: [KeptHealth, FailedToKeepHealth],
+        commands: [KeepHealth],
+        systems: [],
+        rules: [
+          Rule.on(AskedToHeal, {
+            writes: [Health],
+            emits: [],
+            commands: [KeepHealth],
+            run: (context, asked) => {
+              context.set(asked.player, Health, { current: asked.amount });
+              context.command(KeepHealth.of({ player: asked.player, amount: asked.amount }));
+            },
+          }),
+          Rule.on(KeptHealth, {
+            writes: [Kept],
+            emits: [],
+            run: (context, kept) => context.set(kept.player, Kept, { _tag: 'Yes' }),
+          }),
+          Rule.on(FailedToKeepHealth, {
+            writes: [Kept],
+            emits: [],
+            run: (context, failed) => context.set(failed.player, Kept, { _tag: 'No' }),
+          }),
+        ],
+      }),
+    ],
+  });
+  const keeping = (vault: { readonly keep: (amount: number) => Effect.Effect<boolean> }) =>
+    Effect.gen(function* () {
+      const host = yield* Host.make({
+        game: keepGame,
+        world: World.empty({ seed: 1 }),
+        join: (world) => World.spawn(world, [Health.of({ current: 0 })]),
+        leave: World.despawn,
+        mayHold: false,
+      });
+      const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+      yield* host.connect(hostEnd);
+      const client = yield* Client.connect(clientEnd, { game: keepGame });
+      return { host, client };
+    }).pipe(Effect.provideService(Vault, vault));
+  const keptIn = (world: World.World, entity: World.Entity) =>
+    Option.map(World.get(world, entity, Kept), ({ _tag }) => _tag);
+  const healthIn = (world: World.World, entity: World.Entity) =>
+    Option.map(World.get(world, entity, Health), ({ current }) => current);
+
+  it('needs the services the game’s commands need', () => {
+    const hosting = Host.make({
+      game: keepGame,
+      world: World.empty({ seed: 1 }),
+      join: (world) => World.spawn(world, [Health.of({ current: 0 })]),
+      leave: World.despawn,
+      mayHold: false,
+    });
+    // Both the type checker and Effect's own check refuse it: hosting a game that keeps health needs a vault to keep it in.
+    // @ts-expect-error The vault is not given.
+    // @effect-diagnostics-next-line missingEffectContext:off
+    const unprovided: Effect.Effect<Host.Host, never, Scope.Scope> = hosting;
+
+    expect(unprovided).toBe(hosting);
+  });
+
+  it.effect(
+    'runs what the rules issue with the host’s services, its result handled a step later',
+    () =>
+      Effect.gen(function* () {
+        const kept: Array<number> = [];
+        const { host, client } = yield* keeping({
+          keep: (amount) => Effect.sync(() => kept.push(amount) > 0),
+        });
+
+        yield* client.act(AskedToHeal, { amount: 40 });
+        yield* advance(100);
+
+        expect(kept).toEqual([40]);
+        expect(keptIn(yield* host.world, client.entity)).toEqual(Option.some('Yes'));
+      }),
+  );
+
+  it.effect('brings a failure it foresaw back as one of its results', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* keeping({ keep: () => Effect.succeed(false) });
+
+      yield* client.act(AskedToHeal, { amount: 40 });
+      yield* advance(100);
+
+      expect(keptIn(yield* host.world, client.entity)).toEqual(Option.some('No'));
+    }),
+  );
+
+  it.effect('goes on stepping when a command breaks, and the command has no result', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* keeping({ keep: () => Effect.die('the vault is gone') });
+
+      yield* client.act(AskedToHeal, { amount: 40 });
+      yield* advance(100);
+      const world = yield* host.world;
+
+      expect(world.tick).toBeGreaterThan(2);
+      expect(healthIn(world, client.entity)).toEqual(Option.some(40));
+      expect(keptIn(world, client.entity)).toEqual(Option.none());
+    }),
+  );
 });

@@ -40,10 +40,6 @@ export interface Issued<Name extends string = string, Services = unknown> {
 /** What `C` gives when issued. */
 export type IssuedOf<C extends Any> = ReturnType<C['of']>;
 
-/** The services `C` needs to run. */
-export type ServicesOf<C extends Any> =
-  IssuedOf<C> extends Issued<string, infer Services> ? Services : never;
-
 export const make = <
   const Name extends string,
   const F extends Fields,
