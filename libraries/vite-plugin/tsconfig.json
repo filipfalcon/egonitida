@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The plugin runs in the development server, under Node.
+    "lib": ["esnext"],
+    "types": ["node"]
+  }
+}

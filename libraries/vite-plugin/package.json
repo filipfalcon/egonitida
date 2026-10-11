@@ -1,0 +1,20 @@
+{
+  "name": "@lightocean/vite-plugin",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightocean/devtools": "*",
+    "effect": "4.0.0",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
+  }
+}
