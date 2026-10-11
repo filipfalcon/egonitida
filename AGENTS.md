@@ -45,6 +45,8 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 
 **Wiring.** Nothing is wired implicitly: no automatic registration, decorators, wiring by file name, or global registries. All wiring is in `Game.make` and domains' `requires`.
 
+**Styling.** A page's elements are styled with StyleX beside their view, through `Styled.attributes`, with colours as tokens in a `tokens.stylex.ts`. A stylesheet keeps only the document itself, which StyleX cannot reach. No plain CSS and no Tailwind.
+
 **Naming and layout.** Modules are PascalCase files exported as namespaces from a barrel `index.ts` that holds only re-exports. What only a host or a test needs is under a package's `/internal` entry. A domain's module is laid out in the sections `COMPONENTS`, `ACTIONS`, `EVENTS`, `COMMANDS`, `RULES`, `SYSTEMS`, `DOMAIN`.
 
 **Comments and prose.** Every public export has a doc comment saying what it is and why. Prose leads with its claim, in plain words; headings are labels. Code, tests, and documents carry no notes about earlier attempts or what something used to be.
@@ -77,5 +79,6 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 - A local server and a page drawing from it: `examples/spinning-cube/src/simulation.worker.ts`, `examples/spinning-cube/src/entry.ts`
 - A local server with the devtools beside it in development, and the Vite config that serves them: `examples/horde/src/simulation.worker.ts`, `examples/horde/vite.config.ts`
 - An application built of a world and Foldkit: its page's Model, Messages, and Commands in `applications/playground/src/main.ts`, told in `main.test.ts`; the world joined, shown, and projected in `applications/playground/src/world.ts`
+- A document that is a world, edited by its editors' actions and played in a worker the page opens with it: `applications/editor/src/editing.ts`, `playing.ts`, and `play.worker.ts`
 - The engine's own tests: `libraries/core/src/Game.test.ts`, `libraries/client/src/View.test.ts`
 - A lint rule and its test: `libraries/oxlint-plugin/src/rules/pureSteps.ts`, `pureSteps.test.ts`

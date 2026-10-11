@@ -133,7 +133,7 @@ Everything that lives in 3D, an application as much as a game, is a world made o
 - The editor's documents are entities with components, its low-code rules are rules on actions, and Play-in-Editor runs a local server, as a game does.
 - A world with no systems need not step at its rate while nothing happens; when its host steps it is decided when it is built.
 
-The editor and Play-in-Editor still run on the first iteration, from before the principles above: the Elm Architecture over the whole application, with a second view of the Model, `viewScene: Model → Scene`, that a reconciler in `libraries/engine` applies to Three.js. They move onto worlds next, and `engine` goes with them.
+The first iteration, from before the principles above, ran the Elm Architecture over the whole application, with a second view of the Model, `viewScene: Model → Scene`, that a reconciler in `libraries/engine` applied to Three.js. The playground and the editor have moved onto worlds, and nothing runs on it any more; it goes next.
 
 ### The frame loop
 
@@ -238,23 +238,24 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 ### Editor
 
 - The editor runs in the browser. Locally it is served through Alchemy (`npm run dev`), as a Cloudflare website.
-- **Outliner, Viewport, and Details**, as in Unreal. The Details panel is generated: a schema field annotated with `inspector` shows with the widget it names, and every edit is checked against the field's schema before it reaches the document. A field without the annotation cannot be edited there.
-- **Behaviour is low-code rules.** An object holds rules of the form _when clicked, do an action to a target_. Each action is itself an annotated schema, so its settings use the same generated form.
-- **Play-in-Editor** turns the document into a running program: the world is the Model, a click is a Message, and the rules are `update`. Stopping discards everything that happened while playing.
-- **The debugger is part of the editor**, not a development tool. While playing it shows every event, what each changed, and the Model at any of them. Selecting a past event shows the world as it was, the 3D view included, because the scene is only a function of the Model.
+- **The document is a world.** Its objects are entities with components, hosted in a worker beside the page; whoever edits it is a player, and every edit is their action, which the document's rules check against the components' schemas before anything changes. What each editor has selected is on their own entity, so an agent sees it too, and editors at one document see each other's.
+- **Outliner, Viewport, and Details**, as in Unreal. The panels read the document through projections, and send it every edit as a Command. The Details panel is generated: a schema field annotated with `inspector` shows with the widget it names, and a field without the annotation cannot be edited there.
+- **Behaviour is low-code rules.** An object holds reactions of the form _when clicked, make a change to a target_. Each kind of change is itself an annotated schema, so its settings use the same generated form.
+- **Play-in-Editor** plays the document in a worker of its own, which the page opens with the document as it is, in a game that has no editing in it: a click makes objects react, and nothing is edited meanwhile. Stopping ends the worker, and everything that happened while playing with it.
+- **The debugger is part of the editor**, not a development tool. Beside the world playing, it keeps its last stretch of time and answers the page's questions over the game's own connection, so it works wherever the editor plays: each step in which something happened, what each part changed, and the world after any of them, on the canvas too, while the document's time is held.
 - Foldkit's own DevTools stay available in development, for debugging the editor itself.
 
 ## Repository
 
 - `libraries/core`: the world, components, actions, events, systems, rules, the game, the host, the client, transports, and snapshots.
 - `libraries/client`: the timeline, interpolation, and the drawing.
-- `libraries/foldkit`: a world in an application built on Foldkit: `World`, joined in a worker the page starts and held as a Foldkit Managed Resource while the application's Model wants it; and `Stage`, the world shown on a canvas Foldkit keeps, through the game's views, played by a click, and mirrored for the keyboard, while a Subscription runs; and `Projection`, what an application shows of a world kept in its Model, told as it is and again only when it changes.
+- `libraries/foldkit`: a world in an application built on Foldkit: `World`, joined in a worker the page starts and held as a Foldkit Managed Resource while the application's Model wants it; and `Stage`, the world shown on a canvas Foldkit keeps, through the game's views, played by a click, and mirrored for the keyboard, while a Subscription runs; `Projection`, what an application shows of a world kept in its Model, told as it is and again only when it changes; and `Styled`, StyleX on Foldkit's elements.
 - `libraries/engine`: the `Scene` description, `SceneHost` (reconciler, picking, motion, resource lifetimes), and `Viewport` (the renderer on a canvas), which the editor runs on until it moves onto worlds.
-- `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a world told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent asks of a hosted game, answered as data; and `Bridge` and `Relay`, the way such requests travel from a tool to a host and back.
-- `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is.
-- `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio, reaching its hosts through the development server's relay; `.mcp.json` offers it.
+- `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a world told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent or a page asks of a hosted game, answered as data, to a page over the game's own connection; `Debugger`, the past kept beside a host and its clients' questions answered, wherever it runs; and `Bridge` and `Relay`, the way an agent's requests travel from a tool to a host and back.
+- `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__lightocean/mcp`; and a banner saying what is served and where both are reached.
+- `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio or over HTTP at a development server, reaching its hosts through the development server's relay; `.mcp.json` offers it over stdio.
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
-- `applications/editor`: the editor.
+- `applications/editor`: the editor: a document that is a world, edited by its editors' actions; played in a worker of its own; and debugged while it plays.
 - `applications/playground`: cubes a player asks for and paints: a world in a worker, drawn on a canvas, with the page around it Foldkit's, and the first application built of the two together.
 - `applications/net-spike`: the spike that hosted a world in a Durable Object.
 - `examples/spinning-cube`: the first example, a cube that turns: one component, one system, one domain, one view, told as a story and as a scene, and drawn in a browser from a local server in a worker.
