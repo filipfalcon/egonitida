@@ -16,10 +16,12 @@ export const Input = Schema.Struct({
 });
 export type Input = typeof Input.Type;
 
-/** One thing that changed the world: a client joining or leaving, between steps, or a step taken, with the input that reached it, the actions the rules took in it, as their events encode them, and the fingerprint of the world it led to, which a replay must come to. */
+/** One thing that changed the world: a client joining or leaving, between steps, the host going back to a world, or a step taken, with the input that reached it, the actions the rules took in it, as their events encode them, and the fingerprint of the world it led to, which a replay must come to. */
 export const Entry = Schema.Union([
   Schema.TaggedStruct('Joined', { entity: Schema.Int }),
   Schema.TaggedStruct('Left', { entity: Schema.Int }),
+  /** The host went back to a world, as the game's schema encodes it. */
+  Schema.TaggedStruct('Restored', { world: Schema.Unknown }),
   Schema.TaggedStruct('Stepped', {
     tick: Schema.Int,
     inputs: Schema.Array(Input),
@@ -64,20 +66,23 @@ export const encoderOf = (game: Game.Game) => {
 /** What `game` records of each thing that happens to a host's world. */
 export const entryOf = (game: Game.Game): ((happening: Host.Happening) => Entry) => {
   const encodeAction = encoderOf(game);
+  const encodeWorld = Schema.encodeSync(Game.schema(game));
   return (happening) =>
-    happening._tag === 'Stepped'
-      ? {
-          _tag: 'Stepped',
-          tick: happening.world.tick,
-          inputs: happening.inputs.map((input) => ({
-            entity: input.entity,
-            component: input.component.name,
-            value: input.encoded(),
-          })),
-          actions: happening.actions.map(encodeAction),
-          fingerprint: Fingerprint.of(game, happening.world),
-        }
-      : happening;
+    happening._tag === 'Restored'
+      ? { _tag: 'Restored', world: encodeWorld(happening.world) }
+      : happening._tag === 'Stepped'
+        ? {
+            _tag: 'Stepped',
+            tick: happening.world.tick,
+            inputs: happening.inputs.map((input) => ({
+              entity: input.entity,
+              component: input.component.name,
+              value: input.encoded(),
+            })),
+            actions: happening.actions.map(encodeAction),
+            fingerprint: Fingerprint.of(game, happening.world),
+          }
+        : happening;
 };
 
 /** Records `game` as `host` plays it, from now until the scope closes. */

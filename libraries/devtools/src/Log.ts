@@ -22,6 +22,8 @@ export interface PartLine {
 
 export type Line =
   | { readonly _tag: 'Joined' | 'Left'; readonly tick: number; readonly entity: World.Entity }
+  /** The host went back to the world at `tick`. */
+  | { readonly _tag: 'Restored'; readonly tick: number }
   | {
       readonly _tag: 'Stepped';
       readonly tick: number;
@@ -55,7 +57,10 @@ export const of = (
     const encode = encoderOf(setup.game);
     const { taken, divergence } = yield* Replay.steps(setup, recording, { trace: true });
     const lines = taken.map(({ entry, world, trace }): Line => {
-      // Joining and leaving take no step, so the world after one is at the tick it happened at.
+      // Joining, leaving, and going back take no step, so the world after one is at the tick it came to.
+      if (entry._tag === 'Restored') {
+        return { _tag: 'Restored', tick: world.tick };
+      }
       if (entry._tag !== 'Stepped') {
         return { _tag: entry._tag, tick: world.tick, entity: entry.entity };
       }
@@ -133,6 +138,8 @@ const lineText = (line: Line): string => {
       return `tick ${line.tick}: entity ${line.entity} joined`;
     case 'Left':
       return `tick ${line.tick}: entity ${line.entity} left`;
+    case 'Restored':
+      return `tick ${line.tick}: went back to this tick`;
     case 'CameApart':
       return `tick ${line.tick}: the replay came apart ${whereText(line.where)}`;
     case 'Stepped':

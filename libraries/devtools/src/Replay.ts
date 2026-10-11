@@ -82,6 +82,9 @@ const taking = (setup: Setup, options: { readonly trace: boolean }) => {
               where: { _tag: 'Joined', recorded: entry.entity, replayed: entity },
             });
       }
+      if (entry._tag === 'Restored') {
+        return Result.succeed({ entry, world: yield* firstOf(setup.game, entry.world), trace: [] });
+      }
       if (entry._tag === 'Left') {
         return Result.succeed({ entry, world: setup.leave(world, entry.entity), trace: [] });
       }
@@ -119,7 +122,7 @@ const taking = (setup: Setup, options: { readonly trace: boolean }) => {
     });
 };
 
-/** The first world of `recording`, as `game` reads it. */
+/** A world of a recording, as `game` reads it. */
 const firstOf = (game: Game.Game, first: unknown) =>
   Schema.decodeUnknownEffect(Game.schema(game))(first).pipe(
     Effect.mapError((issue) => new Unreadable({ reason: issue.message })),

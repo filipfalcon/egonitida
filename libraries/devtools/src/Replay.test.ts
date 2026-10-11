@@ -2,6 +2,7 @@ import { describe, expect, it } from '@effect/vitest';
 import { World } from '@lightocean/core';
 import { Effect, Fiber, Option } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
+import * as Recording from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';
 
 describe('replaying a recording', () => {
@@ -43,6 +44,25 @@ describe('replaying a recording', () => {
       expect(divergence).toEqual(
         Option.some({ tick: 3, where: { _tag: 'Joined', recorded: entity, replayed: entity + 1 } }),
       );
+    }),
+  );
+});
+
+describe('replaying a recording in which the host went back in time', () => {
+  it.effect('goes back with it, and comes to the worlds the host stepped through after', () =>
+    Effect.gen(function* () {
+      const hosted = yield* Fixtures.host();
+      const recorder = yield* Recording.record(hosted, Fixtures.game);
+      yield* Fixtures.advance(100);
+      const past = yield* hosted.world;
+      yield* Fixtures.visit(hosted);
+
+      yield* hosted.restore(past);
+      yield* Fixtures.advance(100);
+      const recording = yield* recorder.recording;
+
+      expect(recording.entries.some((entry) => entry._tag === 'Restored')).toBe(true);
+      expect(yield* Replay.check(Fixtures.setup(), recording)).toEqual(Option.none());
     }),
   );
 });
