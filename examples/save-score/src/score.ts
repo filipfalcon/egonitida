@@ -1,0 +1,209 @@
+import {
+  Action,
+  Command,
+  Component,
+  Domain,
+  Event,
+  Game,
+  Pointing,
+  Rule,
+  System,
+  World,
+} from '@lightocean/core';
+import { Effect, Option, Schema } from 'effect';
+import { Scores } from '#src/scores.ts';
+
+/**
+ * The fifth example: a round against the clock, whose score is saved when it ends. It adds one idea to those before: a rule that needs something done outside the world, saving the score, issues a command, and what came of it, the best score kept or why none was, comes back as an event. Its view is in `score.view.ts`; where scores are kept is `scores.ts`'s.
+ */
+
+/** How long a round lasts, in seconds. */
+export const ROUND_SECONDS = 20;
+
+/** How far from the middle a target may stand. */
+const SPREAD = 4;
+
+// COMPONENTS
+
+/** A target, standing at `x`, `z`, for a click to hit. */
+export const Target = Component.make(
+  'Target',
+  Schema.Struct({ x: Schema.Finite, z: Schema.Finite }),
+  {
+    owner: 'rules',
+    network: 'server',
+  },
+);
+
+/** The round: being played until a tick, its hits counted; its score being saved; or over, with the best kept, or why the score was not saved. */
+export const Round = Component.make(
+  'Round',
+  Schema.Union([
+    Schema.TaggedStruct('Playing', { endsAt: Schema.Int, hits: Schema.Int }),
+    Schema.TaggedStruct('Saving', { hits: Schema.Int }),
+    Schema.TaggedStruct('Saved', { hits: Schema.Int, best: Schema.Int }),
+    Schema.TaggedStruct('Unsaved', { hits: Schema.Int, reason: Schema.String }),
+  ]),
+  { owner: 'rules', network: 'server' },
+);
+
+// ACTIONS
+
+/** The player chose to play another round. */
+export const ChoseNewRound = Action.make('ChoseNewRound', {});
+
+// EVENTS
+
+/** The round's time is up, with so many hits. */
+export const RoundEnded = Event.make('RoundEnded', { hits: Schema.Int });
+
+/** The score was saved, and `best` is the best kept so far. */
+export const ScoreSaved = Event.make('ScoreSaved', { best: Schema.Int });
+
+/** The score was not saved, for `reason`. */
+export const ScoreNotSaved = Event.make('ScoreNotSaved', { reason: Schema.String });
+
+// COMMANDS
+
+/** Saves a score where scores are kept, coming to the best kept so far, or to why it could not be saved. */
+export const SaveScore = Command.make('SaveScore', {
+  args: { score: Schema.Int },
+  results: [ScoreSaved, ScoreNotSaved],
+  execute: ({ score }) =>
+    Effect.gen(function* () {
+      const scores = yield* Scores;
+      return yield* scores.save(score).pipe(
+        Effect.map((best): Event.ValueOf<typeof ScoreSaved> => ({ _tag: 'ScoreSaved', best })),
+        Effect.catchTag('Unsaved', ({ reason }) =>
+          Effect.succeed<Event.ValueOf<typeof ScoreNotSaved>>({ _tag: 'ScoreNotSaved', reason }),
+        ),
+      );
+    }),
+});
+
+// RULES
+
+/** A click on a target while the round plays is a hit, and the target moves somewhere else. */
+const hit = Rule.on(Pointing.Clicked, {
+  writes: [Round, Target],
+  emits: [],
+  run: (context, { entity }) => {
+    if (Option.isNone(context.get(entity, Target))) {
+      return;
+    }
+    for (const [round, state] of context.query(Round)) {
+      if (state._tag === 'Playing') {
+        context.set(round, Round, { ...state, hits: state.hits + 1 });
+        context.set(entity, Target, {
+          x: (context.random() * 2 - 1) * SPREAD,
+          z: (context.random() * 2 - 1) * SPREAD,
+        });
+      }
+    }
+  },
+});
+
+/** A round over has its score saved. */
+const endRound = Rule.on(RoundEnded, {
+  writes: [Round],
+  emits: [],
+  commands: [SaveScore],
+  run: (context, { hits }) => {
+    for (const [round] of context.query(Round)) {
+      context.set(round, Round, { _tag: 'Saving', hits });
+    }
+    context.command(SaveScore.of({ score: hits }));
+  },
+});
+
+const saved = Rule.on(ScoreSaved, {
+  writes: [Round],
+  emits: [],
+  run: (context, { best }) => {
+    for (const [round, state] of context.query(Round)) {
+      if (state._tag === 'Saving') {
+        context.set(round, Round, { _tag: 'Saved', hits: state.hits, best });
+      }
+    }
+  },
+});
+
+const notSaved = Rule.on(ScoreNotSaved, {
+  writes: [Round],
+  emits: [],
+  run: (context, { reason }) => {
+    for (const [round, state] of context.query(Round)) {
+      if (state._tag === 'Saving') {
+        context.set(round, Round, { _tag: 'Unsaved', hits: state.hits, reason });
+      }
+    }
+  },
+});
+
+/** A new round, once the last is over, plays for its time from now. */
+const newRound = Rule.on(ChoseNewRound, {
+  writes: [Round],
+  emits: [],
+  run: (context) => {
+    for (const [round, state] of context.query(Round)) {
+      if (state._tag === 'Saved' || state._tag === 'Unsaved') {
+        context.set(round, Round, {
+          _tag: 'Playing',
+          endsAt: context.time.tick + ROUND_SECONDS * game.stepRate,
+          hits: 0,
+        });
+      }
+    }
+  },
+});
+
+// SYSTEMS
+
+/** A round plays until its time is up. */
+const clock = System.make({
+  name: 'clock',
+  reads: [Round],
+  writes: [],
+  emits: [RoundEnded],
+  run: (context) => {
+    for (const [, state] of context.query(Round)) {
+      if (state._tag === 'Playing' && context.time.tick >= state.endsAt) {
+        context.emit({ _tag: 'RoundEnded', hits: state.hits });
+      }
+    }
+  },
+});
+
+// DOMAIN
+
+export const domain = Domain.make({
+  name: 'Score',
+  requires: [Pointing.domain],
+  components: [Target, Round],
+  actions: [ChoseNewRound],
+  events: [RoundEnded, ScoreSaved, ScoreNotSaved],
+  commands: [SaveScore],
+  systems: [clock],
+  rules: [hit, endRound, saved, notSaved, newRound],
+});
+
+/** The example's game: pointing at things, and the round. */
+export const game = Game.make({ stepRate: 30, domains: [Pointing.domain, domain] });
+
+const [withRound, round] = World.spawn(World.empty({ seed: 1 }), [
+  Round.of({ _tag: 'Playing', endsAt: ROUND_SECONDS * 30, hits: 0 }),
+]);
+const [withFirst, firstTarget] = World.spawn(withRound, [
+  Target.of({ x: -2, z: 0 }),
+  Pointing.Label.of({ text: 'Target' }),
+]);
+const [withSecond] = World.spawn(withFirst, [
+  Target.of({ x: 2, z: -1 }),
+  Pointing.Label.of({ text: 'Target' }),
+]);
+/** Whoever plays: an entity that holds nothing, whom a click is from. */
+const [withPlayer, player] = World.spawn(withSecond, []);
+
+/** A round about to start, two targets, and a player. */
+export const world = withPlayer;
+export { round, firstTarget, player };

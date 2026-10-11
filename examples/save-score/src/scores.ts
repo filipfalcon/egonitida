@@ -1,0 +1,17 @@
+import { Context, Data, type Effect } from 'effect';
+
+/**
+ * Where the best score is kept, outside the world: a score saved, and the best kept so far told back. The game reaches it only through its `SaveScore` command, so how it is kept is its Layer's to say: over HTTP to the scores Worker, which keeps the best in Cloudflare KV, or recording, in a test.
+ */
+
+/** Why a score was not saved. */
+export class Unsaved extends Data.TaggedError('Unsaved')<{ readonly reason: string }> {}
+
+/** Keeping the best score. */
+export class Scores extends Context.Service<
+  Scores,
+  {
+    /** Saves `score`, and tells the best kept so far, this one included. */
+    readonly save: (score: number) => Effect.Effect<number, Unsaved>;
+  }
+>()('@lightocean/example-save-score/Scores') {}

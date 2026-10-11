@@ -1,0 +1,27 @@
+{
+  "name": "@lightocean/example-save-score",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vp dev"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0",
+    "@lightocean/client": "*",
+    "@lightocean/core": "*",
+    "@lightocean/devtools": "*",
+    "@stylexjs/stylex": "0.19.0",
+    "effect": "4.0.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@lightocean/vite-plugin": "*",
+    "@stylexjs/unplugin": "0.19.0",
+    "@types/three": "0.186.0"
+  }
+}
