@@ -1,3 +1,4 @@
+export * as Chroma from '#src/Chroma.ts';
 export * as Clicking from '#src/Clicking.ts';
 export * as Controls from '#src/Controls.ts';
 export * as Devices from '#src/Devices.ts';
@@ -8,6 +9,7 @@ export * as Haptics from '#src/Haptics.ts';
 export * as Hid from '#src/Hid.ts';
 export * as Interpolate from '#src/Interpolate.ts';
 export * as KeyboardAndMouse from '#src/KeyboardAndMouse.ts';
+export * as Lighting from '#src/Lighting.ts';
 export * as Mirror from '#src/Mirror.ts';
 export * as Navigation from '#src/Navigation.ts';
 export * as Scene from '#src/Scene.ts';

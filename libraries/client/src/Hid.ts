@@ -2,9 +2,10 @@
 import { Data, Effect, Option, type Scope } from 'effect';
 import type * as Devices from '#src/Devices.ts';
 import * as Haptics from '#src/Haptics.ts';
+import type * as Lighting from '#src/Lighting.ts';
 
 /**
- * Devices as WebHID reaches them, for what the Gamepad API does not: a device is read through a driver that knows its reports, into the shapes the engine knows, and felt through reports the driver writes, so a game never meets a device's bytes. WebHID is Chromium's only, and a player gives leave for each device once, in answer to a click; a device given leave before is reached again with no asking.
+ * Devices as WebHID reaches them, for what the Gamepad API does not: a device is read through a driver that knows its reports, into the shapes the engine knows, and felt and lit through reports the driver writes, so a game never meets a device's bytes. WebHID is Chromium's only, and a player gives leave for each device once, in answer to a click; a device given leave before is reached again with no asking.
  */
 
 /** A vendor's device, by the ids it reports itself by. */
@@ -19,14 +20,19 @@ export interface Report {
   readonly data: DataView;
 }
 
-/** What a device is asked to make felt at one moment, all of it: how hard its motors turn, from 0 to 1, and how its triggers push back. A driver writes all of it in every report, as devices such as the DualSense take it. */
+/** What a device is asked to make felt and seen at one moment, all of it: how hard its motors turn, from 0 to 1, how its triggers push back, and the colour of its light, if it is asked to have one rather than its own. A driver writes all of it in every report, as devices such as the DualSense take it. */
 export interface Output {
   readonly motors: { readonly strong: number; readonly weak: number };
   readonly triggers: Haptics.Triggers;
+  readonly light: Option.Option<Lighting.Colour>;
 }
 
-/** Nothing felt: the motors still, and the triggers free. */
-export const still: Output = { motors: { strong: 0, weak: 0 }, triggers: Haptics.freeTriggers };
+/** Nothing felt, and nothing lit: the motors still, the triggers free, and the light the device's own. */
+export const still: Output = {
+  motors: { strong: 0, weak: 0 },
+  triggers: Haptics.freeTriggers,
+  light: Option.none(),
+};
 
 /** An output report a device takes: its id, and how many bytes it is after the id, where the device says. A browser sends only a report of the length the device says. */
 export interface OutputReport {
@@ -53,11 +59,12 @@ export class Refused extends Data.TaggedError('Refused')<{ readonly reason: stri
 /** Whether this browser has WebHID. */
 export const available = (): boolean => typeof navigator !== 'undefined' && 'hid' in navigator;
 
-/** A device connected through its driver: the pad it was last read as, if it has said anything yet, and it felt. */
+/** A device connected through its driver: the pad it was last read as, if it has said anything yet, it felt, and it lit. */
 export interface Connection {
   readonly model: Model;
   readonly pad: () => Option.Option<Devices.Pad>;
   readonly felt: Haptics.Felt;
+  readonly lit: Lighting.Lit;
 }
 
 /** As much of a device as is read and written through a driver: its ids, opening and closing it, the reports it sends and takes, and its feature reports, as WebHID's `HIDDevice` gives them. */
@@ -91,7 +98,7 @@ const driverOf = (drivers: ReadonlyArray<Driver>, device: Device) =>
     ),
   );
 
-/** Reads `device` through `driver`, and makes it felt, until the scope closes. */
+/** Reads `device` through `driver`, and makes it felt and lit, until the scope closes. */
 export const connect = (
   device: Device,
   driver: Driver,
@@ -165,7 +172,7 @@ export const connect = (
           },
         });
       });
-    // Left still as it is let go, so nothing goes on rumbling or pushing back once the page is done with it.
+    // Left still as it is let go, so nothing goes on rumbling or pushing back once the page is done with it; its light is given back to it.
     yield* Effect.addFinalizer(() => write(still));
     const felt: Haptics.Felt = {
       // The motors turn until the rumble's time is up, unless something else has turned them since.
@@ -194,6 +201,10 @@ export const connect = (
       model: { vendorId: device.vendorId, productId: device.productId },
       pad: () => latest.pad,
       felt,
+      lit: {
+        colour: (colour) =>
+          Effect.suspend(() => write({ ...written.output, light: Option.some(colour) })),
+      },
     };
   });
 

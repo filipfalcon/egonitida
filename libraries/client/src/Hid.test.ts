@@ -72,6 +72,22 @@ describe('a device through WebHID', () => {
       }),
   );
 
+  it.effect('is lit through its driver, and goes on being felt as it was', () =>
+    Effect.gen(function* () {
+      const device = new Recorded();
+      const connection = yield* Hid.connect(device, DualSense.driver);
+
+      yield* connection.felt.triggers({
+        left: Haptics.free,
+        right: { _tag: 'Resisting', from: 0, strength: 1 },
+      });
+      yield* connection.lit.colour({ red: 0, green: 0, blue: 1 });
+
+      expect(device.sent.at(-1)?.bytes.slice(44, 47)).toEqual([0, 0, 255]);
+      expect(device.sent.at(-1)?.bytes[10]).toEqual(0x21);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect('asks for what its driver asks for once it opens', () =>
     Effect.gen(function* () {
       const device = new Recorded();

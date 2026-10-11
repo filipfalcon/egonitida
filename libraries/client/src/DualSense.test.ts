@@ -88,8 +88,9 @@ describe('a DualSense', () => {
           left: Haptics.free,
           right: { _tag: 'Clicking', from: 0.2, to: 0.5, strength: 1 },
         },
+        light: Option.none(),
       },
-      { outputs: [{ reportId: 0x02, length: Option.none() }], sent: 0 },
+      { outputs: [{ reportId: 0x02, length: Option.none() }], sent: 1 },
     );
     const declared = DualSense.driver.write(Hid.still, {
       outputs: [{ reportId: 0x02, length: Option.some(63) }],
@@ -124,7 +125,7 @@ describe('a DualSense', () => {
 
   it('writes the same over Bluetooth, two bytes further in, counted and sealed with its checksum', () => {
     const report = DualSense.driver.write(
-      { motors: { strong: 0, weak: 1 }, triggers: { left: Haptics.free, right: Haptics.free } },
+      { ...Hid.still, motors: { strong: 0, weak: 1 } },
       { outputs: [{ reportId: 0x31, length: Option.none() }], sent: 3 },
     );
 
@@ -139,6 +140,23 @@ describe('a DualSense', () => {
     expect(Option.map(report, ({ data }) => data.getUint32(73, true))).toEqual(
       Option.some(0x01080f5d),
     );
+  });
+
+  it('lights its lightbar, the first report ending the light it starts with, and leaves it be unless asked', () => {
+    const usb = [{ reportId: 0x02, length: Option.none() }];
+    const bytesOf = (report: Option.Option<Hid.Report>, offsets: ReadonlyArray<number>) =>
+      Option.map(report, ({ data }) => offsets.map((offset) => data.getUint8(offset)));
+    const light = { ...Hid.still, light: Option.some({ red: 1, green: 0.5, blue: 0 }) };
+
+    const first = DualSense.driver.write(light, { outputs: usb, sent: 0 });
+    const later = DualSense.driver.write(light, { outputs: usb, sent: 1 });
+    const unlit = DualSense.driver.write(Hid.still, { outputs: usb, sent: 1 });
+
+    expect(bytesOf(first, [1, 38, 41, 44, 45, 46])).toEqual(
+      Option.some([0x04, 0x04 | 0x02, 0x02, 255, 128, 0]),
+    );
+    expect(bytesOf(later, [1, 38, 41])).toEqual(Option.some([0x04, 0x04, 0]));
+    expect(bytesOf(unlit, [1, 44])).toEqual(Option.some([0, 0]));
   });
 
   it('asks for its calibration once it opens, which over Bluetooth starts its full reports', () => {

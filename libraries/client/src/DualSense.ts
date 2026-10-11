@@ -4,7 +4,7 @@ import type * as Haptics from '#src/Haptics.ts';
 import type * as Hid from '#src/Hid.ts';
 
 /**
- * Sony's DualSense, and the DualSense Edge, as WebHID reaches them: their reports over USB and over Bluetooth read into a standard pad, Cross as South and Options as Start, and their motors and adaptive triggers written to. The touchpad, the motion sensors, and the mute button wait for something to read them into.
+ * Sony's DualSense, and the DualSense Edge, as WebHID reaches them: their reports over USB and over Bluetooth read into a standard pad, Cross as South and Options as Start, and their motors, adaptive triggers, and lightbar written to. The touchpad, the motion sensors, and the mute button wait for something to read them into.
  */
 
 /** Where in a report the sticks, the triggers, and the buttons begin: one byte further in over Bluetooth's full report, and laid out apart in its short one. */
@@ -80,11 +80,25 @@ const USB_OUTPUT = { reportId: 0x02, length: 47 };
 const BLUETOOTH_OUTPUT = { reportId: 0x31, length: 77 };
 
 /** Where in what both output reports share each thing is written. */
-const OUTPUT = { flags: 0, weak: 2, strong: 3, right: 10, left: 21, newerFlags: 38 };
+const OUTPUT = {
+  flags: 0,
+  lightFlags: 1,
+  weak: 2,
+  strong: 3,
+  right: 10,
+  left: 21,
+  newerFlags: 38,
+  lightSetup: 41,
+  light: 44,
+};
 /** That the motors, as the DualShock 4 had them, and both triggers are written. */
 const WRITTEN = 0x01 | 0x02 | 0x04 | 0x08;
 /** That the motors are written, as newer firmware reads them. */
 const NEWER_WRITTEN = 0x04;
+/** That the lightbar is written. */
+const LIGHT_WRITTEN = 0x04;
+/** That the light the pad shows as it starts is to end, so the lightbar can be lit. */
+const LIGHT_SHOW_ENDS = { flag: 0x02, setup: 0x02 };
 
 /** A value kept between 0 and 1. */
 const fraction = (value: number) => Math.max(0, Math.min(1, value));
@@ -129,10 +143,22 @@ const triggerOf = (trigger: Haptics.Trigger): ReadonlyArray<number> => {
   }
 };
 
-/** What both output reports share, written into `bytes` from `at`. */
-const writeShared = (bytes: Uint8Array, at: number, { motors, triggers }: Hid.Output) => {
+/** What both output reports share, written into `bytes` from `at`, the `sent`th report: the first ends the light the pad starts with. */
+const writeShared = (
+  bytes: Uint8Array,
+  at: number,
+  { motors, triggers, light }: Hid.Output,
+  sent: number,
+) => {
+  const first = sent === 0;
   bytes[at + OUTPUT.flags] = WRITTEN;
-  bytes[at + OUTPUT.newerFlags] = NEWER_WRITTEN;
+  bytes[at + OUTPUT.newerFlags] = NEWER_WRITTEN | (first ? LIGHT_SHOW_ENDS.flag : 0);
+  bytes[at + OUTPUT.lightSetup] = first ? LIGHT_SHOW_ENDS.setup : 0;
+  if (Option.isSome(light)) {
+    const { red, green, blue } = light.value;
+    bytes[at + OUTPUT.lightFlags] = LIGHT_WRITTEN;
+    bytes.set([byteOf(red), byteOf(green), byteOf(blue)], at + OUTPUT.light);
+  }
   bytes[at + OUTPUT.weak] = byteOf(motors.weak);
   bytes[at + OUTPUT.strong] = byteOf(motors.strong);
   bytes.set(triggerOf(triggers.right), at + OUTPUT.right);
@@ -161,7 +187,7 @@ const bluetooth = (output: Hid.Output, length: number, sent: number): Hid.Report
   const bytes = new Uint8Array(length);
   bytes[0] = (sent & 0x0f) << 4;
   bytes[1] = 0x10;
-  writeShared(bytes, 2, output);
+  writeShared(bytes, 2, output, sent);
   const sealed = length - 4;
   const data = new DataView(bytes.buffer);
   data.setUint32(
@@ -172,9 +198,9 @@ const bluetooth = (output: Hid.Output, length: number, sent: number): Hid.Report
   return { reportId: BLUETOOTH_OUTPUT.reportId, data };
 };
 
-const usb = (output: Hid.Output, length: number): Hid.Report => {
+const usb = (output: Hid.Output, length: number, sent: number): Hid.Report => {
   const bytes = new Uint8Array(length);
-  writeShared(bytes, 0, output);
+  writeShared(bytes, 0, output, sent);
   return { reportId: USB_OUTPUT.reportId, data: new DataView(bytes.buffer) };
 };
 
@@ -211,7 +237,7 @@ export const driver: Hid.Driver = {
       );
     return Option.match(takes(BLUETOOTH_OUTPUT), {
       onSome: (length) => Option.some(bluetooth(output, length, sent)),
-      onNone: () => Option.map(takes(USB_OUTPUT), (length) => usb(output, length)),
+      onNone: () => Option.map(takes(USB_OUTPUT), (length) => usb(output, length, sent)),
     });
   },
 };
