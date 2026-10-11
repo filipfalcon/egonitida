@@ -1,9 +1,9 @@
-import { Component, Domain, Event, Pointing, Rule } from '@lightocean/core';
+import { Component, Domain, Event, Pointing, Rule, System } from '@lightocean/core';
 import { Inspector } from '@lightocean/reflection';
 import { Option, Schema } from 'effect';
 
 /**
- * What a document is made of: objects, each a shape with a place, a colour, a spin, and the reactions it has when clicked, and read out by its label. Whatever changes an object, an editor or a document playing, changes it by this domain's events, which its rules check against the components' own schemas. Each field annotated with `inspector` is one the Details panel edits.
+ * What a document is made of: objects, each a shape with a place, a colour, a spin, and the reactions it has when clicked, and read out by its label. Each turns at its spin, which only a client keeps, so an editor and a document playing show it alike. Whatever changes an object, an editor or a document playing, changes it by this domain's events, which its rules check against the components' own schemas. Each field annotated with `inspector` is one the Details panel edits.
  */
 
 const Vector3 = Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite]);
@@ -47,6 +47,12 @@ export const SpinFields = Schema.Struct({
 export const Spin = Component.make('Spin', SpinFields, { owner: 'rules', network: 'server' });
 
 // REACTIONS
+
+/** How far an object has turned at its spin, in radians: drawn, never sent, and kept by each client for itself. */
+export const Turn = Component.make('Turn', Schema.Struct({ angle: Schema.Finite }), {
+  owner: 'simulation',
+  network: 'local',
+});
 
 /** Whom a reaction acts on: the object clicked itself, or another. */
 export const Target = Schema.Union([
@@ -176,6 +182,16 @@ export const ReactionEdited = Event.make('ReactionEdited', {
   edit: ReactionEdit,
 });
 
+/** An object is to be `hex` in colour. */
+export const Recoloured = Event.make('Recoloured', { entity: Schema.Int, hex: Schema.Int });
+/** An object is to move by `offset` from where it is. */
+export const Moved = Event.make('Moved', {
+  entity: Schema.Int,
+  offset: Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite]),
+});
+/** An object is to spin at `speed` from now on. */
+export const SpinChanged = Event.make('SpinChanged', { entity: Schema.Int, speed: Schema.Finite });
+
 // RULES
 
 const edit = Rule.on(Edited, {
@@ -264,14 +280,66 @@ const editReactions = Rule.on(ReactionEdited, {
   },
 });
 
+const recolour = Rule.on(Recoloured, {
+  writes: [Colour],
+  emits: [],
+  run: (context, { entity, hex }) => {
+    if (Option.isSome(context.get(entity, Colour))) {
+      context.set(entity, Colour, { hex });
+    }
+  },
+});
+
+/** A move is from where the object is by then, so two in one step add up. */
+const move = Rule.on(Moved, {
+  writes: [Transform],
+  emits: [],
+  run: (context, { entity, offset }) => {
+    Option.map(context.get(entity, Transform), (transform) => {
+      const [x, y, z] = transform.position;
+      context.set(entity, Transform, {
+        ...transform,
+        position: [x + offset[0], y + offset[1], z + offset[2]],
+      });
+    });
+  },
+});
+
+const changeSpin = Rule.on(SpinChanged, {
+  writes: [Spin],
+  emits: [],
+  run: (context, { entity, speed }) => {
+    if (Option.isSome(context.get(entity, Spin))) {
+      context.set(entity, Spin, { speed });
+    }
+  },
+});
+
+// SYSTEMS
+
+/** Every object turns on at its spin, from wherever it had turned to. */
+const turning = System.make({
+  name: 'turning',
+  reads: [Spin],
+  writes: [Turn],
+  emits: [],
+  run: (context) => {
+    for (const [entity, { speed }] of context.query(Spin)) {
+      const { angle } = Option.getOrElse(context.get(entity, Turn), () => ({ angle: 0 }));
+      context.set(entity, Turn, { angle: angle + speed * context.time.stepSeconds });
+    }
+  },
+});
+
 // DOMAIN
 
 export const domain = Domain.make({
   name: 'Objects',
   requires: [Pointing.domain],
-  components: [Shape, Transform, Colour, Spin, Behaviour],
+  components: [Shape, Transform, Colour, Spin, Behaviour, Turn],
   actions: [],
-  events: [Edited, ReactionEdited],
+  events: [Edited, ReactionEdited, Recoloured, Moved, SpinChanged],
   systems: [],
-  rules: [edit, editReactions],
+  rules: [edit, editReactions, recolour, move, changeSpin],
+  localSystems: [turning],
 });
