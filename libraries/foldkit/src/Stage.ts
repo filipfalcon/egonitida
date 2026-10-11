@@ -54,14 +54,38 @@ export const show = <R>(
 /** Why a stage could not be shown. */
 export class Unshown extends Data.TaggedError('Unshown')<{ readonly reason: string }> {}
 
-/** The canvas whose id is `id`, in the document. */
-const canvasOf = (id: string) =>
+/** The element whose id is `id`, in the document. */
+const elementOf = (id: string) =>
   Effect.suspend(() => {
-    const canvas = document.getElementById(id);
-    return canvas instanceof HTMLCanvasElement
-      ? Effect.succeed(canvas)
-      : Effect.fail(new Unshown({ reason: `There is no canvas with the id ${id}.` }));
+    const element = document.getElementById(id);
+    return element === null
+      ? Effect.fail(new Unshown({ reason: `There is no element with the id ${id}.` }))
+      : Effect.succeed(element);
   });
+
+/**
+ * A world drawn by the page itself, as a Foldkit Subscription's Stream: `show` is given the world `resource` holds and the element whose id is `elementId`, and draws it however the page draws, such as with a renderer of its own, for as long as the Stream runs; what it says goes on as Messages of the application's. If the world is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so, which puts the Model right so it is drawn again once the world is joined; if it cannot be drawn, `onFailed` says why.
+ */
+export const run = <Message, Service, R>(options: {
+  readonly resource: ManagedResource.ManagedResource<World.Joined, Service>;
+  readonly elementId: string;
+  readonly show: (joined: World.Joined, element: HTMLElement) => Stream.Stream<Message, Unshown, R>;
+  readonly onNotJoined: () => Message;
+  readonly onFailed: (reason: string) => Message;
+}): Stream.Stream<Message, never, Service | R> =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const maybeJoined = yield* Effect.option(options.resource.get);
+      if (Option.isNone(maybeJoined)) {
+        return Stream.make(options.onNotJoined());
+      }
+      const element = yield* elementOf(options.elementId);
+      return options.show(maybeJoined.value, element);
+    }).pipe(
+      Effect.map(Stream.catch(({ reason }) => Stream.make(options.onFailed(reason)))),
+      Effect.catch(({ reason }) => Effect.succeed(Stream.make(options.onFailed(reason)))),
+    ),
+  );
 
 /**
  * A stage as a Foldkit Subscription's Stream: the world `resource` holds, shown on the canvas whose id is `canvasId`, its mirror beside the canvas, for as long as the Stream runs. If the world is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so in a Message of the application's, which puts the Model right so the stage is shown again once the world is joined; if it cannot be shown otherwise, `onFailed` says why.
@@ -74,18 +98,27 @@ export const stream = <Message, Service, R>(
     readonly onFailed: (reason: string) => Message;
   },
 ): Stream.Stream<Message, never, Service | Exclude<R, Scope.Scope>> =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const maybeJoined = yield* Effect.option(options.resource.get);
-      if (Option.isNone(maybeJoined)) {
-        return Stream.make(options.onNotJoined());
-      }
-      const joined = maybeJoined.value;
-      const canvas = yield* canvasOf(options.canvasId);
-      const viewport = yield* Viewport.make(canvas).pipe(
-        Effect.mapError(({ reason }) => new Unshown({ reason })),
-      );
-      yield* show(viewport, joined, { ...options, mirror: canvas.parentElement ?? document.body });
-      return Stream.never;
-    }).pipe(Effect.catch(({ reason }) => Effect.succeed(Stream.make(options.onFailed(reason))))),
-  );
+  run({
+    resource: options.resource,
+    elementId: options.canvasId,
+    onNotJoined: options.onNotJoined,
+    onFailed: options.onFailed,
+    show: (joined, element) =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          if (!(element instanceof HTMLCanvasElement)) {
+            return yield* new Unshown({
+              reason: `There is no canvas with the id ${options.canvasId}.`,
+            });
+          }
+          const viewport = yield* Viewport.make(element).pipe(
+            Effect.mapError(({ reason }) => new Unshown({ reason })),
+          );
+          yield* show(viewport, joined, {
+            ...options,
+            mirror: element.parentElement ?? document.body,
+          });
+          return Stream.never;
+        }),
+      ),
+  });

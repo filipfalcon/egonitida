@@ -180,4 +180,76 @@ describe('a stage', () => {
         expect(told).toEqual(['not joined']);
       }),
   );
+
+  describe('run by a page that draws it itself', () => {
+    it.live('gives the page the world and its element, and passes on what the page says', () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const resource = ManagedResource.tag<World.Joined>()('Drawn');
+        const element = document.createElement('div');
+        element.id = 'scene';
+        document.body.append(element);
+
+        const told = yield* Stage.run({
+          resource,
+          elementId: 'scene',
+          show: (given, at) =>
+            Stream.make(
+              `${at.id} shows the world of ${given.client.entity === joined.client.entity ? 'this' : 'another'} player`,
+            ),
+          onNotJoined: () => 'not joined',
+          onFailed: (reason) => `failed: ${reason}`,
+        }).pipe(Stream.runCollect, Held.holding(resource, yield* Ref.make(Option.some(joined))));
+
+        element.remove();
+        expect(told).toEqual(['scene shows the world of this player']);
+      }).pipe(Effect.scoped),
+    );
+
+    it.live('says why when there is no element to draw on, or the drawing fails', () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const resource = ManagedResource.tag<World.Joined>()('Drawn');
+        const element = document.createElement('div');
+        element.id = 'failing';
+        document.body.append(element);
+        const runOn = (elementId: string) =>
+          Stage.run({
+            resource,
+            elementId,
+            show: () => Stream.fail(new Stage.Unshown({ reason: 'No GPU.' })),
+            onNotJoined: () => 'not joined',
+            onFailed: (reason) => `failed: ${reason}`,
+          }).pipe(Stream.runCollect);
+
+        const told = yield* Effect.all([runOn('nowhere'), runOn('failing')]).pipe(
+          Held.holding(resource, yield* Ref.make(Option.some(joined))),
+        );
+
+        element.remove();
+        expect(told).toEqual([
+          ['failed: There is no element with the id nowhere.'],
+          ['failed: No GPU.'],
+        ]);
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect('says the world is not joined, as a stage does', () =>
+      Effect.gen(function* () {
+        const resource = ManagedResource.tag<World.Joined>()('Drawn');
+        const told = yield* Stage.run({
+          resource,
+          elementId: 'scene',
+          show: () => Stream.make('shown'),
+          onNotJoined: () => 'not joined',
+          onFailed: (reason) => `failed: ${reason}`,
+        }).pipe(
+          Stream.runCollect,
+          Held.holding(resource, yield* Ref.make(Option.none<World.Joined>())),
+        );
+
+        expect(told).toEqual(['not joined']);
+      }),
+    );
+  });
 });
