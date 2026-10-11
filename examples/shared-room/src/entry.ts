@@ -12,7 +12,7 @@ import * as WalkersView from '#src/walkers.view.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from './tokens.stylex.ts';
 
-// The page: opens the room the address names, `?room=lobby` unless it names another, over a WebSocket to the Worker the Alchemy stack says is at VITE_ROOMS_URL; draws its walkers at every frame the display shows, and steers this player's walker by the keys.
+// The page: opens the room the address names, `?room=lobby` unless it names another, over a WebSocket to the Worker the Alchemy stack says is at VITE_ROOMS_URL; draws its walkers at every frame the display shows, and steers this player's walker by the keys, telling the room of each change.
 
 const styles = stylex.create({
   canvas: { display: 'block', width: '100%', height: '100%', backgroundColor: colours.ground },
@@ -70,11 +70,16 @@ const main = Effect.gen(function* () {
       onSome: (frame) =>
         Effect.andThen(
           Effect.suspend(() => {
+            const before = steered.last.steering;
             steered.last = Steering.steer(
               { ...Devices.idle, ...keyboardAndMouse.read() },
               steered.last,
             );
-            return client.send([Walkers.Steering.of(steered.last.steering)]);
+            const { x, z } = steered.last.steering;
+            // The room keeps the steering it was sent last, so it hears only of a change, not of every frame.
+            return x === before.x && z === before.z
+              ? Effect.void
+              : client.send([Walkers.Steering.of(steered.last.steering)]);
           }),
           views.frame(frame),
         ),

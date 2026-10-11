@@ -16,7 +16,7 @@ const STEP_RATE = 30;
 
 // COMPONENTS
 
-/** Which way the player steers: a direction on the floor no longer than one. */
+/** Which way the player steers: a direction on the floor; one as long as one or longer walks a walker at its pace, and a shorter one, as a pad's stick tilted part way, slower. */
 export const Steering = Component.make(
   'Steering',
   Schema.Struct({ x: Schema.Finite, z: Schema.Finite }),
