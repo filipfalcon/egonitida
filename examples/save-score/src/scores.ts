@@ -32,7 +32,7 @@ export const http = (url: string): Layer.Layer<Scores, never, HttpClient.HttpCli
             .execute(HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(url), { score }))
             .pipe(
               Effect.mapError(
-                () => new Unsaved({ reason: `The scores Worker at ${url} could not be reached.` }),
+                () => new Unsaved({ reason: 'Where scores are kept could not be reached.' }),
               ),
               Effect.flatMap((response) =>
                 response.status === 200

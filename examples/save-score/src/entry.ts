@@ -115,9 +115,9 @@ const main = Effect.gen(function* () {
         Effect.andThen(views.frame(frame), mirror.frame(frame)).pipe(
           Effect.tap(() =>
             Effect.sync(() => {
-              const round = Option.flatMap(
+              const round = Option.map(
                 Option.fromNullishOr(frame.query(Score.Round)[0]),
-                ([, value]) => Option.some(value),
+                ([, value]) => value,
               );
               told.textContent = Option.match(round, {
                 onNone: () => '',

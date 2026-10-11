@@ -20,6 +20,9 @@ import { Scores } from '#src/scores.ts';
 /** How long a round lasts, in seconds. */
 export const ROUND_SECONDS = 20;
 
+/** How many steps the game takes a second. */
+const STEP_RATE = 30;
+
 /** How far from the middle a target may stand. */
 const SPREAD = 4;
 
@@ -116,6 +119,7 @@ const endRound = Rule.on(RoundEnded, {
   },
 });
 
+/** A score saved ends the round with the best kept so far. */
 const saved = Rule.on(ScoreSaved, {
   writes: [Round],
   emits: [],
@@ -128,6 +132,7 @@ const saved = Rule.on(ScoreSaved, {
   },
 });
 
+/** A score not saved ends the round with why. */
 const notSaved = Rule.on(ScoreNotSaved, {
   writes: [Round],
   emits: [],
@@ -149,7 +154,7 @@ const newRound = Rule.on(ChoseNewRound, {
       if (state._tag === 'Saved' || state._tag === 'Unsaved') {
         context.set(round, Round, {
           _tag: 'Playing',
-          endsAt: context.time.tick + ROUND_SECONDS * game.stepRate,
+          endsAt: context.time.tick + Math.round(ROUND_SECONDS / context.time.stepSeconds),
           hits: 0,
         });
       }
@@ -176,6 +181,7 @@ const clock = System.make({
 
 // DOMAIN
 
+/** The round: its targets, its clock, and its score saved. */
 export const domain = Domain.make({
   name: 'Score',
   requires: [Pointing.domain],
@@ -188,10 +194,10 @@ export const domain = Domain.make({
 });
 
 /** The example's game: pointing at things, and the round. */
-export const game = Game.make({ stepRate: 30, domains: [Pointing.domain, domain] });
+export const game = Game.make({ stepRate: STEP_RATE, domains: [Pointing.domain, domain] });
 
 const [withRound, round] = World.spawn(World.empty({ seed: 1 }), [
-  Round.of({ _tag: 'Playing', endsAt: ROUND_SECONDS * 30, hits: 0 }),
+  Round.of({ _tag: 'Playing', endsAt: ROUND_SECONDS * STEP_RATE, hits: 0 }),
 ]);
 const [withFirst, firstTarget] = World.spawn(withRound, [
   Target.of({ x: -2, z: 0 }),
@@ -206,4 +212,5 @@ const [withPlayer, player] = World.spawn(withSecond, []);
 
 /** A round about to start, two targets, and a player. */
 export const world = withPlayer;
+/** The round's entity, the first target's, and the player's, for stories and scenes to name. */
 export { round, firstTarget, player };

@@ -8,7 +8,7 @@ const worker = (answer: (sent: unknown) => Response) => {
   const sent: Array<{ readonly url: string; readonly body: unknown }> = [];
   const client = HttpClient.make((request) =>
     Effect.sync(() => {
-      const body =
+      const body: unknown =
         request.body._tag === 'Uint8Array'
           ? JSON.parse(new TextDecoder().decode(request.body.body))
           : undefined;

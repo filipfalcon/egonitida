@@ -77,16 +77,16 @@ describe('a round', () => {
     );
   });
 
-  it('starts again when the player chooses, once the last round is over', () => {
+  it('starts again when the player chooses, once the last round is over, and not before', () => {
     Story.story(
       Score.game,
       given,
+      ...hit,
       Story.act('player', Score.ChoseNewRound, {}),
       Story.step(),
       Story.expect('round', Score.Round, (round) =>
-        expect(round).toMatchObject({ _tag: 'Playing', hits: 0 }),
+        expect(round).toMatchObject({ _tag: 'Playing', hits: 1 }),
       ),
-      ...hit,
       Story.seconds(Score.ROUND_SECONDS),
       Story.resolve(Score.SaveScore, Score.ScoreSaved, { best: 1 }),
       Story.step(),

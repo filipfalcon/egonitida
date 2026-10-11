@@ -5,9 +5,9 @@ import { type HttpServerRequest, HttpServerResponse } from 'effect/http';
  * The best score, as the scores Worker keeps it: in a store read and written by key, as Cloudflare KV is, and saved by a POST of a score from a page anywhere, which is answered with the best kept so far. What it keeps the best in is the Worker's binding to say, or a map in memory in a test.
  */
 
-/** Where the best is kept: read and written by key, as Cloudflare KV is, which gives `null` for a key it does not hold. */
+/** Where the best is kept: read and written by key, as Cloudflare KV is. */
 export interface Store<E, R> {
-  readonly get: (key: string) => Effect.Effect<string | null, E, R>;
+  readonly get: (key: string) => Effect.Effect<Option.Option<string>, E, R>;
   readonly put: (key: string, value: string) => Effect.Effect<void, E, R>;
 }
 
@@ -20,10 +20,7 @@ const Whole = Schema.NumberFromString.pipe(Schema.check(Schema.isInt()));
 /** Keeps `score` if it is the best yet, and tells the best kept so far, this one included. */
 export const keep = <E, R>(store: Store<E, R>, score: number): Effect.Effect<number, E, R> =>
   Effect.gen(function* () {
-    const kept = Option.flatMap(
-      Option.fromNullishOr(yield* store.get(KEY)),
-      Schema.decodeUnknownOption(Whole),
-    );
+    const kept = Option.flatMap(yield* store.get(KEY), Schema.decodeUnknownOption(Whole));
     const best = Option.match(kept, {
       onNone: () => score,
       onSome: (before) => Math.max(before, score),

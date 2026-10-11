@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import * as Best from '#src/best.ts';
 
@@ -7,7 +7,7 @@ import * as Best from '#src/best.ts';
 const inMemory = () => {
   const kept = new Map<string, string>();
   const store: Best.Store<never, never> = {
-    get: (key) => Effect.sync(() => kept.get(key) ?? null),
+    get: (key) => Effect.sync(() => Option.fromNullishOr(kept.get(key))),
     put: (key, value) =>
       Effect.sync(() => {
         kept.set(key, value);
