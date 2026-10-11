@@ -1,6 +1,7 @@
 /* The document itself, which StyleX cannot reach: the page fills the window. Everything the page draws is styled with StyleX beside it, and StyleX adds its rules to this sheet when it builds. */
 html,
-body {
+body,
+#root {
   height: 100%;
   margin: 0;
 }

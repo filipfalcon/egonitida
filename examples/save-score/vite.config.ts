@@ -1,3 +1,4 @@
+import { foldkit } from '@foldkit/vite-plugin';
 import { Devtools } from '@lightocean/vite-plugin';
 import stylex from '@stylexjs/unplugin';
 import type { Plugin } from 'vite';
@@ -16,9 +17,15 @@ const pinAlchemyDevPort = (port: number): Plugin => ({
 export default defineConfig({
   plugins: [
     process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),
+    ...foldkit(),
     Devtools.plugin(),
     pinAlchemyDevPort(5292),
   ],
+  optimizeDeps: {
+    entries: ['src/entry.ts'],
+    // The plugin's per-module transform injects the foldkit/brand import, so the optimizer's crawl never sees it; left undeclared, a cold cache re-optimizes and reloads the page on first load.
+    include: ['foldkit/brand'],
+  },
   server: {
     // IPv4 loopback, explicitly: a dual-stack bind lets two inner dev servers under `alchemy dev` own the same port, one per address family.
     host: '127.0.0.1',
