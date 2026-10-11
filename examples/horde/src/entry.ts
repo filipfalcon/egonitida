@@ -1,6 +1,7 @@
 import { BrowserWorker } from '@effect/platform-browser';
 import { Drawing, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
+import { Rewind } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
@@ -9,7 +10,7 @@ import * as HordeView from '#src/horde.view.ts';
 import * as Survivor from '#src/survivor.ts';
 import * as SurvivorView from '#src/survivor.view.ts';
 
-// The page: joins the local server in a worker as a survivor, sends what the keyboard and the mouse hold and do, and draws the arena through the game's views at every frame the display shows.
+// The page: joins the local server in a worker as a survivor, sends what the keyboard and the mouse hold and do, and draws the arena through the game's views at every frame the display shows. In development, keys drive the rewind beside the host.
 
 /** Which way each key walks, on the floor as the camera looks at it. */
 const WALKS: Readonly<Record<string, readonly [number, number]>> = {
@@ -21,6 +22,31 @@ const WALKS: Readonly<Record<string, readonly [number, number]>> = {
   ArrowDown: [0, 1],
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
+};
+
+/** What each key asks of the rewind beside the host, in development: to hold time, to step back or forth, to play on from the tick shown, or to go live. */
+type Asked =
+  | { readonly _tag: 'Pause' }
+  | { readonly _tag: 'Step'; readonly steps: number }
+  | { readonly _tag: 'PlayFromHere' }
+  | { readonly _tag: 'Live' };
+
+const asked = (event: KeyboardEvent): Option.Option<Asked> => {
+  const by = event.shiftKey ? 10 : 1;
+  switch (event.code) {
+    case 'KeyP':
+      return Option.some({ _tag: 'Pause' });
+    case 'Comma':
+      return Option.some({ _tag: 'Step', steps: -by });
+    case 'Period':
+      return Option.some({ _tag: 'Step', steps: by });
+    case 'Enter':
+      return Option.some({ _tag: 'PlayFromHere' });
+    case 'KeyL':
+      return Option.some({ _tag: 'Live' });
+    default:
+      return Option.none();
+  }
 };
 
 /** Listens to `type` on the window until the scope closes. */
@@ -60,10 +86,13 @@ const main = Effect.gen(function* () {
   // What the player holds and has done since the last frame.
   const held = new Set<string>();
   const pointer = new Three.Vector2();
-  const done = { fired: false, restarted: false };
+  const done = { fired: false, restarted: false, asked: new Array<Asked>() };
   yield* listen('keydown', (event) => {
     held.add(event.code);
     done.restarted ||= event.code === 'KeyR';
+    if (import.meta.env.DEV) {
+      done.asked.push(...Option.toArray(asked(event)));
+    }
   });
   yield* listen('keyup', (event) => held.delete(event.code));
   yield* listen('pointermove', (event) => {
@@ -76,6 +105,27 @@ const main = Effect.gen(function* () {
   const ground = new Three.Plane(new Three.Vector3(0, 1, 0), 0);
   const ray = new Three.Raycaster();
   const aimed = new Three.Vector3();
+  const rewind = Rewind.controls(client);
+  const time = { paused: false };
+  /** Does what a key asked of the rewind; while time is held, the player does nothing else. */
+  const answer = (asking: Asked) => {
+    switch (asking._tag) {
+      case 'Pause':
+        if (time.paused) {
+          return Effect.void;
+        }
+        time.paused = true;
+        return rewind.pause;
+      case 'Step':
+        return time.paused ? rewind.step(asking.steps) : Effect.void;
+      case 'PlayFromHere':
+        time.paused = false;
+        return rewind.playFromHere;
+      case 'Live':
+        time.paused = false;
+        return rewind.live;
+    }
+  };
 
   yield* viewport.loop((seconds) =>
     Option.match(drawing.frame(seconds), {
@@ -98,15 +148,18 @@ const main = Effect.gen(function* () {
             ray.ray.intersectPlane(ground, aimed) === null
               ? 0
               : Math.atan2(aimed.z - at.z, aimed.x - at.x);
-          yield* client.send([Survivor.Stick.of({ ...walk, aim })]);
-          if (done.fired) {
-            done.fired = false;
+          yield* Effect.forEach(done.asked.splice(0), answer, { discard: true });
+          if (!time.paused) {
+            yield* client.send([Survivor.Stick.of({ ...walk, aim })]);
+          }
+          if (done.fired && !time.paused) {
             yield* client.act(Survivor.PulledTrigger, {});
           }
-          if (done.restarted) {
-            done.restarted = false;
+          if (done.restarted && !time.paused) {
             yield* client.act(Survivor.ChoseRestart, {});
           }
+          done.fired = false;
+          done.restarted = false;
           yield* views.frame(frame);
           hud.textContent = Option.match(
             Option.all({
@@ -119,6 +172,16 @@ const main = Effect.gen(function* () {
                 [
                   life._tag === 'Alive' ? `health ${life.health}` : 'dead: R to rise again',
                   `kills ${tally.kills}`,
+                  ...(time.paused
+                    ? [
+                        '',
+                        `paused at tick ${Math.round(frame.tick)}`,
+                        ', . step back and forth (shift: by ten)',
+                        'enter plays on from here, L goes live',
+                      ]
+                    : import.meta.env.DEV
+                      ? ['', 'P pauses']
+                      : []),
                 ].join('\n'),
             },
           );
