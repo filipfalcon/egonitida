@@ -30,6 +30,8 @@ export interface Game<
   readonly commands: ReadonlyArray<Commands>;
   readonly systems: ReadonlyArray<System.System>;
   readonly rules: ReadonlyArray<Rule.Rule>;
+  /** The systems each client runs for itself after every step, in the order of their domains. */
+  readonly localSystems: ReadonlyArray<System.System>;
 }
 
 /** The names of the domains `Domains` require and do not hold. */
@@ -83,6 +85,7 @@ export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
   commands: game.domains.flatMap((domain) => domain.commands),
   systems: game.domains.flatMap((domain) => domain.systems),
   rules: game.domains.flatMap((domain) => domain.rules),
+  localSystems: game.domains.flatMap((domain) => domain.localSystems),
 });
 
 /**
@@ -218,12 +221,47 @@ export const step = <Commands extends Command.Any>(
 /** The schema of a whole world of `game`: what saves, recordings, and the debugger carry it in. */
 export const schema = (game: Game) => World.schema(game.components);
 
+/**
+ * `world` after a client's own step at `tick`: every local system run in order, over the world the server sent and what the client keeps for itself. Nothing the server sends changes. What they spawn is given ids of the client's own, and the numbers they draw come of the tick and the world's randomness there, so every client draws the same at the same tick and the world's own randomness is left as it was.
+ */
+export const stepLocal = (
+  game: Game,
+  world: World.World,
+  options: { readonly tick: number },
+): World.World => {
+  const draft = World.draft(world);
+  const drawn = { state: (world.random ^ Math.imul(options.tick, 0x9e3779b1)) >>> 0 };
+  const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> = {
+    time: { tick: options.tick, stepSeconds: 1 / game.stepRate },
+    random: () => {
+      const [value, state] = Random.next(drawn.state);
+      drawn.state = state;
+      return value;
+    },
+    get: <Value>(
+      entity: World.Entity,
+      component: Component.Component<string, Value, Component.Owner>,
+    ) => World.get(draft, entity, component),
+    query: World.queryIn(draft),
+    set: (entity, component, value) => World.write(draft, entity, component, value),
+    emit: (event) => {
+      throw new Error(`a local system emitted ${event._tag}; events are for the server's rules`);
+    },
+    spawn: (instances) => World.spawnLocalInto(draft, instances),
+    despawn: (entity) => World.despawnFrom(draft, entity),
+  };
+  for (const system of game.localSystems) {
+    system.run(context);
+  }
+  return World.finish(draft);
+};
+
 // CHANGES
 
 /** A part of a game that changes its state, with the domain it belongs to: a system, by its name, or a rule, by the event or action it handles and its name if it has one. A part a test gave a game with `only` belongs to no domain. */
 export type Part =
   | {
-      readonly _tag: 'System';
+      readonly _tag: 'System' | 'LocalSystem';
       readonly name: string;
       readonly domain: Option.Option<string>;
     }
@@ -266,13 +304,29 @@ export interface Changes {
 export const changes = (game: Game): Changes => {
   const domainOf = new Map<System.System | Rule.Rule, string>(
     game.domains.flatMap((domain) =>
-      [...domain.systems, ...domain.rules].map((part) => [part, domain.name] as const),
+      [...domain.systems, ...domain.rules, ...domain.localSystems].map(
+        (part) => [part, domain.name] as const,
+      ),
     ),
   );
   const parts = [
     ...game.systems.map((system) => ({
       part: {
         _tag: 'System',
+        name: system.name,
+        domain: Option.fromNullishOr(domainOf.get(system)),
+      } satisfies Part,
+      reads: system.reads,
+      writes: system.writes,
+      spawns: system.spawns,
+      emits: system.emits,
+      handles: [],
+      issues: [],
+      despawns: system.despawns,
+    })),
+    ...game.localSystems.map((system) => ({
+      part: {
+        _tag: 'LocalSystem',
         name: system.name,
         domain: Option.fromNullishOr(domainOf.get(system)),
       } satisfies Part,

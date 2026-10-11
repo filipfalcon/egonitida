@@ -42,6 +42,8 @@ export interface Domain<
   readonly commands: ReadonlyArray<Commands>;
   readonly systems: ReadonlyArray<System.System>;
   readonly rules: ReadonlyArray<Rule.Rule>;
+  /** The systems each client runs for itself after every step, over what only it keeps. */
+  readonly localSystems: ReadonlyArray<System.System>;
 }
 
 export type Any = Domain;
@@ -81,7 +83,7 @@ export const make = <
   const Systems extends ReadonlyArray<
     System.System<
       Reads<Components, Requires>,
-      Extract<Writes<Components, Requires>, System.SimulationComponent>,
+      Exclude<Extract<Writes<Components, Requires>, System.SimulationComponent>, Component.Local>,
       Says<Events, Requires>,
       Reads<Components, Requires>
     >
@@ -96,6 +98,14 @@ export const make = <
     >
   > = [],
   const Shares extends ReadonlyArray<Components[number]> = [],
+  const LocalSystems extends ReadonlyArray<
+    System.System<
+      Reads<Components, Requires>,
+      Extract<Components[number], Component.Local>,
+      never,
+      Extract<Components[number], Component.Local>
+    >
+  > = [],
 >(domain: {
   readonly name: Name;
   readonly requires: Requires;
@@ -108,6 +118,8 @@ export const make = <
   readonly commands?: Commands;
   readonly systems: Systems;
   readonly rules: Rules;
+  /** The systems each client runs for itself after every step: they read what the domain may, write and spawn only its local components, and emit nothing, since events are for the server's rules. None if left out. */
+  readonly localSystems?: LocalSystems;
 }): Domain<
   Name,
   Components[number],
@@ -120,4 +132,10 @@ export const make = <
   | Commands[number]['results'][number]['tag'],
   Shares[number],
   Commands[number]
-> => ({ _tag: 'Domain', ...domain, shares: domain.shares ?? [], commands: domain.commands ?? [] });
+> => ({
+  _tag: 'Domain',
+  ...domain,
+  shares: domain.shares ?? [],
+  commands: domain.commands ?? [],
+  localSystems: domain.localSystems ?? [],
+});

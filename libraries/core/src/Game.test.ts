@@ -1138,3 +1138,106 @@ describe('commands', () => {
     });
   });
 });
+
+describe('local systems', () => {
+  /** A drop of blood on the floor: drawn by each client for itself, and never sent. */
+  const Drop = Component.make('Drop', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'simulation',
+    network: 'local',
+  });
+  /** Every entity with health bleeds a drop, somewhere near, every step a client sees. */
+  const bleed = System.make({
+    name: 'bleed',
+    reads: [Health, Position],
+    writes: [Drop],
+    emits: [],
+    spawns: [Drop],
+    run: (context) => {
+      for (const [, , position] of context.query(Health, Position)) {
+        context.spawn([Drop.of({ x: position.x + context.random() })]);
+      }
+    },
+  });
+  const Blood = Domain.make({
+    name: 'Blood',
+    requires: [Fixture],
+    components: [Drop],
+    actions: [],
+    events: [],
+    systems: [],
+    rules: [],
+    localSystems: [bleed],
+  });
+  const bleeding = Game.make({ stepRate: 10, domains: [Fixture, Blood] });
+  const [world] = spawnRunner(4, 60);
+  const drops = (after: World.World) => World.query(after, Drop);
+
+  it('run on a client, at a tick, and never on the server', () => {
+    expect(drops(Game.step(bleeding, world).world)).toEqual([]);
+
+    const local = Game.stepLocal(bleeding, world, { tick: 1 });
+    expect(drops(local)).toHaveLength(1);
+  });
+
+  it('give what they spawn ids of their own, below the server’s, so the two never meet', () => {
+    const once = Game.stepLocal(bleeding, world, { tick: 1 });
+    const twice = Game.stepLocal(bleeding, once, { tick: 2 });
+
+    expect(drops(twice).map(([entity]) => entity)).toEqual([-2, -1]);
+    expect(twice.nextEntity).toBe(world.nextEntity);
+  });
+
+  it('draw the same numbers at the same tick on every client, leaving the world’s own untouched', () => {
+    const at = (tick: number) => drops(Game.stepLocal(bleeding, world, { tick }));
+
+    expect(at(5)).toEqual(at(5));
+    expect(at(5)).not.toEqual(at(6));
+    expect(Game.stepLocal(bleeding, world, { tick: 5 }).random).toBe(world.random);
+  });
+
+  it('are in the map of a game’s changes, as what changes what each client keeps', () => {
+    expect(Game.changes(bleeding).components.get('Drop')).toEqual({
+      readBy: [],
+      writtenBy: [{ _tag: 'LocalSystem', name: 'bleed', domain: Option.some('Blood') }],
+      spawnedBy: [{ _tag: 'LocalSystem', name: 'bleed', domain: Option.some('Blood') }],
+    });
+  });
+
+  it('write and spawn only what is local and their domain’s, and emit nothing', () => {
+    const writing = System.make({
+      name: 'writing',
+      reads: [],
+      writes: [Position],
+      emits: [],
+      run: () => {},
+    });
+    const emitting = System.make({
+      name: 'emitting',
+      reads: [],
+      writes: [],
+      emits: [Bitten],
+      run: () => {},
+    });
+    const settling = System.make({
+      name: 'settling',
+      reads: [],
+      writes: [Drop],
+      emits: [],
+      run: () => {},
+    });
+    const parts = {
+      requires: [Fixture],
+      components: [Drop],
+      actions: [],
+      events: [],
+      rules: [],
+    } as const;
+
+    // @ts-expect-error Position is the fixture's, and sent.
+    Domain.make({ ...parts, name: 'Pushy', systems: [], localSystems: [writing] });
+    // @ts-expect-error A local system emits nothing; events are for the server's rules.
+    Domain.make({ ...parts, name: 'Noisy', systems: [], localSystems: [emitting] });
+    // @ts-expect-error Drop is local: the server's systems never write it.
+    Domain.make({ ...parts, name: 'Muddled', systems: [settling] });
+  });
+});

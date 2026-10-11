@@ -37,7 +37,7 @@ export const encode = (world: World.World, game: Game.Game): string =>
   Schema.encodeSync(wireOf(game).json)(world);
 
 /**
- * `world` with every component that travels replaced by the snapshot's, including any the snapshot no longer holds, and the rest kept. A snapshot that does not decode, in any part, changes nothing: `None`.
+ * `world` with every component that travels replaced by the snapshot's, including any the snapshot no longer holds, and the rest kept, with the ids of the entities the client spawned for itself. A snapshot that does not decode, in any part, changes nothing: `None`.
  */
 export const apply = (
   world: World.World,
@@ -47,6 +47,8 @@ export const apply = (
   const wire = wireOf(game);
   return Option.map(Schema.decodeOption(wire.json)(text), (received) => ({
     ...received,
+    // Its own entities' ids are the client's to keep counting.
+    nextLocal: world.nextLocal,
     stores: new Map([
       ...[...world.stores].filter(([name]) => !wire.sent.has(name)),
       ...received.stores,

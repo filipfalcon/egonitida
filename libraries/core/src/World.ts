@@ -14,6 +14,8 @@ type Stores = ReadonlyMap<string, Component.Store>;
 export interface World {
   readonly tick: number;
   readonly nextEntity: Entity;
+  /** The id the next entity a client spawns for itself gets: they count down from -1, so they never meet the server's, which count up from 0. */
+  readonly nextLocal: Entity;
   /** The state of the world's random generator. */
   readonly random: number;
   readonly stores: Stores;
@@ -22,6 +24,7 @@ export interface World {
 export const empty = (options: { readonly seed: number }): World => ({
   tick: 0,
   nextEntity: 0,
+  nextLocal: -1,
   random: options.seed >>> 0,
   stores: new Map(),
 });
@@ -221,6 +224,7 @@ export const despawn = (world: World, entity: Entity): World => {
 export interface Draft {
   tick: number;
   nextEntity: Entity;
+  nextLocal: Entity;
   random: number;
   readonly stores: Map<string, Component.Store>;
   /** The stores this step has copied so far, by the component that owns each; only that component can change one. */
@@ -230,6 +234,7 @@ export interface Draft {
 export const draft = (world: World): Draft => ({
   tick: world.tick,
   nextEntity: world.nextEntity,
+  nextLocal: world.nextLocal,
   random: world.random,
   stores: new Map(world.stores),
   copies: new Map(),
@@ -259,6 +264,22 @@ export const spawnInto = (draft: Draft, instances: ReadonlyArray<Component.Insta
   }
   return entity;
 };
+
+/** Spawns an entity a client keeps for itself into a world being stepped, with the next local id, and gives the id. */
+export const spawnLocalInto = (
+  draft: Draft,
+  instances: ReadonlyArray<Component.Instance>,
+): Entity => {
+  const entity = draft.nextLocal;
+  draft.nextLocal -= 1;
+  for (const instance of instances) {
+    instance.writeWith((component, value) => write(draft, entity, component, value));
+  }
+  return entity;
+};
+
+/** Whether `entity` is one a client spawned for itself. */
+export const isLocal = (entity: Entity): boolean => entity < 0;
 
 /** Takes an entity out of every store of a world being stepped. Its id is never given out again. */
 export const despawnFrom = (draft: Draft, entity: Entity): void => {
@@ -290,6 +311,7 @@ export const finish = (draft: Draft, freeze: ReadonlyArray<Component.Any> = []):
   return {
     tick: draft.tick,
     nextEntity: draft.nextEntity,
+    nextLocal: draft.nextLocal,
     random: draft.random,
     stores: new Map(draft.stores),
   };
@@ -301,6 +323,7 @@ export const finish = (draft: Draft, freeze: ReadonlyArray<Component.Any> = []):
 const Encoded = Schema.Struct({
   tick: Schema.Int,
   nextEntity: Schema.Int,
+  nextLocal: Schema.Int,
   random: Schema.Int,
   stores: Schema.Record(Schema.String, Schema.Array(Schema.Tuple([Schema.Int, Schema.Unknown]))),
 });
@@ -312,6 +335,8 @@ const isWorld = (value: unknown): value is World =>
   typeof value.tick === 'number' &&
   'nextEntity' in value &&
   typeof value.nextEntity === 'number' &&
+  'nextLocal' in value &&
+  typeof value.nextLocal === 'number' &&
   'random' in value &&
   typeof value.random === 'number' &&
   'stores' in value &&
@@ -346,6 +371,7 @@ export const schema = (components: ReadonlyArray<Component.Any>) => {
               Effect.succeed<World>({
                 tick: encoded.tick,
                 nextEntity: encoded.nextEntity,
+                nextLocal: encoded.nextLocal,
                 random: encoded.random,
                 stores: new Map(stores),
               }),
@@ -355,6 +381,7 @@ export const schema = (components: ReadonlyArray<Component.Any>) => {
       encode: SchemaGetter.transform((world: World) => ({
         tick: world.tick,
         nextEntity: world.nextEntity,
+        nextLocal: world.nextLocal,
         random: world.random,
         stores: Object.fromEntries(
           components.flatMap((component) => {

@@ -44,14 +44,19 @@ export interface Instance<C extends Any = Any> {
 /**
  * Methods rather than function properties wherever a parameter is the component's value: TypeScript checks a method's parameters both ways, so a component of a particular value still fits where any component is accepted.
  */
-export interface Component<Name extends string, Value, O extends Owner> {
+export interface Component<
+  Name extends string,
+  Value,
+  O extends Owner,
+  N extends NetworkRole = NetworkRole,
+> {
   readonly _tag: 'Component';
   readonly name: Name;
   readonly schema: Schema.Codec<Value, unknown>;
   readonly owner: O;
-  readonly network: NetworkRole;
+  readonly network: N;
   /** The component holding `value`, to spawn an entity with. */
-  of(value: Value): Instance<Component<Name, Value, O>>;
+  of(value: Value): Instance<Component<Name, Value, O, N>>;
   /** The value `entity` holds in `store`. */
   read(store: Store | undefined, entity: Entity): Option.Option<Value>;
   /** A copy of `store` that `set` may change in place, until it is sealed. */
@@ -72,6 +77,9 @@ export interface Component<Name extends string, Value, O extends Owner> {
 
 export type Any = Component<string, unknown, Owner>;
 
+/** A component each client keeps and changes for itself, which only local systems write. */
+export type Local = Component<string, unknown, 'simulation', 'local'>;
+
 export type ValueOf<C> = C extends Component<string, infer Value, Owner> ? Value : never;
 
 /** Freezes `value` and everything it holds; what is frozen already, and all it holds, is left as it is. */
@@ -88,11 +96,16 @@ const freezeDeep = (value: unknown): void => {
 /**
  * Makes a component. Its values must never be `null` or `undefined`: holding nothing is the absence of the component, not a value of it.
  */
-export const make = <const Name extends string, Value, const O extends Owner>(
+export const make = <
+  const Name extends string,
+  Value,
+  const O extends Owner,
+  const N extends NetworkRole,
+>(
   name: Name,
   schema: Schema.Codec<Value, unknown>,
-  options: { readonly owner: O; readonly network: NetworkRole },
-): Component<Name, Value, O> => {
+  options: { readonly owner: O; readonly network: N },
+): Component<Name, Value, O, N> => {
   // What a value travels as: its schema's canonical JSON form, so an option or anything else that is not plain data still travels.
   const json = Schema.toCodecJson(schema);
   // Every store this component made, and the values in it. Nothing else can reach this map.
@@ -117,7 +130,7 @@ export const make = <const Name extends string, Value, const O extends Owner>(
   const copyOf = (store: Store | undefined): Map<Entity, Value> =>
     new Map(store === undefined ? undefined : values.get(store));
 
-  const component: Component<Name, Value, O> = {
+  const component: Component<Name, Value, O, N> = {
     _tag: 'Component',
     name,
     schema,
