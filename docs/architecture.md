@@ -250,6 +250,7 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `applications/playground`: the first proof that one Model drives both the DOM and the 3D world.
 - `applications/net-spike`: the spike that hosted a world in a Durable Object.
 - `examples/spinning-cube`: the first example, a cube that turns: one component, one system, one domain, one view, told as a story and as a scene, and drawn in a browser from a local server in a worker.
+- `examples/click-to-colour`: cubes a click paints the next colour of a palette: a world changed by clicking what is drawn, through the `Pointing` domain the engine gives.
 - `examples/horde`: survivors in an arena against a horde that keeps rising: three domains requiring one another and sharing where bodies are, input and actions, events between domains, randomness, and entities spawned and despawned; what the devtools are shown on.
 
 The packages are to become `core` (adding commands, domains, and `Story`), `client` (adding local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object, and persistence), `reflection`, `devtools`, `devtools-mcp`, and `oxlint-plugin`. `engine` goes, its `Viewport` moving to `client`.
