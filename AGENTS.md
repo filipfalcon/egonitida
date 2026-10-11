@@ -64,7 +64,7 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 - With a game's development server running and its page open, the `lightocean-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `lightocean_hosts` and `lightocean_describe`; read the world with `lightocean_world`, `lightocean_compare`, and `lightocean_log`; hold and step time with `lightocean_hold` and `lightocean_advance` to look closely; and play, as one player or many, with `lightocean_join`, `lightocean_input`, and `lightocean_act`.
 - Check a change on the running game yourself rather than asking the person to: hold time, step, and read what came of it, and see how it looks with `lightocean_screenshot`, after `lightocean_seek` to see the past. Asking them is for what neither tells, such as how it feels to play.
 - What you find by playing becomes a test: `lightocean_story` writes a stretch as the source of a story test. Keep the expectations that tell the behaviour, drop the rest, and name the entities for what they are.
-- A game serves its host this way through `Devtools.plugin()` in its Vite config, `Beside.serve` in its worker, and `Page.serve` in its page, in development.
+- A game serves its host this way through `Devtools.plugin()` in its Vite config, `Beside.host` in its worker, and `Page.serve` in its page, in development.
 
 ## Commits
 

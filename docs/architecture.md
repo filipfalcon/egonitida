@@ -262,7 +262,7 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `examples/shared-room`: walkers in a room many players share, steered by the keys: a Worker that sends a page to its room, a Durable Object for each room hosting it with `Room`, and a page that opens it over a WebSocket and predicts its own player with `Prediction`, deployed by Alchemy.
 - `examples/horde`: survivors in an arena against a horde that keeps rising: three domains requiring one another and sharing where bodies are, input and actions, events between domains, randomness, and entities spawned and despawned; what the devtools are shown on.
 
-The packages are to become `core` (adding commands, domains, and `Story`), `client` (adding local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object, and persistence), `reflection`, `devtools`, `devtools-mcp`, and `oxlint-plugin`. `engine` goes, its `Viewport` moving to `client`.
+The packages are `core` (with commands, domains, and `Story`), `client` (with local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object; persistence is to come), `foldkit`, `reflection`, `devtools`, `devtools-mcp`, `vite-plugin`, and `oxlint-plugin`.
 
 ## Development
 
