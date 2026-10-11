@@ -30,6 +30,7 @@ const ClientReliable = Schema.Union([
   Schema.TaggedStruct('Hold', {}),
   Schema.TaggedStruct('Release', {}),
   Schema.TaggedStruct('Act', { action: Schema.Unknown }),
+  Schema.TaggedStruct('Control', { payload: Schema.Unknown }),
 ]);
 export type ClientReliable = typeof ClientReliable.Type;
 

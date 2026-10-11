@@ -32,6 +32,8 @@ export interface Client {
   readonly hold: Effect.Effect<void>;
   /** Lets go of time this client held. */
   readonly release: Effect.Effect<void>;
+  /** Sends the host a control, such as a development tool's, which whatever listens beside the host reads; the game never sees it. */
+  readonly control: (payload: unknown) => Effect.Effect<void>;
   /** Takes an action, which the host hands to the rules at its next step, as from this client's player. */
   readonly act: <Sent>(
     action: Action.Action<string, Sent, Event.Tagged>,
@@ -156,5 +158,6 @@ export const connect = (
       hold: ask({ _tag: 'Hold' }),
       release: ask({ _tag: 'Release' }),
       act: (action, value) => ask({ _tag: 'Act', action: action.encode(value) }),
+      control: (payload) => ask({ _tag: 'Control', payload }),
     };
   });

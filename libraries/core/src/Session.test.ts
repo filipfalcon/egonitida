@@ -434,6 +434,38 @@ describe('going back in time', () => {
   );
 });
 
+describe('controls', () => {
+  it.effect('reach whatever listens beside the host, from the client that sent them', () =>
+    Effect.gen(function* () {
+      const { host, client } = yield* session;
+      const heard = yield* host.controls.pipe(Stream.runHead, Effect.forkChild);
+      yield* Effect.yieldNow;
+
+      yield* client.control({ _tag: 'Seek', tick: 5 });
+
+      expect(yield* Fiber.join(heard)).toEqual(
+        Option.some({ entity: client.entity, payload: { _tag: 'Seek', tick: 5 } }),
+      );
+    }),
+  );
+
+  it.effect('reach nothing from a host that lets no client hold time', () =>
+    Effect.gen(function* () {
+      const host = yield* Host.make(hostOptions(false));
+      const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+      yield* host.connect(hostEnd);
+      const client = yield* Client.connect(clientEnd, { game });
+      const heard = yield* host.controls.pipe(Stream.runHead, Effect.forkChild);
+      yield* Effect.yieldNow;
+
+      yield* client.control({ _tag: 'Seek', tick: 5 });
+      yield* advance(100);
+
+      expect(heard.pollUnsafe()).toBeUndefined();
+    }),
+  );
+});
+
 describe('commands', () => {
   /** Where health is kept outside the world: it says whether it kept an amount, or breaks. */
   const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(

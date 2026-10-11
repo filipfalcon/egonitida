@@ -37,7 +37,7 @@ export interface Options<Services = never> {
   /** Freezes every world the host steps to, so a system or rule that changes a value in place throws at once; for development, since it walks the whole world every step. */
   readonly freeze?: boolean;
   /**
-   * Whether a client may hold time: a local server for one player grants it, a world shared with others refuses. Holding time is the host's to allow, never the world's.
+   * Whether a client may hold time, and send controls: a local server for one player grants it, a world shared with others refuses. Holding time is the host's to allow, never the world's.
    */
   readonly mayHold: boolean;
 }
@@ -62,12 +62,20 @@ export interface Watching {
   readonly happenings: Stream.Stream<Happening>;
 }
 
+/** A control a client sent, with the entity it controls. */
+export interface Control {
+  readonly entity: World.Entity;
+  readonly payload: unknown;
+}
+
 export interface Host {
   /** Joins a client through `connection`, until the scope closes; returns the entity it controls. */
   readonly connect: (
     connection: Transport.Connection,
   ) => Effect.Effect<World.Entity, never, Scope.Scope>;
   readonly world: Effect.Effect<World.World>;
+  /** The controls clients send, such as a development tool's, from now on, as they come; a host that lets no client hold time passes on none. */
+  readonly controls: Stream.Stream<Control>;
   /** Shows every client `world` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
   readonly show: (world: World.World) => Effect.Effect<void>;
   /** Goes back to `world`, such as a past one, and steps on from it; every client is shown it at once. */
@@ -106,6 +114,7 @@ export const make = <Services = never>(
       era: 0,
     };
     const happened = yield* PubSub.unbounded<Happening>();
+    const controlled = yield* PubSub.unbounded<Control>();
     // Open while time runs; the loop waits here while it is held.
     const running = yield* Latch.make(true);
 
@@ -199,6 +208,9 @@ export const make = <Services = never>(
             if (!options.mayHold) {
               return Effect.void;
             }
+            if (message._tag === 'Control') {
+              return PubSub.publish(controlled, { entity, payload: message.payload });
+            }
             if (message._tag === 'Hold') {
               state.holders.add(entity);
             } else {
@@ -272,6 +284,7 @@ export const make = <Services = never>(
     return {
       connect,
       world: Effect.sync(() => state.world),
+      controls: Stream.fromPubSub(controlled),
       show: (world) =>
         Effect.suspend(() => {
           state.era += 1;
