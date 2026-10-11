@@ -7,6 +7,7 @@ LightOcean is an engine for real-time web applications and games: a world of ent
 - Read the exemplar files below for the kind of code you are about to write, and follow them.
 - When an API's behaviour matters, read its source rather than guessing: the engine's own in `libraries/`, and Effect's and Three.js's installed sources under `node_modules`.
 - Write the test first. A behaviour is done when its test passed after failing.
+- The skills in `skills/` walk through the common work: `lightocean` to start, `generate-domain` for a new domain, and `audit-game` to review a game against these rules.
 
 ## Checking
 
@@ -79,6 +80,7 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 - A local server and a page drawing from it: `examples/spinning-cube/src/simulation.worker.ts`, `examples/spinning-cube/src/entry.ts`
 - A local server with the devtools beside it in development, and the Vite config that serves them: `examples/horde/src/simulation.worker.ts`, `examples/horde/vite.config.ts`
 - An application built of a world and Foldkit: its page's Model, Messages, and Commands in `applications/playground/src/main.ts`, told in `main.test.ts`; the world joined, shown, and projected in `applications/playground/src/world.ts`
+- A rule that issues a command, the service the command needs, and the Worker behind it: `examples/save-score/src/score.ts`, `scores.ts`, and `server.ts`
 - A document that is a world, edited by its editors' actions and played in a worker the page opens with it: `applications/editor/src/editing.ts`, `playing.ts`, and `play.worker.ts`
 - The engine's own tests: `libraries/core/src/Game.test.ts`, `libraries/client/src/View.test.ts`
 - A lint rule and its test: `libraries/oxlint-plugin/src/rules/pureSteps.ts`, `pureSteps.test.ts`

@@ -204,7 +204,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 - `examples/` is the curriculum and the end-to-end tests at once; each example adds one idea: a spinning cube, click to colour, Pong for two, a small horde, saving a score, and Pong over the network. A feature lands with its example.
 - Code in documentation comes from compiled, type-checked snippets, except short sketches in design documents of what does not exist yet. Prose leads with its claim, and headings are labels.
-- The agent skills (`lightocean` for framing, `generate-domain`, and a read-only `audit-game`) live in `skills/` and are written once the API above exists. Agents read the sources of Effect and Three.js in `node_modules`, pinned by the lockfile.
+- The agent skills live in `skills/`: `lightocean` frames how a game is built and where to read first, `generate-domain` adds a domain test first, and `audit-game` reviews a game against the rules, reading only. They lean on `AGENTS.md` and its exemplar files rather than code of their own. Agents read the sources of Effect and Three.js in `node_modules`, pinned by the lockfile.
 
 **Mods, a direction.** A mod is a domain loaded while the game runs, from outside it: it requires the game's domains, owns only its own state, and reaches the game's only through the events and shared components those domains declare, which make up the game's modding interface without anyone writing one. What types check for a domain today, a game checks when it loads a mod. The first mods are data, not code: rules made in the editor, which the engine carries out as declared actions and which need no sandbox. Mods as code wait on loading code at run time, a sandbox on the server, determinism no lint can hold for code it never saw, and versions; none of it is planned yet.
 
@@ -252,11 +252,13 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__lightocean/mcp`; and a banner saying what is served and where both are reached.
 - `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio or over HTTP at a development server, reaching its hosts through the development server's relay; `.mcp.json` offers it over stdio.
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
+- `skills/`: the agent skills, `lightocean`, `generate-domain`, and `audit-game`.
 - `applications/editor`: the editor: a document that is a world, edited by its editors' actions; played in a worker of its own; and debugged while it plays.
 - `applications/playground`: cubes a player asks for and paints: a world in a worker, drawn on a canvas, with the page around it Foldkit's, and the first application built of the two together.
 - `applications/net-spike`: the spike that hosted a world in a Durable Object.
 - `examples/spinning-cube`: the first example, a cube that turns: one component, one system, one domain, one view, told as a story and as a scene, and drawn in a browser from a local server in a worker.
 - `examples/click-to-colour`: cubes a click paints the next colour of a palette: a world changed by clicking what is drawn, through the `Pointing` domain the engine gives.
+- `examples/save-score`: a round against the clock whose score is saved: a rule that issues a command, the `Scores` service it needs, and a Worker that keeps the best score in Cloudflare KV, deployed by Alchemy with the namespace bound to it.
 - `examples/horde`: survivors in an arena against a horde that keeps rising: three domains requiring one another and sharing where bodies are, input and actions, events between domains, randomness, and entities spawned and despawned; what the devtools are shown on.
 
 The packages are to become `core` (adding commands, domains, and `Story`), `client` (adding local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object, and persistence), `reflection`, `devtools`, `devtools-mcp`, and `oxlint-plugin`. `engine` goes, its `Viewport` moving to `client`.
