@@ -1,0 +1,16 @@
+{
+  "name": "@lightocean/server",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    "./experimental": "./src/experimental.ts"
+  },
+  "dependencies": {
+    "@lightocean/core": "*",
+    "effect": "4.0.0"
+  }
+}

@@ -8,7 +8,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./internal": "./src/internal.ts"
+    "./internal": "./src/internal.ts",
+    "./experimental": "./src/experimental.ts"
   },
   "dependencies": {
     "effect": "4.0.0"

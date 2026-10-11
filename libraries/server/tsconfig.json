@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // A room runs in a Durable Object: with neither the DOM's types nor Node's, reaching for either is a compile error.
+    "lib": ["esnext"],
+    "types": []
+  }
+}
