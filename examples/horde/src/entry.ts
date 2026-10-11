@@ -4,6 +4,7 @@ import {
   Drawing,
   DualSense,
   Gamepads,
+  Haptics,
   Hid,
   KeyboardAndMouse,
   Tab,
@@ -21,7 +22,7 @@ import * as HordeView from '#src/horde.view.ts';
 import * as Survivor from '#src/survivor.ts';
 import * as SurvivorView from '#src/survivor.view.ts';
 
-// The page: joins the local server in a worker as a survivor, sends what the player does with a pad, or the keyboard and the mouse, and draws the arena through the game's views at every frame the display shows. In development, keys drive the rewind beside the host.
+// The page: joins the local server in a worker as a survivor, sends what the player does with a pad, or the keyboard and the mouse, draws the arena through the game's views at every frame the display shows, and makes the player feel what happens to their survivor through their pads. In development, keys drive the rewind beside the host.
 
 /** What each key asks of the rewind beside the host, in development: to hold time, to step back or forth, to play on from the tick shown, or to go live. */
 type Asked =
@@ -71,14 +72,13 @@ const main = Effect.gen(function* () {
   const client = yield* Client.connect(connection, { game: Game.game });
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
   const viewport = yield* Viewport.make(canvas);
-  const views = yield* View.make([...SurvivorView.views, ...HordeView.views]);
 
   const floor = new Three.Mesh(
     new Three.CircleGeometry(Body.ARENA_RADIUS, 64),
     new Three.MeshStandardNodeMaterial({ color: 0x2b2f33 }),
   );
   floor.rotation.x = -Math.PI / 2;
-  viewport.scene.add(views.root, floor, new Three.AmbientLight(0xffffff, 0.5));
+  viewport.scene.add(floor, new Three.AmbientLight(0xffffff, 0.5));
   const sun = new Three.DirectionalLight(0xffffff, 2);
   sun.position.set(4, 10, 6);
   viewport.scene.add(sun);
@@ -89,6 +89,18 @@ const main = Effect.gen(function* () {
   // Pads through WebHID: those the player gave leave for before, and more at H, a key being the gesture a browser asks for.
   const drivers = [DualSense.driver];
   const hid = { connections: [...(yield* Hid.granted(drivers))] };
+  // The survivor's player feels it on every pad that can be felt: through WebHID where it is read through it, else through the Gamepad API.
+  const haptics = Haptics.make({
+    player: client.entity,
+    felt: () => [
+      ...hid.connections.map(({ felt }) => felt),
+      ...Gamepads.feltNow(hid.connections.map(({ model }) => model)),
+    ],
+  });
+  const views = yield* View.make([...SurvivorView.views, ...HordeView.views]).pipe(
+    Effect.provideService(Haptics.Haptics, haptics),
+  );
+  viewport.scene.add(views.root);
   // What a key starts runs within the page's scope, so a device connected at it stays connected while the page is open.
   const run = Effect.runForkWith(yield* Effect.context<Scope.Scope>());
   yield* listen('keydown', (event) => {
@@ -192,7 +204,7 @@ const main = Effect.gen(function* () {
           if (now.restarted && !time.paused) {
             yield* client.act(Survivor.ChoseRestart, {});
           }
-          yield* views.frame(frame);
+          yield* views.frame(frame).pipe(Effect.provideService(Haptics.Haptics, haptics));
           hud.textContent = Option.match(
             Option.all({
               life: frame.get(client.entity, Survivor.Life),

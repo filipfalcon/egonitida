@@ -1,4 +1,4 @@
-import { View } from '@lightocean/client';
+import { Haptics, View } from '@lightocean/client';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
@@ -37,4 +37,33 @@ export const survivors = View.each([Survivor.Life, Body.Position, Survivor.Stick
   },
 });
 
-export const views = [survivors];
+/** How a bite feels, and harder the bite that kills. */
+export const BITE: Haptics.Rumble = { strong: 0.4, weak: 0.8, seconds: 0.15 };
+export const DEATH: Haptics.Rumble = { strong: 1, weak: 1, seconds: 0.6 };
+/** A gun's trigger: it pushes back over a stretch of its travel and gives way just before it fires. */
+export const GUN: Haptics.Triggers = {
+  left: Haptics.free,
+  right: { _tag: 'Clicking', from: 0.2, to: 0.45, strength: 0.8 },
+};
+
+/** What a survivor's player feels: a bite, the bite that kills harder, and their gun's trigger while they live. */
+export const felt = View.on(Survivor.Life, (life, frame, survivor) =>
+  Effect.gen(function* () {
+    const haptics = yield* Haptics.Haptics;
+    // A survivor who comes into the arena hurt, or dead, was not hurt just now.
+    const arrived = frame.gained(Survivor.Life).includes(survivor);
+    if (life._tag === 'Dead') {
+      if (!arrived) {
+        yield* haptics.rumble(survivor, DEATH);
+      }
+      yield* haptics.triggers(survivor, Haptics.freeTriggers);
+      return;
+    }
+    if (life.health < Survivor.HEALTH && !arrived) {
+      yield* haptics.rumble(survivor, BITE);
+    }
+    yield* haptics.triggers(survivor, GUN);
+  }),
+);
+
+export const views = [survivors, felt];

@@ -9,7 +9,8 @@ import * as HordeView from '#src/horde.view.ts';
 import * as Survivor from '#src/survivor.ts';
 import * as SurvivorView from '#src/survivor.view.ts';
 
-const views = [...SurvivorView.views, ...HordeView.views];
+/** What is drawn of the arena; what is felt is told in `survivor.scene.test.ts`. */
+const views = [SurvivorView.survivors, ...HordeView.views];
 
 /** A survivor aiming along z at a zombie three metres off, who has just shot it down. */
 const shotDown = () => {
