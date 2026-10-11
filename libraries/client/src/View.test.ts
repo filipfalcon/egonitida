@@ -175,3 +175,64 @@ describe('View.make', () => {
     }),
   );
 });
+
+describe('picking', () => {
+  /** A crate as a unit box, standing where its position puts it, and a streak drawn across everything. */
+  const boxes = View.each([Crate, Position], {
+    acquire: () =>
+      Effect.succeed(
+        new Three.Mesh(new Three.BoxGeometry(1, 1, 1), new Three.MeshBasicNodeMaterial()),
+      ),
+    draw: (box, held) => {
+      box.position.x = held(Position).x;
+    },
+  });
+  const streaks = View.each([Struck], {
+    acquire: () => {
+      const geometry = new Three.BufferGeometry().setFromPoints([
+        new Three.Vector3(-10, 0, 2),
+        new Three.Vector3(10, 0, 2),
+      ]);
+      return Effect.succeed(new Three.Line(geometry, new Three.LineBasicNodeMaterial()));
+    },
+    draw: () => {},
+  });
+  /** A camera five units back, looking at the middle. */
+  const camera = new Three.PerspectiveCamera(50, 1, 0.1, 100);
+  camera.position.set(0, 0, 5);
+  camera.lookAt(0, 0, 0);
+
+  const drawn = Effect.gen(function* () {
+    const views = yield* View.make([boxes, streaks]);
+    const [one, left] = World.spawn(World.empty({ seed: 1 }), crateAt(0));
+    const [two, right] = World.spawn(one, crateAt(2));
+    const [world] = World.spawn(two, [Struck.of({ at: 1 })]);
+    yield* play(views, [world]);
+    return { views, left, right };
+  });
+
+  it.effect(
+    'finds the entity whose object is nearest under a point, and the view that drew it',
+    () =>
+      Effect.gen(function* () {
+        const { views, left, right } = yield* drawn;
+
+        const middle = views.pick(camera, { x: 0, y: 0 });
+        const toTheRight = views.pick(camera, new Three.Vector3(2, 0, 0).project(camera));
+
+        expect(Option.map(middle, ({ entity, view }) => [entity, view === boxes])).toEqual(
+          Option.some([left, true]),
+        );
+        expect(Option.map(toTheRight, ({ entity }) => entity)).toEqual(Option.some(right));
+      }),
+  );
+
+  it.effect('finds nothing where nothing is drawn, and never a line, which no pointer hits', () =>
+    Effect.gen(function* () {
+      const { views } = yield* drawn;
+
+      expect(views.pick(camera, { x: 0.9, y: 0.9 })).toEqual(Option.none());
+      expect(views.pick(camera, { x: -0.9, y: 0 })).toEqual(Option.none());
+    }),
+  );
+});

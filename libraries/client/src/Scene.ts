@@ -6,7 +6,7 @@ import * as Timeline from '#src/Timeline.ts';
 import * as View from '#src/View.ts';
 
 /**
- * A test told through a game's views: worlds shown one frame each, as a client draws them, with no renderer, canvas, or browser. What the views drew is found by view and entity, never by walking the scene graph; what they put out that is not drawn, such as a sound, goes through services, which a test gives as Layers that record.
+ * A test told through a game's views: worlds shown one frame each, as a client draws them, with no renderer, canvas, or browser. What the views drew is found by view and entity, never by walking the scene graph, and what a click would find, by a point of the screen; what they put out that is not drawn, such as a sound, goes through services, which a test gives as Layers that record.
  *
  * A world to show comes from wherever a test has one, such as where a story ended.
  */
@@ -17,6 +17,8 @@ export interface Scene<R = never> {
   readonly show: (world: World.World) => Effect.Effect<void, never, R>;
   /** What `view` drew for `entity` in the last frame shown, if anything. */
   readonly find: View.Views<R>['find'];
+  /** What is under a point of the screen, seen through a camera, in the last frame shown, as a click would find it. */
+  readonly pick: View.Views<R>['pick'];
 }
 
 /** A scene drawn through `views`, until the scope closes. */
@@ -36,5 +38,6 @@ export const make = <R = never>(
           return working.frame(frame);
         }),
       find: working.find,
+      pick: working.pick,
     };
   });

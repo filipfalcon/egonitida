@@ -119,6 +119,13 @@ export const during = <R = never>(
   acquire: Effect.Effect<unknown, never, R | Scope.Scope>,
 ): View<R> => ({ _tag: 'During', holds, acquire });
 
+/** What is under a point of the screen: the entity whose object is nearest there, the view that drew it, and where it was hit, in the world. */
+export interface Picked {
+  readonly entity: World.Entity;
+  readonly view: Each<unknown, Three.Object3D>;
+  readonly point: Three.Vector3;
+}
+
 /** A game's views at work: their objects under `root`, drawn with every frame. */
 export interface Views<R = never> {
   readonly root: Three.Group;
@@ -127,6 +134,13 @@ export interface Views<R = never> {
     view: Each<unknown, Built>,
     entity: World.Entity,
   ) => Option.Option<Built>;
+  /**
+   * What is under `point` of the screen, seen through `camera`, as the objects were last drawn: the entity of the nearest object an `each` view built, and the view, if one is there. Only meshes are hit, so a line or a sprite drawn over a scene never takes a click; what is nearest decides, so an object in front blocks one behind it. `point` runs from -1 to 1 across the screen and up it, as Three.js's normalized device coordinates do.
+   */
+  readonly pick: (
+    camera: Three.Camera,
+    point: { readonly x: number; readonly y: number },
+  ) => Option.Option<Picked>;
   /** Draws `frame`: builds and lets go of what entities coming and going need, draws every object, and reacts to what just happened. */
   readonly frame: (frame: Drawing.Frame) => Effect.Effect<void, never, R>;
 }
@@ -145,6 +159,12 @@ export const make = <R = never>(
     const scope = yield* Effect.scope;
     // What each `each` view keeps, by entity: its identity is the view and the entity together.
     const kept = new Map<object, Map<World.Entity, Kept>>();
+    // Which view built each object, and for which entity, so a hit object leads back to them.
+    const owners = new WeakMap<
+      Three.Object3D,
+      { readonly view: Each<R, Three.Object3D>; readonly entity: World.Entity }
+    >();
+    const raycaster = new Three.Raycaster();
     // The scope each `during` view holds open, while its condition holds.
     const held = new Map<During<R>, Scope.Closeable>();
 
@@ -181,6 +201,7 @@ export const make = <R = never>(
             const own = yield* Scope.fork(scope);
             const object = yield* view.acquire(entity, frame).pipe(Scope.provide(own));
             root.add(object);
+            owners.set(object, { view, entity });
             keeping.set(entity, { object, scope: own });
           }
         }
@@ -210,8 +231,37 @@ export const make = <R = never>(
         }
       });
 
+    /** The view and entity of the object an each view built that `hit` is, or is part of. */
+    const ownerOf = (
+      hit: Three.Object3D | null,
+    ): Option.Option<{
+      readonly view: Each<R, Three.Object3D>;
+      readonly entity: World.Entity;
+    }> => {
+      if (hit === null || hit === root) {
+        return Option.none();
+      }
+      const owner = owners.get(hit);
+      return owner === undefined ? ownerOf(hit.parent) : Option.some(owner);
+    };
+
     return {
       root,
+      pick: (camera, point) => {
+        root.updateMatrixWorld(true);
+        camera.updateMatrixWorld();
+        raycaster.setFromCamera(new Three.Vector2(point.x, point.y), camera);
+        const nearest = raycaster
+          .intersectObject(root, true)
+          .find(({ object }) => object instanceof Three.Mesh);
+        return Option.flatMap(Option.fromNullishOr(nearest), (hit) =>
+          Option.map(ownerOf(hit.object), ({ view, entity }) => ({
+            entity,
+            view,
+            point: hit.point,
+          })),
+        );
+      },
       find: (view, entity) =>
         Option.flatMap(Option.fromNullishOr(kept.get(view)?.get(entity)), ({ object }) =>
           view.own(object),

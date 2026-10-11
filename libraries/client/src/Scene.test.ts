@@ -77,6 +77,30 @@ describe('Scene', () => {
     }),
   );
 
+  it.effect('finds the entity under a point of the screen, as a click would', () =>
+    Effect.gen(function* () {
+      const told = Story.story(
+        sliding,
+        Story.spawn('crate', [Crate.of({}), Position.of({ x: 0 })]),
+      );
+      const boxes = View.each([Crate, Position], {
+        acquire: () => Effect.succeed(new Three.Mesh(new Three.BoxGeometry(1, 1, 1))),
+        draw: (box, held) => {
+          box.position.x = held(Position).x;
+        },
+      });
+      const camera = new Three.PerspectiveCamera(50, 1, 0.1, 100);
+      camera.position.set(0, 0, 5);
+      const scene = yield* Scene.make([boxes]);
+
+      yield* scene.show(told.world);
+
+      expect(Option.map(scene.pick(camera, { x: 0, y: 0 }), ({ entity }) => entity)).toEqual(
+        Option.some(Story.named(told, 'crate')),
+      );
+    }),
+  );
+
   it.effect('records what views put out through the services a test gives', () => {
     const played: Array<string> = [];
     return Effect.gen(function* () {
