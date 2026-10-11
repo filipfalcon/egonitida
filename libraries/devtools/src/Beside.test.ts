@@ -1,8 +1,10 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Queue, Stream } from 'effect';
+import { World } from '@lightocean/core';
+import { Effect, Option, Queue, Stream } from 'effect';
 import * as Beside from '#src/Beside.ts';
 import type * as Bridge from '#src/Bridge.ts';
 import * as Fixtures from '#src/fixtures.ts';
+import * as Keep from '#src/Keep.ts';
 
 describe('the devtools beside a host', () => {
   it.effect('bridge the host to a relay, by the id given, with time kept to go back in', () =>
@@ -34,6 +36,30 @@ describe('the devtools beside a host', () => {
         id: 1,
         answer: { oldest: 0, newest: 3 },
       });
+    }),
+  );
+
+  it.effect('host a game from the world kept for the tab, and keep it on', () =>
+    Effect.gen(function* () {
+      const store = Keep.memory();
+      const first = yield* Fixtures.host();
+      yield* Keep.serve(store, first, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
+      yield* Fixtures.visit(first);
+      yield* first.hold;
+      yield* Fixtures.advance(100);
+      const left = yield* first.world;
+      const served: Array<number> = [];
+
+      yield* Beside.host(
+        { ...Fixtures.setup(), world: World.empty({ seed: 7 }), mayHold: true },
+        { name: 'test', id: 'tab-1', kept: {}, store: Option.some(store) },
+        (hosted) =>
+          Effect.map(hosted.world, ({ tick }) => {
+            served.push(tick);
+          }),
+      );
+
+      expect(served).toEqual([left.tick]);
     }),
   );
 });
