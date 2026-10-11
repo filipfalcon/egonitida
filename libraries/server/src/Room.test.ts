@@ -112,6 +112,50 @@ describe('a room', () => {
       expect(yield* tick).toBe(left);
     }).pipe(Effect.scoped),
   );
+
+  it.live('runs for a player who enters while the last one is still leaving', () =>
+    Effect.gen(function* () {
+      const room = yield* Room.make(options);
+      const tick = Effect.map(room.host.world, ({ tick }) => tick);
+      const runs: Array<boolean> = [];
+
+      // One leaves and the next enters at once, again and again, as a page reconnecting does.
+      const first = yield* entered(room);
+      const leaving = { opened: first.opened };
+      for (let round = 0; round < 10; round += 1) {
+        const [, next] = yield* Effect.all([leaving.opened.closed, entered(room)], {
+          concurrency: 'unbounded',
+        });
+        leaving.opened = next.opened;
+        const before = yield* tick;
+        yield* Effect.sleep('100 millis');
+        runs.push((yield* tick) > before);
+      }
+
+      expect(runs).toEqual(Array.from({ length: 10 }, () => true));
+    }).pipe(Effect.scoped),
+  );
+
+  it.live(
+    'takes a socket closing twice as closing once, and text that is no frame as nothing',
+    () =>
+      Effect.gen(function* () {
+        const room = yield* Room.make(options);
+        const tick = Effect.map(room.host.world, ({ tick }) => tick);
+        const staying = yield* entered(room);
+        const going = yield* entered(room);
+
+        yield* going.opened.closed;
+        yield* going.opened.closed;
+        yield* staying.opened.received('no frame at all');
+        yield* Effect.sleep('100 millis');
+        const before = yield* tick;
+        yield* Effect.sleep('200 millis');
+
+        expect(yield* someone(staying.client)).toEqual([staying.client.entity]);
+        expect(yield* tick).toBeGreaterThan(before);
+      }).pipe(Effect.scoped),
+  );
 });
 
 describe("a room's id", () => {

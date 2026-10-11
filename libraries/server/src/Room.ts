@@ -38,14 +38,15 @@ export const make = <Services = never>(
     const state = { inside: 0 };
     yield* host.hold;
 
+    /** Holds time while no one is in the room, and lets it run while someone is, by how many are in it now, whatever came between. */
+    const settle = Effect.suspend(() => (state.inside === 0 ? host.hold : host.release));
+
     const open = (socket: Socket): Effect.Effect<Opened> =>
       Effect.gen(function* () {
         const scope = yield* Scope.fork(parent);
         const inbox = yield* Queue.unbounded<Transport.Frame, Cause.Done>();
         state.inside += 1;
-        if (state.inside === 1) {
-          yield* host.release;
-        }
+        yield* settle;
         yield* host
           .connect({
             send: (frame) => socket.send(Transport.encodeFrame(frame)),
@@ -54,7 +55,7 @@ export const make = <Services = never>(
           .pipe(Scope.provide(scope));
         const left = { closed: false };
         return {
-          received: (text) =>
+          received: (text: string) =>
             Option.match(Transport.decodeFrame(text), {
               // What is no frame is no one's to read.
               onNone: () => Effect.void,
@@ -66,13 +67,11 @@ export const make = <Services = never>(
             }
             left.closed = true;
             state.inside -= 1;
-            return Effect.andThen(
-              Scope.close(scope, Exit.void),
-              state.inside === 0 ? host.hold : Effect.void,
-            );
+            return Effect.andThen(Scope.close(scope, Exit.void), settle);
           }),
         };
-      });
+        // Counted in and joined, or neither: an open cut short leaves no one counted who is not there.
+      }).pipe(Effect.uninterruptible);
 
     return { host, open };
   });

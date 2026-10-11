@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { type Cause, Effect, Queue, Stream } from 'effect';
+import { type Cause, Effect, Option, Queue, Stream } from 'effect';
 import * as Socket from 'effect/socket/Socket';
 import * as SocketTransport from '#src/SocketTransport.ts';
 
@@ -59,6 +59,34 @@ describe('a connection over a socket', () => {
       const received = yield* receiving.frames.pipe(Stream.runCollect);
 
       expect(received).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  // Real time: a socket that cannot be written to is found out only when something is sent.
+  it.live('ends its frames once a frame cannot be sent, as the socket is broken', () =>
+    Effect.gen(function* () {
+      const broken = Socket.make({
+        reader: Effect.succeed({ pull: Effect.never, upgrade: () => Effect.void }),
+        writer: Effect.succeed({
+          write: () =>
+            Effect.fail(
+              new Socket.SocketError({ reason: new Socket.SocketCloseError({ code: 1006 }) }),
+            ),
+          writeAll: () =>
+            Effect.fail(
+              new Socket.SocketError({ reason: new Socket.SocketCloseError({ code: 1006 }) }),
+            ),
+        }),
+      });
+      const connection = yield* SocketTransport.fromSocket(broken);
+
+      yield* connection.send({ channel: 'reliable', payload: 'hello' });
+      const received = yield* connection.frames.pipe(
+        Stream.runCollect,
+        Effect.timeoutOption('300 millis'),
+      );
+
+      expect(received).toEqual(Option.some([]));
     }).pipe(Effect.scoped),
   );
 });

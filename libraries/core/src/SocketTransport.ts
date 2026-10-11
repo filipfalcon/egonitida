@@ -6,7 +6,7 @@ import * as Transport from '#src/Transport.ts';
  * A connection to a host over a socket, such as a WebSocket to a room in a Durable Object: both channels travel on the one socket, each frame marked with its channel, and the unreliable channel never loses anything, which a protocol written for loss does not mind. It is written against Effect's platform-neutral sockets, so the platform decides what a socket is: a browser's WebSocket, or one in memory in a test.
  */
 
-/** A connection over `socket`, until the scope closes: what it reads, as frames, ends when the other end closes, and a frame sent once it has is lost, as the player has gone. */
+/** A connection over `socket`, until the scope closes: what it reads, as frames, ends when the other end closes or a frame cannot be sent, as the socket is broken, and a frame sent after is lost, as the player has gone. */
 export const fromSocket = (
   socket: Socket.Socket,
 ): Effect.Effect<Transport.Connection, never, Scope.Scope> =>
@@ -37,7 +37,12 @@ export const fromSocket = (
       Effect.forkScoped,
     );
     return {
-      send: (frame) => writer.write(Transport.encodeFrame(frame)).pipe(Effect.ignore),
+      send: (frame) =>
+        writer.write(Transport.encodeFrame(frame)).pipe(
+          // A socket that cannot be written to is broken: the connection ends, so the other side lets go of it.
+          Effect.catch(() => Queue.end(inbox)),
+          Effect.asVoid,
+        ),
       frames: Stream.fromQueue(inbox),
     };
   });
