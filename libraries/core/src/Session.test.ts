@@ -322,6 +322,57 @@ describe('a session between a host and its clients', () => {
   });
 });
 
+describe('watching a host', () => {
+  it.effect(
+    'tells the world as it is, then every client joining and leaving and every step taken with what went into it, in order',
+    () =>
+      Effect.gen(function* () {
+        const host = yield* startHost;
+        yield* advance(100);
+        const watching = yield* host.watch;
+        const told = yield* watching.happenings.pipe(
+          Stream.takeUntil((happening) => happening._tag === 'Left'),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+        const scope = yield* Scope.make();
+        const entity = yield* host.connect(hostEnd).pipe(Scope.provide(scope));
+        const client = yield* Client.connect(clientEnd, { game }).pipe(Scope.provide(scope));
+
+        yield* client.send([Controls.of({ move: 1, fire: false })]);
+        yield* client.act(AskedToHeal, { amount: 50 });
+        yield* advance(100);
+        yield* Scope.close(scope, Exit.void);
+        const happenings = yield* Fiber.join(told);
+
+        expect(watching.world.tick).toBe(3);
+        const [joined, firstStep, ...rest] = happenings;
+        expect(joined).toEqual({ _tag: 'Joined', entity });
+        expect(
+          firstStep?._tag === 'Stepped' && {
+            tick: firstStep.tick,
+            inputs: firstStep.inputs.map((input) => [
+              input.entity,
+              input.component.name,
+              input.encoded(),
+            ]),
+            actions: firstStep.actions,
+          },
+        ).toEqual({
+          tick: 4,
+          inputs: [[entity, 'Controls', { move: 1, fire: false }]],
+          actions: [{ _tag: 'AskedToHeal', amount: 50, player: entity }],
+        });
+        expect(rest.at(-1)).toEqual({ _tag: 'Left', entity });
+        expect(rest.slice(0, -1).map((happening) => happening._tag)).toEqual([
+          'Stepped',
+          'Stepped',
+        ]);
+      }),
+  );
+});
+
 describe('commands', () => {
   /** Where health is kept outside the world: it says whether it kept an amount, or breaks. */
   const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(

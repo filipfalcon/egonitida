@@ -11,6 +11,8 @@ export type InputComponent = Component.Component<string, unknown, 'input'>;
 export interface Input {
   readonly entity: World.Entity;
   readonly component: InputComponent;
+  /** Its value, encoded as JSON by its component's schema, as it is sent and recorded. */
+  readonly encoded: () => unknown;
   /** Writes the value into a world being stepped. */
   readonly writeInto: (draft: World.Draft) => void;
 }
@@ -22,5 +24,6 @@ export const of = <Value>(
 ): Input => ({
   entity,
   component,
+  encoded: () => component.of(value).encoded(),
   writeInto: (draft) => World.write(draft, entity, component, value),
 });

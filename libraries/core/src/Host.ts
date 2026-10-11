@@ -1,4 +1,4 @@
-import { Clock, Effect, Latch, Option, Schema, type Scope, Stream } from 'effect';
+import { Clock, Effect, Latch, Option, PubSub, Schema, type Scope, Stream } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
@@ -13,6 +13,8 @@ import type * as World from '#src/World.ts';
 
 /**
  * Hosts a game: steps its world at the game's rate, takes the input its clients send, and sends every client the world after each step. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
+ *
+ * Everything that changes its world can be watched, so the world can be told again from where watching began: a client joining or leaving, which happens between steps, and every step, with the input and actions that went into it. Command results enter as actions, so they are among them.
  *
  * It also runs the commands the game's rules issue, once the step that issued them is over, with the services of the Layers it is given; so hosting a game that saves needs whatever it saves to. A command's result enters the world at the next step taken after it comes, as actions do. A command that breaks is reported, has no result, and stops nothing.
  */
@@ -40,12 +42,32 @@ export interface Options<Services = never> {
   readonly mayHold: boolean;
 }
 
+/** What changed a host's world: a client joining or leaving, between steps, by the game's own `join` and `leave`, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
+export type Happening =
+  | { readonly _tag: 'Joined'; readonly entity: World.Entity }
+  | { readonly _tag: 'Left'; readonly entity: World.Entity }
+  | {
+      readonly _tag: 'Stepped';
+      /** The tick the step took the world to. */
+      readonly tick: number;
+      readonly inputs: ReadonlyArray<Input.Input>;
+      readonly actions: ReadonlyArray<Event.Tagged>;
+    };
+
+/** A host's world as it was when watching began, and everything that has happened to it since, in order. */
+export interface Watching {
+  readonly world: World.World;
+  readonly happenings: Stream.Stream<Happening>;
+}
+
 export interface Host {
   /** Joins a client through `connection`, until the scope closes; returns the entity it controls. */
   readonly connect: (
     connection: Transport.Connection,
   ) => Effect.Effect<World.Entity, never, Scope.Scope>;
   readonly world: Effect.Effect<World.World>;
+  /** Watches the world until the scope closes: where it is now, and everything that happens to it from now on, with nothing missed between the two. */
+  readonly watch: Effect.Effect<Watching, never, Scope.Scope>;
 }
 
 export const make = <Services = never>(
@@ -75,6 +97,7 @@ export const make = <Services = never>(
       acted: new Array<Event.Tagged>(),
       heldSince: Option.none<number>(),
     };
+    const happened = yield* PubSub.unbounded<Happening>();
     // Open while time runs; the loop waits here while it is held.
     const running = yield* Latch.make(true);
 
@@ -120,12 +143,11 @@ export const make = <Services = never>(
       state.pending.clear();
       const actions = state.acted.splice(0);
       const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
-      const first = Game.step(options.game, state.world, inputs, actions, stepping);
-      state.world = first.world;
-      yield* Effect.forEach(first.commands, run, { discard: true });
-      for (let step = 1; step < steps; step += 1) {
-        const next = Game.step(options.game, state.world, [], [], stepping);
+      for (let step = 0; step < steps; step += 1) {
+        const taken = step === 0 ? { inputs, actions } : { inputs: [], actions: [] };
+        const next = Game.step(options.game, state.world, taken.inputs, taken.actions, stepping);
         state.world = next.world;
+        PubSub.publishUnsafe(happened, { _tag: 'Stepped', tick: next.world.tick, ...taken });
         yield* Effect.forEach(next.commands, run, { discard: true });
       }
       const payload = Snapshot.encode(state.world, options.game);
@@ -204,6 +226,7 @@ export const make = <Services = never>(
       Effect.gen(function* () {
         const [world, entity] = options.join(state.world);
         state.world = world;
+        PubSub.publishUnsafe(happened, { _tag: 'Joined', entity });
         state.connections.add(connection);
         yield* Effect.addFinalizer(() =>
           Effect.suspend(() => {
@@ -212,6 +235,7 @@ export const make = <Services = never>(
             state.lastSeq.delete(entity);
             state.holders.delete(entity);
             state.world = options.leave(state.world, entity);
+            PubSub.publishUnsafe(happened, { _tag: 'Left', entity });
             // A client that leaves lets go of time it was holding.
             return settleHold;
           }),
@@ -231,5 +255,13 @@ export const make = <Services = never>(
         return entity;
       });
 
-    return { connect, world: Effect.sync(() => state.world) };
+    return {
+      connect,
+      world: Effect.sync(() => state.world),
+      // Subscribing and reading the world happen with nothing in between, so the first happening told is the first after the world given.
+      watch: Effect.map(PubSub.subscribe(happened), (subscription) => ({
+        world: state.world,
+        happenings: Stream.fromSubscription(subscription),
+      })),
+    };
   });
