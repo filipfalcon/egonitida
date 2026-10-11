@@ -159,7 +159,7 @@ const Span = Schema.Struct({ oldest: Schema.Int, newest: Schema.Int });
 const ASKED_EVERY = '500 millis';
 
 /** The steps of the document playing in which something happened, as its debugger tells them, whenever they change. */
-const stepsTold = Stream.unwrap(
+const stepsTold: Stream.Stream<Message, never, Services> = Stream.unwrap(
   Played.get.pipe(
     Effect.map(({ client }) =>
       Stream.fromSchedule(Schedule.spaced(ASKED_EVERY)).pipe(
@@ -175,10 +175,13 @@ const stepsTold = Stream.unwrap(
         // What the debugger could not tell this time is asked again next time.
         Stream.flatMap((told) => Stream.fromIterable(Option.toArray(told))),
         Stream.changesWith(Schema.toEquivalence(Schema.Array(Log.Step))),
-        Stream.map((steps) => Message.ToldSteps({ steps })),
+        Stream.map((steps): Message => Message.ToldSteps({ steps })),
       ),
     ),
-    Effect.orElseSucceed(() => Stream.empty),
+    // Not joined, though the Model says it is, as one restored after a reload does: the Model is put right, and the steps asked again once it is joined.
+    Effect.orElseSucceed(() =>
+      Stream.make(Message.LeftPlay()).pipe(Stream.map((left): Message => left)),
+    ),
   ),
 );
 
@@ -200,6 +203,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               views: [...ObjectsView.views, ...EditingView.views],
               setup: setUp,
               alongside: capturedAs(host),
+              onNotJoined: (): Message => Message.LeftDocument(),
               onFailed: (reason) => Message.FailedShowDocument({ reason }),
             });
           case 'Playing':
@@ -209,6 +213,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               views: ObjectsView.views,
               setup: setUp,
               alongside: capturedAs(`${host}-playing`),
+              onNotJoined: (): Message => Message.LeftPlay(),
               onFailed: (reason) => Message.FailedShowDocument({ reason }),
             });
         }
@@ -235,6 +240,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               schema: Schema.Array(OutlineEntry),
               project: outlineOf,
               onProjected: (objects) => Message.ProjectedOutline({ objects }),
+              onNotJoined: (): Message => Message.LeftDocument(),
             })
           : Stream.empty,
     },
@@ -250,6 +256,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               schema: Schema.Option(Selected),
               project: selectedBy,
               onProjected: (maybeSelected) => Message.ProjectedSelection({ maybeSelected }),
+              onNotJoined: (): Message => Message.LeftDocument(),
             })
           : Stream.empty,
     },

@@ -21,17 +21,18 @@ export const changes = <A>(joined: World.Joined, projection: Projection<A>): Str
   );
 
 /**
- * A projection as a Foldkit Subscription's Stream: what `projection` reads off the world `resource` holds, each value said in a Message of the application's, for as long as the Stream runs; nothing while no world is joined.
+ * A projection as a Foldkit Subscription's Stream: what `projection` reads off the world `resource` holds, each value said in a Message of the application's, for as long as the Stream runs. If the world is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so instead, which puts the Model right so the projection runs again once the world is joined.
  */
 export const stream = <A, Message, Service>(
   options: Projection<A> & {
     readonly resource: ManagedResource.ManagedResource<World.Joined, Service>;
     readonly onProjected: (value: A) => Message;
+    readonly onNotJoined: () => Message;
   },
 ): Stream.Stream<Message, never, Service> =>
   Stream.unwrap(
     options.resource.get.pipe(
       Effect.map((joined) => changes(joined, options).pipe(Stream.map(options.onProjected))),
-      Effect.orElseSucceed(() => Stream.empty),
+      Effect.orElseSucceed(() => Stream.make(options.onNotJoined())),
     ),
   );

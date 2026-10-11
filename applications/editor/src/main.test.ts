@@ -238,4 +238,34 @@ describe('the editor', () => {
       expect(stopped.play).toEqual({ _tag: 'Editing' });
     });
   });
+
+  it('shows it again after a reload, whichever comes first of the world joined and the stage finding it is not', () => {
+    // A Model restored after a reload says the document is joined and its canvas in the page, before it is joined again.
+    const restored = {
+      ...initialModel,
+      document: { _tag: 'Joined', canvas: 'Mounted' },
+      maybeError: Option.some('The world is not joined.'),
+    } as const;
+
+    Story.story(
+      update,
+      Story.given(restored),
+      Story.message(Message.JoinedDocument()),
+      Story.model((model) => {
+        expect(model.document).toEqual({ _tag: 'Joined', canvas: 'Mounted' });
+        // What went wrong while it was not joined is past.
+        expect(model.maybeError).toEqual(Option.none());
+      }),
+    );
+    Story.story(
+      update,
+      Story.given(restored),
+      Story.message(Message.LeftDocument()),
+      Story.message(Message.JoinedDocument()),
+      Story.message(Message.MountedCanvas()),
+      Story.model((model) => {
+        expect(model.document).toEqual({ _tag: 'Joined', canvas: 'Mounted' });
+      }),
+    );
+  });
 });

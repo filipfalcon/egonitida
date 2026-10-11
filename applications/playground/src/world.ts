@@ -88,6 +88,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               views: CubesView.views,
               setup: setUp,
               alongside: capturedAs(host),
+              onNotJoined: (): Message => Message.LeftWorld(),
               onFailed: (reason) => Message.FailedShowWorld({ reason }),
             })
           : Stream.empty,
@@ -104,6 +105,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               schema: Schema.Int,
               project: (world) => Worlds.holding(world, [Cubes.Cube]).length,
               onProjected: (count) => Message.CountedCubes({ count }),
+              onNotJoined: (): Message => Message.LeftWorld(),
             })
           : Stream.empty,
     },

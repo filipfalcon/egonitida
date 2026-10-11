@@ -10,7 +10,8 @@ import {
   WorkerTransport,
   World as Worlds,
 } from '@lightocean/core';
-import { Effect, Option, Schema, Stream } from 'effect';
+import { Effect, Option, Ref, Schema, Stream } from 'effect';
+import { ManagedResource } from 'foldkit';
 import * as Projection from '#src/Projection.ts';
 import * as World from '#src/World.ts';
 
@@ -111,5 +112,25 @@ describe('a projection', () => {
         expect(Option.map(clock, ({ steps }) => steps > 10)).toEqual(Option.some(true));
         expect(told).toEqual([{ count: 0 }, { count: 1 }, { count: 2 }]);
       }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    'says the world is not joined, rather than telling nothing, when the Model believes it is but it is not',
+    () =>
+      Effect.gen(function* () {
+        const resource = ManagedResource.tag<World.Joined>()('Tallies');
+        const told = yield* Projection.stream({
+          ...counted,
+          resource,
+          onProjected: ({ count }) => `counted ${count}`,
+          onNotJoined: () => 'not joined',
+        }).pipe(
+          Stream.runCollect,
+          // As Foldkit holds a resource it has not acquired, such as one a Model restored after a reload says is.
+          Effect.provideService(resource._tag, yield* Ref.make(Option.none<World.Joined>())),
+        );
+
+        expect(told).toEqual(['not joined']);
+      }),
   );
 });

@@ -87,6 +87,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               views: ScoreView.views,
               setup: setUp,
               alongside: capturedAs(host),
+              onNotJoined: (): Message => Message.LeftWorld(),
               onFailed: (reason) => Message.FailedShowWorld({ reason }),
             })
           : Stream.empty,
@@ -103,6 +104,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               schema: Schema.Option(Told),
               project: told,
               onProjected: (maybeRound) => Message.ToldRound({ maybeRound }),
+              onNotJoined: (): Message => Message.LeftWorld(),
             })
           : Stream.empty,
     },

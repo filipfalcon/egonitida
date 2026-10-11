@@ -102,8 +102,12 @@ const failed = (model: Model, reason: string) =>
 /** The page after `message`, and the Commands it sends: a new round chosen. */
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, Services>>(message, {
+    // Joined again while the Model already says so, as one restored after a reload does, the canvas in the page stays as it is. What went wrong while it was not joined is past.
     JoinedWorld: () => ({
-      model: modifyFields(model, { world: () => ({ _tag: 'Joined', canvas: 'Waiting' }) }),
+      model: modifyFields(model, {
+        world: (was) => (was._tag === 'Joined' ? was : { _tag: 'Joined', canvas: 'Waiting' }),
+        maybeError: () => Option.none(),
+      }),
     }),
     // The canvas goes with the world, so a world joined again waits for its own canvas.
     LeftWorld: () => ({

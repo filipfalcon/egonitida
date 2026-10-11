@@ -319,8 +319,12 @@ const ofSelected = (model: Model, edit: (entity: number) => Option.Option<Edit>)
 /** The page after `message`, and the Commands it sends: edits to the document, what Play and the debugger ask of the world playing. */
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, Services>>(message, {
+    // Joined again while the Model already says so, as one restored after a reload does, the canvas in the page stays as it is. What went wrong while it was not joined is past.
     JoinedDocument: () => ({
-      model: modifyFields(model, { document: () => ({ _tag: 'Joined', canvas: 'Waiting' }) }),
+      model: modifyFields(model, {
+        document: (was) => (was._tag === 'Joined' ? was : { _tag: 'Joined', canvas: 'Waiting' }),
+        maybeError: () => Option.none(),
+      }),
     }),
     // The canvas goes with the document, so a document joined again waits for its own canvas.
     LeftDocument: () => ({ model: modifyFields(model, { document: () => ({ _tag: 'Joining' }) }) }),

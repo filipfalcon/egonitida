@@ -64,22 +64,23 @@ const canvasOf = (id: string) =>
   });
 
 /**
- * A stage as a Foldkit Subscription's Stream: the world `resource` holds, shown on the canvas whose id is `canvasId`, its mirror beside the canvas, for as long as the Stream runs; if it cannot be shown, `onFailed` says why in a Message of the application's.
+ * A stage as a Foldkit Subscription's Stream: the world `resource` holds, shown on the canvas whose id is `canvasId`, its mirror beside the canvas, for as long as the Stream runs. If the world is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so in a Message of the application's, which puts the Model right so the stage is shown again once the world is joined; if it cannot be shown otherwise, `onFailed` says why.
  */
 export const stream = <Message, Service, R>(
   options: Options<R> & {
     readonly resource: ManagedResource.ManagedResource<World.Joined, Service>;
     readonly canvasId: string;
+    readonly onNotJoined: () => Message;
     readonly onFailed: (reason: string) => Message;
   },
 ): Stream.Stream<Message, never, Service | Exclude<R, Scope.Scope>> =>
   Stream.unwrap(
     Effect.gen(function* () {
-      const joined = yield* options.resource.get.pipe(
-        Effect.mapError(
-          ({ resource }) => new Unshown({ reason: `The world ${resource} is not joined.` }),
-        ),
-      );
+      const maybeJoined = yield* Effect.option(options.resource.get);
+      if (Option.isNone(maybeJoined)) {
+        return Stream.make(options.onNotJoined());
+      }
+      const joined = maybeJoined.value;
       const canvas = yield* canvasOf(options.canvasId);
       const viewport = yield* Viewport.make(canvas).pipe(
         Effect.mapError(({ reason }) => new Unshown({ reason })),

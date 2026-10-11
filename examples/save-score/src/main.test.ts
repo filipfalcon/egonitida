@@ -66,4 +66,34 @@ describe('the page', () => {
 
     expect(reasons).toEqual(['No worker.', 'No GPU.', 'Not joined.'].map(Option.some));
   });
+
+  it('shows it again after a reload, whichever comes first of the world joined and the stage finding it is not', () => {
+    // A Model restored after a reload says the world is joined and its canvas in the page, before it is joined again.
+    const restored = {
+      ...initialModel,
+      world: { _tag: 'Joined', canvas: 'Mounted' },
+      maybeError: Option.some('The world is not joined.'),
+    } as const;
+
+    Story.story(
+      update,
+      Story.given(restored),
+      Story.message(Message.JoinedWorld()),
+      Story.model((model) => {
+        expect(model.world).toEqual({ _tag: 'Joined', canvas: 'Mounted' });
+        // What went wrong while it was not joined is past.
+        expect(model.maybeError).toEqual(Option.none());
+      }),
+    );
+    Story.story(
+      update,
+      Story.given(restored),
+      Story.message(Message.LeftWorld()),
+      Story.message(Message.JoinedWorld()),
+      Story.message(Message.MountedCanvas()),
+      Story.model((model) => {
+        expect(model.world).toEqual({ _tag: 'Joined', canvas: 'Mounted' });
+      }),
+    );
+  });
 });
