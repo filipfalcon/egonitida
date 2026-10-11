@@ -244,6 +244,7 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `libraries/engine`: the `Scene` description, `SceneHost` (reconciler, picking, motion, resource lifetimes), and `Viewport` (the renderer on a canvas).
 - `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a world told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent asks of a hosted game, answered as data; and `Bridge` and `Relay`, the way such requests travel from a tool to a host and back.
 - `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is.
+- `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio, reaching its hosts through the development server's relay; `.mcp.json` offers it.
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
 - `applications/editor`: the editor.
 - `applications/playground`: the first proof that one Model drives both the DOM and the 3D world.
