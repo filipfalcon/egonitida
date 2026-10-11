@@ -156,6 +156,7 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 | `libraries/oxlint-plugin`  | Lint rules for what the types cannot enforce                                   |
 | `applications/editor`      | The editor: a document that is a world, played and debugged in the browser     |
 | `applications/playground`  | Cubes a player asks for and paints, with the page around them in Foldkit       |
+| `applications/website`     | The engine's website, with an ocean of lights on the engine at its top         |
 | `examples/spinning-cube`   | A cube that turns                                                              |
 | `examples/click-to-colour` | Cubes a click paints                                                           |
 | `examples/save-score`      | A round whose score a rule saves through a command, to a Worker over KV        |
@@ -183,7 +184,7 @@ Run every test:
 npm test
 ```
 
-Serve the playground, the editor, the save-score example with its Worker, and the network spike through Alchemy:
+Serve the playground, the editor, the website, and the save-score and shared-room examples with their Workers through Alchemy:
 
 ```bash
 npm run dev

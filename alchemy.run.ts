@@ -28,6 +28,15 @@ export default Alchemy.Stack(
       },
     });
 
+    // The engine's website, with the ocean it runs at its top.
+    const website = yield* Cloudflare.Website.Foldkit('Website', {
+      rootDir: 'applications/website',
+      dev: { port: 5194, strictPort: true },
+      assets: {
+        notFoundHandling: 'single-page-application',
+      },
+    });
+
     // Where the save-score example keeps the best score: a Worker over a KV namespace, which is made first.
     yield* ScoresKV;
     const scores = yield* Scores;
@@ -52,6 +61,7 @@ export default Alchemy.Stack(
     return {
       playground: playground.urls,
       editor: editor.urls,
+      website: website.urls,
       scores: scores.url,
       saveScore: saveScore.url,
       sharedRooms: sharedRooms.url,
