@@ -22,6 +22,7 @@ const recording = (felt: Array<Felt>): Haptics.Haptics['Service'] => ({
     Effect.sync(() => {
       felt.push({ _tag: 'Rumble', entity, rumble });
     }),
+  silence: () => Effect.void,
   triggers: (entity, triggers) =>
     Effect.sync(() => {
       felt.push({ _tag: 'Triggers', entity, triggers });

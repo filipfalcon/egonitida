@@ -1,6 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect, Exit, Option, Scope } from 'effect';
-import { TestClock } from 'effect/testing';
 import * as DualSense from '#src/DualSense.ts';
 import * as Haptics from '#src/Haptics.ts';
 import * as Hid from '#src/Hid.ts';
@@ -127,7 +126,7 @@ describe('a device through WebHID', () => {
   );
 
   it.effect(
-    'is felt through its driver: its motors rumble for as long as asked, its triggers as held',
+    'is felt through its driver: its motors turned until turned otherwise, its triggers as held',
     () =>
       Effect.gen(function* () {
         const device = new Recorded();
@@ -135,19 +134,18 @@ describe('a device through WebHID', () => {
         /** The strong motor, and the right trigger's mode, of each report sent. */
         const felt = () => device.sent.map(({ bytes }) => [bytes[3], bytes[10]]);
 
-        yield* connection.felt.rumble({ strong: 1, weak: 0, seconds: 0.25 });
+        yield* connection.felt.motors({ strong: 1, weak: 0 });
         yield* connection.felt.triggers({
           left: Haptics.free,
           right: { _tag: 'Resisting', from: 0, strength: 1 },
         });
-        const rumbling = felt();
-        yield* TestClock.adjust('250 millis');
+        yield* connection.felt.motors(Haptics.stillMotors);
 
-        expect(rumbling).toEqual([
+        expect(felt()).toEqual([
           [255, 0x05],
           [255, 0x21],
+          [0, 0x21],
         ]);
-        expect(felt()).toEqual([...rumbling, [0, 0x21]]);
         expect(device.sent.map(({ bytes }) => bytes.length)).toEqual([47, 47, 47]);
         expect(device.sent.map(({ reportId }) => reportId)).toEqual([0x02, 0x02, 0x02]);
       }).pipe(Effect.scoped),

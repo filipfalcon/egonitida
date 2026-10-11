@@ -240,6 +240,8 @@ const main = Effect.gen(function* () {
             yield* client.act(Survivor.ChoseRestart, {});
           }
           yield* felt(views.frame(frame));
+          // The rumbles the views asked for, mixed and turned as the frames go.
+          yield* haptics.frame(seconds);
           hud.textContent = Option.match(
             Option.all({
               life: frame.get(client.entity, Survivor.Life),

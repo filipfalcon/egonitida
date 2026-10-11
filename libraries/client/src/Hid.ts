@@ -145,7 +145,6 @@ export const connect = (
           await device.close().catch(() => undefined);
         }),
     );
-    const scope = yield* Effect.scope;
     const outputs = device.collections.flatMap(({ outputReports }) =>
       (outputReports ?? []).flatMap(({ reportId, items }): ReadonlyArray<OutputReport> => {
         const bits = (items ?? []).reduce(
@@ -204,26 +203,7 @@ export const connect = (
       }),
     );
     const felt: Haptics.Felt = {
-      // The motors turn until the rumble's time is up, unless something else has turned them since.
-      rumble: ({ strong, weak, seconds }) =>
-        Effect.suspend(() => {
-          const motors = { strong, weak };
-          return write({ ...written.output, motors }).pipe(
-            Effect.andThen(
-              Effect.sleep(`${seconds * 1000} millis`).pipe(
-                Effect.andThen(
-                  Effect.suspend(() =>
-                    written.output.motors === motors
-                      ? write({ ...written.output, motors: still.motors })
-                      : Effect.void,
-                  ),
-                ),
-                Effect.forkIn(scope),
-              ),
-            ),
-            Effect.asVoid,
-          );
-        }),
+      motors: (motors) => Effect.suspend(() => write({ ...written.output, motors })),
       triggers: (triggers) => Effect.suspend(() => write({ ...written.output, triggers })),
     };
     return {

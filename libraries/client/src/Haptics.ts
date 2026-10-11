@@ -35,9 +35,48 @@ export const free: Trigger = { _tag: 'Free' };
 /** Triggers that do not push back. */
 export const freeTriggers: Triggers = { left: free, right: free };
 
-/** A device that can be felt, as much as it can: a rumble, and its triggers set. */
+/** How hard a device's strong, slow motor and its weak, quick one turn, from 0 to 1. */
+export interface Motors {
+  readonly strong: number;
+  readonly weak: number;
+}
+
+/** Motors that do not turn. */
+export const stillMotors: Motors = { strong: 0, weak: 0 };
+
+/** A rumble under way: what was asked, and how long ago. */
+export interface Pulse {
+  readonly rumble: Rumble;
+  readonly age: number;
+}
+
+/** `pulses` with `rumble` begun among them. */
+export const added = (pulses: ReadonlyArray<Pulse>, rumble: Rumble): ReadonlyArray<Pulse> => [
+  ...pulses,
+  { rumble, age: 0 },
+];
+
+/** `pulses` `seconds` on, those over let go, and how hard the motors turn for them: as hard as the strongest, each fading evenly to nothing as it goes, so rumbles at once add up to the strongest of them rather than the latest. */
+export const mixed = (
+  pulses: ReadonlyArray<Pulse>,
+  seconds: number,
+): { readonly pulses: ReadonlyArray<Pulse>; readonly motors: Motors } => {
+  const going = pulses
+    .map(({ rumble, age }) => ({ rumble, age: age + seconds }))
+    .filter(({ rumble, age }) => age < rumble.seconds);
+  const motors = going.reduce((turning, { rumble, age }) => {
+    const left = 1 - age / rumble.seconds;
+    return {
+      strong: Math.max(turning.strong, rumble.strong * left),
+      weak: Math.max(turning.weak, rumble.weak * left),
+    };
+  }, stillMotors);
+  return { pulses: going, motors };
+};
+
+/** A device that can be felt, as much as it can: its motors turned, until turned otherwise, and its triggers set. */
 export interface Felt {
-  readonly rumble: (rumble: Rumble) => Effect.Effect<void>;
+  readonly motors: (motors: Motors) => Effect.Effect<void>;
   readonly triggers: (triggers: Triggers) => Effect.Effect<void>;
 }
 
@@ -45,25 +84,58 @@ export interface Felt {
 export class Haptics extends Context.Service<
   Haptics,
   {
-    /** Rumbles what the player of `entity` holds. */
+    /** Rumbles what the player of `entity` holds, beside whatever else rumbles it now. */
     readonly rumble: (entity: World.Entity, rumble: Rumble) => Effect.Effect<void>;
+    /** Stops every rumble of what the player of `entity` holds, at once, such as when the game is paused. */
+    readonly silence: (entity: World.Entity) => Effect.Effect<void>;
     /** Sets how the triggers the player of `entity` holds push back, until they are set again. */
     readonly triggers: (entity: World.Entity, triggers: Triggers) => Effect.Effect<void>;
   }
 >()('@lightocean/client/Haptics') {}
 
-/** Haptics for a page whose player is `player`, felt on the devices `felt` gives at that moment. */
+/** Haptics for a page whose player is `player`, felt on the devices `felt` gives at that moment. Its rumbles are mixed and turn the motors as the page's frames go, by `frame`, which the page calls every frame with the seconds since the one before; a device's motors are turned only when they turn otherwise. */
 export const make = (options: {
   readonly player: World.Entity;
   readonly felt: () => ReadonlyArray<Felt>;
-}): Haptics['Service'] => {
+}): Haptics['Service'] & { readonly frame: (seconds: number) => Effect.Effect<void> } => {
+  const state: { pulses: ReadonlyArray<Pulse>; turning: Motors } = {
+    pulses: [],
+    turning: stillMotors,
+  };
   /** Does `feel` to every device, if `entity` is the player's. */
   const feelFor = (entity: World.Entity, feel: (device: Felt) => Effect.Effect<void>) =>
     entity === options.player
       ? Effect.suspend(() => Effect.forEach(options.felt(), feel, { discard: true }))
       : Effect.void;
+  /** Turns every device's motors `motors`, unless they turn so already. */
+  const turn = (motors: Motors) =>
+    Effect.suspend(() => {
+      if (motors.strong === state.turning.strong && motors.weak === state.turning.weak) {
+        return Effect.void;
+      }
+      state.turning = motors;
+      return Effect.forEach(options.felt(), (device) => device.motors(motors), { discard: true });
+    });
   return {
-    rumble: (entity, rumble) => feelFor(entity, (device) => device.rumble(rumble)),
+    rumble: (entity, rumble) =>
+      entity === options.player
+        ? Effect.sync(() => {
+            state.pulses = added(state.pulses, rumble);
+          })
+        : Effect.void,
+    silence: (entity) =>
+      entity === options.player
+        ? Effect.suspend(() => {
+            state.pulses = [];
+            return turn(stillMotors);
+          })
+        : Effect.void,
     triggers: (entity, triggers) => feelFor(entity, (device) => device.triggers(triggers)),
+    frame: (seconds) =>
+      Effect.suspend(() => {
+        const next = mixed(state.pulses, seconds);
+        state.pulses = next.pulses;
+        return turn(next.motors);
+      }),
   };
 };

@@ -14,7 +14,10 @@ export interface Gamepad {
   readonly buttons: ReadonlyArray<{ readonly value: number }>;
   readonly axes: ReadonlyArray<number>;
   /** Its motors, where it has them and the browser reaches them. */
-  readonly vibrationActuator?: Pick<GamepadHapticActuator, 'playEffect'> | null | undefined;
+  readonly vibrationActuator?:
+    | Pick<GamepadHapticActuator, 'playEffect' | 'reset'>
+    | null
+    | undefined;
 }
 
 /** Where a device of no standard layout has its buttons and axes, by index; it is the layout of every device whose id holds `id`. */
@@ -97,6 +100,9 @@ export const poll = (
     ? []
     : read(navigator.getGamepads(), layouts, elsewhere);
 
+/** How long a pad's motors are asked to turn each time, which the page turns them again before, as often as its frames go. */
+const TURNED_FOR_MILLIS = 250;
+
 /** The pads among `gamepads` that rumble, felt through their motors; pads of `elsewhere`, felt some other way such as through WebHID, are left out. */
 export const felt = (
   gamepads: ReadonlyArray<Gamepad | null>,
@@ -115,15 +121,18 @@ export const felt = (
     }
     return [
       {
-        rumble: ({ strong, weak, seconds }) =>
+        // The Gamepad API turns motors only for a while, so they are asked to for a little longer than between two frames, and each turn takes the place of the last; turned still, they stop at once.
+        motors: ({ strong, weak }) =>
           Effect.ignore(
             Effect.tryPromise(() =>
-              actuator.playEffect('dual-rumble', {
-                duration: seconds * 1000,
-                strongMagnitude: strong,
-                weakMagnitude: weak,
-                startDelay: 0,
-              }),
+              strong === 0 && weak === 0
+                ? actuator.reset()
+                : actuator.playEffect('dual-rumble', {
+                    duration: TURNED_FOR_MILLIS,
+                    strongMagnitude: strong,
+                    weakMagnitude: weak,
+                    startDelay: 0,
+                  }),
             ),
           ),
         triggers: () => Effect.void,

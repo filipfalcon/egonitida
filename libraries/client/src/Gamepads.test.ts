@@ -70,7 +70,7 @@ describe('gamepads', () => {
   });
 
   it.effect(
-    'rumble through the Gamepad API, every pad that can, those read some other way left out',
+    'rumble through the Gamepad API, every pad that can, those read some other way left out, and stop at once',
     () => {
       const played: Array<{ readonly type: string; readonly params: unknown }> = [];
       const actuator = {
@@ -79,6 +79,10 @@ describe('gamepads', () => {
           params?: GamepadEffectParameters,
         ): Promise<GamepadHapticsResult> => {
           played.push({ type, params });
+          return 'complete';
+        },
+        reset: async (): Promise<GamepadHapticsResult> => {
+          played.push({ type: 'reset', params: undefined });
           return 'complete';
         },
       };
@@ -92,13 +96,15 @@ describe('gamepads', () => {
       );
 
       return Effect.gen(function* () {
-        yield* Effect.forEach(felt, (pad) => pad.rumble({ strong: 1, weak: 0.5, seconds: 0.2 }));
+        yield* Effect.forEach(felt, (pad) => pad.motors({ strong: 1, weak: 0.5 }));
+        yield* Effect.forEach(felt, (pad) => pad.motors({ strong: 0, weak: 0 }));
 
         expect(played).toEqual([
           {
             type: 'dual-rumble',
-            params: { duration: 200, strongMagnitude: 1, weakMagnitude: 0.5, startDelay: 0 },
+            params: { duration: 250, strongMagnitude: 1, weakMagnitude: 0.5, startDelay: 0 },
           },
+          { type: 'reset', params: undefined },
         ]);
       });
     },
