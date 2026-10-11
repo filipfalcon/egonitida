@@ -133,8 +133,6 @@ Everything that lives in 3D, an application as much as a game, is a world made o
 - The editor's documents are entities with components, its low-code rules are rules on actions, and Play-in-Editor runs a local server, as a game does.
 - A world with no systems need not step at its rate while nothing happens; when its host steps it is decided when it is built.
 
-The first iteration, from before the principles above, ran the Elm Architecture over the whole application, with a second view of the Model, `viewScene: Model → Scene`, that a reconciler in `libraries/engine` applied to Three.js. The playground and the editor have moved onto worlds, and nothing runs on it any more; it goes next.
-
 ### The frame loop
 
 - Views draw every frame from the frame drawn; continuous motion, such as a spin, is a function of the frame's time or a local component, never data the engine advances outside the world.
@@ -250,7 +248,6 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `libraries/core`: the world, components, actions, events, systems, rules, the game, the host, the client, transports, and snapshots.
 - `libraries/client`: the timeline, interpolation, and the drawing.
 - `libraries/foldkit`: a world in an application built on Foldkit: `World`, joined in a worker the page starts and held as a Foldkit Managed Resource while the application's Model wants it; and `Stage`, the world shown on a canvas Foldkit keeps, through the game's views, played by a click, and mirrored for the keyboard, while a Subscription runs; `Projection`, what an application shows of a world kept in its Model, told as it is and again only when it changes; and `Styled`, StyleX on Foldkit's elements.
-- `libraries/engine`: the `Scene` description, `SceneHost` (reconciler, picking, motion, resource lifetimes), and `Viewport` (the renderer on a canvas), which the editor runs on until it moves onto worlds.
 - `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a world told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent or a page asks of a hosted game, answered as data, to a page over the game's own connection; `Debugger`, the past kept beside a host and its clients' questions answered, wherever it runs; and `Bridge` and `Relay`, the way an agent's requests travel from a tool to a host and back.
 - `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__lightocean/mcp`; and a banner saying what is served and where both are reached.
 - `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio or over HTTP at a development server, reaching its hosts through the development server's relay; `.mcp.json` offers it over stdio.
