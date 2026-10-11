@@ -242,7 +242,7 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `libraries/core`: the world, components, actions, events, systems, rules, the game, the host, the client, transports, and snapshots.
 - `libraries/client`: the timeline, interpolation, and the drawing.
 - `libraries/engine`: the `Scene` description, `SceneHost` (reconciler, picking, motion, resource lifetimes), and `Viewport` (the renderer on a canvas).
-- `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched.
+- `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a world told in a hash per component; and `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart.
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
 - `applications/editor`: the editor.
 - `applications/playground`: the first proof that one Model drives both the DOM and the 3D world.
