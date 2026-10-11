@@ -5,7 +5,7 @@ import * as Ask from '#src/Ask.ts';
 import * as Discovery from '#src/Discovery.ts';
 
 /**
- * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the world at any tick kept, compare two ticks, read the log between them; hold, step, show, and play on from time; and play the game, as one player or many. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
+ * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the world at any tick kept, compare two ticks, read the log between them; hold, step, show, and play on from time; play the game, as one player or many; and write what happened as a story test. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
  */
 
 const host = Schema.optionalKey(Schema.String).annotate({
@@ -117,6 +117,23 @@ export const toolkit = Toolkit.make(
       { from: tick, to: tick, inputs: Schema.optionalKey(Schema.Boolean) },
     ),
   ),
+  reading(
+    asking(
+      'lightocean_story',
+      "Writes what happened after the world at one tick, up to the world at another, as the source of a story test: the world at the first tick, the input and actions of every step, and every value that came of them, by name. Save it as a *.story.test.ts file in the game's package. A stretch in which a player joined or left cannot be told; start after it, or end before.",
+      {
+        from: tick,
+        to: tick,
+        title: Schema.String.annotate({ description: 'What the story tells, as a test is named.' }),
+        gameFrom: Schema.String.annotate({
+          description: "The module the game is imported from in the test, such as '#src/game.ts'.",
+        }),
+        gameName: Schema.String.annotate({
+          description: 'The name the module exports the game under, such as game.',
+        }),
+      },
+    ),
+  ),
   steering(
     asking('lightocean_hold', 'Holds time: the world stands until it is released.', {}),
     true,
@@ -190,6 +207,8 @@ export const handlers = (from: string) => {
     lightocean_world: ({ host, ...asked }) => ask({ _tag: 'World', ...asked }, host),
     lightocean_compare: ({ host, ...asked }) => ask({ _tag: 'Compare', ...asked }, host),
     lightocean_log: ({ host, ...asked }) => ask({ _tag: 'Log', ...asked }, host),
+    lightocean_story: ({ host, gameFrom, gameName, ...asked }) =>
+      ask({ _tag: 'Story', ...asked, game: { from: gameFrom, name: gameName } }, host),
     lightocean_hold: ({ host }) => ask({ _tag: 'Hold' }, host),
     lightocean_release: ({ host }) => ask({ _tag: 'Release' }, host),
     lightocean_advance: ({ host, steps }) => ask({ _tag: 'Advance', steps }, host),

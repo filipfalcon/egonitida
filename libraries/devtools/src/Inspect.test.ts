@@ -206,4 +206,32 @@ describe('inspecting a hosted game', () => {
       expect(refused).toEqual(Option.some('Health is no input of the game'));
     }),
   );
+
+  it.effect('writes what happened between two ticks as a story test', () =>
+    Effect.gen(function* () {
+      const { inspector } = yield* inspected;
+
+      const written = yield* inspector.answer({
+        _tag: 'Story',
+        from: 3,
+        to: 5,
+        title: 'heals a player who asks',
+        game: { from: '#src/game.ts', name: 'game' },
+      });
+      const refused = yield* refusal(
+        inspector.answer({
+          _tag: 'Story',
+          from: 4,
+          to: 6,
+          title: 'leaves',
+          game: { from: '#src/game.ts', name: 'game' },
+        }),
+      );
+
+      expect(written).toEqual({ source: expect.stringContaining('    Story.steps(2),') });
+      expect(refused).toEqual(
+        Option.some('a player left at tick 6: tell a stretch that ends before it'),
+      );
+    }),
+  );
 });

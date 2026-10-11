@@ -1,7 +1,8 @@
 import { type Event, Game, type Host, type World } from '@lightocean/core';
-import { Data, Effect, Option, Schema } from 'effect';
+import { Data, Effect, Option, Result, Schema } from 'effect';
 import * as Log from '#src/Log.ts';
 import type * as Rewind from '#src/Rewind.ts';
+import * as Transcript from '#src/Transcript.ts';
 
 /**
  * A hosted game as an agent asks after it: what the game is made of, the world at any tick kept, how two ticks differ, what happened between them, and time itself, held, stepped, or played on from a past tick; and the game played, by players joined with no client, or any player, through input and actions the game reads. Every request and every answer is plain data, so it travels as JSON to whatever asks, such as an MCP server; nothing here knows how.
@@ -39,6 +40,13 @@ export const Request = Schema.Union([
   Schema.TaggedStruct('PlayFrom', { tick: Schema.Int }),
   /** Shows the host's clients the world as it is now again. */
   Schema.TaggedStruct('Live', {}),
+  /** Writes what happened after the world at `from`, up to the world at `to`, as the source of a story test called `title`, telling the game `game.name` exports from the module `game.from`. */
+  Schema.TaggedStruct('Story', {
+    from: Schema.Int,
+    to: Schema.Int,
+    title: Schema.String,
+    game: Schema.Struct({ from: Schema.String, name: Schema.String }),
+  }),
   /** Joins a player with no client, as the game's own `join` makes one: its entity. */
   Schema.TaggedStruct('Join', {}),
   /** Lets go of the player of an entity. */
@@ -215,6 +223,30 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
             { inputs: Option.getOrElse(request.inputs, () => false) },
           ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
           return { text: Log.format(lines) };
+        }
+        case 'Story': {
+          const stretch = yield* rewind
+            .between(request.from, request.to)
+            .pipe(Effect.mapError(({ reason }) => refuse(reason)));
+          if (Option.isNone(stretch)) {
+            const { oldest, newest } = yield* rewind.span;
+            return yield* refuse(
+              `ticks ${request.from} to ${request.to} are not kept: ticks ${oldest} to ${newest} are`,
+            );
+          }
+          const end = yield* kept(request.to);
+          const lines = Transcript.of(
+            yield* rewind.setup,
+            stretch.value.world,
+            stretch.value.entries,
+            end,
+          );
+          if (Result.isFailure(lines)) {
+            return yield* refuse(lines.failure);
+          }
+          return {
+            source: Transcript.source(lines.success, { title: request.title, game: request.game }),
+          };
         }
         case 'Hold':
           return yield* host.hold;

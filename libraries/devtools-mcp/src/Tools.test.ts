@@ -72,6 +72,7 @@ describe('the tools', () => {
         'lightocean_release',
         'lightocean_seek',
         'lightocean_span',
+        'lightocean_story',
         'lightocean_world',
       ].toSorted(),
     );
