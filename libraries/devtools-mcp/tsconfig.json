@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The MCP server runs under Node, started by an agent.
+    "lib": ["esnext"],
+    "types": ["node"]
+  }
+}
