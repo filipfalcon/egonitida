@@ -17,7 +17,7 @@ export default defineConfig({
   plugins: [
     process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),
     Devtools.plugin(),
-    pinAlchemyDevPort(5192),
+    pinAlchemyDevPort(5292),
   ],
   server: {
     // IPv4 loopback, explicitly: a dual-stack bind lets two inner dev servers under `alchemy dev` own the same port, one per address family.
