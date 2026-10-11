@@ -21,4 +21,13 @@ describe('styled', () => {
     expect(Styled.fromProps(h, {})).toEqual([]);
     expect(Styled.fromProps(h, { className: '' })).toEqual([]);
   });
+
+  it('gives an element global classes in the one class attribute with its own, for a rule StyleX cannot write', () => {
+    expect(Styled.fromProps(h, { className: 'x1' }, ['hide-cursor'])).toEqual([
+      { _tag: 'Class', value: 'hide-cursor x1' },
+    ]);
+    expect(Styled.fromProps(h, {}, ['hide-cursor'])).toEqual([
+      { _tag: 'Class', value: 'hide-cursor' },
+    ]);
+  });
 });

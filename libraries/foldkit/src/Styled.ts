@@ -16,22 +16,26 @@ export interface Html<ClassAttribute, StyleAttribute> {
   readonly Style: (value: Record<string, string>) => StyleAttribute;
 }
 
-/** `props` as Foldkit's attributes: a class attribute if there are classes, a style attribute if there are inline styles. */
+/** `props` as Foldkit's attributes: a class attribute if there are classes, with any global `classes` first, and a style attribute if there are inline styles. */
 export const fromProps = <ClassAttribute, StyleAttribute>(
   h: Html<ClassAttribute, StyleAttribute>,
   props: Props,
-): ReadonlyArray<ClassAttribute | StyleAttribute> => [
-  ...(props.className === undefined || props.className === '' ? [] : [h.Class(props.className)]),
-  ...(props.style === undefined
-    ? []
-    : [
-        h.Style(
-          Object.fromEntries(
-            Object.entries(props.style).map(([key, value]) => [key, String(value)]),
+  classes: ReadonlyArray<string> = [],
+): ReadonlyArray<ClassAttribute | StyleAttribute> => {
+  const className = [...classes, props.className ?? ''].filter((name) => name !== '').join(' ');
+  return [
+    ...(className === '' ? [] : [h.Class(className)]),
+    ...(props.style === undefined
+      ? []
+      : [
+          h.Style(
+            Object.fromEntries(
+              Object.entries(props.style).map(([key, value]) => [key, String(value)]),
+            ),
           ),
-        ),
-      ]),
-];
+        ]),
+  ];
+};
 
 /** The styles an element is given, as StyleX's `props` takes them. */
 export type Style = stylex.StyleXArray<
@@ -47,3 +51,10 @@ export const attributes = <ClassAttribute, StyleAttribute>(
   h: Html<ClassAttribute, StyleAttribute>,
   ...styles: ReadonlyArray<Style>
 ): ReadonlyArray<ClassAttribute | StyleAttribute> => fromProps(h, stylex.props(...styles));
+
+/** An element's `styles`, later ones winning, as Foldkit's attributes, with global `classes` beside them in the one class attribute: for a rule only a stylesheet can write, such as one over an element's descendants. */
+export const attributesWith = <ClassAttribute, StyleAttribute>(
+  h: Html<ClassAttribute, StyleAttribute>,
+  classes: ReadonlyArray<string>,
+  ...styles: ReadonlyArray<Style>
+): ReadonlyArray<ClassAttribute | StyleAttribute> => fromProps(h, stylex.props(...styles), classes);
