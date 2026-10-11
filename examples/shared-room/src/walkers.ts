@@ -2,7 +2,7 @@ import { Component, Domain, Game, System, World } from '@lightocean/core';
 import { Schema } from 'effect';
 
 /**
- * The example over the network: a room many players share, hosted in a Durable Object, each player a walker of a colour of their own, steered by the keys. It adds one idea to those before: the world is not on the player's machine but across a network, and every page that opens the room sees the same walkers. Nothing is predicted yet, so a player's own walker answers their keys only once the room has.
+ * The example over the network: a room many players share, hosted in a Durable Object, each player a walker of a colour of their own, steered by the keys. It adds one idea to those before: the world is not on the player's machine but across a network, and every page that opens the room sees the same walkers. A player's own walker is predicted, so it answers their keys at once, and goes over to where the room says it is if the two disagree.
  */
 
 /** How fast a walker walks, in metres a second. */
@@ -20,14 +20,14 @@ const STEP_RATE = 30;
 export const Steering = Component.make(
   'Steering',
   Schema.Struct({ x: Schema.Finite, z: Schema.Finite }),
-  { owner: 'input', network: 'server' },
+  { owner: 'input', network: 'predicted' },
 );
 
 /** Where a walker stands on the floor. */
 export const Position = Component.make(
   'Position',
   Schema.Struct({ x: Schema.Finite, z: Schema.Finite }),
-  { owner: 'simulation', network: 'server' },
+  { owner: 'simulation', network: 'predicted' },
 );
 
 /** A walker: the hue of its colour, in degrees, which tells it from the others. */

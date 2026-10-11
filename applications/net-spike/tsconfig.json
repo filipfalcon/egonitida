@@ -1,8 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    // The server runs in workerd and the probe in Node; neither has the DOM.
-    "lib": ["esnext"],
-    "types": ["node"]
-  }
-}

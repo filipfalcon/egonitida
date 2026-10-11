@@ -1,5 +1,6 @@
 import { Devices, Drawing, KeyboardAndMouse, View, Viewport } from '@lightocean/client';
 import { Client } from '@lightocean/core';
+import { Prediction } from '@lightocean/client/experimental';
 import { SocketTransport } from '@lightocean/core/experimental';
 import { Room } from '@lightocean/server/experimental';
 import * as stylex from '@stylexjs/stylex';
@@ -12,7 +13,7 @@ import * as WalkersView from '#src/walkers.view.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from './tokens.stylex.ts';
 
-// The page: opens the room the address names, `?room=lobby` unless it names another, over a WebSocket to the Worker the Alchemy stack says is at VITE_ROOMS_URL; draws its walkers at every frame the display shows, and steers this player's walker by the keys, telling the room of each change.
+// The page: opens the room the address names, `?room=lobby` unless it names another, over a WebSocket to the Worker the Alchemy stack says is at VITE_ROOMS_URL; draws its walkers at every frame the display shows, and steers this player's walker by the keys, predicting it so it answers at once.
 
 const styles = stylex.create({
   canvas: { display: 'block', width: '100%', height: '100%', backgroundColor: colours.ground },
@@ -49,6 +50,7 @@ const main = Effect.gen(function* () {
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
   const viewport = yield* Viewport.make(canvas);
   const views = yield* View.make(WalkersView.views);
+  const prediction = yield* Prediction.make(client, Walkers.game);
 
   const sun = new Three.DirectionalLight(0xffffff, 2);
   sun.position.set(4, 10, 6);
@@ -68,21 +70,14 @@ const main = Effect.gen(function* () {
     Option.match(drawing.frame(seconds), {
       onNone: () => Effect.void,
       onSome: (frame) =>
-        Effect.andThen(
-          Effect.suspend(() => {
-            const before = steered.last.steering;
-            steered.last = Steering.steer(
-              { ...Devices.idle, ...keyboardAndMouse.read() },
-              steered.last,
-            );
-            const { x, z } = steered.last.steering;
-            // The room keeps the steering it was sent last, so it hears only of a change, not of every frame.
-            return x === before.x && z === before.z
-              ? Effect.void
-              : client.send([Walkers.Steering.of(steered.last.steering)]);
-          }),
-          views.frame(frame),
-        ),
+        Effect.suspend(() => {
+          steered.last = Steering.steer(
+            { ...Devices.idle, ...keyboardAndMouse.read() },
+            steered.last,
+          );
+          prediction.hold([Walkers.Steering.of(steered.last.steering)]);
+          return views.frame(prediction.frame(frame, seconds));
+        }),
     }),
   );
   return yield* Effect.never;
