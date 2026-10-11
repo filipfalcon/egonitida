@@ -289,4 +289,48 @@ describe('the editor', () => {
       }),
     );
   });
+
+  it('takes the document or the world playing found joined as joined only while it waits for one', () => {
+    Story.story(
+      update,
+      Story.given({ ...initialModel, maybeError: Option.some('Not joined.') }),
+      Story.message(Message.FoundDocumentJoined()),
+      Story.model((model) => {
+        expect(model.document).toEqual({ _tag: 'Joined', canvas: 'Waiting' });
+        expect(model.maybeError).toEqual(Option.none());
+      }),
+    );
+    const opening: Model = {
+      ...selecting,
+      play: {
+        _tag: 'Playing',
+        opening: 'the document',
+        world: 'Opening',
+        steps: [],
+        maybePast: Option.none(),
+      },
+    };
+    Story.story(
+      update,
+      Story.given(opening),
+      Story.message(Message.FoundPlayJoined()),
+      Story.model((model) => {
+        expect(model.play).toMatchObject({ world: 'Joined' });
+      }),
+    );
+    // Found joined just after it said so, and after the stage said why it could not show it.
+    for (const [shown, found] of [
+      [{ ...selecting, maybeError: Option.some('No GPU.') }, Message.FoundDocumentJoined()],
+      [{ ...playingWith(), maybeError: Option.some('No GPU.') }, Message.FoundPlayJoined()],
+    ] as const) {
+      Story.story(
+        update,
+        Story.given(shown),
+        Story.message(found),
+        Story.model((model) => {
+          expect(model).toEqual(shown);
+        }),
+      );
+    }
+  });
 });

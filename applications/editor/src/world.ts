@@ -270,7 +270,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
         isJoining
           ? World.whenJoined({
               resource: Document,
-              onJoined: (): Message => Message.JoinedDocument(),
+              onJoined: (): Message => Message.FoundDocumentJoined(),
             })
           : Stream.empty,
     },
@@ -283,7 +283,10 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
       }),
       dependenciesToStream: ({ isJoining }) =>
         isJoining
-          ? World.whenJoined({ resource: Played, onJoined: (): Message => Message.JoinedPlay() })
+          ? World.whenJoined({
+              resource: Played,
+              onJoined: (): Message => Message.FoundPlayJoined(),
+            })
           : Stream.empty,
     },
   ),

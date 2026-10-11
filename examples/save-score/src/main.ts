@@ -59,6 +59,7 @@ export type Model = typeof Model.Type;
 /** What happens on the page: the round joined and left, what it tells, and what the player does. */
 export const Message = defineMessageUnion({
   JoinedWorld: {},
+  FoundWorldJoined: {},
   LeftWorld: {},
   FailedJoinWorld: { reason: Schema.String },
   MountedCanvas: {},
@@ -108,6 +109,16 @@ export const update = (model: Model, message: Message) =>
         world: (was) => (was._tag === 'Joined' ? was : { _tag: 'Joined', canvas: 'Waiting' }),
         maybeError: () => Option.none(),
       }),
+    }),
+    // Found joined while waiting for it, the world is joined, as when the stage found it not joined a moment before it was; found joined once the page has it, it changes nothing, and what went wrong since stays told.
+    FoundWorldJoined: () => ({
+      model:
+        model.world._tag === 'Joining'
+          ? modifyFields(model, {
+              world: () => ({ _tag: 'Joined', canvas: 'Waiting' }),
+              maybeError: () => Option.none(),
+            })
+          : model,
     }),
     // The canvas goes with the world, so a world joined again waits for its own canvas.
     LeftWorld: () => ({

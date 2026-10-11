@@ -119,7 +119,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
         isJoining
           ? World.whenJoined({
               resource: CubesWorld,
-              onJoined: (): Message => Message.JoinedWorld(),
+              onJoined: (): Message => Message.FoundWorldJoined(),
             })
           : Stream.empty,
     },

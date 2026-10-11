@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
 import { Story } from 'foldkit';
-import { Message, PlayAgain, initialModel, update } from '#src/main.ts';
+import { Message, type Model, PlayAgain, initialModel, update } from '#src/main.ts';
 
 describe('the page', () => {
   it('starts joining the round, with nothing shown and nothing told of it', () => {
@@ -93,6 +93,32 @@ describe('the page', () => {
       Story.message(Message.MountedCanvas()),
       Story.model((model) => {
         expect(model.world).toEqual({ _tag: 'Joined', canvas: 'Mounted' });
+      }),
+    );
+  });
+
+  it('takes a world found joined as joined only while it waits for one, and changes nothing once it has it', () => {
+    Story.story(
+      update,
+      Story.given({ ...initialModel, maybeError: Option.some('Not joined.') }),
+      Story.message(Message.FoundWorldJoined()),
+      Story.model((model) => {
+        expect(model.world).toEqual({ _tag: 'Joined', canvas: 'Waiting' });
+        expect(model.maybeError).toEqual(Option.none());
+      }),
+    );
+    // Found joined just after the world said so, and after the stage said why it could not show it.
+    const shown: Model = {
+      ...initialModel,
+      world: { _tag: 'Joined', canvas: 'Mounted' },
+      maybeError: Option.some('No GPU.'),
+    };
+    Story.story(
+      update,
+      Story.given(shown),
+      Story.message(Message.FoundWorldJoined()),
+      Story.model((model) => {
+        expect(model).toEqual(shown);
       }),
     );
   });
