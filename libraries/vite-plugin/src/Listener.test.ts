@@ -40,7 +40,7 @@ describe('a relay listening for tools', () => {
       const record = JSON.parse(yield* Effect.promise(() => readFile(listening.record, 'utf8')));
       const mode = (yield* Effect.promise(() => stat(listening.record))).mode & 0o777;
       yield* Scope.close(scope, Exit.void);
-      const left = yield* Effect.promise(() => readdir(join(kept, 'relays')));
+      const left = yield* Effect.promise(() => readdir(kept));
 
       expect(record).toEqual({ url: listening.url, token: listening.token, pid: process.pid });
       expect(listening.url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/$/);

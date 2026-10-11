@@ -29,6 +29,13 @@ export const FromRelay = Schema.Union([
 ]);
 export type FromRelay = typeof FromRelay.Type;
 
+/** A record of where a relay listens for tools, and the token they give: what a tool reads to reach it. */
+export const Record = Schema.Struct({ url: Schema.String, token: Schema.String, pid: Schema.Int });
+export type Record = typeof Record.Type;
+
+/** Where, under a workspace's root, relays keep their records. */
+export const RECORDS = ['node_modules', '.lightocean', 'relays'];
+
 /** A connection to one side, which a relay sends messages to. */
 export interface Peer<Message> {
   readonly send: (message: Message) => Effect.Effect<void>;

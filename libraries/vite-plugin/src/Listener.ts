@@ -10,11 +10,7 @@ import { type RawData, type WebSocket, WebSocketServer } from 'ws';
  * A relay reachable by the tools on this machine that know its token: a WebSocket server on a loopback port of its own, so nothing else the development server serves sees its traffic, and a record of where it listens and its token, which only its user may read, kept while it listens. Each relay keeps a record of its own, so several development servers can run at once.
  */
 
-/** A record of where a relay listens: what a tool reads to reach it. */
-export const Record = Schema.Struct({ url: Schema.String, token: Schema.String, pid: Schema.Int });
-export type Record = typeof Record.Type;
-
-export interface Listening extends Record {
+export interface Listening extends Relay.Record {
   /** Where its record is kept. */
   readonly record: string;
 }
@@ -96,13 +92,12 @@ export const listen = (
       socket.on('close', () => run(relay.toolGone(tool)));
     });
 
-    const relays = join(options.directory, 'relays');
-    const record = join(relays, `${process.pid}-${address.port}.json`);
-    const kept: Record = { url, token, pid: process.pid };
+    const record = join(options.directory, `${process.pid}-${address.port}.json`);
+    const kept: Relay.Record = { url, token, pid: process.pid };
     yield* Effect.acquireRelease(
       Effect.tryPromise({
         try: async () => {
-          await mkdir(relays, { recursive: true, mode: 0o700 });
+          await mkdir(options.directory, { recursive: true, mode: 0o700 });
           await writeFile(record, JSON.stringify(kept), { mode: 0o600 });
         },
         catch: (error) => new ListenFailed({ reason: `cannot keep its record: ${String(error)}` }),
