@@ -133,6 +133,15 @@ export const live = (timeline: Timeline): Timeline => ({
   playback: { _tag: 'Live' },
 });
 
+/** `world` drawn as it is, with nothing to move toward: for drawing one world on its own, as a test of what is drawn does. */
+export const still = (world: World.World): View => ({
+  tick: world.tick,
+  get: (entity, component) => World.get(world, entity, component),
+  query: World.queryIn(world),
+  entities: World.entities(world),
+  drawn: world,
+});
+
 /** What to draw at the cursor; `None` before the first world. */
 export const view = (timeline: Timeline): Option.Option<View> => {
   const [first] = timeline.history;

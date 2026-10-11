@@ -70,6 +70,27 @@ const changedBetween = (
   );
 };
 
+/** `view` as a frame drawn after `previous`, the view of the frame before, if there was one. */
+export const frameOf = (view: Timeline.View, previous: Option.Option<Timeline.View>): Frame => {
+  const before = Option.match(previous, { onNone: () => [], onSome: (last) => last.entities });
+  const holding = (drawn: Timeline.View, component: Component.Any) =>
+    drawn.query(component).map(([entity]) => entity);
+  const holdingBefore = (component: Component.Any) =>
+    Option.match(previous, { onNone: () => [], onSome: (last) => holding(last, component) });
+  return {
+    ...view,
+    entered: without(view.entities, before),
+    left: without(before, view.entities),
+    gained: (component) => without(holding(view, component), holdingBefore(component)),
+    changed: (component) =>
+      Option.match(previous, {
+        onNone: () => [],
+        onSome: (last) => changedBetween(last.drawn, view.drawn, component),
+      }),
+    lost: (component) => without(holdingBefore(component), holding(view, component)),
+  };
+};
+
 export const make = (
   client: Client.Client,
   options: { readonly keepSeconds: number },
@@ -92,31 +113,9 @@ export const make = (
       frame: (seconds) => {
         state.timeline = Timeline.advance(state.timeline, seconds);
         return Option.map(Timeline.view(state.timeline), (view) => {
-          const previous = state.previous;
+          const drawn = frameOf(view, state.previous);
           state.previous = Option.some(view);
-          const before = Option.match(previous, {
-            onNone: () => [],
-            onSome: (last) => last.entities,
-          });
-          const holding = (drawn: Timeline.View, component: Component.Any) =>
-            drawn.query(component).map(([entity]) => entity);
-          const holdingBefore = (component: Component.Any) =>
-            Option.match(previous, {
-              onNone: () => [],
-              onSome: (last) => holding(last, component),
-            });
-          return {
-            ...view,
-            entered: without(view.entities, before),
-            left: without(before, view.entities),
-            gained: (component) => without(holding(view, component), holdingBefore(component)),
-            changed: (component) =>
-              Option.match(previous, {
-                onNone: () => [],
-                onSome: (last) => changedBetween(last.drawn, view.drawn, component),
-              }),
-            lost: (component) => without(holdingBefore(component), holding(view, component)),
-          };
+          return drawn;
         });
       },
       present: (presentation) => {
