@@ -1,5 +1,6 @@
 {
   "name": "@lightocean/example-click-to-colour",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "imports": {
