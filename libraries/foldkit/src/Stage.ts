@@ -65,7 +65,7 @@ export const stream = <Message, Service, R>(
     readonly canvasId: string;
     readonly onFailed: (reason: string) => Message;
   },
-): Stream.Stream<Message, never, Service | R> =>
+): Stream.Stream<Message, never, Service | Exclude<R, Scope.Scope>> =>
   Stream.unwrap(
     Effect.gen(function* () {
       const joined = yield* options.resource.get.pipe(
