@@ -4,6 +4,7 @@ import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
 import NetSpike from './applications/net-spike/src/Server.ts';
 import Scores, { ScoresKV } from './examples/save-score/src/server.ts';
+import SharedRooms from './examples/shared-room/src/server.ts';
 
 export default Alchemy.Stack(
   'LightOcean',
@@ -43,12 +44,23 @@ export default Alchemy.Stack(
       env: { VITE_SCORES_URL: Output.map(scores.url, (url) => url ?? '') },
     });
 
+    // The shared-room example: a Worker in front of one Durable Object per room, and the page that opens one.
+    const sharedRooms = yield* SharedRooms;
+    const sharedRoom = yield* Cloudflare.Website.Vite('SharedRoom', {
+      rootDir: 'examples/shared-room',
+      dev: { port: 5193, strictPort: true },
+      // Empty while the Worker has no address, which the page tells as rooms it cannot reach.
+      env: { VITE_ROOMS_URL: Output.map(sharedRooms.url, (url) => url ?? '') },
+    });
+
     return {
       playground: playground.urls,
       editor: editor.urls,
       netSpike: netSpike.url,
       scores: scores.url,
       saveScore: saveScore.url,
+      sharedRooms: sharedRooms.url,
+      sharedRoom: sharedRoom.url,
     };
   }),
 );
