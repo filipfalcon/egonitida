@@ -1,7 +1,16 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
 import { Story } from 'foldkit';
-import { Message, type Model, OpenPlay, SendEdit, initialModel, update } from '#src/main.ts';
+import {
+  GoLive,
+  Message,
+  type Model,
+  OpenPlay,
+  SendEdit,
+  ShowPast,
+  initialModel,
+  update,
+} from '#src/main.ts';
 
 /** The page with the document joined, and a box selected. */
 const selecting: Model = {
@@ -45,6 +54,8 @@ describe('the editor', () => {
       maybeSelected: Option.none(),
       play: { _tag: 'Editing' },
       isPlayJoined: false,
+      steps: [],
+      maybePast: Option.none(),
       maybeError: Option.none(),
     });
   });
@@ -171,5 +182,53 @@ describe('the editor', () => {
     ]) {
       Story.story(update, Story.given(playing), Story.message(edit), Story.Command.expectNone());
     }
+  });
+
+  describe('the debugger', () => {
+    /** The document playing, with a click on the box told. */
+    const playing: Model = {
+      ...selecting,
+      play: { _tag: 'Playing', opening: 'the document' },
+      isPlayJoined: true,
+    };
+    const clicked = {
+      tick: 40,
+      actions: [{ tag: 'Clicked', fields: '{"entity":1,"player":3}' }],
+      parts: [{ part: 'Objects: on Moved', set: { Transform: [2] }, spawned: [], despawned: [] }],
+    };
+
+    it('keeps the steps the document playing tells of', () => {
+      const told = update(playing, Message.ToldSteps({ steps: [clicked] })).model;
+
+      expect(told.steps).toEqual([clicked]);
+    });
+
+    it('shows the world as it was after a step, the canvas too, and the live world again', () => {
+      Story.story(
+        update,
+        Story.given({ ...playing, steps: [clicked] }),
+        Story.message(Message.InspectedStep({ tick: 40 })),
+        Story.Command.expectExact(ShowPast({ tick: 40 })),
+        Story.Command.resolve(ShowPast, Message.ShowedPast({ tick: 40, world: '{"1":{}}' })),
+        Story.model((model) => {
+          expect(model.maybePast).toEqual(Option.some({ tick: 40, world: '{"1":{}}' }));
+        }),
+        Story.message(Message.ClickedLive()),
+        Story.Command.expectExact(GoLive),
+        Story.Command.resolve(GoLive, Message.WentLive()),
+        Story.model((model) => {
+          expect(model.maybePast).toEqual(Option.none());
+        }),
+      );
+    });
+
+    it('forgets what it was told once playing stops', () => {
+      const stopped = update(
+        { ...playing, steps: [clicked], maybePast: Option.some({ tick: 40, world: '{}' }) },
+        Message.ClickedStop(),
+      ).model;
+
+      expect([stopped.steps, stopped.maybePast]).toEqual([[], Option.none()]);
+    });
   });
 });

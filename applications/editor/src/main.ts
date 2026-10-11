@@ -1,3 +1,4 @@
+import { Inspect, Log, Rewind } from '@lightocean/devtools';
 import { World } from '@lightocean/foldkit';
 import { Pointing } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
@@ -9,7 +10,7 @@ import * as Objects from '#src/objects.ts';
 import * as Playing from '#src/playing.ts';
 
 /**
- * The editor's page. The document is a world, joined in a worker; the page holds no more of it than its panels show, the objects in the outliner and the one the editor has selected, and sends the document every edit as the editor's action, which the document checks and decides on. Play opens a second worker from the document as it is, and the canvas shows that world until Stop ends it; nothing is edited meanwhile.
+ * The editor's page. The document is a world, joined in a worker; the page holds no more of it than its panels show, the objects in the outliner and the one the editor has selected, and sends the document every edit as the editor's action, which the document checks and decides on. Play opens a second worker from the document as it is, and the canvas shows that world until Stop ends it; nothing is edited meanwhile. While it plays, the debugger tells what happened at each step, what it changed, and the world as it was after any of them, on the canvas too.
  */
 
 // MODEL
@@ -50,6 +51,10 @@ export const Model = Schema.Struct({
   maybeSelected: Schema.Option(Selected),
   play: Play,
   isPlayJoined: Schema.Boolean,
+  /** The steps of the document playing in which something happened, as its debugger tells them. */
+  steps: Schema.Array(Log.Step),
+  /** The tick the debugger shows the world after, and the world then, entity by entity as JSON; none while it shows the live world. */
+  maybePast: Schema.Option(Schema.Struct({ tick: Schema.Int, world: Schema.String })),
   maybeError: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
@@ -86,6 +91,12 @@ export const Message = defineMessageUnion({
   LeftPlay: {},
   FailedJoinPlay: { reason: Schema.String },
   ClickedStop: {},
+  ToldSteps: { steps: Schema.Array(Log.Step) },
+  InspectedStep: { tick: Schema.Int },
+  ShowedPast: { tick: Schema.Int, world: Schema.String },
+  ClickedLive: {},
+  WentLive: {},
+  FailedDebug: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
 
@@ -203,6 +214,39 @@ export const OpenPlay = Command.define('OpenPlay', {
     Effect.catch(({ resource }) =>
       Effect.succeed(Message.FailedOpenPlay({ reason: `The document ${resource} is not joined.` })),
     ),
+  ),
+});
+
+/** Holds the time of the document playing and shows it, the canvas too, as it was after `tick`, with the world then. */
+export const ShowPast = Command.define('ShowPast', {
+  args: { tick: Schema.Int },
+  messages: [Message.ShowedPast, Message.FailedDebug],
+  execute: ({ tick }) =>
+    Played.get.pipe(
+      Effect.flatMap(({ client }) =>
+        Effect.gen(function* () {
+          const rewind = Rewind.controls(client);
+          yield* rewind.pause;
+          yield* rewind.seek(tick);
+          return yield* Inspect.ask(client, { _tag: 'World', tick });
+        }),
+      ),
+      Effect.map((world) => Message.ShowedPast({ tick, world: JSON.stringify(world, null, 2) })),
+      Effect.catchTags({
+        ResourceNotAvailable: () =>
+          Effect.succeed(Message.FailedDebug({ reason: 'The document is not playing.' })),
+        Unanswered: ({ reason }) => Effect.succeed(Message.FailedDebug({ reason })),
+      }),
+    ),
+});
+
+/** Shows the document playing as it is now, and lets its time go on. */
+export const GoLive = Command.define('GoLive', {
+  messages: [Message.WentLive, Message.FailedDebug],
+  execute: Played.get.pipe(
+    Effect.flatMap(({ client }) => Rewind.controls(client).live),
+    Effect.as(Message.WentLive()),
+    Effect.orElseSucceed(() => Message.FailedDebug({ reason: 'The document is not playing.' })),
   ),
 });
 
@@ -339,7 +383,21 @@ export const update = (model: Model, message: Message) =>
     LeftPlay: () => ({ model: modifyFields(model, { isPlayJoined: () => false }) }),
     FailedJoinPlay: ({ reason }) => ({ model: failed(model, reason) }),
     // The worker playing goes with it, and everything that happened while it played.
-    ClickedStop: () => ({ model: modifyFields(model, { play: () => ({ _tag: 'Editing' }) }) }),
+    ClickedStop: () => ({
+      model: modifyFields(model, {
+        play: () => ({ _tag: 'Editing' }),
+        steps: () => [],
+        maybePast: () => Option.none(),
+      }),
+    }),
+    ToldSteps: ({ steps }) => ({ model: modifyFields(model, { steps: () => steps }) }),
+    InspectedStep: ({ tick }) => ({ model, commands: [ShowPast({ tick })] }),
+    ShowedPast: ({ tick, world }) => ({
+      model: modifyFields(model, { maybePast: () => Option.some({ tick, world }) }),
+    }),
+    ClickedLive: () => ({ model, commands: [GoLive()] }),
+    WentLive: () => ({ model: modifyFields(model, { maybePast: () => Option.none() }) }),
+    FailedDebug: ({ reason }) => ({ model: failed(model, reason) }),
   });
 
 // INIT
@@ -351,6 +409,8 @@ export const initialModel: Model = {
   maybeSelected: Option.none(),
   play: { _tag: 'Editing' },
   isPlayJoined: false,
+  steps: [],
+  maybePast: Option.none(),
   maybeError: Option.none(),
 };
 

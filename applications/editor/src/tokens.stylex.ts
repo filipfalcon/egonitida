@@ -12,4 +12,5 @@ export const colours = stylex.defineVars({
   danger: '#ff6b6b',
   play: '#2f9e44',
   stop: '#e03131',
+  past: '#fcc419',
 });

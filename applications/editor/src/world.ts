@@ -1,7 +1,8 @@
 import { Tab } from '@lightocean/client';
 import { Pointing, World as Worlds } from '@lightocean/core';
 import { Projection, Stage, World } from '@lightocean/foldkit';
-import { Effect, Option, Schema, Stream } from 'effect';
+import { Inspect, Log } from '@lightocean/devtools';
+import { Effect, Option, Schedule, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
 import * as Editing from '#src/editing.ts';
@@ -136,6 +137,36 @@ const shownBy = (model: Model): 'Nothing' | 'Editing' | 'Playing' => {
   return model.isPlayJoined ? 'Playing' : 'Nothing';
 };
 
+/** The ticks the debugger of the document playing keeps. */
+const Span = Schema.Struct({ oldest: Schema.Int, newest: Schema.Int });
+
+/** How often the debugger is asked what happened. */
+const ASKED_EVERY = '500 millis';
+
+/** The steps of the document playing in which something happened, as its debugger tells them, whenever they change. */
+const stepsTold = Stream.unwrap(
+  Played.get.pipe(
+    Effect.map(({ client }) =>
+      Stream.fromSchedule(Schedule.spaced(ASKED_EVERY)).pipe(
+        Stream.mapEffect(() =>
+          Inspect.ask(client, { _tag: 'Span' }).pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(Span)),
+            Effect.flatMap(({ oldest, newest }) =>
+              Inspect.steps(client, { from: oldest, to: newest }),
+            ),
+            Effect.option,
+          ),
+        ),
+        // What the debugger could not tell this time is asked again next time.
+        Stream.flatMap((told) => Stream.fromIterable(Option.toArray(told))),
+        Stream.changesWith(Schema.toEquivalence(Schema.Array(Log.Step))),
+        Stream.map((steps) => Message.ToldSteps({ steps })),
+      ),
+    ),
+    Effect.orElseSucceed(() => Stream.empty),
+  ),
+);
+
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
   // The canvas shows the document being edited, with what is selected outlined, or the document playing, once its world is joined.
   stage: entry(
@@ -164,6 +195,13 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
             });
         }
       },
+    },
+  ),
+  steps: entry(
+    { isPlayJoined: Schema.Boolean },
+    {
+      modelToDependencies: ({ isPlayJoined }) => ({ isPlayJoined }),
+      dependenciesToStream: ({ isPlayJoined }) => (isPlayJoined ? stepsTold : Stream.empty),
     },
   ),
   outline: entry(

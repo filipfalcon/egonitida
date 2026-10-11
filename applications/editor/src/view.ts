@@ -4,6 +4,7 @@ import * as stylex from '@stylexjs/stylex';
 import { Option, Schema } from 'effect';
 import type { Document, Html, HtmlBuilder } from 'foldkit/html';
 import { viewBehaviour } from '#src/behaviour.ts';
+import { viewDebugger } from '#src/debugger.ts';
 import { viewDetails } from '#src/details.ts';
 import { Message, type Model, type Selected } from '#src/main.ts';
 import * as Objects from '#src/objects.ts';
@@ -151,19 +152,21 @@ const viewSelected = (model: Model, selected: Selected, h: HtmlBuilder<Message>)
   );
 };
 
-const viewDetailsPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.aside(Styled.attributes(h, styles.panel), [
-    h.h2(Styled.attributes(h, ui.heading), ['Details']),
+/** The panel beside the canvas: the details of what is selected while the document is edited, the debugger while it plays. */
+const viewSidePanel = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.aside(
+    Styled.attributes(h, styles.panel),
     isEditing(model)
-      ? Option.match(model.maybeSelected, {
-          onNone: () => h.p(Styled.attributes(h, ui.hint), ['Select an object to edit it.']),
-          // Keyed by object, so switching selection replaces the form instead of patching one object's inputs into another's.
-          onSome: (selected) => viewSelected(model, selected, h),
-        })
-      : h.p(Styled.attributes(h, ui.hint), [
-          'The document is playing: click objects to make them react. Stop to edit it again.',
-        ]),
-  ]);
+      ? [
+          h.h2(Styled.attributes(h, ui.heading), ['Details']),
+          Option.match(model.maybeSelected, {
+            onNone: () => h.p(Styled.attributes(h, ui.hint), ['Select an object to edit it.']),
+            // Keyed by object, so switching selection replaces the form instead of patching one object's inputs into another's.
+            onSome: (selected) => viewSelected(model, selected, h),
+          }),
+        ]
+      : [viewDebugger(model, h)],
+  );
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Editor',
@@ -209,6 +212,6 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
         onSome: (reason) => [h.p(Styled.attributes(h, styles.error), [reason])],
       }),
     ]),
-    viewDetailsPanel(model, h),
+    viewSidePanel(model, h),
   ]),
 });
