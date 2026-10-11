@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The devtools record and replay where a host steps its world, a Durable Object among them, so they lean on neither the DOM's types nor Node's.
+    "lib": ["esnext"],
+    "types": []
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@lightocean/devtools",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightocean/core": "*",
+    "effect": "4.0.0"
+  }
+}
