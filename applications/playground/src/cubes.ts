@@ -79,6 +79,7 @@ export const domain = Domain.make({
   rules: [spawnCube, repaint],
 });
 
+/** The playground's game: pointing at things, and the cubes. */
 export const game = Game.make({ stepRate: 30, domains: [Pointing.domain, domain] });
 
 /** Whoever asks for cubes and clicks them: an entity that holds nothing, whom an ask or a click is from. */

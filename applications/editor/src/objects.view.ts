@@ -37,4 +37,5 @@ export const objects = View.each([Objects.Shape, Objects.Transform, Objects.Colo
   },
 });
 
+/** The views of a document's objects. */
 export const views = [objects];

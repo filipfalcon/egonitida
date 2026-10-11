@@ -13,10 +13,13 @@ import { colours } from './tokens.stylex.ts';
 export const parseNumber = (typed: string): number =>
   typed.trim() === '' ? Number.NaN : Number(typed);
 
+/** A colour, `0xRRGGBB`, as a colour input writes it. */
 export const toHex = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
 
+/** A colour input's `#rrggbb` as a colour, `0xRRGGBB`. */
 export const fromHex = (hex: string): number => Number.parseInt(hex.slice(1), 16);
 
+/** `vector` with its `index`th component made `value`, as one field of a vector is typed into. */
 export const withComponent = (
   vector: ReadonlyArray<number>,
   index: number,
@@ -114,6 +117,7 @@ const viewWidget = <Message>(
   }
 };
 
+/** A form of `properties` for `value`, each edit said as `change` of the property's key and the value typed, not yet checked. */
 export const viewDetails = <Message>(
   h: HtmlBuilder<Message>,
   properties: ReadonlyArray<Inspector.Property>,

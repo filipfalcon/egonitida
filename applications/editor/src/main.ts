@@ -60,6 +60,7 @@ export const Play = Schema.Union([
   }),
 ]);
 export type Play = typeof Play.Type;
+/** The document playing. */
 export type PlayingState = Extract<Play, { readonly _tag: 'Playing' }>;
 
 /** The editor's page: the document as far as it has it, its objects as the outliner lists them, the one selected, whether the document plays, and what last went wrong. */

@@ -32,4 +32,5 @@ export const selections = View.each([Editing.Selection], {
   },
 });
 
+/** The views of what editing adds to the drawing. */
 export const views = [selections];

@@ -16,10 +16,12 @@ export const ShapeFields = Schema.Struct({
     inspector: Inspector.choice(),
   }),
 });
+/** The shapes an object can be. */
 export type ShapeKind = (typeof ShapeFields.Type)['kind'];
 /** What an object is: a box or a sphere. */
 export const Shape = Component.make('Shape', ShapeFields, { owner: 'rules', network: 'server' });
 
+/** What a transform holds, each field as the Details panel edits it. */
 export const TransformFields = Schema.Struct({
   position: Vector3.annotate({ title: 'Position', inspector: Inspector.vector3({ step: 0.1 }) }),
   rotation: Vector3.annotate({ title: 'Rotation (°)', inspector: Inspector.vector3({ step: 5 }) }),
@@ -31,12 +33,14 @@ export const Transform = Component.make('Transform', TransformFields, {
   network: 'server',
 });
 
+/** What a colour holds, as the Details panel edits it. */
 export const ColourFields = Schema.Struct({
   hex: Schema.Int.annotate({ title: 'Colour', inspector: Inspector.color() }),
 });
 /** An object's colour, as `0xRRGGBB`. */
 export const Colour = Component.make('Colour', ColourFields, { owner: 'rules', network: 'server' });
 
+/** What a spin holds, as the Details panel edits it. */
 export const SpinFields = Schema.Struct({
   speed: Schema.Finite.annotate({
     title: 'Spin (rad/s)',
@@ -64,12 +68,15 @@ export type Target = typeof Target.Type;
 /** The object clicked itself. */
 export const itself: Target = { _tag: 'Itself' };
 
+/** A change that gives the target a colour. */
 export const Recolour = Schema.TaggedStruct('Recolour', {
   hex: Schema.Int.annotate({ title: 'Colour', inspector: Inspector.color() }),
 });
+/** A change that moves the target by an offset from where it is. */
 export const MoveBy = Schema.TaggedStruct('MoveBy', {
   offset: Vector3.annotate({ title: 'Offset', inspector: Inspector.vector3({ step: 0.5 }) }),
 });
+/** A change that sets how fast the target spins. */
 export const SetSpin = Schema.TaggedStruct('SetSpin', {
   speed: Schema.Finite.annotate({
     title: 'Spin (rad/s)',
@@ -80,7 +87,9 @@ export const SetSpin = Schema.TaggedStruct('SetSpin', {
 /** What a reaction does to its target. */
 export const Change = Schema.Union([Recolour, MoveBy, SetSpin]);
 export type Change = typeof Change.Type;
+/** The kinds of change a reaction can make. */
 export type ChangeKind = Change['_tag'];
+/** The kinds of change a reaction can make, as a schema an editor's choice is checked against. */
 export const ChangeKind = Schema.Literals(['Recolour', 'MoveBy', 'SetSpin']);
 
 /** A change of each kind, as a reaction starts doing it. */

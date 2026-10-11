@@ -28,6 +28,7 @@ const host = Tab.id('editor');
 /** The id of the canvas the document is shown on. */
 export const CANVAS_ID = 'viewport';
 
+/** The document, joined while the editor is open, and the document playing, opened with the document as it was, while it plays. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
   document: entry(
     World.Requirements,
@@ -167,6 +168,7 @@ const stepsTold = Stream.unwrap(
   ),
 );
 
+/** The canvas showing the document or the document playing, the steps the debugger tells, and what the outliner and the panels show of the document. */
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
   // The canvas shows the document being edited, with what is selected outlined, or the document playing, once its world is joined.
   stage: entry(

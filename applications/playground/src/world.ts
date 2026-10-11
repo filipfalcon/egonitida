@@ -16,6 +16,7 @@ const host = Tab.id('playground');
 /** The id of the canvas the world is shown on. */
 export const CANVAS_ID = 'viewport';
 
+/** The cubes' world, joined while the playground is open. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
   world: entry(
     World.Requirements,
@@ -56,6 +57,7 @@ const setUp = ({
   camera.rotation.set(-0.25, 0, 0);
 };
 
+/** The canvas showing the world, and the count of cubes it holds. */
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
   stage: entry(
     { isShown: Schema.Boolean },

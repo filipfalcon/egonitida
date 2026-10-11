@@ -48,21 +48,28 @@ export type Answer = typeof Answer.Type;
 const WelcomeJson = Schema.fromJsonString(Welcome);
 const AnswerJson = Schema.fromJsonString(Answer);
 
+/** An answer as it travels to the client that asked. */
 export const encodeAnswer = (answer: Answer): string => Schema.encodeSync(AnswerJson)(answer);
+/** The answer to a question this client asked; `None` for anything else. */
 export const decodeAnswer = (text: string): Option.Option<Answer> =>
   Schema.decodeOption(AnswerJson)(text);
 const ClientReliableJson = Schema.fromJsonString(ClientReliable);
 
+/** A client's reliable message as it travels to the host. */
 export const encodeClientReliable = (message: ClientReliable): string =>
   Schema.encodeSync(ClientReliableJson)(message);
+/** A client's reliable message; `None` for anything else. */
 export const decodeClientReliable = (text: string): Option.Option<ClientReliable> =>
   Schema.decodeOption(ClientReliableJson)(text);
 const InputsJson = Schema.fromJsonString(Inputs);
 
+/** A welcome as it travels to the client joining. */
 export const encodeWelcome = (welcome: Welcome): string => Schema.encodeSync(WelcomeJson)(welcome);
+/** The welcome the host sent this client; `None` for anything else. */
 export const decodeWelcome = (text: string): Option.Option<Welcome> =>
   Schema.decodeOption(WelcomeJson)(text);
 
+/** A client's latest inputs as they travel to the host. */
 export const encodeInputs = (inputs: Inputs): string => Schema.encodeSync(InputsJson)(inputs);
 
 /** The inputs a client sent; `None` for anything else, including more inputs than a client ever repeats. */

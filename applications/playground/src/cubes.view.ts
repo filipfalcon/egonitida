@@ -30,4 +30,5 @@ export const cubes = View.each([Cubes.Cube, Cubes.Paint], {
   },
 });
 
+/** The views of the cubes. */
 export const views = [cubes];
