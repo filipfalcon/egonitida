@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Exit, Option, Scope } from 'effect';
+import { Effect, Exit, Fiber, Option, Scope, Stream } from 'effect';
 import * as DualSense from '#src/DualSense.ts';
 import * as Haptics from '#src/Haptics.ts';
 import * as Hid from '#src/Hid.ts';
@@ -8,6 +8,7 @@ import * as Hid from '#src/Hid.ts';
 class Recorded extends EventTarget {
   readonly vendorId = 0x054c;
   readonly productId = 0x0ce6;
+  readonly productName = 'DualSense Wireless Controller';
   opened = false;
   async open() {
     this.opened = true;
@@ -60,6 +61,34 @@ class Slow extends Recorded {
   }
   get onTheWay() {
     return this.waiting.length;
+  }
+}
+
+/** A DualSense whose reports never get through, as one unplugged mid-write. */
+class Failing extends Recorded {
+  override async sendReport() {
+    throw new Error('The device was disconnected.');
+  }
+}
+
+/** The devices a browser reaches through WebHID, as a test hands them: those already granted, the one a player chooses when asked, and devices plugged in and pulled out. */
+class Source extends EventTarget {
+  granted: Array<Recorded> = [];
+  chosen: Array<Recorded> = [];
+  async getDevices() {
+    return this.granted;
+  }
+  async requestDevice() {
+    this.granted.push(...this.chosen);
+    return this.chosen;
+  }
+  plug(device: Recorded) {
+    this.granted.push(device);
+    this.dispatchEvent(Object.assign(new Event('connect'), { device }));
+  }
+  pull(device: Recorded) {
+    this.granted = this.granted.filter((granted) => granted !== device);
+    this.dispatchEvent(Object.assign(new Event('disconnect'), { device }));
   }
 }
 
@@ -195,4 +224,84 @@ describe('a device through WebHID', () => {
       expect(shades).toEqual([26, 255]);
     }).pipe(Effect.scoped),
   );
+
+  describe('pooled', () => {
+    it.live(
+      'connects the devices granted before, each once however often it looks, by their names',
+      () =>
+        Effect.gen(function* () {
+          const source = new Source();
+          source.granted = [new Recorded()];
+          const pool = yield* Hid.pool([DualSense.driver], Option.some(source));
+
+          yield* pool.scan;
+          yield* pool.scan;
+
+          expect(pool.connections().map(({ name }) => name)).toEqual([
+            'DualSense Wireless Controller',
+          ]);
+        }).pipe(Effect.scoped),
+    );
+
+    it.live(
+      'connects a device plugged in or chosen, and lets go of one pulled out, saying so',
+      () =>
+        Effect.gen(function* () {
+          const source = new Source();
+          const pool = yield* Hid.pool([DualSense.driver], Option.some(source));
+          const changes = yield* pool.changes.pipe(
+            Stream.take(3),
+            Stream.runCollect,
+            Effect.forkChild,
+          );
+          yield* Effect.sleep('10 millis');
+          const plugged = new Recorded();
+          source.chosen = [new Recorded()];
+
+          source.plug(plugged);
+          yield* Effect.sleep('10 millis');
+          yield* pool.request;
+          const both = pool.connections().length;
+          source.pull(plugged);
+          yield* Effect.sleep('10 millis');
+
+          expect(both).toBe(2);
+          expect(pool.connections()).toHaveLength(1);
+          expect(plugged.opened).toBe(false);
+          expect(yield* Fiber.join(changes)).toEqual([
+            { _tag: 'Connected', name: 'DualSense Wireless Controller' },
+            { _tag: 'Connected', name: 'DualSense Wireless Controller' },
+            { _tag: 'Disconnected', name: 'DualSense Wireless Controller' },
+          ]);
+        }).pipe(Effect.scoped),
+    );
+
+    it.live('says once why a device cannot be felt, however often it fails the same way', () =>
+      Effect.gen(function* () {
+        const source = new Source();
+        source.granted = [new Failing()];
+        const pool = yield* Hid.pool([DualSense.driver], Option.some(source));
+        const changes = yield* pool.changes.pipe(
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Effect.sleep('10 millis');
+
+        const [pad] = pool.connections();
+        if (pad !== undefined) {
+          yield* pad.felt.motors({ strong: 1, weak: 0 });
+          yield* pad.felt.motors({ strong: 0.5, weak: 0 });
+        }
+
+        expect(yield* Fiber.join(changes)).toEqual([
+          {
+            _tag: 'Failed',
+            name: 'DualSense Wireless Controller',
+            reason: 'The device was disconnected.',
+          },
+        ]);
+      }).pipe(Effect.scoped),
+    );
+  });
 });

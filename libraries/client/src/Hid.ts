@@ -1,5 +1,5 @@
 /// <reference types="w3c-web-hid" />
-import { Data, Effect, Option, type Scope, Semaphore } from 'effect';
+import { Data, Effect, Exit, Option, PubSub, Scope, Semaphore, Stream } from 'effect';
 import type * as Devices from '#src/Devices.ts';
 import * as Haptics from '#src/Haptics.ts';
 import type * as Lighting from '#src/Lighting.ts';
@@ -61,18 +61,27 @@ export class Refused extends Data.TaggedError('Refused')<{ readonly reason: stri
 /** Whether this browser has WebHID. */
 export const available = (): boolean => typeof navigator !== 'undefined' && 'hid' in navigator;
 
-/** A device connected through its driver: the pad it was last read as, if it has said anything yet, it felt, and it lit. */
+/** A device connected through its driver: its name, the pad it was last read as, if it has said anything yet, it felt, it lit, and why it could not be felt or lit, each reason once until another comes. */
 export interface Connection {
   readonly model: Model;
+  readonly name: string;
   readonly pad: () => Option.Option<Devices.Pad>;
   readonly felt: Haptics.Felt;
   readonly lit: Lighting.Lit;
+  readonly failed: Stream.Stream<string>;
 }
 
 /** As much of a device as is read and written through a driver: its ids, opening and closing it, the reports it sends and takes, and its feature reports, as WebHID's `HIDDevice` gives them. */
 export type Device = Pick<
   HIDDevice,
-  'vendorId' | 'productId' | 'opened' | 'open' | 'close' | 'sendReport' | 'receiveFeatureReport'
+  | 'vendorId'
+  | 'productId'
+  | 'productName'
+  | 'opened'
+  | 'open'
+  | 'close'
+  | 'sendReport'
+  | 'receiveFeatureReport'
 > &
   EventTarget & {
     readonly collections: ReadonlyArray<{
@@ -156,6 +165,7 @@ export const connect = (
           : [{ reportId, length: bits > 0 ? Option.some(Math.ceil(bits / 8)) : Option.none() }];
       }),
     );
+    const failures = yield* PubSub.unbounded<string>();
     const written = {
       /** What the device is to feel and show, as last asked. */
       output: still,
@@ -177,14 +187,18 @@ export const connect = (
         onSome: ({ reportId, data }) => {
           written.reports += 1;
           written.sent = Option.some(output);
-          return Effect.ignore(
-            Effect.tryPromise(() =>
-              device.sendReport(
-                reportId,
-                Uint8Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)),
-              ),
+          return Effect.tryPromise(() =>
+            device.sendReport(
+              reportId,
+              Uint8Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)),
             ),
-          ).pipe(Effect.andThen(sendNewest));
+          ).pipe(
+            // A report the device does not take is let go, and why is said.
+            Effect.catch(({ cause }) =>
+              PubSub.publish(failures, cause instanceof Error ? cause.message : String(cause)),
+            ),
+            Effect.andThen(sendNewest),
+          );
         },
       });
     });
@@ -208,6 +222,8 @@ export const connect = (
     };
     return {
       model: { vendorId: device.vendorId, productId: device.productId },
+      name: device.productName === '' ? driver.name : device.productName,
+      failed: Stream.fromPubSub(failures).pipe(Stream.changes),
       pad: () => latest.pad,
       felt,
       lit: {
@@ -261,3 +277,157 @@ export const request = (
     : Effect.fail(
         new Refused({ reason: 'This browser has no WebHID: Chrome, Edge, or Opera have it.' }),
       );
+
+/** Where a page finds the devices it may reach through WebHID: those granted before, one a player chooses when asked, and word of devices plugged in and pulled out, as `navigator.hid` gives them. */
+export interface Source extends EventTarget {
+  readonly getDevices: () => Promise<ReadonlyArray<Device>>;
+  readonly requestDevice: (options: {
+    readonly filters: Array<{ readonly vendorId: number; readonly productId: number }>;
+  }) => Promise<ReadonlyArray<Device>>;
+}
+
+/** What befell a pooled device: connected, pulled out, or failing to be felt or lit, and why. */
+export type Change =
+  | { readonly _tag: 'Connected'; readonly name: string }
+  | { readonly _tag: 'Disconnected'; readonly name: string }
+  | { readonly _tag: 'Failed'; readonly name: string; readonly reason: string };
+
+/** The devices a page reaches through WebHID, kept up as they come and go. */
+export interface Pool {
+  /** The devices connected now. */
+  readonly connections: () => ReadonlyArray<Connection>;
+  /** Connects the devices granted before that are not connected yet. */
+  readonly scan: Effect.Effect<void>;
+  /** Asks the player for leave to reach another device, and connects what they choose; to be asked in answer to a click. */
+  readonly request: Effect.Effect<void, Refused>;
+  /** What befalls the devices from now on, as it does. */
+  readonly changes: Stream.Stream<Change>;
+}
+
+/**
+ * The devices one of `drivers` reads, reached through `source`, `navigator.hid` unless given, until the scope closes: those granted before connected at once, each once however often they are looked for; one plugged in connected as it is, and one pulled out let go of, so no stick or button of it stays held. Where there is no WebHID, there is none.
+ */
+export const pool = (
+  drivers: ReadonlyArray<Driver>,
+  source: Option.Option<Source> = available() ? Option.some(navigator.hid) : Option.none(),
+): Effect.Effect<Pool, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const parent = yield* Effect.scope;
+    const changes = yield* PubSub.unbounded<Change>();
+    const held = new Map<
+      Device,
+      { readonly connection: Connection; readonly scope: Scope.Closeable }
+    >();
+    const adopting = new Set<Device>();
+
+    /** Connects `device` through its driver, unless it is connected or being connected already. */
+    const adopt = (device: Device) =>
+      Effect.suspend(() => {
+        if (held.has(device) || adopting.has(device)) {
+          return Effect.void;
+        }
+        return Option.match(driverOf(drivers, device), {
+          onNone: () => Effect.void,
+          onSome: (driver) =>
+            Effect.gen(function* () {
+              adopting.add(device);
+              const scope = yield* Scope.fork(parent);
+              const name = device.productName === '' ? driver.name : device.productName;
+              yield* connect(device, driver).pipe(
+                Scope.provide(scope),
+                Effect.matchEffect({
+                  onFailure: ({ reason }) =>
+                    Effect.andThen(
+                      Scope.close(scope, Exit.void),
+                      PubSub.publish(changes, { _tag: 'Failed', name, reason }),
+                    ),
+                  onSuccess: (connection) =>
+                    Effect.gen(function* () {
+                      held.set(device, { connection, scope });
+                      yield* PubSub.publish(changes, { _tag: 'Connected', name });
+                      yield* connection.failed.pipe(
+                        Stream.runForEach((reason) =>
+                          PubSub.publish(changes, { _tag: 'Failed', name, reason }),
+                        ),
+                        Effect.forkIn(scope),
+                      );
+                    }),
+                }),
+                Effect.ensuring(Effect.sync(() => adopting.delete(device))),
+              );
+            }),
+        });
+      });
+
+    const scan = Option.match(source, {
+      onNone: () => Effect.void,
+      onSome: (hid) =>
+        Effect.tryPromise(() => hid.getDevices()).pipe(
+          Effect.orElseSucceed(() => []),
+          Effect.flatMap((devices) => Effect.forEach(devices, adopt, { discard: true })),
+        ),
+    });
+
+    /** Lets go of the device `pulled`, pulled out. */
+    const letGo = (pulled: unknown) =>
+      Effect.suspend(() => {
+        const found = [...held].find(([device]) => device === pulled);
+        if (found === undefined) {
+          return Effect.void;
+        }
+        const [device, { connection, scope }] = found;
+        held.delete(device);
+        return Effect.andThen(
+          Scope.close(scope, Exit.void),
+          PubSub.publish(changes, { _tag: 'Disconnected', name: connection.name }),
+        );
+      });
+
+    yield* Option.match(source, {
+      onNone: () => Effect.void,
+      onSome: (hid) =>
+        Effect.gen(function* () {
+          const run = Effect.runForkWith(yield* Effect.context<never>());
+          // Plugged in, a device granted before is found among those granted; pulled out, it is let go of.
+          const plugged = () => run(scan);
+          const pulled = (event: Event) => run(letGo('device' in event ? event.device : undefined));
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              hid.addEventListener('connect', plugged);
+              hid.addEventListener('disconnect', pulled);
+            }),
+            () =>
+              Effect.sync(() => {
+                hid.removeEventListener('connect', plugged);
+                hid.removeEventListener('disconnect', pulled);
+              }),
+          );
+        }),
+    });
+    yield* scan;
+
+    return {
+      connections: () => [...held.values()].map(({ connection }) => connection),
+      scan,
+      request: Option.match(source, {
+        onNone: () =>
+          Effect.fail(
+            new Refused({ reason: 'This browser has no WebHID: Chrome, Edge, or Opera have it.' }),
+          ),
+        onSome: (hid) =>
+          Effect.tryPromise({
+            try: () =>
+              hid.requestDevice({
+                filters: drivers.flatMap(({ devices }) =>
+                  devices.map(({ vendorId, productId }) => ({ vendorId, productId })),
+                ),
+              }),
+            catch: (cause) =>
+              new Refused({
+                reason: cause instanceof Error ? cause.message : 'No device was chosen.',
+              }),
+          }).pipe(Effect.flatMap((devices) => Effect.forEach(devices, adopt, { discard: true }))),
+      }),
+      changes: Stream.fromPubSub(changes),
+    };
+  });

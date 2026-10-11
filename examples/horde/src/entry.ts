@@ -15,7 +15,7 @@ import {
 } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page, Rewind } from '@lightocean/devtools';
-import { Effect, Option, type Scope } from 'effect';
+import { Effect, Option, type Scope, Stream } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
@@ -89,45 +89,47 @@ const main = Effect.gen(function* () {
   viewport.camera.lookAt(0, 0, 0);
 
   const keyboardAndMouse = yield* KeyboardAndMouse.make(window);
-  // Pads through WebHID: those the player gave leave for before, and more at H, a key being the gesture a browser asks for.
-  const drivers = [DualSense.driver];
-  const hid = { connections: [...(yield* Hid.granted(drivers))] };
+  // Pads through WebHID: those the player gave leave for before, one plugged in since, and more at H, a key being the gesture a browser asks for; one pulled out is let go of.
+  const hid = yield* Hid.pool([DualSense.driver]);
   // The survivor's player feels it on every pad that can be felt: through WebHID where it is read through it, else through the Gamepad API.
   const haptics = Haptics.make({
     player: client.entity,
     felt: () => [
-      ...hid.connections.map(({ felt }) => felt),
-      ...Gamepads.feltNow(hid.connections.map(({ model }) => model)),
+      ...hid.connections().map(({ felt }) => felt),
+      ...Gamepads.feltNow(hid.connections().map(({ model }) => model)),
     ],
   });
   // Their lights too: a pad's through WebHID, and Razer's devices through Chroma once the player asks for it at C, as asking a machine with no Razer software for it fails aloud.
   const chroma = { lit: new Array<Lighting.Lit>() };
   const lighting = Lighting.make({
     player: client.entity,
-    lit: () => [...hid.connections.map(({ lit }) => lit), ...chroma.lit],
+    lit: () => [...hid.connections().map(({ lit }) => lit), ...chroma.lit],
   });
   const felt = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.provideService(Haptics.Haptics, haptics),
       Effect.provideService(Lighting.Lighting, lighting),
     );
+  // A pad connected since is lit as the rest; what befalls one is told on the console.
+  yield* hid.changes.pipe(
+    Stream.runForEach((change) =>
+      change._tag === 'Connected'
+        ? lighting.again
+        : Effect.logInfo(
+            change._tag === 'Failed'
+              ? `${change.name}: ${change.reason}`
+              : `${change.name} was pulled out.`,
+          ),
+    ),
+    Effect.forkScoped,
+  );
   const views = yield* felt(View.make([...SurvivorView.views, ...HordeView.views]));
   viewport.scene.add(views.root);
   // What a key starts runs within the page's scope, so a device connected at it stays connected while the page is open.
   const run = Effect.runForkWith(yield* Effect.context<Scope.Scope>());
   yield* listen('keydown', (event) => {
     if (event.code === 'KeyH' && Hid.available()) {
-      run(
-        Hid.request(drivers).pipe(
-          Effect.tap((connected) =>
-            Effect.sync(() => {
-              hid.connections.push(...connected);
-            }),
-          ),
-          Effect.andThen(lighting.again),
-          Effect.catch(({ reason }) => Effect.logWarning(reason)),
-        ),
-      );
+      run(hid.request.pipe(Effect.catch(({ reason }) => Effect.logWarning(reason))));
     }
   });
   const app: Chroma.App = {
@@ -204,10 +206,10 @@ const main = Effect.gen(function* () {
           // A pad read through WebHID is left out of the Gamepad API's, so it does not count twice.
           const devices: Devices.State = {
             pads: [
-              ...hid.connections.flatMap((connection) => Option.toArray(connection.pad())),
+              ...hid.connections().flatMap((connection) => Option.toArray(connection.pad())),
               ...Gamepads.poll(
                 [],
-                hid.connections.map(({ model }) => model),
+                hid.connections().map(({ model }) => model),
               ),
             ],
             ...keyboardAndMouse.read(),
@@ -265,7 +267,7 @@ const main = Effect.gen(function* () {
                     : import.meta.env.DEV
                       ? ['', 'P pauses']
                       : []),
-                  ...(Hid.available() && hid.connections.length === 0
+                  ...(Hid.available() && hid.connections().length === 0
                     ? ['H connects a DualSense through WebHID']
                     : []),
                   ...(chroma.lit.length === 0 ? ['C lights Razer devices through Chroma'] : []),
