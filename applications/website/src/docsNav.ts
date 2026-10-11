@@ -1,4 +1,5 @@
 import { Array, Option, pipe } from 'effect';
+import { architectureRouter } from '#src/route.ts';
 
 /**
  * The documentation's navigation: its sections in the order they are read, each with its pages. The sidebar lists them, and every page leads to the one before it and the one after it. A page is added here, with its route in `route.ts`.
@@ -17,7 +18,9 @@ export interface DocsSection {
 }
 
 /** The documentation's sections, in the order they are read. */
-export const docsSections: ReadonlyArray<DocsSection> = [];
+export const docsSections: ReadonlyArray<DocsSection> = [
+  { label: 'Introduction', pages: [{ label: 'Architecture', href: architectureRouter() }] },
+];
 
 /** The pages before and after a page, where there are any. */
 export interface Neighbours {

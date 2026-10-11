@@ -8,6 +8,7 @@ import cube from '../../../../examples/spinning-cube/src/cube.ts?raw';
 import cubeView from '../../../../examples/spinning-cube/src/cube.view.ts?raw';
 import { DISCORD, REPOSITORY, inRepository } from '#src/links.ts';
 import type { Message, Model } from '#src/main.ts';
+import { architectureRouter } from '#src/route.ts';
 import { CANVAS_ID, MountCanvas } from '#src/world.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from '../tokens.stylex.ts';
@@ -290,10 +291,10 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.nav(
         [h.AriaLabel('Main'), ...Styled.attributes(h, styles.links)],
         [
-          external(inRepository('docs/architecture.md'), 'Architecture', [
-            styles.link,
-            styles.wide,
-          ]),
+          h.a(
+            [h.Href(architectureRouter()), ...Styled.attributes(h, styles.link, styles.wide)],
+            ['Architecture'],
+          ),
           external(`${REPOSITORY}/tree/main/examples`, 'Examples', [styles.link, styles.wide]),
           external(REPOSITORY, 'GitHub'),
           external(DISCORD, 'Discord'),
@@ -322,7 +323,10 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         ]),
         h.div(Styled.attributes(h, styles.actions), [
           h.a([h.Href('#start'), ...Styled.attributes(h, styles.primary)], ['Get started']),
-          external(inRepository('docs/architecture.md'), 'Read the architecture', styles.secondary),
+          h.a(
+            [h.Href(architectureRouter()), ...Styled.attributes(h, styles.secondary)],
+            ['Read the architecture'],
+          ),
         ]),
         Option.match(model.maybeError, {
           onNone: () =>
