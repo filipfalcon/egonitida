@@ -404,6 +404,102 @@ describe('spawning and despawning within a step', () => {
   });
 });
 
+describe('tracing a step', () => {
+  const part = (name: string): Game.Part => ({ _tag: 'System', name, domain: Option.none() });
+  const nothing = { set: [], spawned: [], despawned: [], emitted: [], issued: [] };
+
+  it('tells what each system and rule did in it, a rule with the event it ran for', () => {
+    const [world, runner] = spawnRunner(9, 30);
+    const bitten = { _tag: 'Bitten', entity: runner, damage: 30 };
+
+    expect(Game.step(game, world, [], [], { trace: true }).trace).toEqual([
+      {
+        ...nothing,
+        part: part('move'),
+        cause: Option.none(),
+        set: [{ entity: runner, component: 'Position' }],
+      },
+      { ...nothing, part: part('bite'), cause: Option.none(), emitted: [bitten] },
+      {
+        ...nothing,
+        part: { _tag: 'Rule', on: 'Bitten', name: Option.none(), domain: Option.none() },
+        cause: Option.some(bitten),
+        set: [{ entity: runner, component: 'Health' }],
+        emitted: [{ _tag: 'Died', entity: runner }],
+      },
+    ]);
+  });
+
+  it('leaves out what did nothing, and tells what was spawned and despawned', () => {
+    const raise = System.make({
+      name: 'raise',
+      reads: [],
+      writes: [],
+      emits: [],
+      spawns: [Position],
+      run: (context) => {
+        context.spawn([Position.of({ x: 5 })]);
+      },
+    });
+    const clear = System.make({
+      name: 'clear',
+      reads: [Position],
+      writes: [],
+      emits: [],
+      despawns: true,
+      run: (context) => {
+        for (const [entity, position] of context.query(Position)) {
+          if (position.x === 0) {
+            context.despawn(entity);
+          }
+        }
+      },
+    });
+    const [world, standing] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 0 })]);
+    const lifecycle = Game.only(fixture, { systems: [raise, move, clear], rules: [] });
+
+    expect(Game.step(lifecycle, world, [], [], { trace: true }).trace).toEqual([
+      { ...nothing, part: part('raise'), cause: Option.none(), spawned: [standing + 1] },
+      { ...nothing, part: part('clear'), cause: Option.none(), despawned: [standing] },
+    ]);
+  });
+
+  it('tells a value set twice by the same part once', () => {
+    const twice = System.make({
+      name: 'twice',
+      reads: [],
+      writes: [Position],
+      emits: [],
+      run: (context) => {
+        for (const [entity] of context.query(Position)) {
+          context.set(entity, Position, { x: 1 });
+          context.set(entity, Position, { x: 2 });
+        }
+      },
+    });
+    const [world, entity] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 0 })]);
+
+    expect(
+      Game.step(Game.only(fixture, { systems: [twice], rules: [] }), world, [], [], {
+        trace: true,
+      }).trace,
+    ).toEqual([
+      {
+        ...nothing,
+        part: part('twice'),
+        cause: Option.none(),
+        set: [{ entity, component: 'Position' }],
+      },
+    ]);
+  });
+
+  it('traces nothing unless asked to', () => {
+    const [world] = spawnRunner(9, 30);
+
+    expect(Game.step(game, world).trace).toEqual([]);
+  });
+});
+
 describe('Game.changes', () => {
   const changes = Game.changes(game);
 

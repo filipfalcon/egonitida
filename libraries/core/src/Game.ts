@@ -129,12 +129,73 @@ export interface Step<Commands extends Command.Any = Command.Any> {
   readonly events: ReadonlyArray<Event.Tagged>;
   /** Every command the rules issued, in the order they issued them; none of them has run. */
   readonly commands: ReadonlyArray<Command.IssuedOf<Commands>>;
+  /** What each part did, in the order they ran, if the step was traced; empty if not. */
+  readonly trace: ReadonlyArray<Trace>;
+}
+
+/** What one part of a game did in a step: the values it set, the entities it spawned and despawned, the events it emitted, and the commands it issued; a rule, with the event or action it ran for. */
+export interface Trace {
+  readonly part: Part;
+  /** The event or action a rule ran for; none for a system. */
+  readonly cause: Option.Option<Event.Tagged>;
+  /** Each value it set, once, however often it set it. */
+  readonly set: ReadonlyArray<{ readonly entity: World.Entity; readonly component: string }>;
+  readonly spawned: ReadonlyArray<World.Entity>;
+  readonly despawned: ReadonlyArray<World.Entity>;
+  readonly emitted: ReadonlyArray<Event.Tagged>;
+  readonly issued: ReadonlyArray<Command.Issued>;
 }
 
 export interface StepOptions {
   /** Freezes every value of the world the step leaves, so a system or rule that changes one in place throws at once. For development: it walks the whole world. */
   readonly freeze?: boolean;
+  /** Tells what each part did in the step, for a log of it. For development: it keeps a note of every change. */
+  readonly trace?: boolean;
 }
+
+/** A trace being taken of one part, as it runs. */
+interface Tracing {
+  readonly part: Part;
+  readonly cause: Option.Option<Event.Tagged>;
+  readonly set: Array<{ readonly entity: World.Entity; readonly component: string }>;
+  readonly setKeys: Set<string>;
+  readonly spawned: Array<World.Entity>;
+  readonly despawned: Array<World.Entity>;
+  readonly emitted: Array<Event.Tagged>;
+  readonly issued: Array<Command.Issued>;
+}
+
+const tracing = (part: Part, cause: Option.Option<Event.Tagged>): Tracing => ({
+  part,
+  cause,
+  set: [],
+  setKeys: new Set(),
+  spawned: [],
+  despawned: [],
+  emitted: [],
+  issued: [],
+});
+
+/** What a trace taken of a part tells, if the part did anything. */
+const traced = (trace: Tracing): ReadonlyArray<Trace> =>
+  trace.set.length +
+    trace.spawned.length +
+    trace.despawned.length +
+    trace.emitted.length +
+    trace.issued.length ===
+  0
+    ? []
+    : [
+        {
+          part: trace.part,
+          cause: trace.cause,
+          set: trace.set,
+          spawned: trace.spawned,
+          despawned: trace.despawned,
+          emitted: trace.emitted,
+          issued: trace.issued,
+        },
+      ];
 
 export const step = <Commands extends Command.Any>(
   game: Game<Component.Any, Action.Any, Event.Any, Commands>,
@@ -164,13 +225,41 @@ export const step = <Commands extends Command.Any>(
   // What the rules decided should be done outside the world, in the order they decided it.
   const commands: Array<Command.IssuedOf<Commands>> = [];
   const handled = { count: 0 };
+  // Every part by what it is, if the step is traced, and the trace of the part running now.
+  const parts = options.trace === true ? Option.some(partsOf(game)) : Option.none();
+  const traces: Array<Trace> = [];
+  const running: { trace: Option.Option<Tracing> } = { trace: Option.none() };
+  /** Runs `run` as `part`, keeping a trace of it if the step is traced. */
+  const runAs = (
+    part: System.System | Rule.Rule,
+    cause: Option.Option<Event.Tagged>,
+    run: () => void,
+  ) => {
+    if (Option.isNone(parts)) {
+      run();
+      return;
+    }
+    const trace = tracing(
+      Option.getOrElse(Option.fromNullishOr(parts.value.get(part)), () => partOutside(part)),
+      cause,
+    );
+    running.trace = Option.some(trace);
+    run();
+    running.trace = Option.none();
+    traces.push(...traced(trace));
+  };
+  const note = (keep: (trace: Tracing) => void) => {
+    if (Option.isSome(running.trace)) {
+      keep(running.trace.value);
+    }
+  };
   /** Hands every event not yet handled to the rules that handle it, including events those rules emit meanwhile. */
   const settle = () => {
     for (const event of line.slice(handled.count)) {
       handled.count += 1;
       for (const rule of game.rules) {
         if (rule.on.tag === event._tag) {
-          rule.run(context, event);
+          runAs(rule, Option.some(event), () => rule.run(context, event));
         }
       }
     }
@@ -193,21 +282,39 @@ export const step = <Commands extends Command.Any>(
       component: Component.Component<string, Value, Component.Owner>,
     ) => World.get(draft, entity, component),
     query: World.queryIn(draft),
-    set: (entity, component, value) => World.write(draft, entity, component, value),
+    set: (entity, component, value) => {
+      World.write(draft, entity, component, value);
+      note((trace) => {
+        const key = `${entity}:${component.name}`;
+        if (!trace.setKeys.has(key)) {
+          trace.setKeys.add(key);
+          trace.set.push({ entity, component: component.name });
+        }
+      });
+    },
     emit: (event: Event.Tagged) => {
       line.push(event);
+      note((trace) => trace.emitted.push(event));
     },
     command(issued) {
       commands.push(issued);
+      note((trace) => trace.issued.push(issued));
     },
-    spawn: (instances) => World.spawnInto(draft, instances),
-    despawn: (entity) => World.despawnFrom(draft, entity),
+    spawn: (instances) => {
+      const entity = World.spawnInto(draft, instances);
+      note((trace) => trace.spawned.push(entity));
+      return entity;
+    },
+    despawn: (entity) => {
+      World.despawnFrom(draft, entity);
+      note((trace) => trace.despawned.push(entity));
+    },
   };
 
   // The players' actions are decided before anything moves, so the systems see what the rules made of them.
   settle();
   for (const system of game.systems) {
-    system.run(context);
+    runAs(system, Option.none(), () => system.run(context));
   }
   settle();
 
@@ -215,6 +322,7 @@ export const step = <Commands extends Command.Any>(
     world: World.finish(draft, freezing),
     events: line,
     commands,
+    trace: traces,
   };
 };
 
@@ -301,7 +409,8 @@ export interface Changes {
 /**
  * The map of how `game` changes its state. A game of systems has no single `update` to read; its declarations are what is read instead, by people, the debugger, and agents alike. Parts are listed in the order the game runs them.
  */
-export const changes = (game: Game): Changes => {
+/** Each system, local system, and rule of `game`, as the part it is, with the domain it belongs to. */
+const partsOf = (game: Game): ReadonlyMap<System.System | Rule.Rule, Part> => {
   const domainOf = new Map<System.System | Rule.Rule, string>(
     game.domains.flatMap((domain) =>
       [...domain.systems, ...domain.rules, ...domain.localSystems].map(
@@ -309,27 +418,36 @@ export const changes = (game: Game): Changes => {
       ),
     ),
   );
+  const domain = (part: System.System | Rule.Rule) => Option.fromNullishOr(domainOf.get(part));
+  return new Map<System.System | Rule.Rule, Part>([
+    ...game.systems.map((system): [System.System, Part] => [
+      system,
+      { _tag: 'System', name: system.name, domain: domain(system) },
+    ]),
+    ...game.localSystems.map((system): [System.System, Part] => [
+      system,
+      { _tag: 'LocalSystem', name: system.name, domain: domain(system) },
+    ]),
+    ...game.rules.map((rule): [Rule.Rule, Part] => [
+      rule,
+      { _tag: 'Rule', on: rule.on.tag, name: rule.name, domain: domain(rule) },
+    ]),
+  ]);
+};
+
+/** `part` as a part of no game's domains, as one a test gave a game with `only` is. */
+const partOutside = (part: System.System | Rule.Rule): Part =>
+  'on' in part
+    ? { _tag: 'Rule', on: part.on.tag, name: part.name, domain: Option.none() }
+    : { _tag: 'System', name: part.name, domain: Option.none() };
+
+export const changes = (game: Game): Changes => {
+  const named = partsOf(game);
+  const partOf = (part: System.System | Rule.Rule) =>
+    Option.getOrElse(Option.fromNullishOr(named.get(part)), () => partOutside(part));
   const parts = [
-    ...game.systems.map((system) => ({
-      part: {
-        _tag: 'System',
-        name: system.name,
-        domain: Option.fromNullishOr(domainOf.get(system)),
-      } satisfies Part,
-      reads: system.reads,
-      writes: system.writes,
-      spawns: system.spawns,
-      emits: system.emits,
-      handles: [],
-      issues: [],
-      despawns: system.despawns,
-    })),
-    ...game.localSystems.map((system) => ({
-      part: {
-        _tag: 'LocalSystem',
-        name: system.name,
-        domain: Option.fromNullishOr(domainOf.get(system)),
-      } satisfies Part,
+    ...[...game.systems, ...game.localSystems].map((system) => ({
+      part: partOf(system),
       reads: system.reads,
       writes: system.writes,
       spawns: system.spawns,
@@ -339,12 +457,7 @@ export const changes = (game: Game): Changes => {
       despawns: system.despawns,
     })),
     ...game.rules.map((rule) => ({
-      part: {
-        _tag: 'Rule',
-        on: rule.on.tag,
-        name: rule.name,
-        domain: Option.fromNullishOr(domainOf.get(rule)),
-      } satisfies Part,
+      part: partOf(rule),
       reads: [],
       writes: rule.writes,
       spawns: rule.spawns,
