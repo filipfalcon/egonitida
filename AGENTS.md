@@ -55,6 +55,13 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 - What views draw is told as a scene (`Scene.make`, `scene.show`, `scene.find`), in a `*.scene.test.ts` file, found by view and entity, never by walking the scene graph.
 - No mocks and no fake timers: time is the world's step, effects are values, and services are given as Layers that record.
 
+## A running game
+
+- With a game's development server running and its page open, the `lightocean-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `lightocean_hosts` and `lightocean_describe`; read the world with `lightocean_world`, `lightocean_compare`, and `lightocean_log`; hold and step time with `lightocean_hold` and `lightocean_advance` to look closely; and play, as one player or many, with `lightocean_join`, `lightocean_input`, and `lightocean_act`.
+- Check a change on the running game yourself rather than asking the person to: hold time, step, and read what came of it. Asking them is for what only a person sees, such as how it looks.
+- What you find by playing becomes a test: `lightocean_story` writes a stretch as the source of a story test. Keep the expectations that tell the behaviour, drop the rest, and name the entities for what they are.
+- A game serves its host this way through `Devtools.plugin()` in its Vite config and a bridge in its worker in development.
+
 ## Commits
 
 - Conventional Commits, signed. A change any consumer must follow is marked `!`, and its body gives a before-and-after table; Border, the game on the engine, is migrated with it.
@@ -67,5 +74,6 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 - A story: `examples/spinning-cube/src/cube.story.test.ts`
 - A scene: `examples/spinning-cube/src/cube.scene.test.ts`
 - A local server and a page drawing from it: `examples/spinning-cube/src/simulation.worker.ts`, `examples/spinning-cube/src/entry.ts`
+- A local server with the devtools beside it in development, and the Vite config that serves them: `examples/horde/src/simulation.worker.ts`, `examples/horde/vite.config.ts`
 - The engine's own tests: `libraries/core/src/Game.test.ts`, `libraries/client/src/View.test.ts`
 - A lint rule and its test: `libraries/oxlint-plugin/src/rules/pureSteps.ts`, `pureSteps.test.ts`
