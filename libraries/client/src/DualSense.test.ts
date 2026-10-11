@@ -2,6 +2,8 @@ import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
 import * as Devices from '#src/Devices.ts';
 import * as DualSense from '#src/DualSense.ts';
+import * as Haptics from '#src/Haptics.ts';
+import * as Hid from '#src/Hid.ts';
 
 /** A report's bytes, `length` long, with `set` written at their offsets. */
 const bytes = (length: number, set: Readonly<Record<number, number>>) => {
@@ -76,6 +78,71 @@ describe('a DualSense', () => {
 
   it('reads nothing of a report it does not know', () => {
     expect(DualSense.driver.read({ reportId: 0x05, data: bytes(40, {}) })).toEqual(Option.none());
+  });
+
+  it('writes its motors and triggers in a report over USB, as long as the pad says it is', () => {
+    const report = DualSense.driver.write(
+      {
+        motors: { strong: 1, weak: 0.5 },
+        triggers: {
+          left: Haptics.free,
+          right: { _tag: 'Clicking', from: 0.2, to: 0.5, strength: 1 },
+        },
+      },
+      { outputs: [{ reportId: 0x02, length: Option.none() }], sent: 0 },
+    );
+    const declared = DualSense.driver.write(Hid.still, {
+      outputs: [{ reportId: 0x02, length: Option.some(63) }],
+      sent: 0,
+    });
+
+    const at = (offsets: ReadonlyArray<number>) =>
+      Option.map(report, ({ data }) => offsets.map((offset) => data.getUint8(offset)));
+    expect(Option.map(report, ({ reportId, data }) => [reportId, data.byteLength])).toEqual(
+      Option.some([0x02, 47]),
+    );
+    expect(Option.map(declared, ({ data }) => data.byteLength)).toEqual(Option.some(63));
+    // Both kinds of rumble flagged, as older firmware and newer read them.
+    expect(at([0, 38, 2, 3])).toEqual(Option.some([0x0f, 0x04, 128, 255]));
+    // A gun's trigger, giving way from the third to the sixth of its ten zones, at its strongest; the other free.
+    expect(at([10, 11, 12, 13, 21])).toEqual(Option.some([0x25, 0x24, 0x00, 7, 0x05]));
+  });
+
+  it('writes a trigger that resists from a point of its travel on, zone by zone', () => {
+    const report = DualSense.driver.write(
+      {
+        ...Hid.still,
+        triggers: { left: Haptics.free, right: { _tag: 'Resisting', from: 0.7, strength: 1 } },
+      },
+      { outputs: [{ reportId: 0x02, length: Option.none() }], sent: 0 },
+    );
+
+    expect(
+      Option.map(report, ({ data }) => [...new Uint8Array(data.buffer).subarray(10, 17)]),
+    ).toEqual(Option.some([0x21, 0xc0, 0x03, 0x00, 0x00, 0xfc, 0x3f]));
+  });
+
+  it('writes the same over Bluetooth, two bytes further in, counted and sealed with its checksum', () => {
+    const report = DualSense.driver.write(
+      { motors: { strong: 0, weak: 1 }, triggers: { left: Haptics.free, right: Haptics.free } },
+      { outputs: [{ reportId: 0x31, length: Option.none() }], sent: 3 },
+    );
+
+    const data = Option.map(report, ({ data }) => new Uint8Array(data.buffer));
+    expect(Option.map(report, ({ reportId, data }) => [reportId, data.byteLength])).toEqual(
+      Option.some([0x31, 77]),
+    );
+    expect(Option.map(data, (bytes) => [...bytes.subarray(0, 5)])).toEqual(
+      Option.some([0x30, 0x10, 0x0f, 0, 255]),
+    );
+    // CRC-32 of 0xa2, the report's id, and its first 73 bytes, as Python's `zlib.crc32` has it.
+    expect(Option.map(report, ({ data }) => data.getUint32(73, true))).toEqual(
+      Option.some(0x01080f5d),
+    );
+  });
+
+  it('asks for its calibration once it opens, which over Bluetooth starts its full reports', () => {
+    expect(DualSense.driver.features).toEqual([0x05]);
   });
 
   it('is the driver of the DualSense and the DualSense Edge', () => {

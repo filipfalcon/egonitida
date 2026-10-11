@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
+import { Effect } from 'effect';
 import * as Devices from '#src/Devices.ts';
 import * as Gamepads from '#src/Gamepads.ts';
 
@@ -67,6 +68,41 @@ describe('gamepads', () => {
     expect(pad?.buttons).toEqual({ ...Devices.idlePad.buttons, South: 1 });
     expect(pad?.axes).toEqual({ ...Devices.idlePad.axes, LeftX: 0.3, LeftY: -0.6 });
   });
+
+  it.effect(
+    'rumble through the Gamepad API, every pad that can, those read some other way left out',
+    () => {
+      const played: Array<{ readonly type: string; readonly params: unknown }> = [];
+      const actuator = {
+        playEffect: async (
+          type: GamepadHapticEffectType,
+          params?: GamepadEffectParameters,
+        ): Promise<GamepadHapticsResult> => {
+          played.push({ type, params });
+          return 'complete';
+        },
+      };
+      const felt = Gamepads.felt(
+        [
+          { ...gamepad({ id: 'Xbox Wireless Controller' }), vibrationActuator: actuator },
+          gamepad({ id: 'Without motors' }),
+          { ...gamepad({}), vibrationActuator: actuator },
+        ],
+        [{ vendorId: 0x054c, productId: 0x0ce6 }],
+      );
+
+      return Effect.gen(function* () {
+        yield* Effect.forEach(felt, (pad) => pad.rumble({ strong: 1, weak: 0.5, seconds: 0.2 }));
+
+        expect(played).toEqual([
+          {
+            type: 'dual-rumble',
+            params: { duration: 200, strongMagnitude: 1, weakMagnitude: 0.5, startDelay: 0 },
+          },
+        ]);
+      });
+    },
+  );
 
   it('leave out pads read some other way, such as a DualSense through WebHID, by their vendor and product', () => {
     const read = Gamepads.read(

@@ -1,8 +1,9 @@
-import { Option } from 'effect';
+import { Effect, Option } from 'effect';
 import * as Devices from '#src/Devices.ts';
+import type * as Haptics from '#src/Haptics.ts';
 
 /**
- * Pads as the Gamepad API reaches them: a standard pad read by the standard layout, a DualSense or an Xbox pad alike, and any other device, a wheel or a flight stick, through a layout given as data that says where its buttons and axes are. A device of no layout known is left out rather than guessed at.
+ * Pads as the Gamepad API reaches them: a standard pad read by the standard layout, a DualSense or an Xbox pad alike, and any other device, a wheel or a flight stick, through a layout given as data that says where its buttons and axes are. A device of no layout known is left out rather than guessed at. A pad with motors rumbles; its triggers are the Gamepad API's to leave alone, as it has nothing that makes them push back.
  */
 
 /** A gamepad, as much of one as is read: what `navigator.getGamepads()` gives. */
@@ -12,6 +13,8 @@ export interface Gamepad {
   readonly connected: boolean;
   readonly buttons: ReadonlyArray<{ readonly value: number }>;
   readonly axes: ReadonlyArray<number>;
+  /** Its motors, where it has them and the browser reaches them. */
+  readonly vibrationActuator?: Pick<GamepadHapticActuator, 'playEffect'> | null | undefined;
 }
 
 /** Where a device of no standard layout has its buttons and axes, by index; it is the layout of every device whose id holds `id`. */
@@ -60,22 +63,24 @@ const modelOf = (
       });
 };
 
+type Models = ReadonlyArray<{ readonly vendorId: number; readonly productId: number }>;
+
+/** Whether `gamepad` is of one of `models`. */
+const isOf = (gamepad: Gamepad, models: Models) =>
+  Option.exists(modelOf(gamepad.id), (model) =>
+    models.some(
+      ({ vendorId, productId }) => vendorId === model.vendorId && productId === model.productId,
+    ),
+  );
+
 /** The pads among `gamepads`, read by the standard layout or one of `layouts`; empty slots, pads gone, pads of no layout known, and pads of `elsewhere`, read some other way such as through WebHID, are left out. */
 export const read = (
   gamepads: ReadonlyArray<Gamepad | null>,
   layouts: ReadonlyArray<Layout> = [],
-  elsewhere: ReadonlyArray<{ readonly vendorId: number; readonly productId: number }> = [],
+  elsewhere: Models = [],
 ): ReadonlyArray<Devices.Pad> =>
   gamepads.flatMap((gamepad) => {
-    if (gamepad === null || !gamepad.connected) {
-      return [];
-    }
-    const read = Option.exists(modelOf(gamepad.id), (model) =>
-      elsewhere.some(
-        ({ vendorId, productId }) => vendorId === model.vendorId && productId === model.productId,
-      ),
-    );
-    if (read) {
+    if (gamepad === null || !gamepad.connected || isOf(gamepad, elsewhere)) {
       return [];
     }
     const layout =
@@ -86,8 +91,48 @@ export const read = (
 /** The pads connected now, read off the browser; none where it has no Gamepad API. */
 export const poll = (
   layouts: ReadonlyArray<Layout> = [],
-  elsewhere: ReadonlyArray<{ readonly vendorId: number; readonly productId: number }> = [],
+  elsewhere: Models = [],
 ): ReadonlyArray<Devices.Pad> =>
   typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function'
     ? []
     : read(navigator.getGamepads(), layouts, elsewhere);
+
+/** The pads among `gamepads` that rumble, felt through their motors; pads of `elsewhere`, felt some other way such as through WebHID, are left out. */
+export const felt = (
+  gamepads: ReadonlyArray<Gamepad | null>,
+  elsewhere: Models = [],
+): ReadonlyArray<Haptics.Felt> =>
+  gamepads.flatMap((gamepad) => {
+    const actuator = gamepad?.vibrationActuator;
+    if (
+      gamepad === null ||
+      !gamepad.connected ||
+      actuator === null ||
+      actuator === undefined ||
+      isOf(gamepad, elsewhere)
+    ) {
+      return [];
+    }
+    return [
+      {
+        rumble: ({ strong, weak, seconds }) =>
+          Effect.ignore(
+            Effect.tryPromise(() =>
+              actuator.playEffect('dual-rumble', {
+                duration: seconds * 1000,
+                strongMagnitude: strong,
+                weakMagnitude: weak,
+                startDelay: 0,
+              }),
+            ),
+          ),
+        triggers: () => Effect.void,
+      },
+    ];
+  });
+
+/** The pads connected now that rumble, read off the browser; none where it has no Gamepad API. */
+export const feltNow = (elsewhere: Models = []): ReadonlyArray<Haptics.Felt> =>
+  typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function'
+    ? []
+    : felt(navigator.getGamepads(), elsewhere);

@@ -1,9 +1,10 @@
 /// <reference types="w3c-web-hid" />
 import { Data, Effect, Option, type Scope } from 'effect';
 import type * as Devices from '#src/Devices.ts';
+import * as Haptics from '#src/Haptics.ts';
 
 /**
- * Devices as WebHID reaches them, for what the Gamepad API does not: a device is read through a driver that knows its reports, into the shapes the engine knows, so a game never meets a device's bytes. WebHID is Chromium's only, and a player gives leave for each device once, in answer to a click; a device given leave before is reached again with no asking.
+ * Devices as WebHID reaches them, for what the Gamepad API does not: a device is read through a driver that knows its reports, into the shapes the engine knows, and felt through reports the driver writes, so a game never meets a device's bytes. WebHID is Chromium's only, and a player gives leave for each device once, in answer to a click; a device given leave before is reached again with no asking.
  */
 
 /** A vendor's device, by the ids it reports itself by. */
@@ -18,11 +19,33 @@ export interface Report {
   readonly data: DataView;
 }
 
-/** What reads a kind of device: which devices it reads, and what a report of one says, if it is one it knows. */
+/** What a device is asked to make felt at one moment, all of it: how hard its motors turn, from 0 to 1, and how its triggers push back. A driver writes all of it in every report, as devices such as the DualSense take it. */
+export interface Output {
+  readonly motors: { readonly strong: number; readonly weak: number };
+  readonly triggers: Haptics.Triggers;
+}
+
+/** Nothing felt: the motors still, and the triggers free. */
+export const still: Output = { motors: { strong: 0, weak: 0 }, triggers: Haptics.freeTriggers };
+
+/** An output report a device takes: its id, and how many bytes it is after the id, where the device says. A browser sends only a report of the length the device says. */
+export interface OutputReport {
+  readonly reportId: number;
+  readonly length: Option.Option<number>;
+}
+
+/** What reads a kind of device and writes to it: which devices it reads, what a report of one says, if it is one it knows, and the report that makes an output felt. */
 export interface Driver {
   readonly name: string;
   readonly devices: ReadonlyArray<Model>;
   readonly read: (report: Report) => Option.Option<Devices.Pad>;
+  /** Feature reports asked of a device once it opens, which some devices take as the sign to say all they can. */
+  readonly features: ReadonlyArray<number>;
+  /** The report that makes `output` felt on a device that takes the output reports `outputs`, the `sent`th sent to it since it opened; none if the driver writes none. */
+  readonly write: (
+    output: Output,
+    device: { readonly outputs: ReadonlyArray<OutputReport>; readonly sent: number },
+  ) => Option.Option<Report>;
 }
 
 export class Refused extends Data.TaggedError('Refused')<{ readonly reason: string }> {}
@@ -30,15 +53,33 @@ export class Refused extends Data.TaggedError('Refused')<{ readonly reason: stri
 /** Whether this browser has WebHID. */
 export const available = (): boolean => typeof navigator !== 'undefined' && 'hid' in navigator;
 
-/** A device connected through its driver: the pad it was last read as, if it has said anything yet. */
+/** A device connected through its driver: the pad it was last read as, if it has said anything yet, and it felt. */
 export interface Connection {
   readonly model: Model;
   readonly pad: () => Option.Option<Devices.Pad>;
+  readonly felt: Haptics.Felt;
 }
 
-/** As much of a device as is read through a driver: its ids, opening and closing it, and the reports it sends, as WebHID's `HIDDevice` gives them. */
-export type Device = Pick<HIDDevice, 'vendorId' | 'productId' | 'opened' | 'open' | 'close'> &
-  EventTarget;
+/** As much of a device as is read and written through a driver: its ids, opening and closing it, the reports it sends and takes, and its feature reports, as WebHID's `HIDDevice` gives them. */
+export type Device = Pick<
+  HIDDevice,
+  'vendorId' | 'productId' | 'opened' | 'open' | 'close' | 'sendReport' | 'receiveFeatureReport'
+> &
+  EventTarget & {
+    readonly collections: ReadonlyArray<{
+      readonly outputReports?:
+        | ReadonlyArray<{
+            readonly reportId?: number | undefined;
+            readonly items?:
+              | ReadonlyArray<{
+                  readonly reportSize?: number | undefined;
+                  readonly reportCount?: number | undefined;
+                }>
+              | undefined;
+          }>
+        | undefined;
+    }>;
+  };
 
 /** The driver of `device` among `drivers`, if one reads it. */
 const driverOf = (drivers: ReadonlyArray<Driver>, device: Device) =>
@@ -50,7 +91,7 @@ const driverOf = (drivers: ReadonlyArray<Driver>, device: Device) =>
     ),
   );
 
-/** Reads `device` through `driver` until the scope closes. */
+/** Reads `device` through `driver`, and makes it felt, until the scope closes. */
 export const connect = (
   device: Device,
   driver: Driver,
@@ -77,6 +118,9 @@ export const connect = (
             await device.open();
           }
           device.addEventListener('inputreport', listener);
+          for (const reportId of driver.features) {
+            await device.receiveFeatureReport(reportId).catch(() => undefined);
+          }
         },
         catch: (cause) =>
           new Refused({
@@ -89,9 +133,67 @@ export const connect = (
           await device.close().catch(() => undefined);
         }),
     );
+    const scope = yield* Effect.scope;
+    const outputs = device.collections.flatMap(({ outputReports }) =>
+      (outputReports ?? []).flatMap(({ reportId, items }): ReadonlyArray<OutputReport> => {
+        const bits = (items ?? []).reduce(
+          (total, { reportSize, reportCount }) => total + (reportSize ?? 0) * (reportCount ?? 0),
+          0,
+        );
+        return reportId === undefined
+          ? []
+          : [{ reportId, length: bits > 0 ? Option.some(Math.ceil(bits / 8)) : Option.none() }];
+      }),
+    );
+    const written = { output: still, sent: 0 };
+    /** Makes `output` felt, as the driver writes it; a report the device does not take is let go. */
+    const write = (output: Output) =>
+      Effect.suspend(() => {
+        written.output = output;
+        return Option.match(driver.write(output, { outputs, sent: written.sent }), {
+          onNone: () => Effect.void,
+          onSome: ({ reportId, data }) => {
+            written.sent += 1;
+            return Effect.ignore(
+              Effect.tryPromise(() =>
+                device.sendReport(
+                  reportId,
+                  Uint8Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)),
+                ),
+              ),
+            );
+          },
+        });
+      });
+    // Left still as it is let go, so nothing goes on rumbling or pushing back once the page is done with it.
+    yield* Effect.addFinalizer(() => write(still));
+    const felt: Haptics.Felt = {
+      // The motors turn until the rumble's time is up, unless something else has turned them since.
+      rumble: ({ strong, weak, seconds }) =>
+        Effect.suspend(() => {
+          const motors = { strong, weak };
+          return write({ ...written.output, motors }).pipe(
+            Effect.andThen(
+              Effect.sleep(`${seconds * 1000} millis`).pipe(
+                Effect.andThen(
+                  Effect.suspend(() =>
+                    written.output.motors === motors
+                      ? write({ ...written.output, motors: still.motors })
+                      : Effect.void,
+                  ),
+                ),
+                Effect.forkIn(scope),
+              ),
+            ),
+            Effect.asVoid,
+          );
+        }),
+      triggers: (triggers) => Effect.suspend(() => write({ ...written.output, triggers })),
+    };
     return {
       model: { vendorId: device.vendorId, productId: device.productId },
       pad: () => latest.pad,
+      felt,
     };
   });
 
