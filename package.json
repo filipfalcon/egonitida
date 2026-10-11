@@ -22,7 +22,7 @@
     "@effect/tsgo": "0.51.1",
     "@effect/vitest": "4.0.0",
     "@lightocean/oxlint-plugin": "*",
-    "@types/node": "26.0.1",
+    "@types/node": "26.6.4",
     "alchemy": "2.0.0-beta.81",
     "effect": "4.0.0",
     "typescript": "7.0.2",
