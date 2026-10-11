@@ -27,3 +27,15 @@ export const of = <Value>(
   encoded: () => component.of(value).encoded(),
   writeInto: (draft) => World.write(draft, entity, component, value),
 });
+
+/** `instance`, a value of an input component, as an input aimed at `entity`: as a client predicting its own player steps its world with the input it sent. */
+export const fromInstance = (
+  entity: World.Entity,
+  instance: Component.Instance<InputComponent>,
+): Input => ({
+  entity,
+  component: instance.component,
+  encoded: instance.encoded,
+  writeInto: (draft) =>
+    instance.writeWith((component, value) => World.write(draft, entity, component, value)),
+});
