@@ -152,6 +152,9 @@ export const make = (
         if (drawing === null) {
           return Effect.fail(new ViewportError({ reason: 'A shot cannot be drawn here.' }));
         }
+        // What shows through where nothing is drawn is the canvas's own background, as the page styles it.
+        drawing.fillStyle = getComputedStyle(canvas).backgroundColor;
+        drawing.fillRect(0, 0, shot.width, shot.height);
         drawing.drawImage(canvas, 0, 0, shot.width, shot.height);
         const url = shot.toDataURL('image/png');
         return Effect.succeed({
