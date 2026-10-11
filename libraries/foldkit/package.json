@@ -13,6 +13,7 @@
     "@effect/platform-browser": "4.0.0",
     "@lightocean/client": "*",
     "@lightocean/core": "*",
+    "@stylexjs/stylex": "0.19.0",
     "effect": "4.0.0",
     "foldkit": "0.167.0",
     "three": "0.186.1"
