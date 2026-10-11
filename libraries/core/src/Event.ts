@@ -7,7 +7,8 @@ import { Schema } from 'effect';
 export interface Event<Tag extends string, Value> {
   readonly _tag: 'Event';
   readonly tag: Tag;
-  readonly schema: Schema.Top;
+  /** Encodes and decodes it with no services, so it can be recorded, replayed, and sent. */
+  readonly schema: Schema.Codec<Value, unknown>;
   /** Carries the value's type; never set. */
   readonly '~value'?: Value;
   /** Whether `event` is one of this kind, checked by its schema. */
@@ -23,10 +24,10 @@ export type Any = Event<string, Tagged>;
 
 export type ValueOf<E> = E extends Event<string, infer Value> ? Value : never;
 
-export const make = <const Tag extends string, const Fields extends Schema.Struct.Fields>(
-  tag: Tag,
-  fields: Fields,
-) => {
+/** Fields that encode and decode on their own, needing no services: what can be recorded. */
+type Fields = Record<string, Schema.Codec<unknown, unknown>>;
+
+export const make = <const Tag extends string, const F extends Fields>(tag: Tag, fields: F) => {
   const schema = Schema.TaggedStruct(tag, fields);
   const event: Event<Tag, typeof schema.Type> = {
     _tag: 'Event',
