@@ -125,7 +125,8 @@ export const steps =
           : Game.step(simulation.game, current, [], [], frozen);
       events.push(...step.events);
       commands.push(...step.commands);
-      return step.world;
+      // As a client that sees every step: what it keeps for itself is stepped too.
+      return Game.stepLocal(simulation.game, step.world, { tick: step.world.tick });
     }, simulation.world);
     return { ...simulation, world, inputs: [], actions: [], events, commands };
   };

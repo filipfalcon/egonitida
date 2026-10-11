@@ -2,14 +2,14 @@ import { Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
-import type * as Game from '#src/Game.ts';
+import * as Game from '#src/Game.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import type * as Transport from '#src/Transport.ts';
 import * as World from '#src/World.ts';
 
 /**
- * A player's side of a session: joins a host, sends it the player's input, and keeps the newest world the host sent. It draws nothing and predicts nothing yet; it is what both are built on.
+ * A player's side of a session: joins a host, sends it the player's input, and keeps the newest world the host sent, with what the client keeps for itself stepped by the game's local systems through every tick the world reached. It draws nothing and predicts nothing yet; it is what both are built on.
  */
 
 export interface Options {
@@ -48,6 +48,9 @@ const encodeValues = (values: ReadonlyArray<Component.Instance>): SentInput['val
       .map((instance) => [instance.component.name, instance.encoded()]),
   );
 
+/** The most ticks a client steps what it keeps for itself through at once. */
+const MAX_LOCAL_STEPS = 5;
+
 /** Joins the host at the other end of `connection`, until the scope closes. */
 export const connect = (
   connection: Transport.Connection,
@@ -63,6 +66,17 @@ export const connect = (
       history: [],
     };
 
+    /**
+     * `world` with what the client keeps for itself stepped through every tick since `since` to the world's own: a snapshot lost on the way is still stepped through. After a long gap, such as on joining, only the last few are, as a host catches up only so far.
+     */
+    const keepUp = (world: World.World, since: number) =>
+      Array.from({ length: Math.min(world.tick - since, MAX_LOCAL_STEPS) }, (_, back) => back)
+        .reverse()
+        .reduce(
+          (current, back) => Game.stepLocal(options.game, current, { tick: world.tick - back }),
+          world,
+        );
+
     // A snapshot older than the world already held arrived out of order, and is of no use.
     const receive = (frame: Transport.Frame) =>
       frame.channel === 'reliable'
@@ -77,8 +91,9 @@ export const connect = (
                 if (world.tick <= state.world.tick) {
                   return Effect.void;
                 }
-                state.world = world;
-                return PubSub.publish(received, world).pipe(Effect.asVoid);
+                const stepped = keepUp(world, state.world.tick);
+                state.world = stepped;
+                return PubSub.publish(received, stepped).pipe(Effect.asVoid);
               }),
           });
 

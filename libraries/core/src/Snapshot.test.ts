@@ -43,6 +43,24 @@ describe('Snapshot', () => {
     expect(World.query(world, Splat).map(([, value]) => value)).toEqual([{ size: 7 }]);
   });
 
+  it('takes what a client keeps on an entity the server no longer holds away with it', () => {
+    const [onRunner] = World.spawn(World.empty({ seed: 0 }), [Splat.of({ size: 1 })]);
+    const gone = World.despawn(server, 0);
+    const world = Option.getOrThrow(Snapshot.apply(onRunner, Snapshot.encode(gone, game), game));
+
+    expect(World.query(world, Splat)).toEqual([]);
+  });
+
+  it('keeps the entities a client spawned for itself, and the count of their ids', () => {
+    const draft = World.draft(World.empty({ seed: 0 }));
+    const own = World.spawnLocalInto(draft, [Splat.of({ size: 3 })]);
+    const client = World.finish(draft);
+    const world = Option.getOrThrow(Snapshot.apply(client, Snapshot.encode(server, game), game));
+
+    expect(World.get(world, own, Splat)).toEqual(Option.some({ size: 3 }));
+    expect(world.nextLocal).toBe(client.nextLocal);
+  });
+
   it('never sends what is private to the server', () => {
     const world = Option.getOrThrow(
       Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game), game),

@@ -461,3 +461,71 @@ describe('commands', () => {
     }),
   );
 });
+
+describe('what a client keeps for itself', () => {
+  /** A footprint left where something stands: each client's own. */
+  const Footprint = Component.make('Footprint', Schema.Struct({ tick: Schema.Int }), {
+    owner: 'simulation',
+    network: 'local',
+  });
+  const tread = System.make({
+    name: 'tread',
+    reads: [Position],
+    writes: [],
+    emits: [],
+    spawns: [Footprint],
+    run: (context) => {
+      for (const _ of context.query(Position)) {
+        context.spawn([Footprint.of({ tick: context.time.tick })]);
+      }
+    },
+  });
+  const walking = Game.make({
+    stepRate: 30,
+    domains: [
+      Domain.make({
+        name: 'Walking',
+        requires: [],
+        components: [Position, Footprint],
+        actions: [],
+        events: [],
+        systems: [],
+        rules: [],
+        localSystems: [tread],
+      }),
+    ],
+  });
+  const walk = Effect.gen(function* () {
+    const host = yield* Host.make({
+      game: walking,
+      world: World.empty({ seed: 1 }),
+      join: (world) => World.spawn(world, [Position.of({ x: 0 })]),
+      leave: World.despawn,
+      mayHold: false,
+    });
+    const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+    yield* host.connect(hostEnd);
+    const client = yield* Client.connect(clientEnd, { game: walking });
+    return { host, client };
+  });
+
+  it.effect(
+    'is stepped by the client at every tick the server reaches, and never by the server',
+    () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* walk;
+
+        yield* advance(200);
+        const mine = yield* client.world;
+        const prints = World.query(mine, Footprint);
+
+        expect(World.query(yield* host.world, Footprint)).toEqual([]);
+        expect(prints.length).toBeGreaterThan(3);
+        expect(prints.every(([entity]) => World.isLocal(entity))).toBe(true);
+        // One print a tick, ticks in order, none twice.
+        const ticks = prints.map(([, { tick }]) => tick).toSorted((a, b) => a - b);
+        expect(new Set(ticks).size).toBe(ticks.length);
+        expect(ticks.at(-1)).toBe(mine.tick);
+      }),
+  );
+});

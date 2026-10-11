@@ -1195,6 +1195,15 @@ describe('local systems', () => {
     expect(Game.stepLocal(bleeding, world, { tick: 5 }).random).toBe(world.random);
   });
 
+  it('are stepped in a story too, as by a client that sees every step', () => {
+    Story.story(
+      bleeding,
+      Story.spawn('runner', runner(4, 60)),
+      Story.steps(3),
+      Story.world((after) => expect(drops(after)).toHaveLength(3)),
+    );
+  });
+
   it('are in the map of a game’s changes, as what changes what each client keeps', () => {
     expect(Game.changes(bleeding).components.get('Drop')).toEqual({
       readBy: [],
