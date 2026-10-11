@@ -22,6 +22,7 @@
   "devDependencies": {
     "@lightocean/vite-plugin": "*",
     "@stylexjs/unplugin": "0.19.0",
-    "@types/three": "0.186.0"
+    "@types/three": "0.186.0",
+    "alchemy": "2.0.0-beta.81"
   }
 }
