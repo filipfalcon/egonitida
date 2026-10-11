@@ -181,6 +181,27 @@ describe('the editor', () => {
     play: { _tag: 'Playing', opening: 'the document', world: 'Joined', steps, maybePast },
   });
 
+  it('plays again after a reload, whichever comes first of the world playing joined and the stage finding it is not', () => {
+    // A Model restored after a reload says the world playing is joined, before it is joined again.
+    const restored: Model = {
+      ...playingWith(),
+      maybeError: Option.some('The world Played is not joined.'),
+    };
+
+    for (const messages of [[Message.JoinedPlay()], [Message.LeftPlay(), Message.JoinedPlay()]]) {
+      Story.story(
+        update,
+        Story.given(restored),
+        ...messages.map((message) => Story.message(message)),
+        Story.model((model) => {
+          expect(model.play).toMatchObject({ _tag: 'Playing', world: 'Joined' });
+          // What went wrong while it was not joined is past.
+          expect(model.maybeError).toEqual(Option.none());
+        }),
+      );
+    }
+  });
+
   it('edits nothing while the document plays', () => {
     const playing = playingWith();
     for (const edit of [

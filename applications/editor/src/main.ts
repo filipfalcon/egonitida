@@ -421,8 +421,14 @@ export const update = (model: Model, message: Message) =>
       }),
     }),
     FailedOpenPlay: ({ reason }) => ({ model: failed(model, reason) }),
+    // What went wrong while the world playing was not joined is past.
     JoinedPlay: () => ({
-      model: whilePlaying(model, (playing) => ({ ...playing, world: 'Joined' })),
+      model: modifyFields(
+        whilePlaying(model, (playing) => ({ ...playing, world: 'Joined' })),
+        {
+          maybeError: () => Option.none(),
+        },
+      ),
     }),
     LeftPlay: () => ({
       model: whilePlaying(model, (playing) => ({ ...playing, world: 'Opening' })),
