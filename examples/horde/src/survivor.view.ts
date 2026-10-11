@@ -1,4 +1,4 @@
-import { Haptics, View } from '@lightocean/client';
+import { Haptics, Lighting, View } from '@lightocean/client';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
@@ -66,4 +66,25 @@ export const felt = View.on(Survivor.Life, (life, frame, survivor) =>
   }),
 );
 
-export const views = [survivors, felt];
+/** The light of a dead survivor's player: a dim red. */
+export const DEAD_LIGHT: Lighting.Colour = { red: 0.2, green: 0, blue: 0 };
+
+/** What a survivor's player's lights show: how much health they have left, green while whole and redder as it runs out, and a dim red once they are dead. */
+export const lit = View.on(Survivor.Life, (life, _frame, survivor) =>
+  Effect.gen(function* () {
+    const lighting = yield* Lighting.Lighting;
+    if (life._tag === 'Dead') {
+      yield* lighting.colour(survivor, DEAD_LIGHT);
+      return;
+    }
+    const left = life.health / Survivor.HEALTH;
+    yield* lighting.colour(survivor, { red: 1 - left, green: left, blue: 0 });
+  }),
+);
+
+/** Every view of survivors, with what they need: haptics and lighting for what their player feels and sees. */
+export const views: ReadonlyArray<View.View<Haptics.Haptics | Lighting.Lighting>> = [
+  survivors,
+  felt,
+  lit,
+];

@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Haptics, Scene } from '@lightocean/client';
+import { Haptics, Lighting, Scene } from '@lightocean/client';
 import { Story, World } from '@lightocean/core';
 import { Effect } from 'effect';
 import * as Body from '#src/body.ts';
@@ -28,28 +28,49 @@ const recording = (felt: Array<Felt>): Haptics.Haptics['Service'] => ({
     }),
 });
 
+/** Lighting that keeps the colours it is asked to light in `lit`, with whose they are. */
+const lighting = (
+  lit: Array<{ readonly entity: World.Entity; readonly colour: Lighting.Colour }>,
+): Lighting.Lighting['Service'] => ({
+  colour: (entity, colour) =>
+    Effect.sync(() => {
+      lit.push({ entity, colour });
+    }),
+});
+
+/** A survivor with twenty health, standing; then bitten for ten; then bitten for the last ten: the worlds of each. */
+const bitten = () => {
+  const [arena, survivor] = World.spawn(World.empty({ seed: 1 }), [
+    Body.Position.of({ x: 0, z: 0 }),
+    Survivor.Life.of({ _tag: 'Alive', health: 20, since: 0 }),
+    Survivor.Tally.of({ kills: 0 }),
+    Survivor.Stick.of({ x: 0, z: 0, aim: 0 }),
+  ]);
+  const standing = Story.story(Game.game, Story.given(arena, { survivor }));
+  const bite = (told: Story.Simulation) =>
+    Story.step()(Story.happen(Survivor.Bitten, { survivor, damage: 10 })(told));
+  const hurt = bite(standing);
+  return { survivor, worlds: [standing, hurt, bite(hurt)].map(({ world }) => world) };
+};
+
+/** Shows each of `worlds` in turn, through the survivors' views. */
+const showAll = (worlds: ReadonlyArray<World.World>) =>
+  Effect.gen(function* () {
+    const scene = yield* Scene.make(SurvivorView.views);
+    for (const world of worlds) {
+      yield* scene.show(world);
+      yield* Effect.yieldNow;
+    }
+  });
+
 it.effect(
   'makes a survivor feel a bite, the bite that kills harder, and their gun while they live',
   () => {
     const felt: Array<Felt> = [];
     return Effect.gen(function* () {
-      const [arena, survivor] = World.spawn(World.empty({ seed: 1 }), [
-        Body.Position.of({ x: 0, z: 0 }),
-        Survivor.Life.of({ _tag: 'Alive', health: 20, since: 0 }),
-        Survivor.Tally.of({ kills: 0 }),
-        Survivor.Stick.of({ x: 0, z: 0, aim: 0 }),
-      ]);
-      const standing = Story.story(Game.game, Story.given(arena, { survivor }));
-      const bite = (told: Story.Simulation) =>
-        Story.step()(Story.happen(Survivor.Bitten, { survivor, damage: 10 })(told));
-      const bitten = bite(standing);
-      const killed = bite(bitten);
-      const scene = yield* Scene.make(SurvivorView.views);
+      const { survivor, worlds } = bitten();
 
-      for (const told of [standing, bitten, killed]) {
-        yield* scene.show(told.world);
-        yield* Effect.yieldNow;
-      }
+      yield* showAll(worlds);
 
       expect(felt).toEqual([
         { _tag: 'Triggers', entity: survivor, triggers: SurvivorView.GUN },
@@ -58,6 +79,30 @@ it.effect(
         { _tag: 'Rumble', entity: survivor, rumble: SurvivorView.DEATH },
         { _tag: 'Triggers', entity: survivor, triggers: Haptics.freeTriggers },
       ]);
-    }).pipe(Effect.provideService(Haptics.Haptics, recording(felt)));
+    }).pipe(
+      Effect.provideService(Haptics.Haptics, recording(felt)),
+      Effect.provideService(Lighting.Lighting, lighting([])),
+    );
+  },
+);
+
+it.effect(
+  "lights a survivor's player green while whole, redder as they bleed, and dim once dead",
+  () => {
+    const lit: Array<{ readonly entity: World.Entity; readonly colour: Lighting.Colour }> = [];
+    return Effect.gen(function* () {
+      const { survivor, worlds } = bitten();
+
+      yield* showAll(worlds);
+
+      expect(lit).toEqual([
+        { entity: survivor, colour: { red: 0.8, green: 0.2, blue: 0 } },
+        { entity: survivor, colour: { red: 0.9, green: 0.1, blue: 0 } },
+        { entity: survivor, colour: SurvivorView.DEAD_LIGHT },
+      ]);
+    }).pipe(
+      Effect.provideService(Haptics.Haptics, recording([])),
+      Effect.provideService(Lighting.Lighting, lighting(lit)),
+    );
   },
 );

@@ -1,5 +1,6 @@
 import { BrowserWorker } from '@effect/platform-browser';
 import {
+  Chroma,
   type Devices,
   Drawing,
   DualSense,
@@ -7,6 +8,7 @@ import {
   Haptics,
   Hid,
   KeyboardAndMouse,
+  Lighting,
   Tab,
   View,
   Viewport,
@@ -14,6 +16,7 @@ import {
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page, Rewind } from '@lightocean/devtools';
 import { Effect, Option, type Scope } from 'effect';
+import { FetchHttpClient } from 'effect/http';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';
 import * as HordeControls from '#src/controls.ts';
@@ -22,7 +25,7 @@ import * as HordeView from '#src/horde.view.ts';
 import * as Survivor from '#src/survivor.ts';
 import * as SurvivorView from '#src/survivor.view.ts';
 
-// The page: joins the local server in a worker as a survivor, sends what the player does with a pad, or the keyboard and the mouse, draws the arena through the game's views at every frame the display shows, and makes the player feel what happens to their survivor through their pads. In development, keys drive the rewind beside the host.
+// The page: joins the local server in a worker as a survivor, sends what the player does with a pad, or the keyboard and the mouse, draws the arena through the game's views at every frame the display shows, makes the player feel what happens to their survivor through their pads, and lights their pads and their Razer devices from it. In development, keys drive the rewind beside the host.
 
 /** What each key asks of the rewind beside the host, in development: to hold time, to step back or forth, to play on from the tick shown, or to go live. */
 type Asked =
@@ -97,9 +100,18 @@ const main = Effect.gen(function* () {
       ...Gamepads.feltNow(hid.connections.map(({ model }) => model)),
     ],
   });
-  const views = yield* View.make([...SurvivorView.views, ...HordeView.views]).pipe(
-    Effect.provideService(Haptics.Haptics, haptics),
-  );
+  // Their lights too: a pad's through WebHID, and Razer's devices through Chroma once the player asks for it at C, as asking a machine with no Razer software for it fails aloud.
+  const chroma = { lit: new Array<Lighting.Lit>() };
+  const lighting = Lighting.make({
+    player: client.entity,
+    lit: () => [...hid.connections.map(({ lit }) => lit), ...chroma.lit],
+  });
+  const felt = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.provideService(Haptics.Haptics, haptics),
+      Effect.provideService(Lighting.Lighting, lighting),
+    );
+  const views = yield* felt(View.make([...SurvivorView.views, ...HordeView.views]));
   viewport.scene.add(views.root);
   // What a key starts runs within the page's scope, so a device connected at it stays connected while the page is open.
   const run = Effect.runForkWith(yield* Effect.context<Scope.Scope>());
@@ -112,7 +124,30 @@ const main = Effect.gen(function* () {
               hid.connections.push(...connected);
             }),
           ),
+          Effect.andThen(lighting.again),
           Effect.catch(({ reason }) => Effect.logWarning(reason)),
+        ),
+      );
+    }
+  });
+  const app: Chroma.App = {
+    title: 'Horde',
+    description: 'Survive the horde, lit by how much health is left.',
+    author: { name: 'LightOcean', contact: 'https://github.com/filipfalcon/lightocean' },
+    category: 'game',
+  };
+  yield* listen('keydown', (event) => {
+    if (event.code === 'KeyC' && chroma.lit.length === 0) {
+      run(
+        Chroma.connect(app).pipe(
+          Effect.tap((lit) =>
+            Effect.sync(() => {
+              chroma.lit.push(lit);
+            }),
+          ),
+          Effect.andThen(lighting.again),
+          Effect.catch(({ reason }) => Effect.logWarning(reason)),
+          Effect.provide(FetchHttpClient.layer),
         ),
       );
     }
@@ -204,7 +239,7 @@ const main = Effect.gen(function* () {
           if (now.restarted && !time.paused) {
             yield* client.act(Survivor.ChoseRestart, {});
           }
-          yield* views.frame(frame).pipe(Effect.provideService(Haptics.Haptics, haptics));
+          yield* felt(views.frame(frame));
           hud.textContent = Option.match(
             Option.all({
               life: frame.get(client.entity, Survivor.Life),
@@ -231,6 +266,7 @@ const main = Effect.gen(function* () {
                   ...(Hid.available() && hid.connections.length === 0
                     ? ['H connects a DualSense through WebHID']
                     : []),
+                  ...(chroma.lit.length === 0 ? ['C lights Razer devices through Chroma'] : []),
                 ].join('\n'),
             },
           );
