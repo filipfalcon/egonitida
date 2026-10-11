@@ -1,5 +1,6 @@
 import { type Event, Game, type Host } from '@lightocean/core';
 import { Effect, Option, Schema, type Scope, Stream } from 'effect';
+import * as Fingerprint from '#src/Fingerprint.ts';
 
 /**
  * A game as it was played on a host: the world as it was when recording began, and everything that changed it after, in order. Everything else follows from them, since a step is a function of the world and what went into it; so a recording can be replayed, checked for determinism, rewound, and turned into a test.
@@ -14,7 +15,7 @@ const Input = Schema.Struct({
   value: Schema.Unknown,
 });
 
-/** One thing that changed the world: a client joining or leaving, between steps, or a step taken, with the input that reached it and the actions the rules took in it, as their events encode them. */
+/** One thing that changed the world: a client joining or leaving, between steps, or a step taken, with the input that reached it, the actions the rules took in it, as their events encode them, and the fingerprint of the world it led to, which a replay must come to. */
 export const Entry = Schema.Union([
   Schema.TaggedStruct('Joined', { entity: Schema.Int }),
   Schema.TaggedStruct('Left', { entity: Schema.Int }),
@@ -22,6 +23,7 @@ export const Entry = Schema.Union([
     tick: Schema.Int,
     inputs: Schema.Array(Input),
     actions: Schema.Array(Schema.Unknown),
+    fingerprint: Fingerprint.Fingerprint,
   }),
 ]);
 export type Entry = typeof Entry.Type;
@@ -58,22 +60,24 @@ const encoderOf = (game: Game.Game) => {
     });
 };
 
-const entryOf = (
-  encodeAction: (action: Event.Tagged) => unknown,
-  happening: Host.Happening,
-): Entry =>
-  happening._tag === 'Stepped'
-    ? {
-        _tag: 'Stepped',
-        tick: happening.world.tick,
-        inputs: happening.inputs.map((input) => ({
-          entity: input.entity,
-          component: input.component.name,
-          value: input.encoded(),
-        })),
-        actions: happening.actions.map(encodeAction),
-      }
-    : happening;
+/** What `game` records of each thing that happens to a host's world. */
+export const entryOf = (game: Game.Game): ((happening: Host.Happening) => Entry) => {
+  const encodeAction = encoderOf(game);
+  return (happening) =>
+    happening._tag === 'Stepped'
+      ? {
+          _tag: 'Stepped',
+          tick: happening.world.tick,
+          inputs: happening.inputs.map((input) => ({
+            entity: input.entity,
+            component: input.component.name,
+            value: input.encoded(),
+          })),
+          actions: happening.actions.map(encodeAction),
+          fingerprint: Fingerprint.of(game, happening.world),
+        }
+      : happening;
+};
 
 /** Records `game` as `host` plays it, from now until the scope closes. */
 export const record = (
@@ -85,11 +89,11 @@ export const record = (
     // A world its own game cannot encode is a bug in the engine, not something a recording can go on from.
     const first = yield* Schema.encodeEffect(Game.schema(game))(watching.world).pipe(Effect.orDie);
     const entries: Array<Entry> = [];
-    const encodeAction = encoderOf(game);
+    const toEntry = entryOf(game);
     yield* watching.happenings.pipe(
       Stream.runForEach((happening) =>
         Effect.sync(() => {
-          entries.push(entryOf(encodeAction, happening));
+          entries.push(toEntry(happening));
         }),
       ),
       Effect.forkScoped,

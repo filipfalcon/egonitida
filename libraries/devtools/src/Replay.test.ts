@@ -1,0 +1,81 @@
+import { describe, expect, it } from '@effect/vitest';
+import { World } from '@lightocean/core';
+import { Effect, Fiber, Option } from 'effect';
+import * as Fixtures from '#src/fixtures.ts';
+import * as Replay from '#src/Replay.ts';
+
+describe('replaying a recording', () => {
+  it.effect('comes to the worlds the host stepped through', () =>
+    Effect.gen(function* () {
+      const { recording } = yield* Fixtures.recorded();
+
+      const divergence = yield* Replay.check(Fixtures.setup(), recording);
+
+      expect(divergence).toEqual(Option.none());
+    }),
+  );
+
+  it.effect(
+    'tells the first step and component where a game that does not replay comes apart',
+    () =>
+      Effect.gen(function* () {
+        const drifting = Fixtures.drifting();
+        const { recording } = yield* Fixtures.recorded(drifting);
+
+        const divergence = yield* Replay.check(Fixtures.setup(drifting), recording);
+
+        expect(divergence).toEqual(
+          Option.some({ tick: 4, where: { _tag: 'Component', name: 'Position' } }),
+        );
+      }),
+  );
+
+  it.effect('tells a join that comes to another entity than it did', () =>
+    Effect.gen(function* () {
+      const { recording, entity } = yield* Fixtures.recorded();
+      const crowded = {
+        ...Fixtures.setup(),
+        join: (world: World.World) => Fixtures.join(World.spawn(world, [])[0]),
+      };
+
+      const divergence = yield* Replay.check(crowded, recording);
+
+      expect(divergence).toEqual(
+        Option.some({ tick: 3, where: { _tag: 'Joined', recorded: entity, replayed: entity + 1 } }),
+      );
+    }),
+  );
+});
+
+describe('replaying beside a host', () => {
+  it.effect('tells nothing while the game replays as it is played', () =>
+    Effect.gen(function* () {
+      const hosted = yield* Fixtures.host();
+      const watching = yield* Replay.alongside(hosted, Fixtures.setup()).pipe(Effect.forkChild);
+
+      yield* Fixtures.visit(hosted);
+      yield* Fixtures.advance(100);
+
+      expect(watching.pollUnsafe()).toBeUndefined();
+    }),
+  );
+
+  it.effect('tells where a game that does not replay comes apart, as it does', () =>
+    Effect.gen(function* () {
+      const drifting = Fixtures.drifting();
+      const hosted = yield* Fixtures.host(drifting);
+      yield* Fixtures.advance(100);
+      const watching = yield* Replay.alongside(hosted, Fixtures.setup(drifting)).pipe(
+        Effect.forkChild,
+      );
+      yield* Effect.yieldNow;
+
+      yield* Fixtures.visit(hosted, drifting);
+
+      expect(yield* Fiber.join(watching)).toEqual({
+        tick: 4,
+        where: { _tag: 'Component', name: 'Position' },
+      });
+    }),
+  );
+});
