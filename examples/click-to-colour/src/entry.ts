@@ -1,5 +1,15 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Clicking, Drawing, Mirror, Tab, View, Viewport } from '@lightocean/client';
+import {
+  Clicking,
+  Devices,
+  Drawing,
+  Gamepads,
+  Mirror,
+  Navigation,
+  Tab,
+  View,
+  Viewport,
+} from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
 import { Bridge, Page } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
@@ -7,7 +17,7 @@ import * as Three from 'three/webgpu';
 import * as Colour from '#src/colour.ts';
 import * as ColourView from '#src/colour.view.ts';
 
-// The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked; the cubes are mirrored as buttons for the keyboard and a screen reader. In development, it shows an agent what it draws.
+// The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked; the cubes are mirrored as buttons for the keyboard, a screen reader, and a pad. In development, it shows an agent what it draws.
 /** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the world kept for the tab. */
 const host = Tab.id('cubes');
 
@@ -37,6 +47,8 @@ const main = Effect.gen(function* () {
     scene: viewport.scene,
     client,
   });
+  // A pad reaches the cubes through the mirror: the directional pad moves between them, South paints, East lets go.
+  const navigation = Navigation.make(document.body);
   // In development, an agent asking through the development server can see what this page draws.
   if (import.meta.env.DEV) {
     yield* Option.match(Bridge.vite, {
@@ -51,7 +63,14 @@ const main = Effect.gen(function* () {
   yield* viewport.loop((seconds) =>
     Option.match(drawing.frame(seconds), {
       onNone: () => Effect.void,
-      onSome: (frame) => Effect.andThen(views.frame(frame), mirror.frame(frame)),
+      onSome: (frame) =>
+        Effect.andThen(views.frame(frame), mirror.frame(frame)).pipe(
+          Effect.tap(() =>
+            Effect.sync(() =>
+              navigation.frame({ ...Devices.idle, pads: Gamepads.poll() }, seconds),
+            ),
+          ),
+        ),
     }),
   );
   return yield* Effect.never;
