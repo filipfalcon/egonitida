@@ -1,3 +1,4 @@
+/* The document itself, which StyleX cannot reach: the page fills the window, with the playground's ground and type. Everything the playground draws is styled with StyleX beside its view, and StyleX adds its rules to this sheet when it builds. */
 html,
 body,
 #root {
@@ -9,42 +10,4 @@ body {
   background: #0b1020;
   color: #e8ecf4;
   font-family: system-ui, sans-serif;
-}
-
-.playground {
-  position: relative;
-  height: 100%;
-}
-
-.viewport {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.overlay {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.overlay button {
-  padding: 8px 14px;
-  border: 0;
-  border-radius: 6px;
-  background: #4f8cff;
-  color: white;
-  font: inherit;
-  cursor: pointer;
-}
-
-.overlay p {
-  margin: 0;
-}
-
-.error {
-  color: #ff6b6b;
 }

@@ -17,6 +17,7 @@
     "@lightocean/core": "*",
     "@lightocean/devtools": "*",
     "@lightocean/foldkit": "*",
+    "@stylexjs/stylex": "0.19.0",
     "effect": "4.0.0",
     "foldkit": "0.167.0",
     "three": "0.186.1"
@@ -26,6 +27,7 @@
     "@foldkit/ui": "0.167.0",
     "@foldkit/vite-plugin": "0.27.0",
     "@lightocean/vite-plugin": "*",
+    "@stylexjs/unplugin": "0.19.0",
     "@types/three": "0.186.0"
   }
 }

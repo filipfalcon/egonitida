@@ -1,5 +1,9 @@
+import { Styled } from '@lightocean/foldkit';
 import type { Inspector } from '@lightocean/reflection';
+import * as stylex from '@stylexjs/stylex';
 import type { Html, HtmlBuilder } from 'foldkit/html';
+// Relative, as StyleX finds variables by the path of the module that defines them.
+import { colours } from './tokens.stylex.ts';
 
 /**
  * The Details panel: a form drawn from a schema's inspector properties. It knows nothing about entities; it draws whatever `properties` describe and reports each edit as a candidate value for the update to check against the schema.
@@ -21,6 +25,30 @@ export const withComponent = (
 
 const axes = ['X', 'Y', 'Z'];
 
+/** A property of a form: its label above its field, which fills the panel. */
+export const form = stylex.create({
+  property: { display: 'grid', gap: 4, marginBottom: 12 },
+  label: { color: colours.muted },
+  field: {
+    boxSizing: 'border-box',
+    width: '100%',
+    minWidth: 0,
+    paddingBlock: 5,
+    paddingInline: 6,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: colours.controlHover,
+    borderRadius: 4,
+    backgroundColor: colours.page,
+    color: 'inherit',
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+    lineHeight: 'inherit',
+  },
+  colour: { height: 32, padding: 2 },
+  vector: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 },
+});
+
 const numberAttributes = <Message>(h: HtmlBuilder<Message>, widget: { readonly step: number }) => [
   h.Type('number'),
   h.Step(String(widget.step)),
@@ -35,10 +63,17 @@ const viewWidget = <Message>(
 ): Html => {
   switch (widget._tag) {
     case 'Text':
-      return h.input([h.Id(id), h.Type('text'), h.Value(String(value)), h.OnInput(change)]);
+      return h.input([
+        h.Id(id),
+        ...Styled.attributes(h, form.field),
+        h.Type('text'),
+        h.Value(String(value)),
+        h.OnInput(change),
+      ]);
     case 'Number':
       return h.input([
         h.Id(id),
+        ...Styled.attributes(h, form.field),
         ...numberAttributes(h, widget),
         ...(widget.min._tag === 'Some' ? [h.Min(String(widget.min.value))] : []),
         ...(widget.max._tag === 'Some' ? [h.Max(String(widget.max.value))] : []),
@@ -48,6 +83,7 @@ const viewWidget = <Message>(
     case 'Color':
       return h.input([
         h.Id(id),
+        ...Styled.attributes(h, form.field, form.colour),
         h.Type('color'),
         h.Value(toHex(Number(value))),
         h.OnInput((hex) => change(fromHex(hex))),
@@ -55,10 +91,11 @@ const viewWidget = <Message>(
     case 'Vector3': {
       const vector = Array.isArray(value) ? value.map(Number) : [0, 0, 0];
       return h.div(
-        [h.Class('vector')],
+        Styled.attributes(h, form.vector),
         vector.map((component, index) =>
           h.input([
             ...(index === 0 ? [h.Id(id)] : []),
+            ...Styled.attributes(h, form.field),
             h.AriaLabel(axes[index] ?? ''),
             ...numberAttributes(h, widget),
             h.Value(String(component)),
@@ -69,7 +106,7 @@ const viewWidget = <Message>(
     }
     case 'Choice':
       return h.select(
-        [h.Id(id), h.OnChange(change)],
+        [h.Id(id), ...Styled.attributes(h, form.field), h.OnChange(change)],
         widget.options.map((option) =>
           h.option([h.Value(option), h.Selected(option === value)], [option]),
         ),
@@ -86,17 +123,14 @@ export const viewDetails = <Message>(
   idPrefix = 'property',
 ): Html =>
   h.div(
-    [h.Class('details')],
+    [],
     properties.map((property) => {
       const id = `${idPrefix}-${property.key}`;
-      return h.div(
-        [h.Class('property')],
-        [
-          h.label([h.For(id)], [property.title]),
-          viewWidget(h, id, property.widget, value[property.key], (candidate) =>
-            change(property.key, candidate),
-          ),
-        ],
-      );
+      return h.div(Styled.attributes(h, form.property), [
+        h.label([h.For(id), ...Styled.attributes(h, form.label)], [property.title]),
+        viewWidget(h, id, property.widget, value[property.key], (candidate) =>
+          change(property.key, candidate),
+        ),
+      ]);
     }),
   );

@@ -1,5 +1,6 @@
 import { foldkit } from '@foldkit/vite-plugin';
 import { Devtools } from '@lightocean/vite-plugin';
+import stylex from '@stylexjs/unplugin';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vite-plus';
 
@@ -14,7 +15,13 @@ const pinAlchemyDevPort = (port: number): Plugin => ({
 
 export default defineConfig({
   // In development, the server is also the way to the document's host for the tools on this machine, such as an MCP server.
-  plugins: [...foldkit(), Devtools.plugin(), pinAlchemyDevPort(5291)],
+  plugins: [
+    // StyleX compiles the editor's styles; tests take its Rolldown entry, which compiles them the same without the development server's timer that would keep a test run from ending.
+    process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),
+    ...foldkit(),
+    Devtools.plugin(),
+    pinAlchemyDevPort(5291),
+  ],
   optimizeDeps: {
     entries: ['src/entry.ts'],
     // The plugin's per-module transform injects the foldkit/brand import, so the optimizer's crawl never sees it; left undeclared, a cold cache re-optimizes and reloads the page on first load.
