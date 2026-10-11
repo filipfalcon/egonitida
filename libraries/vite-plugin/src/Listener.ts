@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 import { join } from 'node:path';
 import { Relay } from '@lightocean/devtools';
@@ -44,6 +44,36 @@ const toolOn = (socket: WebSocket): Relay.Peer<Relay.FromRelay> => ({
       Effect.flatMap((encoded) => Effect.sync(() => socket.send(JSON.stringify(encoded)))),
     ),
 });
+
+/** Whether the process `pid` still runs. */
+const running = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // A process of another user's runs, though this one may not signal it.
+    return error instanceof Error && 'code' in error && error.code === 'EPERM';
+  }
+};
+
+const recordFromJson = Schema.decodeUnknownOption(Schema.fromJsonString(Relay.Record));
+
+/** Takes away the records in `directory` of servers that are gone, such as one stopped before it could take its own away. */
+const clearGone = (directory: string) =>
+  Effect.promise(async () => {
+    const names = await readdir(directory).catch(() => []);
+    await Promise.all(
+      names
+        .filter((name) => name.endsWith('.json'))
+        .map(async (name) => {
+          const path = join(directory, name);
+          const record = recordFromJson(await readFile(path, 'utf8').catch(() => ''));
+          if (Option.isSome(record) && !running(record.value.pid)) {
+            await rm(path, { force: true });
+          }
+        }),
+    );
+  });
 
 /** Opens a server on a loopback port the system chooses, once it listens. */
 const open = (token: string) =>
@@ -92,6 +122,7 @@ export const listen = (
       socket.on('close', () => run(relay.toolGone(tool)));
     });
 
+    yield* clearGone(options.directory);
     const record = join(options.directory, `${process.pid}-${address.port}.json`);
     const kept: Relay.Record = { url, token, pid: process.pid };
     yield* Effect.acquireRelease(

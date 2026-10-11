@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from '@effect/vitest';
@@ -69,6 +69,22 @@ describe('a relay listening for tools', () => {
       expect(yield* ask(listening.url, { _tag: 'Hosts', id: 1 })).toBe('refused with 401');
       expect(yield* ask(`${listening.url}?token=wrong`, { _tag: 'Hosts', id: 1 })).toBe(
         'refused with 401',
+      );
+    }),
+  );
+
+  it.live('takes away the records of servers that are gone, as it starts', () =>
+    Effect.gen(function* () {
+      const kept = yield* directory;
+      const record = (pid: number) => JSON.stringify({ url: 'ws://127.0.0.1:1/', token: 't', pid });
+      yield* Effect.promise(() => writeFile(join(kept, 'gone.json'), record(2 ** 22 + 7)));
+      yield* Effect.promise(() => writeFile(join(kept, 'running.json'), record(process.pid)));
+
+      const listening = yield* Listener.listen(yield* Relay.make, { directory: kept });
+      const left = yield* Effect.promise(() => readdir(kept));
+
+      expect(left.toSorted()).toEqual(
+        [listening.record.slice(kept.length + 1), 'running.json'].toSorted(),
       );
     }),
   );
