@@ -36,9 +36,9 @@ export const Stick = Component.make('Stick', Schema.Struct({ move: Schema.Finite
 export const AskedToHeal = Action.make('AskedToHeal', { amount: Schema.Int });
 
 /** The game, moving bodies by `move`, which is handed the step's context and each body's stick. */
-const gameMoving = (move: (stick: { readonly move: number }) => number) =>
+const gameMoving = (move: (stick: { readonly move: number }) => number, stepRate = 30) =>
   Game.make({
-    stepRate: 30,
+    stepRate,
     domains: [
       Domain.make({
         name: 'Test',
@@ -74,6 +74,12 @@ const gameMoving = (move: (stick: { readonly move: number }) => number) =>
 
 /** The game as it should be: a body moves by what its stick holds. */
 export const game = gameMoving((stick) => stick.move);
+
+/** The game as a new build might make it: a body moves twice as far by the same stick. */
+export const brisk = gameMoving((stick) => stick.move * 2);
+
+/** The game stepped at another rate, which no host of the game can take up. */
+export const slow = gameMoving((stick) => stick.move, 10);
 
 /** The game as it should not be: a body moves by how many bodies it has moved before in this process, which nothing in the world holds, so no replay of it comes out the same. */
 export const drifting = () => {

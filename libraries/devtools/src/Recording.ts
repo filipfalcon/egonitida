@@ -1,4 +1,4 @@
-import { type Event, Game, type Host } from '@lightocean/core';
+import { type Event, Game, type Host, type World } from '@lightocean/core';
 import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 
@@ -40,11 +40,16 @@ export const Recording = Schema.Struct({
 });
 export type Recording = typeof Recording.Type;
 
-/** A recording being made, until its scope closes. */
+/** A recording being made, until its scope closes: a segment for every build of the game the host played, since a recording is valid for one build. */
 export interface Recorder {
-  /** Everything recorded so far. */
+  /** Everything recorded so far of the build the host plays now. */
   readonly recording: Effect.Effect<Recording>;
+  /** Every segment recorded so far, oldest first, the last of them the one being recorded. */
+  readonly segments: Effect.Effect<ReadonlyArray<Recording>>;
 }
+
+/** What happens to a host's world within one build of its game. */
+export type Happening = Exclude<Host.Happening, { readonly _tag: 'Reloaded' }>;
 
 /** Encodes an action or event of `game` by its own schema, found by its tag. */
 export const encoderOf = (game: Game.Game) => {
@@ -64,7 +69,7 @@ export const encoderOf = (game: Game.Game) => {
 };
 
 /** What `game` records of each thing that happens to a host's world. */
-export const entryOf = (game: Game.Game): ((happening: Host.Happening) => Entry) => {
+export const entryOf = (game: Game.Game): ((happening: Happening) => Entry) => {
   const encodeAction = encoderOf(game);
   const encodeWorld = Schema.encodeSync(Game.schema(game));
   return (happening) =>
@@ -85,26 +90,39 @@ export const entryOf = (game: Game.Game): ((happening: Host.Happening) => Entry)
         : happening;
 };
 
-/** Records `game` as `host` plays it, from now until the scope closes. */
+/** A segment begun from `world`, as `game` encodes it. */
+const begin = (game: Game.Game, world: World.World) => ({
+  game,
+  toEntry: entryOf(game),
+  // A world its own game cannot encode is a bug in the engine, not something a recording can go on from.
+  recording: { stepRate: game.stepRate, first: Schema.encodeSync(Game.schema(game))(world) },
+  entries: new Array<Entry>(),
+});
+
+/** Records `game` as `host` plays it, from now until the scope closes, beginning a new segment whenever the host takes up another build. */
 export const record = (
   host: Host.Host,
   game: Game.Game,
 ): Effect.Effect<Recorder, never, Scope.Scope> =>
   Effect.gen(function* () {
     const watching = yield* host.watch;
-    // A world its own game cannot encode is a bug in the engine, not something a recording can go on from.
-    const first = yield* Schema.encodeEffect(Game.schema(game))(watching.world).pipe(Effect.orDie);
-    const entries: Array<Entry> = [];
-    const toEntry = entryOf(game);
+    const state = { done: new Array<Recording>(), now: begin(game, watching.world) };
+    const current = () => ({ ...state.now.recording, entries: [...state.now.entries] });
     yield* watching.happenings.pipe(
       Stream.runForEach((happening) =>
         Effect.sync(() => {
-          entries.push(toEntry(happening));
+          if (happening._tag === 'Reloaded') {
+            state.done.push(current());
+            state.now = begin(happening.game, happening.world);
+            return;
+          }
+          state.now.entries.push(state.now.toEntry(happening));
         }),
       ),
       Effect.forkScoped,
     );
     return {
-      recording: Effect.sync(() => ({ stepRate: game.stepRate, first, entries: [...entries] })),
+      recording: Effect.sync(current),
+      segments: Effect.sync(() => [...state.done, current()]),
     };
   });

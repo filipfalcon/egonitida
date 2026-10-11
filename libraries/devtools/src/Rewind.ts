@@ -6,7 +6,7 @@ import * as Replay from '#src/Replay.ts';
 /**
  * Going back in a hosted game: the world the host was at, at any tick of a bounded span of time, shown to its clients through the same views while time is held, and played on from if asked. It keeps a keyframe, a world the host stepped to, every so many steps, and what happened after each, and comes to any tick by replaying from the keyframe before it, so a tick costs at most a few steps.
  *
- * It runs beside a host, in development; a page drives it with controls.
+ * It runs beside a host, in development; a page drives it with controls. When the host takes up a new build of its game, it starts over from there, since the past was played by another.
  */
 
 export interface Options {
@@ -47,9 +47,11 @@ export const make = (
 ): Effect.Effect<Rewind, never, Scope.Scope> =>
   Effect.gen(function* () {
     const watching = yield* host.watch;
-    const toEntry = Recording.entryOf(setup.game);
     const keepTicks = options.keepSeconds * setup.game.stepRate;
     const state = {
+      /** The build played now, which every tick kept is gone back to with. */
+      setup,
+      toEntry: Recording.entryOf(setup.game),
       keyframes: [{ world: watching.world, at: 0 }] satisfies Array<Keyframe>,
       moments: new Array<Moment>(),
       /** How many moments have been forgotten, so a keyframe's place stays where it was. */
@@ -82,6 +84,12 @@ export const make = (
     yield* watching.happenings.pipe(
       Stream.runForEach((happening) =>
         Effect.sync(() => {
+          if (happening._tag === 'Reloaded') {
+            state.setup = { game: happening.game, join: happening.join, leave: happening.leave };
+            state.toEntry = Recording.entryOf(happening.game);
+            startFrom(happening.world);
+            return;
+          }
           if (happening._tag === 'Restored') {
             if (state.restoring) {
               state.restoring = false;
@@ -91,7 +99,7 @@ export const make = (
             return;
           }
           const tick = happening._tag === 'Stepped' ? happening.world.tick : state.newest;
-          state.moments.push({ entry: toEntry(happening), tick });
+          state.moments.push({ entry: state.toEntry(happening), tick });
           state.newest = tick;
           if (happening._tag === 'Stepped' && tick % options.every === 0) {
             state.keyframes.push({
@@ -131,7 +139,7 @@ export const make = (
         const entries = state.moments
           .slice(keyframe.at - state.forgotten, place.value - state.forgotten)
           .map(({ entry }) => entry);
-        const { taken, divergence } = yield* Replay.from(setup, keyframe.world, entries);
+        const { taken, divergence } = yield* Replay.from(state.setup, keyframe.world, entries);
         // A game that does not replay cannot be gone back in; the replay beside the host says where.
         return Option.isSome(divergence)
           ? Option.none<World.World>()

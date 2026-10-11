@@ -179,22 +179,35 @@ export const alongside = (
 ): Effect.Effect<Divergence, Unreadable, Scope.Scope> =>
   Effect.gen(function* () {
     const watching = yield* host.watch;
-    const take = taking(setup, { trace: false });
-    const toEntry = Recording.entryOf(setup.game);
-    // The replay starts from the world as a recording keeps it, encoded and read back, so it checks what a recording would.
-    const encoded = yield* Schema.encodeEffect(Game.schema(setup.game))(watching.world).pipe(
-      Effect.orDie,
-    );
-    const state = { world: yield* firstOf(setup.game, encoded) };
+    /** The replay of one build, from `world`: it starts from the world as a recording keeps it, encoded and read back, so it checks what a recording would. */
+    const begin = (played: Setup, world: World.World) =>
+      Effect.gen(function* () {
+        const encoded = yield* Schema.encodeEffect(Game.schema(played.game))(world).pipe(
+          Effect.orDie,
+        );
+        return {
+          take: taking(played, { trace: false }),
+          toEntry: Recording.entryOf(played.game),
+          world: yield* firstOf(played.game, encoded),
+        };
+      });
+    const state = { now: yield* begin(setup, watching.world) };
     const found = yield* watching.happenings.pipe(
-      Stream.mapEffect((happening) => take(state.world, toEntry(happening))),
-      Stream.filterMap((taken) => {
-        if (Result.isFailure(taken)) {
-          return Result.succeed(taken.failure);
-        }
-        state.world = taken.success.world;
-        return Result.failVoid;
-      }),
+      Stream.mapEffect((happening) =>
+        happening._tag === 'Reloaded'
+          ? Effect.map(begin(happening, happening.world), (now) => {
+              state.now = now;
+              return Result.failVoid;
+            })
+          : Effect.map(state.now.take(state.now.world, state.now.toEntry(happening)), (taken) => {
+              if (Result.isFailure(taken)) {
+                return Result.succeed(taken.failure);
+              }
+              state.now.world = taken.success.world;
+              return Result.failVoid;
+            }),
+      ),
+      Stream.filterMap((found) => found),
       Stream.runHead,
     );
     return yield* Option.match(found, { onNone: () => Effect.never, onSome: Effect.succeed });
