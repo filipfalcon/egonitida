@@ -49,11 +49,7 @@ export const plugin = (): Plugin => ({
     server.ws.on('vite:client:disconnect', (_: unknown, client: HotChannelClient) => {
       Effect.runFork(relay.hostGone(hostOn(client)));
     });
-    const directory = join(
-      searchForWorkspaceRoot(server.config.root),
-      'node_modules',
-      '.lightocean',
-    );
+    const directory = join(searchForWorkspaceRoot(server.config.root), ...Relay.RECORDS);
     Effect.runFork(
       Listener.listen(relay, { directory }).pipe(
         Effect.tap(({ url }) =>
