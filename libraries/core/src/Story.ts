@@ -275,6 +275,116 @@ export const world =
     return simulation;
   };
 
+// TOLD BY NAME
+// The same story told with components, actions, and events by name, and values as they travel, as a tool that knows a game only as data writes it. Whatever does not read as the game's is a failure that says so.
+
+const componentNamed = (simulation: Simulation, name: string): Component.Any => {
+  const found = simulation.game.components.find((component) => component.name === name);
+  if (found === undefined) {
+    throw new Error(`${name} is no component of the game`);
+  }
+  return found;
+};
+
+const encodedAs = (component: Component.Any) =>
+  Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(component.schema)));
+
+/** Starts from a world as the game's schema encodes it, with its entities named by `names`. */
+export const givenAs =
+  (encoded: unknown, names: Readonly<Record<string, World.Entity>> = {}): Step =>
+  (simulation) =>
+    Option.match(Schema.decodeUnknownOption(Game.schema(simulation.game))(encoded), {
+      onNone: () => {
+        throw new Error('what is given is not a world of the game');
+      },
+      onSome: (world) => given(world, names)(simulation),
+    });
+
+/** Sends input for the entity named `name`: a value of the input component called `component`, as it travels. */
+export const inputAs =
+  (name: string, component: string, value: unknown): Step =>
+  (simulation) => {
+    const found = simulation.game.components.find(
+      (known): known is Input.InputComponent => known.name === component && known.owner === 'input',
+    );
+    if (found === undefined) {
+      throw new Error(`${component} is no input of the game`);
+    }
+    return Option.match(Schema.decodeUnknownOption(Schema.toCodecJson(found.schema))(value), {
+      onNone: () => {
+        throw new Error(`${component} holds no such value as ${JSON.stringify(value)}`);
+      },
+      onSome: (decoded) => ({
+        ...simulation,
+        inputs: [...simulation.inputs, Input.of(entityOf(simulation, name), found, decoded)],
+      }),
+    });
+  };
+
+/** Takes an action as from the player named `name`: the action tagged with its name, with its fields but the player, as it travels. */
+export const actAs =
+  (name: string, action: unknown): Step =>
+  (simulation) => {
+    const player = entityOf(simulation, name);
+    for (const known of simulation.game.actions) {
+      const accepted = known.accept(action, player);
+      if (Option.isSome(accepted)) {
+        return { ...simulation, actions: [...simulation.actions, accepted.value] };
+      }
+    }
+    throw new Error(`${tagOf(action)} is no action of the game, or not one like it`);
+  };
+
+/** Has an event happen at the next step, as it travels: such as a command's result. */
+export const happenAs =
+  (event: unknown): Step =>
+  (simulation) => {
+    for (const known of [...simulation.game.events, ...simulation.game.actions]) {
+      const decoded = Schema.decodeUnknownOption(Schema.toCodecJson(known.schema))(event);
+      if (Option.isSome(decoded)) {
+        return { ...simulation, actions: [...simulation.actions, decoded.value] };
+      }
+    }
+    throw new Error(`${tagOf(event)} is no event of the game, or not one like it`);
+  };
+
+/** Expects the entity named `name` to hold exactly `value` of the component called `component`, as it travels. */
+export const expectAs =
+  (name: string, component: string, value: unknown): Step =>
+  (simulation) => {
+    const found = componentNamed(simulation, component);
+    const held = World.get(simulation.world, entityOf(simulation, name), found);
+    if (Option.isNone(held)) {
+      throw new Error(`${name} holds no ${component}`);
+    }
+    const holds = encodedAs(found)(held.value);
+    // The value expected is read and written again by the component's schema, so it compares by what it holds, whatever order its fields were written in.
+    const expected = Option.match(
+      Schema.decodeUnknownOption(Schema.toCodecJson(found.schema))(value),
+      {
+        onNone: () => {
+          throw new Error(`${component} holds no such value as ${JSON.stringify(value)}`);
+        },
+        onSome: encodedAs(found),
+      },
+    );
+    if (holds !== expected) {
+      throw new Error(`${name} holds ${component} ${holds}, not ${expected}`);
+    }
+    return simulation;
+  };
+
+/** Expects the entity named `name` not to hold the component called `component`. */
+export const expectNoneAs =
+  (name: string, component: string): Step =>
+  (simulation) =>
+    expectNone(name, componentNamed(simulation, component))(simulation);
+
+const tagOf = (value: unknown): string =>
+  typeof value === 'object' && value !== null && '_tag' in value
+    ? String(value._tag)
+    : 'What is given';
+
 // READING
 
 /** The entity named `name` where `simulation`, a story told, ended: for finding it elsewhere, such as in what a scene drew. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Option } from 'effect';
+import { Option, Schema } from 'effect';
 import { Bitten, Controls, fixture, Died, Health, Position, ChoseRestart } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Rule from '#src/Rule.ts';
@@ -229,5 +229,55 @@ describe('Story', () => {
         Story.expectNoEvent(Bitten),
       ),
     ).toThrow('Bitten happened');
+  });
+});
+
+describe('Story, told by name', () => {
+  /** A world with her in it, as the game's schema encodes it. */
+  const encoded = Schema.encodeSync(Game.schema(game))(
+    World.spawn(World.empty({ seed: 3 }), her)[0],
+  );
+
+  it('starts from a world as it travels, and plays it by names and values as they travel', () => {
+    Story.story(
+      game,
+      Story.givenAs(encoded, { her: 0 }),
+      Story.inputAs('her', 'Controls', { move: 1, fire: false }),
+      Story.actAs('her', { _tag: 'ChoseRestart', x: 0 }),
+      Story.step(),
+      Story.expectAs('her', 'Position', { x: 1 }),
+      Story.expectAs('her', 'Health', { current: 100 }),
+      Story.expectAs('her', 'Controls', { fire: false, move: 1 }),
+    );
+  });
+
+  it('has an event happen as it travels, such as a command’s result', () => {
+    Story.story(
+      game,
+      Story.givenAs(encoded, { her: 0 }),
+      Story.happenAs({ _tag: 'Bitten', entity: 0, damage: 20 }),
+      Story.step(),
+      Story.expectAs('her', 'Health', { current: 30 }),
+      Story.expectNoneAs('her', 'Splat'),
+    );
+  });
+
+  it('says plainly what it cannot read', () => {
+    const told = (step: Story.Step) => () =>
+      Story.story(game, Story.givenAs(encoded, { her: 0 }), step);
+
+    expect(told(Story.inputAs('her', 'Health', { current: 1 }))).toThrow(
+      'Health is no input of the game',
+    );
+    expect(told(Story.inputAs('her', 'Controls', { move: 'far' }))).toThrow('Controls');
+    expect(told(Story.actAs('her', { _tag: 'Flew' }))).toThrow('Flew is no action of the game');
+    expect(told(Story.happenAs({ _tag: 'Flew' }))).toThrow('Flew is no event of the game');
+    expect(told(Story.expectAs('her', 'Health', { current: 1 }))).toThrow(
+      'her holds Health {"current":50}, not {"current":1}',
+    );
+    expect(told(Story.expectAs('her', 'Wings', {}))).toThrow('Wings is no component of the game');
+    expect(() => Story.story(game, Story.givenAs({ tick: 'soon' }))).toThrow(
+      'not a world of the game',
+    );
   });
 });
