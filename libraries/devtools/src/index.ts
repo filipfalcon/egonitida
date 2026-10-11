@@ -1,5 +1,6 @@
 export * as Beside from '#src/Beside.ts';
 export * as Bridge from '#src/Bridge.ts';
+export * as Debugger from '#src/Debugger.ts';
 export * as Fingerprint from '#src/Fingerprint.ts';
 export * as Inspect from '#src/Inspect.ts';
 export * as Keep from '#src/Keep.ts';

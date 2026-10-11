@@ -1,5 +1,5 @@
 import type { Game, World } from '@lightocean/core';
-import { Effect, Option } from 'effect';
+import { Effect, Option, Schema } from 'effect';
 import type * as Recording from '#src/Recording.ts';
 import { encoderOf } from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';
@@ -165,6 +165,44 @@ const lineText = (line: Line): string => {
       ].join('\n');
   }
 };
+
+/** A step in which something happened, as data a page shows: what the players did, each by its tag and its other fields as JSON, and what each part of the game set, spawned, and despawned. */
+export const Step = Schema.Struct({
+  tick: Schema.Int,
+  actions: Schema.Array(Schema.Struct({ tag: Schema.String, fields: Schema.String })),
+  parts: Schema.Array(
+    Schema.Struct({
+      part: Schema.String,
+      set: Schema.Record(Schema.String, Schema.Array(Schema.Int)),
+      spawned: Schema.Array(Schema.Int),
+      despawned: Schema.Array(Schema.Int),
+    }),
+  ),
+});
+export type Step = typeof Step.Type;
+
+/** The steps of `lines` in which something happened, as data. */
+export const stepsOf = (lines: ReadonlyArray<Line>): ReadonlyArray<Step> =>
+  lines.flatMap((line): ReadonlyArray<Step> => {
+    if (line._tag !== 'Stepped' || (line.actions.length === 0 && line.parts.length === 0)) {
+      return [];
+    }
+    return [
+      {
+        tick: line.tick,
+        actions: line.actions.map((action) => {
+          const [tag, fields] = partsOf(action);
+          return { tag, fields };
+        }),
+        parts: line.parts.map(({ part, set, spawned, despawned }) => ({
+          part,
+          set,
+          spawned,
+          despawned,
+        })),
+      },
+    ];
+  });
 
 /** `lines` as text: a step to a paragraph, joins and leaves on a line of their own. */
 export const format = (lines: ReadonlyArray<Line>): string => lines.map(lineText).join('\n\n');

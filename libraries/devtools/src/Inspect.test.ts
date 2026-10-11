@@ -1,4 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
+import { Client } from '@lightocean/core';
+import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Inspect from '#src/Inspect.ts';
@@ -125,6 +127,48 @@ describe('inspecting a hosted game', () => {
           '    set Position of 0',
         ].join('\n'),
       });
+    }),
+  );
+
+  it.effect(
+    'tells the steps after one tick, up to another, as data: what players did, and what each part set',
+    () =>
+      Effect.gen(function* () {
+        const { inspector } = yield* inspected;
+
+        const steps = yield* inspector.answer({ _tag: 'Steps', from: 3, to: 5 });
+
+        expect(yield* Schema.decodeUnknownEffect(Inspect.Steps)(steps)).toEqual([
+          {
+            tick: 4,
+            actions: [{ tag: 'AskedToHeal', fields: '{"amount":50,"player":0}' }],
+            parts: [
+              { part: 'Test: on AskedToHeal', set: { Health: [0] }, spawned: [], despawned: [] },
+              { part: 'Test: steer', set: { Position: [0] }, spawned: [], despawned: [] },
+            ],
+          },
+          {
+            tick: 5,
+            actions: [],
+            parts: [{ part: 'Test: steer', set: { Position: [0] }, spawned: [], despawned: [] }],
+          },
+        ]);
+      }),
+  );
+
+  it.effect("answers the questions a host's clients ask, as a debugger on a page asks them", () =>
+    Effect.gen(function* () {
+      const { hosted, inspector } = yield* inspected;
+      yield* Inspect.answering(hosted, inspector);
+      const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+      yield* hosted.connect(hostEnd);
+      const client = yield* Client.connect(clientEnd, { game: Fixtures.game });
+
+      const span = yield* Inspect.ask(client, { _tag: 'Span' });
+      const steps = yield* Inspect.steps(client, { from: 3, to: 4 });
+
+      expect(span).toEqual({ oldest: 0, newest: 6 });
+      expect(steps.map(({ tick }) => tick)).toEqual([4]);
     }),
   );
 

@@ -1,14 +1,14 @@
 import { type Host, World } from '@lightocean/core';
 import { Effect, Option, type Scope } from 'effect';
 import * as Bridge from '#src/Bridge.ts';
-import * as Inspect from '#src/Inspect.ts';
+import * as Debugger from '#src/Debugger.ts';
 import * as Keep from '#src/Keep.ts';
 import * as Reload from '#src/Reload.ts';
 import * as Replay from '#src/Replay.ts';
-import * as Rewind from '#src/Rewind.ts';
+import type * as Rewind from '#src/Rewind.ts';
 
 /**
- * Everything the devtools run beside a host in development, in one: the game replayed beside it, with where it first comes apart reported; the last stretch of time kept, for a page to go back in; and a bridge to the development server's relay, so an agent can ask after the game and play it.
+ * Everything the devtools run beside a host in development, in one: the game replayed beside it, with where it first comes apart reported; the debugger, the last stretch of time kept for a page to go back in and its questions answered; and a bridge to the development server's relay, so an agent can ask after the game and play it.
  */
 
 /** Runs the devtools beside `host`, which plays `setup`, until the scope closes: the host called `name`, by `id` if a page chose one, over `channel`, the development server's unless given. */
@@ -33,18 +33,13 @@ export const serve = (
       ),
       Effect.forkScoped,
     );
-    const rewind = yield* Rewind.make(
-      host,
-      setup,
-      options.rewind ?? { every: Math.round(setup.game.stepRate / 2), keepSeconds: 30 },
-    );
-    yield* Rewind.serve(host, rewind);
+    const { inspector } = yield* Debugger.serve(host, setup, options.rewind);
     yield* Option.match(
       Option.orElse(Option.fromNullishOr(options.channel), () => Bridge.vite),
       {
         onNone: () => Effect.void,
         onSome: (channel) =>
-          Bridge.serve(channel, Inspect.make(host, rewind), {
+          Bridge.serve(channel, inspector, {
             name: options.name,
             ...(options.id === undefined ? {} : { id: options.id }),
           }),

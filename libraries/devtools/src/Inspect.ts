@@ -1,5 +1,5 @@
-import { type Event, Game, type Host, type World } from '@lightocean/core';
-import { Data, Effect, Option, Result, Schema } from 'effect';
+import { Client, type Event, Game, type Host, type World } from '@lightocean/core';
+import { Data, Effect, Option, Result, Schema, type Scope } from 'effect';
 import * as Log from '#src/Log.ts';
 import type * as Rewind from '#src/Rewind.ts';
 import * as Transcript from '#src/Transcript.ts';
@@ -58,11 +58,16 @@ export const Request = Schema.Union([
   }),
   /** Takes an action as from the player of an entity, tagged with the action it is. */
   Schema.TaggedStruct('Act', { entity: Schema.Int, action: Schema.Unknown }),
+  /** The steps after the world at `from`, up to the world at `to`, in which something happened, as data: what `Steps` describes. */
+  Schema.TaggedStruct('Steps', { from: Schema.Int, to: Schema.Int }),
 ]);
 export type Request = typeof Request.Type;
 
 /** A request that cannot be answered, and why. */
 export class Refused extends Data.TaggedError('Refused')<{ readonly reason: string }> {}
+
+/** What `Steps` is answered with. */
+export const Steps = Schema.Array(Log.Step);
 
 export interface Inspector {
   /** Answers `request` with plain data. */
@@ -213,6 +218,25 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
             components: compare(byEntity(game, before), byEntity(game, after), game),
           };
         }
+        case 'Steps': {
+          const stretch = yield* rewind
+            .between(request.from, request.to)
+            .pipe(Effect.mapError(({ reason }) => refuse(reason)));
+          if (Option.isNone(stretch)) {
+            const { oldest, newest } = yield* rewind.span;
+            return yield* refuse(
+              `ticks ${request.from} to ${request.to} are not kept: ticks ${oldest} to ${newest} are`,
+            );
+          }
+          const lines = yield* Log.from(
+            yield* rewind.setup,
+            stretch.value.world,
+            stretch.value.entries,
+          ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
+          return yield* Schema.encodeEffect(Steps)(Log.stepsOf(lines)).pipe(
+            Effect.mapError(() => refuse('the steps cannot be told as data')),
+          );
+        }
         case 'Log': {
           const stretch = yield* rewind
             .between(request.from, request.to)
@@ -299,3 +323,33 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
     answerUnknown,
   };
 };
+
+/** Answers the questions `host`'s clients ask by `inspector`, until the scope closes, as a debugger on a page asks them. */
+export const answering = (
+  host: Host.Host,
+  inspector: Inspector,
+): Effect.Effect<void, never, Scope.Scope> =>
+  host.answering((question) =>
+    inspector.answerUnknown(question).pipe(Effect.mapError(({ reason }) => reason)),
+  );
+
+/** Asks the host `client` is joined to `request`, by whatever answers beside it. */
+export const ask = (
+  client: Pick<Client.Client, 'ask'>,
+  request: typeof Request.Encoded,
+): Effect.Effect<unknown, Client.Unanswered> => client.ask(request);
+
+/** The steps after the world at `from`, up to the world at `to`, in which something happened, as the host `client` is joined to tells them. */
+export const steps = (
+  client: Pick<Client.Client, 'ask'>,
+  stretch: { readonly from: number; readonly to: number },
+): Effect.Effect<ReadonlyArray<Log.Step>, Client.Unanswered> =>
+  ask(client, { _tag: 'Steps', ...stretch }).pipe(
+    Effect.flatMap((answer) =>
+      Schema.decodeUnknownEffect(Steps)(answer).pipe(
+        Effect.mapError(
+          () => new Client.Unanswered({ reason: 'The answer is no steps a page can read.' }),
+        ),
+      ),
+    ),
+  );
