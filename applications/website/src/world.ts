@@ -30,7 +30,7 @@ const capturedAs = (host: string) => (viewport: Viewport.Viewport) =>
       })
     : Effect.void;
 
-/** The ocean's world, joined while the page is open. */
+/** The ocean's world, joined while the home page is open. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
   ocean: entry(
     World.Requirements,
@@ -42,7 +42,8 @@ export const managedResources = ManagedResource.make<Model, Message>()((entry) =
           type: 'module',
           name: host,
         }),
-      joins: () => true,
+      // The ocean is on the home page alone, so it is joined only there, and a page of the documentation draws nothing in the background.
+      joins: (model) => model.route._tag === 'Home',
       onJoined: () => Message.JoinedOcean(),
       onLeft: () => Message.LeftOcean(),
       onFailed: (reason) => Message.FailedJoinOcean({ reason }),

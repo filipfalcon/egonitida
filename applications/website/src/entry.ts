@@ -11,6 +11,10 @@ const application = Runtime.makeApplication({
   subscriptions,
   managedResources,
   container: document.getElementById('root'),
+  routing: {
+    onUrlRequest: (request) => Message.ClickedLink({ request }),
+    onUrlChange: (url) => Message.ChangedUrl({ url }),
+  },
   // Inspect, not time travel: the canvas shows the live ocean, whose past the devtools beside its host go back in.
   devTools: { Message, mode: 'Inspect' },
 });
