@@ -3,15 +3,24 @@ import { Effect, Option } from 'effect';
 import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import * as Best from '#src/best.ts';
 
-/** A store in memory, read and written as Cloudflare KV is. */
+/** A store in memory, written and listed as Cloudflare KV is, which lets other saves run between any two of its steps. */
 const inMemory = () => {
-  const kept = new Map<string, string>();
+  const kept = new Set<string>();
   const store: Best.Store<never, never> = {
-    get: (key) => Effect.sync(() => Option.fromNullishOr(kept.get(key))),
-    put: (key, value) =>
-      Effect.sync(() => {
-        kept.set(key, value);
-      }),
+    mark: (key) =>
+      Effect.andThen(
+        Effect.yieldNow,
+        Effect.sync(() => {
+          kept.add(key);
+        }),
+      ),
+    first: (prefix) =>
+      Effect.andThen(
+        Effect.yieldNow,
+        Effect.sync(() =>
+          Option.fromNullishOr([...kept].filter((key) => key.startsWith(prefix)).sort()[0]),
+        ),
+      ),
   };
   return { kept, store };
 };
@@ -34,7 +43,17 @@ describe('the best score', () => {
       ];
 
       expect(bests).toEqual([4, 9, 9]);
-      expect(kept.get('best')).toBe('9');
+      expect(kept.size).toBe(3);
+    }),
+  );
+
+  it.effect('keeps the highest of scores saved at the same moment', () =>
+    Effect.gen(function* () {
+      const { store } = inMemory();
+
+      yield* Effect.all([Best.keep(store, 9), Best.keep(store, 4)], { concurrency: 'unbounded' });
+
+      expect(yield* Best.keep(store, 1)).toBe(9);
     }),
   );
 
@@ -83,5 +102,25 @@ describe('the best score', () => {
         );
         expect(refused.status).toBe(400);
       }),
+  );
+
+  it.effect('refuses a score no round could make: below nothing, or above the most', () =>
+    Effect.gen(function* () {
+      const { kept, store } = inMemory();
+      const post = (score: number) =>
+        answer(
+          store,
+          new Request('http://scores.test/scores', {
+            method: 'POST',
+            body: JSON.stringify({ score }),
+          }),
+        );
+
+      const statuses = [(yield* post(-1)).status, (yield* post(Best.MOST + 1)).status];
+
+      expect(statuses).toEqual([400, 400]);
+      expect(kept.size).toBe(0);
+      expect((yield* post(Best.MOST)).status).toBe(200);
+    }),
   );
 });

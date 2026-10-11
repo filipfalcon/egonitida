@@ -2,37 +2,48 @@ import { Effect, Option, Schema } from 'effect';
 import { type HttpServerRequest, HttpServerResponse } from 'effect/http';
 
 /**
- * The best score, as the scores Worker keeps it: in a store read and written by key, as Cloudflare KV is, and saved by a POST of a score from a page anywhere, which is answered with the best kept so far. What it keeps the best in is the Worker's binding to say, or a map in memory in a test.
+ * The best score, as the scores Worker keeps it: every score saved marked by a key of its own in a store written and listed by key, as Cloudflare KV is, and the best read as the first of them. Saved by a POST of a score from a page anywhere, which is answered with the best kept so far. As no save reads before it writes, two saves at the same moment never lose the higher; and as a score is never more than `MOST`, the keys never number more than its scores. What it keeps them in is the Worker's binding to say, or a set in memory in a test.
  */
 
-/** Where the best is kept: read and written by key, as Cloudflare KV is. */
+/** Where scores are marked: written by key, and listed in the order of their keys, as Cloudflare KV is. */
 export interface Store<E, R> {
-  readonly get: (key: string) => Effect.Effect<Option.Option<string>, E, R>;
-  readonly put: (key: string, value: string) => Effect.Effect<void, E, R>;
+  /** Marks `key` as kept; marking it again changes nothing. */
+  readonly mark: (key: string) => Effect.Effect<void, E, R>;
+  /** The first key kept that starts with `prefix`, in the order of keys, if any is. */
+  readonly first: (prefix: string) => Effect.Effect<Option.Option<string>, E, R>;
 }
 
-/** The key the best is kept under. */
-const KEY = 'best';
+/** The most a round could score, and so the most a page may save: a cap on what anyone may post, as the Worker trusts no page. */
+export const MOST = 999;
 
-/** A whole number written as text, if it is one. */
-const Whole = Schema.NumberFromString.pipe(Schema.check(Schema.isInt()));
+/** The prefix every score's key starts with. */
+const PREFIX = 'score:';
 
-/** Keeps `score` if it is the best yet, and tells the best kept so far, this one included. */
+/** The key `score` is marked by: what it falls short of the most, written to a width, so the first key in order is the best score's. */
+const keyOf = (score: number) =>
+  `${PREFIX}${String(MOST - score).padStart(String(MOST).length, '0')}`;
+
+/** A score as its key tells it, if the key is one. */
+const Shortfall = Schema.NumberFromString.pipe(Schema.check(Schema.isInt()));
+
+/** Keeps `score`, and tells the best kept so far, this one included. */
 export const keep = <E, R>(store: Store<E, R>, score: number): Effect.Effect<number, E, R> =>
   Effect.gen(function* () {
-    const kept = Option.flatMap(yield* store.get(KEY), Schema.decodeUnknownOption(Whole));
-    const best = Option.match(kept, {
-      onNone: () => score,
-      onSome: (before) => Math.max(before, score),
-    });
-    if (!Option.contains(kept, best)) {
-      yield* store.put(KEY, String(best));
-    }
-    return best;
+    yield* store.mark(keyOf(score));
+    const first = yield* store.first(PREFIX);
+    const kept = Option.flatMap(first, (key) =>
+      Schema.decodeOption(Shortfall)(key.slice(PREFIX.length)).pipe(
+        Option.map((shortfall) => MOST - shortfall),
+      ),
+    );
+    // A store listed apart from where it was written may not list this score yet.
+    return Option.match(kept, { onNone: () => score, onSome: (best) => Math.max(best, score) });
   });
 
 /** What a page posts: the score of a round. */
-const Saved = Schema.Struct({ score: Schema.Int });
+const Saved = Schema.Struct({
+  score: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: MOST }))),
+});
 
 /** What a page may send from anywhere, as a browser asks before it posts: a score, with the trace headers an Effect HTTP client adds. */
 const CORS = {
@@ -60,10 +71,13 @@ export const respond =
       Effect.matchEffect({
         onFailure: () =>
           Effect.succeed(
-            HttpServerResponse.text('A score is a whole number: { "score": 12 }.', {
-              status: 400,
-              headers: CORS,
-            }),
+            HttpServerResponse.text(
+              `A score is a whole number from 0 to ${MOST}: { "score": 12 }.`,
+              {
+                status: 400,
+                headers: CORS,
+              },
+            ),
           ),
         onSuccess: ({ score }) =>
           keep(store, score).pipe(
