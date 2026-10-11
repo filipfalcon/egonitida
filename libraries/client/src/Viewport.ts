@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Queue, type Scope } from 'effect';
+import { Data, Effect, Option, Queue, type Scope, Stream } from 'effect';
 import * as Three from 'three/webgpu';
 
 /**
@@ -10,6 +10,8 @@ export interface Viewport {
   readonly canvas: HTMLCanvasElement;
   readonly scene: Three.Scene;
   readonly camera: Three.PerspectiveCamera;
+  /** Every click on the canvas from now on, as a point of the screen, from -1 to 1 across it and up it. */
+  readonly clicks: Stream.Stream<{ readonly x: number; readonly y: number }>;
   /** Draws the scene as it is now. */
   readonly render: Effect.Effect<void>;
   /** Runs `frame` with the seconds since the frame before, at every frame the display shows, then draws the scene; until the scope closes. */
@@ -47,6 +49,20 @@ const startRenderer = (canvas: HTMLCanvasElement) =>
     }),
     (renderer) => Effect.promise(() => renderer.dispose()),
   );
+
+/** Where a pointer at `pointer` is on a canvas at `canvas`, from -1 to 1 across it and up it, as Three.js's normalized device coordinates run. */
+export const pointOf = (
+  pointer: { readonly clientX: number; readonly clientY: number },
+  canvas: {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+  },
+) => ({
+  x: ((pointer.clientX - canvas.left) / canvas.width) * 2 - 1,
+  y: 1 - ((pointer.clientY - canvas.top) / canvas.height) * 2,
+});
 
 export const make = (
   canvas: HTMLCanvasElement,
@@ -98,5 +114,21 @@ export const make = (
         }).pipe(Effect.forever, Effect.forkScoped);
       });
 
-    return { canvas, scene, camera, render, loop };
+    // A click is a press of the primary button, or a touch, on the canvas.
+    const clicks = Stream.callback<{ readonly x: number; readonly y: number }>((queue) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const listener = (event: PointerEvent) => {
+            if (event.button === 0) {
+              Queue.offerUnsafe(queue, pointOf(event, canvas.getBoundingClientRect()));
+            }
+          };
+          canvas.addEventListener('pointerdown', listener);
+          return listener;
+        }),
+        (listener) => Effect.sync(() => canvas.removeEventListener('pointerdown', listener)),
+      ),
+    );
+
+    return { canvas, scene, camera, clicks, render, loop };
   });

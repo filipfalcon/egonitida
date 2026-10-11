@@ -16,3 +16,13 @@ describe('Viewport.secondsBetween', () => {
     expect(Viewport.secondsBetween(Option.some(1000), 61_000)).toBe(0.25);
   });
 });
+
+describe('Viewport.pointOf', () => {
+  const canvas = { left: 100, top: 50, width: 400, height: 200 };
+
+  it('is where a pointer is on the canvas, from -1 to 1 across it and up it', () => {
+    expect(Viewport.pointOf({ clientX: 300, clientY: 150 }, canvas)).toEqual({ x: 0, y: 0 });
+    expect(Viewport.pointOf({ clientX: 100, clientY: 50 }, canvas)).toEqual({ x: -1, y: 1 });
+    expect(Viewport.pointOf({ clientX: 500, clientY: 250 }, canvas)).toEqual({ x: 1, y: -1 });
+  });
+});
