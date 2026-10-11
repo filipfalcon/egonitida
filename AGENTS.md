@@ -69,7 +69,7 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 ## Commits
 
 - Conventional Commits, signed. A change any consumer must follow is marked `!`, and its body gives a before-and-after table; Border, the game on the engine, is migrated with it.
-- Before a push is proposed, an independent review checks the commits against this file. Nothing is pushed without the person's say.
+- Nothing is pushed without the person's say.
 
 ## Exemplar files
 
