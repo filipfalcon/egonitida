@@ -53,7 +53,7 @@ export const served = (names: ReadonlyArray<string>, directory?: string) =>
     for (const name of names) {
       const setup = {
         game: counting,
-        join: (world: World.World) => World.spawn(world, []),
+        join: (world: World.World) => World.spawn(world, [Count.of({ value: 0 })]),
         leave: World.despawn,
       };
       const host = yield* Host.make({

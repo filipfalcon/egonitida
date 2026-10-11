@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Option } from 'effect';
+import { Effect, Option, Schema } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Inspect from '#src/Inspect.ts';
 import * as Rewind from '#src/Rewind.ts';
@@ -179,6 +179,31 @@ describe('inspecting a hosted game', () => {
 
       expect(span).toEqual({ oldest: 0, newest: 6 });
       expect(Option.isSome(refused)).toBe(true);
+    }),
+  );
+
+  it.effect('plays players it joins, by input and actions the game reads, and lets them go', () =>
+    Effect.gen(function* () {
+      const { hosted, inspector } = yield* inspected;
+      yield* inspector.answer({ _tag: 'Hold' });
+
+      const { entity } = yield* Schema.decodeUnknownEffect(Schema.Struct({ entity: Schema.Int }))(
+        yield* inspector.answer({ _tag: 'Join' }),
+      );
+      yield* inspector.answer({ _tag: 'Input', entity, values: { Stick: { move: 3 } } });
+      yield* inspector.answer({ _tag: 'Act', entity, action: { _tag: 'AskedToHeal', amount: 7 } });
+      yield* inspector.answer({ _tag: 'Advance', steps: 1 });
+      const played = yield* inspector.answer({ _tag: 'World', entity });
+      yield* inspector.answer({ _tag: 'Leave', entity });
+      const refused = yield* refusal(
+        inspector.answer({ _tag: 'Input', entity, values: { Health: { current: 1 } } }),
+      );
+
+      expect(played).toEqual({
+        tick: (yield* hosted.world).tick,
+        entities: { [entity]: { Position: { x: 3 }, Health: { current: 7 }, Stick: { move: 3 } } },
+      });
+      expect(refused).toEqual(Option.some('Health is no input of the game'));
     }),
   );
 });

@@ -42,14 +42,30 @@ describe('the tools', () => {
     }),
   );
 
+  it.live('play the game as players they join', () =>
+    Effect.gen(function* () {
+      const tools = yield* workspace;
+
+      const joined = yield* tools.lightocean_join({});
+      const world = yield* tools.lightocean_world({});
+
+      expect(joined).toEqual({ entity: 1 });
+      expect(world).toMatchObject({ entities: { 1: { Count: { value: 0 } } } });
+    }),
+  );
+
   it('are every request an inspector answers, and the hosts running', () => {
     expect(Object.keys(Tools.toolkit.tools).toSorted()).toEqual(
       [
+        'lightocean_act',
         'lightocean_advance',
         'lightocean_compare',
         'lightocean_describe',
         'lightocean_hold',
         'lightocean_hosts',
+        'lightocean_input',
+        'lightocean_join',
+        'lightocean_leave',
         'lightocean_live',
         'lightocean_log',
         'lightocean_play_from',

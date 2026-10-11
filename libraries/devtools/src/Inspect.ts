@@ -4,7 +4,7 @@ import * as Log from '#src/Log.ts';
 import type * as Rewind from '#src/Rewind.ts';
 
 /**
- * A hosted game as an agent asks after it: what the game is made of, the world at any tick kept, how two ticks differ, what happened between them, and time itself, held, stepped, or played on from a past tick. Every request and every answer is plain data, so it travels as JSON to whatever asks, such as an MCP server; nothing here knows how.
+ * A hosted game as an agent asks after it: what the game is made of, the world at any tick kept, how two ticks differ, what happened between them, and time itself, held, stepped, or played on from a past tick; and the game played, by players joined with no client, or any player, through input and actions the game reads. Every request and every answer is plain data, so it travels as JSON to whatever asks, such as an MCP server; nothing here knows how.
  */
 
 const OptionalInt = Schema.OptionFromOptionalKey(Schema.Int);
@@ -39,6 +39,17 @@ export const Request = Schema.Union([
   Schema.TaggedStruct('PlayFrom', { tick: Schema.Int }),
   /** Shows the host's clients the world as it is now again. */
   Schema.TaggedStruct('Live', {}),
+  /** Joins a player with no client, as the game's own `join` makes one: its entity. */
+  Schema.TaggedStruct('Join', {}),
+  /** Lets go of the player of an entity. */
+  Schema.TaggedStruct('Leave', { entity: Schema.Int }),
+  /** Gives an entity input, by its input components' names, each value as it travels. */
+  Schema.TaggedStruct('Input', {
+    entity: Schema.Int,
+    values: Schema.Record(Schema.String, Schema.Unknown),
+  }),
+  /** Takes an action as from the player of an entity, tagged with the action it is. */
+  Schema.TaggedStruct('Act', { entity: Schema.Int, action: Schema.Unknown }),
 ]);
 export type Request = typeof Request.Type;
 
@@ -220,6 +231,21 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
             .pipe(Effect.mapError(({ reason }) => refuse(reason)));
         case 'Live':
           return yield* host.show(yield* host.world);
+        case 'Join':
+          return { entity: yield* host.join };
+        case 'Leave':
+          return yield* host.leave(request.entity);
+        case 'Input':
+          return yield* host
+            .input(
+              request.entity,
+              Object.entries(request.values).map(([component, value]) => ({ component, value })),
+            )
+            .pipe(Effect.mapError(({ reason }) => refuse(reason)));
+        case 'Act':
+          return yield* host
+            .act(request.entity, request.action)
+            .pipe(Effect.mapError(({ reason }) => refuse(reason)));
       }
     }).pipe(Effect.map((answered) => answered ?? { done: true }));
 

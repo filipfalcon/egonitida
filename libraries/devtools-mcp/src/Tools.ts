@@ -5,13 +5,16 @@ import * as Ask from '#src/Ask.ts';
 import * as Discovery from '#src/Discovery.ts';
 
 /**
- * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the world at any tick kept, compare two ticks, read the log between them, and hold, step, show, and play on from time. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
+ * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the world at any tick kept, compare two ticks, read the log between them; hold, step, show, and play on from time; and play the game, as one player or many. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
  */
 
 const host = Schema.optionalKey(Schema.String).annotate({
   description: 'The host to ask, as lightocean_hosts lists it; the newest if left out.',
 });
 const tick = Schema.Int.annotate({ description: 'A tick of the world, within the span kept.' });
+const entity = Schema.Int.annotate({
+  description: 'An entity of the world, as lightocean_world lists it.',
+});
 
 /** Why a tool could not do what it was asked. */
 const Failure = Schema.Struct({ reason: Schema.String });
@@ -55,6 +58,14 @@ const steering = <Name extends string, C extends Config, R>(
     .annotate(Tool.Readonly, false)
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, idempotent)
+    .annotate(Tool.OpenWorld, false);
+
+/** A tool that plays the game: it changes the world, as a player would. */
+const playing = <Name extends string, C extends Config, R>(tool: Tool.Tool<Name, C, R>) =>
+  tool
+    .annotate(Tool.Readonly, false)
+    .annotate(Tool.Destructive, false)
+    .annotate(Tool.Idempotent, false)
     .annotate(Tool.OpenWorld, false);
 
 export const toolkit = Toolkit.make(
@@ -136,6 +147,28 @@ export const toolkit = Toolkit.make(
     asking('lightocean_live', 'Shows the page the world as it is now again, after seeking.', {}),
     true,
   ),
+  playing(
+    asking(
+      'lightocean_join',
+      "Joins a player with no page, as the game's own join makes one, and tells its entity: several may join, to play the same world as many players.",
+      {},
+    ),
+  ),
+  playing(asking('lightocean_leave', 'Lets go of the player of an entity.', { entity })),
+  playing(
+    asking(
+      'lightocean_input',
+      'Gives an entity input for the next step, as its player holds it: values of input components by name, as lightocean_describe gives their schemas. It goes in after what a page sends.',
+      { entity, values: Schema.Record(Schema.String, Schema.Unknown) },
+    ),
+  ),
+  playing(
+    asking(
+      'lightocean_act',
+      'Takes an action as from the player of an entity, at the next step: the action tagged with its name, with its fields but the player, as lightocean_describe gives its schema.',
+      { entity, action: Schema.Unknown },
+    ),
+  ),
 );
 
 /** The handlers of every tool, finding the relays from the workspace `from` is in on every call. */
@@ -163,5 +196,9 @@ export const handlers = (from: string) => {
     lightocean_seek: ({ host, tick: at }) => ask({ _tag: 'Seek', tick: at }, host),
     lightocean_play_from: ({ host, tick: at }) => ask({ _tag: 'PlayFrom', tick: at }, host),
     lightocean_live: ({ host }) => ask({ _tag: 'Live' }, host),
+    lightocean_join: ({ host }) => ask({ _tag: 'Join' }, host),
+    lightocean_leave: ({ host, ...asked }) => ask({ _tag: 'Leave', ...asked }, host),
+    lightocean_input: ({ host, ...asked }) => ask({ _tag: 'Input', ...asked }, host),
+    lightocean_act: ({ host, ...asked }) => ask({ _tag: 'Act', ...asked }, host),
   });
 };
