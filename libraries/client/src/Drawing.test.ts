@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Game, Host, Plugin, System, World } from '@lightocean/core';
+import { Client, Component, Game, Host, Domain, System, World } from '@lightocean/core';
 import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
@@ -29,8 +29,8 @@ const steer = System.make({
 
 const steered = Game.make({
   stepRate: 60,
-  plugins: [
-    Plugin.make({
+  domains: [
+    Domain.make({
       name: 'Test',
       requires: [],
       components: [Position, Controls],
@@ -117,8 +117,8 @@ const mark = System.make({
 });
 const marking = Game.make({
   stepRate: 60,
-  plugins: [
-    Plugin.make({
+  domains: [
+    Domain.make({
       name: 'Test',
       requires: [],
       components: [Marker, Flag],

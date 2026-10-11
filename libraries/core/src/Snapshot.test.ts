@@ -3,7 +3,7 @@ import { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
 import { Controls, fixture, Health, Position, Splat, Velocity, Wall } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
-import * as Plugin from '#src/Plugin.ts';
+import * as Domain from '#src/Domain.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import * as World from '#src/World.ts';
 
@@ -63,8 +63,8 @@ describe('Snapshot', () => {
   it('rejects a snapshot from a game made of other components', () => {
     const smaller = Game.make({
       stepRate: 10,
-      plugins: [
-        Plugin.make({
+      domains: [
+        Domain.make({
           name: 'Test',
           requires: [],
           components: [Position],

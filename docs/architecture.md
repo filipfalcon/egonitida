@@ -63,20 +63,21 @@ Six principles shape every API. Each builds on the ones before it.
 - Cosmetics are deterministic too: an event carries a seed, so every client generates the same blood from it without anything more being sent.
 - Rewinding starts from the nearest periodic snapshot and steps forward. A recording carries the fingerprint of the build it is valid for.
 
-### 5. Boundaries: everything is a plugin
+### 5. Boundaries: everything is a domain
 
-- The engine is made of plugins, and its own features (drawing, physics, audio, input, network) are plugins too. A game can do whatever the engine does, and can replace any plugin, as Border would replace physics with its own ragdoll.
-- A plugin is a value: the components, actions, events, systems, rules, and commands it brings, and the plugins it requires. A game is the list of its plugins, flattened by `Game.make` in order, so nothing is wired by hand. The services a plugin needs while running, such as storage for its commands or a renderer for its views, are Effect Layers the host provides, and tests swap in other Layers.
-- A plugin writes only its own components. Any plugin reads any component, but changes another plugin's state only by emitting an event that plugin declared, and that plugin's rules decide what it means. Writing another plugin's component, or reading one from a plugin not in `requires`, is a compile error.
-- A plugin may share some of its components with the plugins that require it, which may then write them too. Sharing is for state many plugins change every step, such as where a body is, which no event could carry; each system still declares what it writes, so who changes a shared component can be read off the game.
-- Systems run in the order of the plugins in the game, then the order each lists them; requiring decides only what a plugin may touch, not when it runs. A plugin others require may still run last, as one keeping bodies out of walls runs after everything that moves them. Whether this needs named phases, as Bevy's schedules have, waits until a game shows it.
+- The engine is made of domains, and its own features (drawing, physics, audio, input, network) are domains too. A game can do whatever the engine does, and can replace any domain, as Border would replace physics with its own ragdoll.
+- A domain is a part of a game that owns some of its state, as Border's undead, her, and the lab's doors are each one. It is not something optional added to a finished game, as a plugin is in a browser or in Unreal; what is added from outside is a mod, below.
+- A domain is a value: the components, actions, events, systems, rules, and commands it brings, and the domains it requires. A game is the list of its domains, flattened by `Game.make` in order, so nothing is wired by hand. The services a domain needs while running, such as storage for its commands or a renderer for its views, are Effect Layers the host provides, and tests swap in other Layers.
+- A domain writes only its own components. Any domain reads any component, but changes another domain's state only by emitting an event that domain declared, and that domain's rules decide what it means. Writing another domain's component, or reading one from a domain not in `requires`, is a compile error.
+- A domain may share some of its components with the domains that require it, which may then write them too. Sharing is for state many domains change every step, such as where a body is, which no event could carry; each system still declares what it writes, so who changes a shared component can be read off the game.
+- Systems run in the order of the domains in the game, then the order each lists them; requiring decides only what a domain may touch, not when it runs. A domain others require may still run last, as one keeping bodies out of walls runs after everything that moves them. Whether this needs named phases, as Bevy's schedules have, waits until a game shows it.
 - Packages come in three layers:
   - **core**: the state, systems, schedule, time, randomness, replay, network protocol, and game rules. It runs everywhere, and it compiles without the DOM's types, so the simulation always runs in a Durable Object.
   - **client**: drawing, audio, input, haptics, cosmetics. Browser only.
   - **server**: hosting a world in a Durable Object, and persistence.
-- A game's plugins split the same way: a plugin's core part in one module, its client part (local systems and views) in a `.view` module, so a worker or a Durable Object never imports Three.js.
-- One program runs everywhere, with no annotations saying where: the roles of components and the split of a plugin say what runs where.
-- Imperative islands are allowed for gradual migration: a local, client-only plugin may use Three.js as it likes, but cannot write the state it does not own. Border can move onto the engine by wrapping its current code this way first.
+- A game's domains split the same way: a domain's core part in one module, its client part (local systems and views) in a `.view` module, so a worker or a Durable Object never imports Three.js.
+- One program runs everywhere, with no annotations saying where: the roles of components and the split of a domain say what runs where.
+- Imperative islands are allowed for gradual migration: a local, client-only domain may use Three.js as it likes, but cannot write the state it does not own. Border can move onto the engine by wrapping its current code this way first.
 
 ### 6. Frame pacing: measured, never assumed
 
@@ -115,7 +116,7 @@ It is measured, not assumed:
 
 ### Program model
 
-Everything that lives in 3D, an application as much as a game, is a world made of plugins. Foldkit keeps the DOM: an application's UI, a game's HUD and menus, and the editor itself. There is one idiom, so a debugger, recordings, and agent tooling are built once.
+Everything that lives in 3D, an application as much as a game, is a world made of domains. Foldkit keeps the DOM: an application's UI, a game's HUD and menus, and the editor itself. There is one idiom, so a debugger, recordings, and agent tooling are built once.
 
 - The editor's documents are entities with components, its low-code rules are rules on actions, and Play-in-Editor runs a local server, as a game does.
 - A world with no systems need not step at its rate while nothing happens; when its host steps it is decided when it is built.
@@ -153,7 +154,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 **Messages.**
 
 - Actions and events are named facts in the past tense, never commands. An action says what a player did, whatever device they did it with (`PulledTrigger`, `ChoseRestart`); an event says what the world made of it (`Shot`, `LevelRestarted`). The pair shows where authority lies: what a player claims, and what the server decided.
-- Every action a game declares has at least one rule, since an action no rule answers is a player doing something to no effect. An event may go unanswered, since a plugin offers its events to others and a game may not hold the one that listens; an event a game declares that nothing emits and nothing handles is dead, and an error. Either is an error in its type where TypeScript bears it, and otherwise when the game is made.
+- Every action a game declares has at least one rule, since an action no rule answers is a player doing something to no effect. An event may go unanswered, since a domain offers its events to others and a game may not hold the one that listens; an event a game declares that nothing emits and nothing handles is dead, and an error. Either is an error in its type where TypeScript bears it, and otherwise when the game is made.
 - Which systems and rules write, emit, spawn, and listen for what follows from the game's declarations, as a map of how its state changes: in a world of systems there is no single `update` to read, so the declarations are what is read.
 - In development the values in a world are frozen, so changing one in place fails at once.
 
@@ -187,10 +188,10 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 **Conventions.**
 
-- Nothing is wired implicitly: no automatic registration, decorators, wiring by file name, or global registries. All wiring is in `Game.make` and plugins' `requires`.
+- Nothing is wired implicitly: no automatic registration, decorators, wiring by file name, or global registries. All wiring is in `Game.make` and domains' `requires`.
 - `AGENTS.md` holds the rules an agent follows and the exemplar files it reads first; `CLAUDE.md` links to it. This document holds why. Agents reach for the runtime's inspection before adding logs.
 - A barrel exports only the public API; what only a host or a test needs is under `/internal`, and what is not settled under `/experimental`.
-- A plugin lives in a folder: `index.ts` as the barrel, `name.ts` with its core part, `name.view.ts` with its client part, and its Story and Scene tests. A plugin's file has the sections `COMPONENTS`, `ACTIONS`, `EVENTS`, `COMMANDS`, `RULES`, `SYSTEMS`, and `PLUGIN`.
+- A domain lives in a folder: `index.ts` as the barrel, `name.ts` with its core part, `name.view.ts` with its client part, and its Story and Scene tests. A domain's file has the sections `COMPONENTS`, `ACTIONS`, `EVENTS`, `COMMANDS`, `RULES`, `SYSTEMS`, and `DOMAIN`.
 - Every public export has a doc comment saying what it is and why. Code, tests, and documents carry no notes about discarded attempts.
 - A declaration's change (`writes`, `emits`, `requires`) is an architectural change, and is where a review looks first. Before a push is proposed, an independent review checks the commits against `AGENTS.md`.
 
@@ -198,7 +199,9 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 - `examples/` is the curriculum and the end-to-end tests at once; each example adds one idea: a spinning cube, click to colour, Pong for two, a small horde, saving a score, and Pong over the network. A feature lands with its example.
 - Code in documentation comes from compiled, type-checked snippets, except short sketches in design documents of what does not exist yet. Prose leads with its claim, and headings are labels.
-- The agent skills (`lightocean` for framing, `generate-plugin`, and a read-only `audit-game`) live in `skills/` and are written once the API above exists. Agents read the sources of Effect and Three.js in `node_modules`, pinned by the lockfile.
+- The agent skills (`lightocean` for framing, `generate-domain`, and a read-only `audit-game`) live in `skills/` and are written once the API above exists. Agents read the sources of Effect and Three.js in `node_modules`, pinned by the lockfile.
+
+**Mods, a direction.** A mod is a domain loaded while the game runs, from outside it: it requires the game's domains, owns only its own state, and reaches the game's only through the events and shared components those domains declare, which make up the game's modding interface without anyone writing one. What types check for a domain today, a game checks when it loads a mod. The first mods are data, not code: rules made in the editor, which the engine carries out as declared actions and which need no sandbox. Mods as code wait on loading code at run time, a sandbox on the server, determinism no lint can hold for code it never saw, and versions; none of it is planned yet.
 
 **Development.** When a file changes, the host keeps its world and swaps in the new game, so a game runs on with the new logic; a world the new schema cannot decode starts over from the initial world, with the reason given. A recording starts a new segment, since a recording is valid for one build.
 
@@ -244,7 +247,7 @@ LightOcean is sold by its structure, not its stack: _Your world is data. LightOc
 - `applications/playground`: the first proof that one Model drives both the DOM and the 3D world.
 - `applications/net-spike`: the spike that hosted a world in a Durable Object.
 
-The packages are to become `core` (adding commands, plugins, and `Story`), `client` (adding local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object, and persistence), `reflection`, `devtools`, `devtools-mcp`, and `oxlint-plugin`. `engine` goes, its `Viewport` moving to `client`.
+The packages are to become `core` (adding commands, domains, and `Story`), `client` (adding local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object, and persistence), `reflection`, `devtools`, `devtools-mcp`, and `oxlint-plugin`. `engine` goes, its `Viewport` moving to `client`.
 
 ## Development
 
@@ -258,7 +261,7 @@ The API above is built in this order, each step test-first, and each breaking on
 1. The game declares its components, actions, and events, and the schema of its whole world follows from it; hosts and clients take them from the game. Tagged unions and `Option` travel in components and interpolate.
 2. `Story`, and the engine's own tests moved onto it.
 3. The map of changes, frozen worlds in development, and the fixtures named as facts.
-4. Plugins: owning their components, requiring one another, every action answered and no event dead, and the `/internal` entry.
+4. Domains: owning their components, requiring one another, every action answered and no event dead, and the `/internal` entry.
 5. Commands.
 6. Local systems.
 7. Views (`View.each`, `View.on`, `View.during`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.
@@ -269,7 +272,7 @@ The API above is built in this order, each step test-first, and each breaking on
 12. Skills, and the example that saves a score.
 13. Hosting in a Durable Object and prediction, as experimental, with the example over the network.
 
-Border is eight plugins (Level, Body, Player, Progress, Undead, Shooting, Knife, Explosives), and none writes what another owns: what one plugin does to another's state goes by an event the other declared, such as a weapon's `Hit` that the undead decide on, and only where bodies are and how they move is shared. Border's seams close along the way, once what each rests on is in the simulation: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`); and pillars and crates become shapes with height, so rounds stop at them.
+Border is eight domains (Level, Body, Player, Progress, Undead, Shooting, Knife, Explosives), and none writes what another owns: what one domain does to another's state goes by an event the other declared, such as a weapon's `Hit` that the undead decide on, and only where bodies are and how they move is shared. Border's seams close along the way, once what each rests on is in the simulation: her health and death (`Died`, and blows the game takes off her health), how she gives herself away (`Presence`, from the lab's lights, her lamp, and her fear), her grenades' flight (`Exploded`), and what she bought (`Stab.deadly`); and pillars and crates become shapes with height, so rounds stop at them.
 
 Later, for the editor:
 

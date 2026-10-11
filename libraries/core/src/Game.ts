@@ -3,14 +3,14 @@ import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type * as Input from '#src/Input.ts';
-import type * as Plugin from '#src/Plugin.ts';
+import type * as Domain from '#src/Domain.ts';
 import * as Random from '#src/Random.ts';
 import type * as Rule from '#src/Rule.ts';
 import type * as System from '#src/System.ts';
 import * as World from '#src/World.ts';
 
 /**
- * A game: its fixed step rate and the plugins it is made of, and from them everything its state is made of (its components, the actions its players take, and the events its steps emit), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
+ * A game: its fixed step rate and the domains it is made of, and from them everything its state is made of (its components, the actions its players take, and the events its steps emit), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
  *
  * One step: the tick advances; the step's input is written to the entities it is aimed at; the players' actions are handled by the rules, in the order they came; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
  */
@@ -21,7 +21,7 @@ export interface Game<
   Events extends Event.Any = Event.Any,
 > {
   readonly stepRate: number;
-  readonly plugins: ReadonlyArray<Plugin.Any>;
+  readonly domains: ReadonlyArray<Domain.Any>;
   readonly components: ReadonlyArray<Components>;
   readonly actions: ReadonlyArray<Actions>;
   readonly events: ReadonlyArray<Events>;
@@ -29,25 +29,25 @@ export interface Game<
   readonly rules: ReadonlyArray<Rule.Rule>;
 }
 
-/** The names of the plugins `Plugins` require and do not hold. */
-type Missing<Plugins extends ReadonlyArray<Plugin.Any>> = Exclude<
-  Plugins[number]['requires'][number]['name'],
-  Plugins[number]['name']
+/** The names of the domains `Domains` require and do not hold. */
+type Missing<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
+  Domains[number]['requires'][number]['name'],
+  Domains[number]['name']
 >;
 
-/** The tags of the actions no rule of `Plugins` answers. */
-type Unanswered<Plugins extends ReadonlyArray<Plugin.Any>> = Exclude<
-  Plugins[number]['actions'][number]['tag'],
-  Parts<Plugins>['handles']
+/** The tags of the actions no rule of `Domains` answers. */
+type Unanswered<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
+  Domains[number]['actions'][number]['tag'],
+  Parts<Domains>['handles']
 >;
 
-/** The tags of the events `Plugins` declare that nothing emits and nothing handles. */
-type Dead<Plugins extends ReadonlyArray<Plugin.Any>> = Exclude<
-  Plugins[number]['events'][number]['tag'],
-  Parts<Plugins>['handles'] | Parts<Plugins>['emits']
+/** The tags of the events `Domains` declare that nothing emits and nothing handles. */
+type Dead<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
+  Domains[number]['events'][number]['tag'],
+  Parts<Domains>['handles'] | Parts<Domains>['emits']
 >;
 
-type Parts<Plugins extends ReadonlyArray<Plugin.Any>> = NonNullable<Plugins[number]['~parts']>;
+type Parts<Domains extends ReadonlyArray<Domain.Any>> = NonNullable<Domains[number]['~parts']>;
 
 /** Nothing, when there is none of `Found`; otherwise a field naming them under `name`, which no game has, so it does not compile. */
 type Refuse<Name extends string, Found> = [Found] extends [never]
@@ -55,33 +55,33 @@ type Refuse<Name extends string, Found> = [Found] extends [never]
   : { readonly [K in Name]: Found };
 
 /**
- * What a game of `Plugins` must not be: missing a plugin one requires, holding an action no rule answers, a player doing something to no effect, or an event nothing emits or handles. An event that is emitted and goes unanswered is a plugin's offer to others, and is fine.
+ * What a game of `Domains` must not be: missing a domain one requires, holding an action no rule answers, a player doing something to no effect, or an event nothing emits or handles. An event that is emitted and goes unanswered is a domain's offer to others, and is fine.
  */
-type Requirements<Plugins extends ReadonlyArray<Plugin.Any>> = Refuse<'missing', Missing<Plugins>> &
-  Refuse<'unanswered', Unanswered<Plugins>> &
-  Refuse<'dead', Dead<Plugins>>;
+type Requirements<Domains extends ReadonlyArray<Domain.Any>> = Refuse<'missing', Missing<Domains>> &
+  Refuse<'unanswered', Unanswered<Domains>> &
+  Refuse<'dead', Dead<Domains>>;
 
 /**
- * A game made of `plugins`: their components, actions, and events, their systems in the order the plugins come and then the order each lists them, and their rules likewise. A plugin required by one of them and missing from the list, an action no rule answers, and an event nothing emits or handles do not compile.
+ * A game made of `domains`: their components, actions, and events, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an action no rule answers, and an event nothing emits or handles do not compile.
  */
-export const make = <const Plugins extends ReadonlyArray<Plugin.Any>>(
-  game: { readonly stepRate: number; readonly plugins: Plugins } & Requirements<Plugins>,
+export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
+  game: { readonly stepRate: number; readonly domains: Domains } & Requirements<Domains>,
 ): Game<
-  Plugins[number]['components'][number],
-  Plugins[number]['actions'][number],
-  Plugins[number]['events'][number]
+  Domains[number]['components'][number],
+  Domains[number]['actions'][number],
+  Domains[number]['events'][number]
 > => ({
   stepRate: game.stepRate,
-  plugins: game.plugins,
-  components: game.plugins.flatMap((plugin) => plugin.components),
-  actions: game.plugins.flatMap((plugin) => plugin.actions),
-  events: game.plugins.flatMap((plugin) => plugin.events),
-  systems: game.plugins.flatMap((plugin) => plugin.systems),
-  rules: game.plugins.flatMap((plugin) => plugin.rules),
+  domains: game.domains,
+  components: game.domains.flatMap((domain) => domain.components),
+  actions: game.domains.flatMap((domain) => domain.actions),
+  events: game.domains.flatMap((domain) => domain.events),
+  systems: game.domains.flatMap((domain) => domain.systems),
+  rules: game.domains.flatMap((domain) => domain.rules),
 });
 
 /**
- * `game` with only `systems` and `rules`, for a test told about some of what a game does, such as the undead standing still while a blast is tested. They may be any parts over what the game declares; which plugin owns what is not checked here, nor that every action is answered.
+ * `game` with only `systems` and `rules`, for a test told about some of what a game does, such as the undead standing still while a blast is tested. They may be any parts over what the game declares; which domain owns what is not checked here, nor that every action is answered.
  */
 export const only = <
   Components extends Component.Any,

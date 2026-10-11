@@ -18,7 +18,7 @@ import {
 } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
-import * as Plugin from '#src/Plugin.ts';
+import * as Domain from '#src/Domain.ts';
 import * as Rule from '#src/Rule.ts';
 import * as Story from '#src/Story.ts';
 import * as Snapshot from '#src/Snapshot.ts';
@@ -583,14 +583,14 @@ export const refused = () => {
   });
 };
 
-describe('Plugin.make', () => {
+describe('Domain.make', () => {
   const Owned = Component.make('Owned', Schema.Struct({ x: Schema.Finite }), {
     owner: 'simulation',
     network: 'server',
   });
-  /** Noticed, like Owned, belongs to a plugin of its own, which not every plugin requires. */
+  /** Noticed, like Owned, belongs to a domain of its own, which not every domain requires. */
   const Noticed = Event.make('Noticed', {});
-  it('lets a plugin read, spawn, emit, and handle what the plugins it requires declare', () => {
+  it('lets a domain read, spawn, emit, and handle what the domains it requires declare', () => {
     const watching = System.make({
       name: 'watching',
       reads: [Position],
@@ -600,7 +600,7 @@ describe('Plugin.make', () => {
       run: () => {},
     });
     const answering = Rule.on(Died, { writes: [], emits: [Noticed], run: () => {} });
-    const Watcher = Plugin.make({
+    const Watcher = Domain.make({
       name: 'Watcher',
       requires: [Fixture],
       components: [Owned],
@@ -610,10 +610,10 @@ describe('Plugin.make', () => {
       rules: [answering],
     });
 
-    expect(Game.make({ stepRate: 10, plugins: [Fixture, Watcher] }).systems).toEqual([watching]);
+    expect(Game.make({ stepRate: 10, domains: [Fixture, Watcher] }).systems).toEqual([watching]);
   });
 
-  it('refuses a plugin writing what another plugin owns, even one it requires', () => {
+  it('refuses a domain writing what another domain owns, even one it requires', () => {
     const meddling = System.make({
       name: 'meddling',
       reads: [],
@@ -623,7 +623,7 @@ describe('Plugin.make', () => {
     });
     const overruling = Rule.on(Died, { writes: [Health], emits: [], run: () => {} });
 
-    Plugin.make({
+    Domain.make({
       name: 'Meddler',
       requires: [Fixture],
       components: [],
@@ -633,7 +633,7 @@ describe('Plugin.make', () => {
       systems: [meddling],
       rules: [],
     });
-    Plugin.make({
+    Domain.make({
       name: 'Overruler',
       requires: [Fixture],
       components: [],
@@ -645,7 +645,7 @@ describe('Plugin.make', () => {
     });
   });
 
-  it('lets a plugin write what a plugin it requires shares, and nothing else of it', () => {
+  it('lets a domain write what a domain it requires shares, and nothing else of it', () => {
     const Moved = Component.make('Moved', Schema.Struct({ x: Schema.Finite }), {
       owner: 'simulation',
       network: 'server',
@@ -654,7 +654,7 @@ describe('Plugin.make', () => {
       owner: 'simulation',
       network: 'server',
     });
-    const Bodies = Plugin.make({
+    const Bodies = Domain.make({
       name: 'Bodies',
       requires: [],
       components: [Moved, Kept],
@@ -685,19 +685,19 @@ describe('Plugin.make', () => {
       events: [],
       rules: [],
     } as const;
-    const Pusher = Plugin.make({ ...parts, name: 'Pusher', systems: [pushing] });
+    const Pusher = Domain.make({ ...parts, name: 'Pusher', systems: [pushing] });
 
-    expect(Game.make({ stepRate: 10, plugins: [Bodies, Pusher] }).systems).toEqual([pushing]);
+    expect(Game.make({ stepRate: 10, domains: [Bodies, Pusher] }).systems).toEqual([pushing]);
     // @ts-expect-error Kept is not shared.
-    Plugin.make({ ...parts, name: 'Keeper', systems: [keeping] });
+    Domain.make({ ...parts, name: 'Keeper', systems: [keeping] });
   });
 
-  it('refuses a plugin sharing what it does not own', () => {
-    Plugin.make({
+  it('refuses a domain sharing what it does not own', () => {
+    Domain.make({
       name: 'Generous',
       requires: [Fixture],
       components: [],
-      // @ts-expect-error Position is the fixture's, not the generous plugin's.
+      // @ts-expect-error Position is the fixture's, not the generous domain's.
       shares: [Position],
       actions: [],
       events: [],
@@ -706,7 +706,7 @@ describe('Plugin.make', () => {
     });
   });
 
-  it('refuses a plugin reading, emitting, or handling what a plugin it does not require declares', () => {
+  it('refuses a domain reading, emitting, or handling what a domain it does not require declares', () => {
     const reading = System.make({
       name: 'reading',
       reads: [Owned],
@@ -730,12 +730,12 @@ describe('Plugin.make', () => {
       events: [],
     } as const;
 
-    // @ts-expect-error Owned is not the stranger's, nor of a plugin it requires.
-    Plugin.make({ ...parts, systems: [reading], rules: [] });
-    // @ts-expect-error Noticed is not the stranger's, nor of a plugin it requires.
-    Plugin.make({ ...parts, systems: [emitting], rules: [] });
-    // @ts-expect-error Noticed is not the stranger's, nor of a plugin it requires.
-    Plugin.make({ ...parts, systems: [], rules: [handling] });
+    // @ts-expect-error Owned is not the stranger's, nor of a domain it requires.
+    Domain.make({ ...parts, systems: [reading], rules: [] });
+    // @ts-expect-error Noticed is not the stranger's, nor of a domain it requires.
+    Domain.make({ ...parts, systems: [emitting], rules: [] });
+    // @ts-expect-error Noticed is not the stranger's, nor of a domain it requires.
+    Domain.make({ ...parts, systems: [], rules: [handling] });
   });
 });
 
@@ -744,7 +744,7 @@ describe('Game.make', () => {
     owner: 'simulation',
     network: 'server',
   });
-  const Needy = Plugin.make({
+  const Needy = Domain.make({
     name: 'Needy',
     requires: [Fixture],
     components: [Owned],
@@ -754,8 +754,8 @@ describe('Game.make', () => {
     rules: [],
   });
 
-  it('is made of its plugins, their parts in the order the plugins come', () => {
-    const made = Game.make({ stepRate: 10, plugins: [Fixture, Needy] });
+  it('is made of its domains, their parts in the order the domains come', () => {
+    const made = Game.make({ stepRate: 10, domains: [Fixture, Needy] });
 
     expect(made.components.map(({ name }) => name)).toEqual([
       'Position',
@@ -774,16 +774,16 @@ describe('Game.make', () => {
     const Pressed = Action.make('Pressed', {});
     const Forgotten = Event.make('Forgotten', {});
     const parts = { requires: [], components: [], systems: [], rules: [] } as const;
-    const Mute = Plugin.make({ ...parts, name: 'Mute', actions: [Pressed], events: [] });
-    const Haunted = Plugin.make({ ...parts, name: 'Haunted', actions: [], events: [Forgotten] });
+    const Mute = Domain.make({ ...parts, name: 'Mute', actions: [Pressed], events: [] });
+    const Haunted = Domain.make({ ...parts, name: 'Haunted', actions: [], events: [Forgotten] });
 
     // @ts-expect-error Pressed is a player doing something to no effect.
-    Game.make({ stepRate: 10, plugins: [Mute] });
+    Game.make({ stepRate: 10, domains: [Mute] });
     // @ts-expect-error Forgotten is never emitted and never handled.
-    Game.make({ stepRate: 10, plugins: [Haunted] });
+    Game.make({ stepRate: 10, domains: [Haunted] });
   });
 
-  it('lets an event go unanswered, as a plugin’s offer to others', () => {
+  it('lets an event go unanswered, as a domain’s offer to others', () => {
     const Called = Event.make('Called', {});
     const calling = System.make({
       name: 'calling',
@@ -792,7 +792,7 @@ describe('Game.make', () => {
       emits: [Called],
       run: () => {},
     });
-    const Caller = Plugin.make({
+    const Caller = Domain.make({
       name: 'Caller',
       requires: [],
       components: [],
@@ -802,12 +802,12 @@ describe('Game.make', () => {
       rules: [],
     });
 
-    expect(Game.make({ stepRate: 10, plugins: [Caller] }).events).toEqual([Called]);
+    expect(Game.make({ stepRate: 10, domains: [Caller] }).events).toEqual([Called]);
   });
 
-  it('refuses a game missing a plugin one of its plugins requires', () => {
-    // @ts-expect-error Needy requires the fixture's plugin.
-    Game.make({ stepRate: 10, plugins: [Needy] });
+  it('refuses a game missing a domain one of its domains requires', () => {
+    // @ts-expect-error Needy requires the fixture's domain.
+    Game.make({ stepRate: 10, domains: [Needy] });
   });
 });
 
@@ -939,8 +939,8 @@ describe('a component holding a state', () => {
   );
   const moody = Game.make({
     stepRate: 10,
-    plugins: [
-      Plugin.make({
+    domains: [
+      Domain.make({
         name: 'Test',
         requires: [],
         components: [Mood],

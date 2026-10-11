@@ -3,7 +3,7 @@ import * as Action from '#src/Action.ts';
 import * as Component from '#src/Component.ts';
 import * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
-import * as Plugin from '#src/Plugin.ts';
+import * as Domain from '#src/Domain.ts';
 import * as Rule from '#src/Rule.ts';
 
 /**
@@ -73,8 +73,8 @@ export const restart = Rule.on(ChoseRestart, {
   },
 });
 
-/** Everything the small game is made of, as one plugin answering its own actions and events, with no systems: a test gives the ones it is about. */
-export const Fixture = Plugin.make({
+/** Everything the small game is made of, as one domain answering its own actions and events, with no systems: a test gives the ones it is about. */
+export const Fixture = Domain.make({
   name: 'Fixture',
   requires: [],
   components: [Position, Velocity, Health, Controls, Splat, Wall],
@@ -85,4 +85,4 @@ export const Fixture = Plugin.make({
 });
 
 /** The small game at ten steps a second, for a test to give the parts it is about with `Game.only`. */
-export const fixture = Game.make({ stepRate: 10, plugins: [Fixture] });
+export const fixture = Game.make({ stepRate: 10, domains: [Fixture] });

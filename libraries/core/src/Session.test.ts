@@ -5,7 +5,7 @@ import * as Action from '#src/Action.ts';
 import * as Client from '#src/Client.ts';
 import { Controls, Health, Position } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
-import * as Plugin from '#src/Plugin.ts';
+import * as Domain from '#src/Domain.ts';
 import * as Host from '#src/Host.ts';
 import * as Rule from '#src/Rule.ts';
 import * as System from '#src/System.ts';
@@ -39,8 +39,8 @@ const heal = Rule.on(AskedToHeal, {
 
 const game = Game.make({
   stepRate: 30,
-  plugins: [
-    Plugin.make({
+  domains: [
+    Domain.make({
       name: 'Test',
       requires: [],
       components: [Position, Controls, Health],
