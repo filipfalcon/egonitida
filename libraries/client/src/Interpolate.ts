@@ -71,7 +71,9 @@ export const between = <Value>(
   if (t >= 1) {
     return b;
   }
-  if (t <= 0) {
+  // Kept whole as a step, it is not worked through at all: what is drawn
+  // between holds the earlier value as it is.
+  if (t <= 0 || howOf(schema.ast) === 'step') {
     return a;
   }
   const json = Schema.toCodecJson(schema);
