@@ -10,9 +10,10 @@ The first game to run on the engine is Border, a first-person browser game in it
 
 Seven principles shape every API. Each builds on the ones before it.
 
-### 1. State: one state, ownership is a type
+### 1. State: one state per host, ownership is a type
 
-- A game has one state, described by Effect Schema. It is not split into a rules Model and a simulation joined by a hand-written bridge, the way Border joins them today.
+- Everything a host holds of a game is one state, described by Effect Schema: the facts the rules decide, what the simulation moves, and what the players demand, alike. It is not split into a rules Model and a simulation joined by a hand-written bridge, the way Border joins them today.
+- A game may run on many hosts, such as one for each zone, and each holds a state and a tick of its own. No state reaches into another: a host sends another what it needs as a command, and it arrives there as an action, recorded with that host's input like any other. Each host's states therefore replay on their own, and no host's tick waits for another's.
 - The simulation follows the Entity Component System model, after Bevy: an entity is an id, components are the data attached to it, and systems are functions over every entity with given components.
 - Every component has exactly one owner, declared in its schema:
   - **Rules** own the facts the game's rules decide, such as health, ammunition, or an open door. Only rules change them, when an action or an event happens.
@@ -45,8 +46,8 @@ Seven principles shape every API. Each builds on the ones before it.
 - The simulation moves on in fixed steps, each one `secondsPerStep` long. The step rate is a setting of each game, given to `Game.make` and never defaulted by the engine, fixed for the game's lifetime, because tuning and recordings depend on it. Border steps at 60 Hz. A system that needs finer steps, such as a ragdoll, subdivides its own.
 - The step rate is one number everywhere: the server, a client predicting, and a replay all take the same steps, or prediction would not match. How often snapshots are sent is a separate, lower number when bandwidth calls for it, such as 20 or 30 Hz; clients interpolate between them.
 - Demands are read once a step, so a step's length bounds how fast movement responds. Looking around is the client's alone, every frame, outside the simulation; the simulation only receives where the player looks as one of their demands.
-- A displayed frame reads input, runs as many fixed steps as real time calls for (each step: systems, then events, then rules), interpolates between the last two steps, and draws. The number of steps per frame is capped, so a slow machine slows the game briefly instead of falling ever further behind.
-- A game has one time, and it only moves forward, step by step, at the game's rate. Nothing inside the game scales it or stops it; only the host can hold it, by its policy.
+- A displayed frame reads the devices into the player's demands and actions, runs as many fixed steps as real time calls for (each step: the demands are written, the rules handle the actions, the systems run, then the rules handle the events that arose), interpolates between the last two steps, and draws. The number of steps per frame is capped, so a slow machine slows the game briefly instead of falling ever further behind.
+- Each state has one time: its tick only moves forward, step by step, at the game's rate. Nothing inside the game scales it or stops it; only its host can suspend it, by its policy.
 - Presentation never changes how the game runs, in singleplayer or multiplayer alike, because a game can always be switched between the two. A client keeps a timeline of recent states, which serves three things:
   - interpolation, drawing slightly in the past between two states;
   - prediction, going back to a confirmed state to replay what the server has not confirmed;
