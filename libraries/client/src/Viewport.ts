@@ -1,18 +1,25 @@
 import { Data, Effect, Option, Queue, type Scope, Stream } from 'effect';
 import { denoise } from 'three/addons/tsl/display/DenoiseNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
+import { smaa } from 'three/addons/tsl/display/SMAANode.js';
+import SSAAPassNode from 'three/addons/tsl/display/SSAAPassNode.js';
+import { taau } from 'three/addons/tsl/display/TAAUNode.js';
+import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import {
   builtinAOContext,
   unpackRGBToNormal,
   packNormalToRGB,
   mrt,
   normalView,
+  output,
   pass,
   rtt,
   sample,
   screenUV,
+  velocity,
 } from 'three/tsl';
 import * as Three from 'three/webgpu';
+import * as Antialiasing from '#src/Antialiasing.ts';
 
 /**
  * A game's state drawn onto a canvas by a `WebGPURenderer`: a scene to put views' objects in, a camera, and a loop that draws a frame at every frame the display shows. It lives in the browser only.
@@ -103,58 +110,140 @@ export const occlusion = (told: Partial<Occlusion> = {}): Occlusion => ({
   resolution: Math.min(Math.max(told.resolution ?? 0.5, 0.1), 1),
 });
 
-/** How a viewport draws: with ambient occlusion, if given. */
+/** How a viewport draws: with ambient occlusion, if given, and antialiased as told, by multisampling unless told otherwise. */
 export interface Options {
-  readonly occlusion: Option.Option<Occlusion>;
+  readonly occlusion?: Option.Option<Occlusion>;
+  readonly antialiasing?: Antialiasing.Antialiasing;
 }
 
-/** Draws `scene` from `camera` with ambient occlusion: first its depth and its normals alone, from which the occlusion is worked out and then smoothed, then the scene itself, its ambient light darkened by it. */
-const occluded = (
-  renderer: Three.WebGPURenderer,
+/** Something drawn with that holds resources on the graphics device until it is let go of. */
+interface Held {
+  readonly dispose: () => void;
+}
+
+/** The ambient occlusion of `scene` seen from `camera`, as `told`, worked out at `resolution`, a share of the canvas's, and blended over the frames when `temporal`: first the scene's depth and its normals alone, from which the occlusion is worked out and then smoothed. Everything it is drawn with is given to `hold`. */
+const occlusionOf = (
   scene: Three.Scene,
   camera: Three.PerspectiveCamera,
   told: Occlusion,
+  drawing: { readonly resolution: number; readonly temporal: boolean },
+  hold: <A extends Held>(held: A) => A,
+) => {
+  // One sample a pixel: the occlusion reads the depth as it is, which it cannot from a smoothed one.
+  const shapes = hold(pass(scene, camera, { samples: 0 }));
+  shapes.transparent = false;
+  shapes.setResolutionScale(drawing.resolution);
+  shapes.setMRT(mrt({ output: packNormalToRGB(normalView) }));
+  // Normals need no more than a byte each.
+  shapes.getTexture('output').type = Three.UnsignedByteType;
+  const normals = sample((uv) => unpackRGBToNormal(shapes.getTextureNode().sample(uv)));
+  const shade = hold(ao(shapes.getTextureNode('depth'), normals, camera));
+  shade.resolutionScale = told.resolution;
+  shade.radius.value = told.radius;
+  shade.scale.value = told.strength;
+  // Blended over the frames, each frame's samples are turned aside from the last's, so together they see more.
+  shade.useTemporalFiltering = drawing.temporal;
+  // Worked out from a few samples a pixel, at a share of the resolution, the occlusion is noisy and coarse: it is smoothed and brought to the whole resolution along the surfaces it lies on, never across an edge between them, once a frame.
+  const smoothed = hold(
+    denoise(shade.getTextureNode(), shapes.getTextureNode('depth'), normals, camera),
+  );
+  return hold(rtt(smoothed)).sample(screenUV).r;
+};
+
+/** A supersampling pass that draws with its context, as every other pass does, which Three's leaves out: the ambient occlusion among it. */
+class Supersampled extends SSAAPassNode {
+  override updateBefore(frame: Three.NodeFrame) {
+    const { renderer } = frame;
+    const drawnWith = this.contextNode;
+    if (renderer === null || drawnWith === null) {
+      return super.updateBefore(frame);
+    }
+    const before = renderer.contextNode;
+    renderer.contextNode = drawnWith;
+    try {
+      return super.updateBefore(frame);
+    } finally {
+      renderer.contextNode = before;
+    }
+  }
+}
+
+/** The scene drawn `samples` times a frame, each a fraction of a pixel aside, and averaged. */
+const supersampled = (scene: Three.Scene, camera: Three.PerspectiveCamera, samples: number) => {
+  const drawn = new Supersampled(scene, camera);
+  drawn.sampleLevel = Math.log2(samples);
+  return drawn;
+};
+
+/** The passes `scene` is drawn through from `camera`, with ambient occlusion if given, and antialiased as `antialiasing` asks; let go of with the scope. */
+const pipelineOf = (
+  renderer: Three.WebGPURenderer,
+  scene: Three.Scene,
+  camera: Three.PerspectiveCamera,
+  occlusion: Option.Option<Occlusion>,
+  antialiasing: Antialiasing.Antialiasing,
 ) =>
   Effect.acquireRelease(
     Effect.sync(() => {
-      // One sample a pixel: the occlusion reads the depth as it is, which it cannot from a smoothed one.
-      const shapes = pass(scene, camera, { samples: 0 });
-      shapes.transparent = false;
-      shapes.setMRT(mrt({ output: packNormalToRGB(normalView) }));
-      // Normals need no more than a byte each.
-      shapes.getTexture('output').type = Three.UnsignedByteType;
-      const normals = sample((uv) => unpackRGBToNormal(shapes.getTextureNode().sample(uv)));
-      const shade = ao(shapes.getTextureNode('depth'), normals, camera);
-      shade.resolutionScale = told.resolution;
-      shade.radius.value = told.radius;
-      shade.scale.value = told.strength;
-      // Worked out from a few samples a pixel, at a share of the resolution, the occlusion is noisy and coarse: it is smoothed and brought to the whole resolution along the surfaces it lies on, never across an edge between them, once a frame.
-      const smoothed = denoise(
-        shade.getTextureNode(),
-        shapes.getTextureNode('depth'),
-        normals,
-        camera,
+      const held = new Array<Held>();
+      const hold = <A extends Held>(resource: A): A => {
+        held.push(resource);
+        return resource;
+      };
+      const drawing = {
+        resolution: antialiasing._tag === 'Temporal' ? antialiasing.resolution : 1,
+        temporal: antialiasing._tag === 'Temporal',
+      };
+      const drawn = hold(
+        antialiasing._tag === 'Supersample'
+          ? supersampled(scene, camera, antialiasing.samples)
+          : pass(scene, camera),
       );
-      const smooth = rtt(smoothed);
-      const lit = pass(scene, camera);
-      lit.contextNode = builtinAOContext(smooth.sample(screenUV).r);
-      const pipeline = new Three.RenderPipeline(renderer, lit);
-      return Object.assign(pipeline, { shade, smoothed, smooth });
+      drawn.setResolutionScale(drawing.resolution);
+      // Blending a frame into the ones before follows where each pixel moved since.
+      if (drawing.temporal) {
+        drawn.setMRT(mrt({ output, velocity }));
+      }
+      if (Option.isSome(occlusion)) {
+        drawn.contextNode = builtinAOContext(
+          occlusionOf(scene, camera, occlusion.value, drawing, hold),
+        );
+      }
+      const shown = (() => {
+        switch (antialiasing._tag) {
+          case 'None':
+          case 'Multisample':
+          case 'Supersample':
+            return drawn;
+          case 'Morphological':
+            return hold(smaa(drawn.getTextureNode()));
+          case 'Temporal': {
+            const resolve = antialiasing.resolution < 1 ? taau : traa;
+            return hold(
+              resolve(
+                drawn.getTextureNode('output'),
+                drawn.getTextureNode('depth'),
+                drawn.getTextureNode('velocity'),
+                camera,
+              ),
+            );
+          }
+        }
+      })();
+      const pipeline = hold(new Three.RenderPipeline(renderer, shown));
+      return { render: () => pipeline.render(), held };
     }),
-    (pipeline) =>
+    ({ held }) =>
       Effect.sync(() => {
-        pipeline.smooth.dispose();
-        pipeline.smoothed.dispose();
-        pipeline.shade.dispose();
-        pipeline.dispose();
+        for (const resource of held) resource.dispose();
       }),
   );
 
-const startRenderer = (canvas: HTMLCanvasElement) =>
+const startRenderer = (canvas: HTMLCanvasElement, antialias: boolean) =>
   Effect.acquireRelease(
     Effect.tryPromise({
       try: async () => {
-        const renderer = new Three.WebGPURenderer({ canvas, antialias: true });
+        const renderer = new Three.WebGPURenderer({ canvas, antialias });
         await renderer.init();
         return renderer;
       },
@@ -180,19 +269,24 @@ export const pointOf = (
   y: 1 - ((pointer.clientY - canvas.top) / canvas.height) * 2,
 });
 
-/** A viewport drawing onto `canvas`, as `options` tell it to: with no ambient occlusion unless given. */
+/** A viewport drawing onto `canvas`, as `options` tell it to: with no ambient occlusion unless given, and antialiased by multisampling unless told otherwise. */
 export const make = (
   canvas: HTMLCanvasElement,
-  options: Options = { occlusion: Option.none() },
+  options: Options = {},
 ): Effect.Effect<Viewport, ViewportError, Scope.Scope> =>
   Effect.gen(function* () {
-    const renderer = yield* startRenderer(canvas);
+    const occlusion = options.occlusion ?? Option.none();
+    const antialiasing = options.antialiasing ?? Antialiasing.multisample;
+    const renderer = yield* startRenderer(canvas, Antialiasing.multisampled(antialiasing));
     const scene = new Three.Scene();
     const camera = new Three.PerspectiveCamera();
-    const pipeline = yield* Option.match(options.occlusion, {
-      onNone: () => Effect.succeed(Option.none<Three.RenderPipeline>()),
-      onSome: (told) => Effect.asSome(occluded(renderer, scene, camera, told)),
-    });
+    // The renderer draws the scene by itself, multisampled or not; anything more is drawn through passes.
+    const alone =
+      Option.isNone(occlusion) &&
+      (antialiasing._tag === 'None' || antialiasing._tag === 'Multisample');
+    const pipeline = alone
+      ? Option.none<{ readonly render: () => void }>()
+      : Option.some(yield* pipelineOf(renderer, scene, camera, occlusion, antialiasing));
     const draw = () =>
       Option.match(pipeline, {
         onNone: () => renderer.render(scene, camera),

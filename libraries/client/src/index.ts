@@ -1,3 +1,4 @@
+export * as Antialiasing from '#src/Antialiasing.ts';
 export * as Chroma from '#src/Chroma.ts';
 export * as Clicking from '#src/Clicking.ts';
 export * as Controls from '#src/Controls.ts';
