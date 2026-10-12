@@ -74,15 +74,19 @@ const main = Effect.gen(function* () {
   const connection = yield* WorkerTransport.connect;
   const client = yield* Client.connect(connection, { game: Game.game });
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
-  const viewport = yield* Viewport.make(canvas);
+  // The ambient light darkens where the undead crowd each other and stand on the floor, which grounds them in the arena.
+  const viewport = yield* Viewport.make(canvas, {
+    occlusion: Option.some(Viewport.occlusion({ radius: 1, strength: 2 })),
+  });
 
   const floor = new Three.Mesh(
     new Three.CircleGeometry(Body.ARENA_RADIUS, 64),
     new Three.MeshStandardNodeMaterial({ color: 0x2b2f33 }),
   );
   floor.rotation.x = -Math.PI / 2;
-  viewport.scene.add(floor, new Three.AmbientLight(0xffffff, 0.5));
-  const sun = new Three.DirectionalLight(0xffffff, 2);
+  // Light from the sky over the arena and from the floor beneath, which the occlusion darkens, and a sun.
+  viewport.scene.add(floor, new Three.HemisphereLight(0xdde6f0, 0x2b2f33, 2.5));
+  const sun = new Three.DirectionalLight(0xffffff, 1.2);
   sun.position.set(4, 10, 6);
   viewport.scene.add(sun);
   viewport.camera.position.set(0, 18, 13);
