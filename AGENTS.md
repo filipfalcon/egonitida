@@ -50,7 +50,7 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 
 **Naming and layout.** Modules are PascalCase files exported as namespaces from a barrel `index.ts` that holds only re-exports. What only a host or a test needs is under a package's `/internal` entry. A domain's module is laid out in the sections `COMPONENTS`, `ACTIONS`, `EVENTS`, `COMMANDS`, `RULES`, `SYSTEMS`, `DOMAIN`.
 
-**Comments and prose.** Every public export has a doc comment saying what it is and why. Prose leads with its claim, in plain words; headings are labels. Code, tests, and documents carry no notes about earlier attempts or what something used to be.
+**Comments and prose.** Every public export has a doc comment saying what it is and why. Prose leads with its claim, in plain words; headings are labels. The website's documentation is written in American English, in an academic register with the vocabulary of the trade, and stays easy and fun to read: short sentences, active verbs, precise terms, and no phrase that says nothing. Code, tests, and documents carry no notes about earlier attempts or what something used to be.
 
 ## Testing
 
