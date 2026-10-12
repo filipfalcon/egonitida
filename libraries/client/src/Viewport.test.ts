@@ -26,3 +26,26 @@ describe('Viewport.pointOf', () => {
     expect(Viewport.pointOf({ clientX: 500, clientY: 250 }, canvas)).toEqual({ x: 1, y: -1 });
   });
 });
+
+describe('Viewport.occlusion', () => {
+  it('shades what lies within half a unit, at full strength, worked out at half the resolution, unless told otherwise', () => {
+    expect(Viewport.occlusion()).toEqual({ radius: 0.5, strength: 1, resolution: 0.5 });
+  });
+
+  it('keeps what it is told', () => {
+    expect(Viewport.occlusion({ radius: 2, strength: 0.6, resolution: 1 })).toEqual({
+      radius: 2,
+      strength: 0.6,
+      resolution: 1,
+    });
+  });
+
+  it('never shades less than nothing, nor works out at less than a tenth of the resolution or more than all of it', () => {
+    expect(Viewport.occlusion({ radius: -1, strength: -1, resolution: 0 })).toEqual({
+      radius: 0,
+      strength: 0,
+      resolution: 0.1,
+    });
+    expect(Viewport.occlusion({ resolution: 3 }).resolution).toBe(1);
+  });
+});

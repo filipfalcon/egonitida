@@ -1,4 +1,17 @@
 import { Data, Effect, Option, Queue, type Scope, Stream } from 'effect';
+import { denoise } from 'three/addons/tsl/display/DenoiseNode.js';
+import { ao } from 'three/addons/tsl/display/GTAONode.js';
+import {
+  builtinAOContext,
+  unpackRGBToNormal,
+  packNormalToRGB,
+  mrt,
+  normalView,
+  pass,
+  rtt,
+  sample,
+  screenUV,
+} from 'three/tsl';
 import * as Three from 'three/webgpu';
 
 /**
@@ -73,6 +86,70 @@ export const shot = (
     });
   });
 
+/** Ambient occlusion: the ambient light darkened where surfaces close in on each other, in creases, corners, and beneath what stands on the ground, which grounds objects in the scene. Only the ambient light is darkened; direct light and its shadows are left as they are. */
+export interface Occlusion {
+  /** How far, in the scene's units, a surface darkens the ambient light reaching what lies near it. */
+  readonly radius: number;
+  /** How dark it makes it: 0 not at all, 1 as dark as it works out, and more darker still. */
+  readonly strength: number;
+  /** The share of the canvas's resolution it is worked out at, from a tenth to all of it: half is enough for most scenes, at a quarter of the cost. */
+  readonly resolution: number;
+}
+
+/** Ambient occlusion as told, the rest as most scenes want it: shading what lies within half a unit, at full strength, worked out at half the resolution. */
+export const occlusion = (told: Partial<Occlusion> = {}): Occlusion => ({
+  radius: Math.max(told.radius ?? 0.5, 0),
+  strength: Math.max(told.strength ?? 1, 0),
+  resolution: Math.min(Math.max(told.resolution ?? 0.5, 0.1), 1),
+});
+
+/** How a viewport draws: with ambient occlusion, if given. */
+export interface Options {
+  readonly occlusion: Option.Option<Occlusion>;
+}
+
+/** Draws `scene` from `camera` with ambient occlusion: first its depth and its normals alone, from which the occlusion is worked out and then smoothed, then the scene itself, its ambient light darkened by it. */
+const occluded = (
+  renderer: Three.WebGPURenderer,
+  scene: Three.Scene,
+  camera: Three.PerspectiveCamera,
+  told: Occlusion,
+) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      // One sample a pixel: the occlusion reads the depth as it is, which it cannot from a smoothed one.
+      const shapes = pass(scene, camera, { samples: 0 });
+      shapes.transparent = false;
+      shapes.setMRT(mrt({ output: packNormalToRGB(normalView) }));
+      // Normals need no more than a byte each.
+      shapes.getTexture('output').type = Three.UnsignedByteType;
+      const normals = sample((uv) => unpackRGBToNormal(shapes.getTextureNode().sample(uv)));
+      const shade = ao(shapes.getTextureNode('depth'), normals, camera);
+      shade.resolutionScale = told.resolution;
+      shade.radius.value = told.radius;
+      shade.scale.value = told.strength;
+      // Worked out from a few samples a pixel, at a share of the resolution, the occlusion is noisy and coarse: it is smoothed and brought to the whole resolution along the surfaces it lies on, never across an edge between them, once a frame.
+      const smoothed = denoise(
+        shade.getTextureNode(),
+        shapes.getTextureNode('depth'),
+        normals,
+        camera,
+      );
+      const smooth = rtt(smoothed);
+      const lit = pass(scene, camera);
+      lit.contextNode = builtinAOContext(smooth.sample(screenUV).r);
+      const pipeline = new Three.RenderPipeline(renderer, lit);
+      return Object.assign(pipeline, { shade, smoothed, smooth });
+    }),
+    (pipeline) =>
+      Effect.sync(() => {
+        pipeline.smooth.dispose();
+        pipeline.smoothed.dispose();
+        pipeline.shade.dispose();
+        pipeline.dispose();
+      }),
+  );
+
 const startRenderer = (canvas: HTMLCanvasElement) =>
   Effect.acquireRelease(
     Effect.tryPromise({
@@ -103,13 +180,24 @@ export const pointOf = (
   y: 1 - ((pointer.clientY - canvas.top) / canvas.height) * 2,
 });
 
+/** A viewport drawing onto `canvas`, as `options` tell it to: with no ambient occlusion unless given. */
 export const make = (
   canvas: HTMLCanvasElement,
+  options: Options = { occlusion: Option.none() },
 ): Effect.Effect<Viewport, ViewportError, Scope.Scope> =>
   Effect.gen(function* () {
     const renderer = yield* startRenderer(canvas);
     const scene = new Three.Scene();
     const camera = new Three.PerspectiveCamera();
+    const pipeline = yield* Option.match(options.occlusion, {
+      onNone: () => Effect.succeed(Option.none<Three.RenderPipeline>()),
+      onSome: (told) => Effect.asSome(occluded(renderer, scene, camera, told)),
+    });
+    const draw = () =>
+      Option.match(pipeline, {
+        onNone: () => renderer.render(scene, camera),
+        onSome: (drawn) => drawn.render(),
+      });
 
     const fit = () => {
       const width = Math.max(canvas.clientWidth, 1);
@@ -129,7 +217,7 @@ export const make = (
       (observer) => Effect.sync(() => observer.disconnect()),
     );
 
-    const render = Effect.sync(() => renderer.render(scene, camera));
+    const render = Effect.sync(draw);
     // Whether the loop has drawn a frame yet, before which a shot would show nothing of the state.
     const drawn = { once: false };
 
@@ -182,7 +270,7 @@ export const make = (
             }),
           );
         }
-        renderer.render(scene, camera);
+        draw();
         return shot(canvas, width);
       });
 
