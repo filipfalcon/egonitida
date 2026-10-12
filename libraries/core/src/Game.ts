@@ -66,12 +66,52 @@ type Requirements<Domains extends ReadonlyArray<Domain.Any>> = Refuse<'missing',
   Refuse<'unanswered', Unanswered<Domains>> &
   Refuse<'dead', Dead<Domains>>;
 
+/** The names that come more than once among `names`, each once. */
+const repeated = (names: ReadonlyArray<string>): ReadonlyArray<string> => [
+  ...new Set(names.filter((name, index) => names.indexOf(name) !== index)),
+];
+
+/** Throws, naming them, if `names` repeat: two things of one name that a state or a step could not tell apart. */
+const refuseRepeated = (names: ReadonlyArray<string>, what: string) => {
+  const twice = repeated(names);
+  if (twice.length > 0) {
+    throw new Error(`a game declares two ${what} ${twice.join(', ')}`);
+  }
+};
+
 /**
- * A game made of `domains`: their components, actions, and events, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an action no rule answers, and an event nothing emits or handles do not compile.
+ * A game made of `domains`: their components, actions, and events, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an action no rule answers, and an event nothing emits or handles do not compile. Two components of one name, which a state keeps in one store, two actions or events of one tag, and two commands of one name are refused when the game is made.
  */
 export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
   game: { readonly stepRate: number; readonly domains: Domains } & Requirements<Domains>,
 ): Game<
+  Domains[number]['components'][number],
+  Domains[number]['actions'][number],
+  Domains[number]['events'][number],
+  Domains[number]['commands'][number]
+> => {
+  refuseRepeated(
+    game.domains.flatMap((domain) => domain.components.map(({ name }) => name)),
+    'components named',
+  );
+  refuseRepeated(
+    game.domains.flatMap((domain) => [
+      ...domain.actions.map(({ tag }) => tag),
+      ...domain.events.map(({ tag }) => tag),
+    ]),
+    'actions or events tagged',
+  );
+  refuseRepeated(
+    game.domains.flatMap((domain) => domain.commands.map(({ name }) => name)),
+    'commands named',
+  );
+  return made(game);
+};
+
+const made = <const Domains extends ReadonlyArray<Domain.Any>>(game: {
+  readonly stepRate: number;
+  readonly domains: Domains;
+}): Game<
   Domains[number]['components'][number],
   Domains[number]['actions'][number],
   Domains[number]['events'][number],

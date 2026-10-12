@@ -1346,3 +1346,79 @@ describe('local systems', () => {
     Domain.make({ ...parts, name: 'Muddled', systems: [settling] });
   });
 });
+
+describe('a game declaring names twice', () => {
+  it('refuses two components of one name, which would share one store and write over each other', () => {
+    const Stride = Component.make('Stride', Schema.Struct({ walk: Schema.Finite }), {
+      owner: 'simulation',
+      network: 'local',
+    });
+    const OtherStride = Component.make('Stride', Schema.Struct({ cycles: Schema.Finite }), {
+      owner: 'simulation',
+      network: 'local',
+    });
+    const horde = Domain.make({
+      name: 'Horde',
+      requires: [],
+      components: [Stride],
+      actions: [],
+      events: [],
+      systems: [],
+      rules: [],
+    });
+    const player = Domain.make({
+      name: 'Player',
+      requires: [],
+      components: [OtherStride],
+      actions: [],
+      events: [],
+      systems: [],
+      rules: [],
+    });
+
+    expect(() => Game.make({ stepRate: 60, domains: [horde, player] })).toThrow(
+      'two components named Stride',
+    );
+  });
+
+  it('refuses two events of one tag, which the rules could not tell apart', () => {
+    const Fell = Event.make('Fell', {});
+    const OtherFell = Event.make('Fell', { far: Schema.Finite });
+    const falling = System.make({
+      name: 'falling',
+      reads: [],
+      writes: [],
+      emits: [Fell],
+      run: () => {},
+    });
+    const fallingFar = System.make({
+      name: 'fallingFar',
+      reads: [],
+      writes: [],
+      emits: [OtherFell],
+      run: () => {},
+    });
+    const horde = Domain.make({
+      name: 'Horde',
+      requires: [],
+      components: [],
+      actions: [],
+      events: [Fell],
+      systems: [falling],
+      rules: [],
+    });
+    const player = Domain.make({
+      name: 'Player',
+      requires: [],
+      components: [],
+      actions: [],
+      events: [OtherFell],
+      systems: [fallingFar],
+      rules: [],
+    });
+
+    expect(() => Game.make({ stepRate: 60, domains: [horde, player] })).toThrow(
+      'two actions or events tagged Fell',
+    );
+  });
+});
