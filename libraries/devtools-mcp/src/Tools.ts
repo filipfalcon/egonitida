@@ -140,8 +140,8 @@ export const toolkit = Toolkit.make(
   ),
   steering(asking('lightocean_release', 'Lets time run again.', {}), true),
   steering(
-    asking('lightocean_advance', 'Takes so many steps at once, as held time is stepped through.', {
-      steps: Schema.Int,
+    asking('lightocean_step', 'Takes so many steps at once, as held time is stepped through.', {
+      count: Schema.Int,
     }),
     false,
   ),
@@ -188,8 +188,8 @@ export const toolkit = Toolkit.make(
   ),
 );
 
-/** The handlers of every tool, finding the relays from the workspace `from` is in on every call. */
-export const handlers = (from: string) => {
+/** How every tool is carried out, finding the relays from the workspace `from` is in on every call. */
+export const implementations = (from: string) => {
   const ask = (request: typeof Inspect.Request.Encoded, named: string | undefined) =>
     Discovery.relays(from).pipe(
       Effect.flatMap((relays) => Ask.request(relays, request, named)),
@@ -211,7 +211,7 @@ export const handlers = (from: string) => {
       ask({ _tag: 'Story', ...asked, game: { from: gameFrom, name: gameName } }, host),
     lightocean_hold: ({ host }) => ask({ _tag: 'Hold' }, host),
     lightocean_release: ({ host }) => ask({ _tag: 'Release' }, host),
-    lightocean_advance: ({ host, steps }) => ask({ _tag: 'Advance', steps }, host),
+    lightocean_step: ({ host, count }) => ask({ _tag: 'Step', count }, host),
     lightocean_seek: ({ host, tick: at }) => ask({ _tag: 'Seek', tick: at }, host),
     lightocean_play_from: ({ host, tick: at }) => ask({ _tag: 'PlayFrom', tick: at }, host),
     lightocean_live: ({ host }) => ask({ _tag: 'Live' }, host),

@@ -124,7 +124,7 @@ export const serveOpened = <R>(
       );
     }
 
-    // The handler only queues the frame and returns nothing, so there is nothing for it to require.
+    // The listener only queues the frame and returns nothing, so there is nothing for it to require.
     yield* runner.run<void, never, never>((portId, frame) => {
       Queue.offerUnsafe(incoming, [portId, frame]);
     });

@@ -13,7 +13,7 @@ import * as WalkersView from '#src/walkers.view.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from './tokens.stylex.ts';
 
-// The page: opens the room the address names, `?room=lobby` unless it names another, over a WebSocket to the Worker the Alchemy stack says is at VITE_ROOMS_URL; draws its walkers at every frame the display shows, and steers this player's walker by the keys, predicting it so it answers at once.
+// The page: opens the room the address names, `?room=lobby` unless it names another, over a WebSocket to the Worker the Alchemy stack says is at VITE_ROOMS_URL; draws its walkers at every frame the display shows, and steers this player's walker by the keys, predicting it so it responds at once.
 
 const styles = stylex.create({
   canvas: { display: 'block', width: '100%', height: '100%', backgroundColor: colours.ground },

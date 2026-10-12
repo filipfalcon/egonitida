@@ -17,7 +17,7 @@ describe('asking a relay', () => {
     Effect.gen(function* () {
       const listening = yield* served(['first', 'counting']);
 
-      yield* Ask.request([listening], { _tag: 'Advance', steps: 3 });
+      yield* Ask.request([listening], { _tag: 'Step', count: 3 });
       const state = yield* Ask.request([listening], { _tag: 'State' });
 
       expect(state).toEqual({ tick: 3, entities: { 0: { Count: { value: 3 } } } });
@@ -30,7 +30,7 @@ describe('asking a relay', () => {
       const hosts = yield* Ask.hosts([listening]);
       const [first] = hosts;
 
-      yield* Ask.request([listening], { _tag: 'Advance', steps: 2 }, first?.host);
+      yield* Ask.request([listening], { _tag: 'Step', count: 2 }, first?.host);
       const state = yield* Ask.request([listening], { _tag: 'State' }, first?.host);
       const other = yield* Ask.request([listening], { _tag: 'State' });
 

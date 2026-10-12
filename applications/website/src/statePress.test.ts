@@ -21,7 +21,7 @@ const stateAt = (tick: number): Stamp => ({ ...stampOf(Press.state), tick, rando
 
 /** Long enough for the press to finish a step, and the frames to get there one by one. */
 const frames = (count: number) =>
-  Array.from({ length: count }, () => Story.message(Message.AdvancedFrame({ milliseconds: 50 })));
+  Array.from({ length: count }, () => Story.message(Message.ElapsedFrame({ milliseconds: 50 })));
 
 /** The figure joined to its game, asking to see it, and shown the state at `tick`. */
 const joinedAt = (tick: number) => [

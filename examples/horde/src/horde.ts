@@ -149,10 +149,10 @@ const rise = System.make({
   emits: [],
   spawns: [Zombie, Gait, Jaws, Body.Position],
   run: (context) => {
-    const { tick, stepSeconds } = context.time;
+    const { tick, secondsPerStep } = context.time;
     const stood = context
       .query(Survivor.Life)
-      .flatMap(([, life]) => (life._tag === 'Alive' ? [(tick - life.since) * stepSeconds] : []));
+      .flatMap(([, life]) => (life._tag === 'Alive' ? [(tick - life.since) * secondsPerStep] : []));
     if (stood.length === 0) {
       return;
     }
@@ -169,7 +169,7 @@ const rise = System.make({
           }),
         );
         const wait = Math.max(RISING.least, RISING.first - RISING.quickening * longest);
-        context.set(tide, Tide, { nextAt: tick + Math.round(wait / stepSeconds) });
+        context.set(tide, Tide, { nextAt: tick + Math.round(wait / secondsPerStep) });
       }
     }
   },
@@ -204,7 +204,7 @@ const shamble = System.make({
         onNone: () => ({ x: 0, z: 0 }),
         onSome: (to) => {
           const distance = Math.hypot(to.x - x, to.z - z);
-          const step = Math.min(speed * context.time.stepSeconds, Math.max(distance - STOP, 0));
+          const step = Math.min(speed * context.time.secondsPerStep, Math.max(distance - STOP, 0));
           return distance === 0
             ? { x: 0, z: 0 }
             : { x: ((to.x - x) / distance) * step, z: ((to.z - z) / distance) * step };
@@ -235,7 +235,7 @@ const bite = System.make({
   writes: [Jaws],
   emits: [Survivor.Bitten],
   run: (context) => {
-    const { tick, stepSeconds } = context.time;
+    const { tick, secondsPerStep } = context.time;
     const survivors = context
       .query(Survivor.Life, Body.Position)
       .filter(([, life]) => life._tag === 'Alive');
@@ -247,7 +247,7 @@ const bite = System.make({
       const reached = survivors.find(([, , at]) => Math.hypot(at.x - x, at.z - z) <= REACH);
       if (mode._tag === 'Shambling' && tick >= readyAt && reached !== undefined) {
         context.emit({ _tag: 'Bitten', survivor: reached[0], damage: BITE_DAMAGE });
-        context.set(zombie, Jaws, { readyAt: tick + Math.round(BITE_SECONDS / stepSeconds) });
+        context.set(zombie, Jaws, { readyAt: tick + Math.round(BITE_SECONDS / secondsPerStep) });
       }
     }
   },
@@ -261,9 +261,9 @@ const rot = System.make({
   emits: [],
   despawns: true,
   run: (context) => {
-    const { tick, stepSeconds } = context.time;
+    const { tick, secondsPerStep } = context.time;
     for (const [zombie, mode] of context.query(Zombie)) {
-      if (mode._tag === 'Fallen' && (tick - mode.at) * stepSeconds >= FALLEN_SECONDS) {
+      if (mode._tag === 'Fallen' && (tick - mode.at) * secondsPerStep >= FALLEN_SECONDS) {
         context.despawn(zombie);
       }
     }

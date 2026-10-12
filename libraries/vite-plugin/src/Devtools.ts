@@ -73,7 +73,7 @@ export const plugin = (): Plugin => ({
     const workspace = searchForWorkspaceRoot(server.config.root);
     const directory = join(workspace, ...Relay.RECORDS);
 
-    const mcp = Server.webHandler(workspace);
+    const mcp = Server.web(workspace);
     server.middlewares.use(Server.PATH, Http.mounted(mcp.handler));
 
     // The banner waits for both what the relay came to and where the server listens, which come in either order.

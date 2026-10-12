@@ -17,7 +17,7 @@ LightOcean is an engine for real-time web applications and games. A game's **sta
 ## The shape of a game
 
 - **Domains** (`Domain.make`) hold the whole state, as components. A domain writes only its own components; it changes another's components only by an event that domain declares. What both of two domains need lives in a domain beneath them.
-- **Actions** say what a player did, **events** what the game made of it; both are facts in the past tense. Every action has a rule.
+- **Actions** say what a player did, **events** what the game made of it; both are facts in the past tense. Every action is handled by a rule; an event that nothing emits and nothing handles is unused.
 - **Systems** change what the simulation owns every step; **rules** change what the rules own when an event or action happens; players change only input components.
 - **Commands** are how a rule gets something done outside the game, such as saving a score; their results come back as events. Systems issue none.
 - **Views** draw: `View.each` for an entity in the drawing, `View.on` for a moment such as a hit, `View.during` for a resource held while a condition holds, `View.rig` for the camera the player looks through.

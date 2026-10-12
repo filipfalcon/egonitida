@@ -108,11 +108,11 @@ describe('a game stepped by hand', () => {
   );
 
   it.effect(
-    'answers a page that holds time itself, stepping when it asks, and letting time run once it lets go',
+    'serves a page that holds time itself, stepping when it asks, and letting time run once it lets go',
     () =>
       Effect.gen(function* () {
         const host = yield* Host.make({ ...Press.setup, state: Press.state, mayHold: true });
-        yield* Stepping.answer(host);
+        yield* Stepping.carryOut(host);
         const [clientEnd, hostEnd] = yield* Transport.memoryPair;
         yield* host.connect(hostEnd);
         const client = yield* Client.connect(clientEnd, { game: Press.game });

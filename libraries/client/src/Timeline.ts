@@ -94,7 +94,7 @@ export const receive = (timeline: Timeline, state: State.State): Timeline => {
 };
 
 /** Moves drawing on by `seconds` of real time. */
-export const advance = (timeline: Timeline, seconds: number): Timeline =>
+export const elapse = (timeline: Timeline, seconds: number): Timeline =>
   Option.match(span(timeline), {
     onNone: () => timeline,
     onSome: ({ oldest, newest }) => {

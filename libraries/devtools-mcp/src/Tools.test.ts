@@ -13,7 +13,7 @@ const workspace = Effect.gen(function* () {
   const inside = join(root, 'examples', 'counting');
   yield* Effect.promise(() => mkdir(inside, { recursive: true }));
   yield* served(['counting'], join(root, ...Relay.RECORDS));
-  return Tools.handlers(inside);
+  return Tools.implementations(inside);
 });
 
 describe('the tools', () => {
@@ -22,7 +22,7 @@ describe('the tools', () => {
       const tools = yield* workspace;
 
       const hosts = yield* tools.lightocean_hosts();
-      yield* tools.lightocean_advance({ steps: 2 });
+      yield* tools.lightocean_step({ count: 2 });
       const state = yield* tools.lightocean_state({ component: 'Count' });
 
       expect(hosts).toEqual([{ host: 'counting', name: 'counting' }]);
@@ -58,7 +58,7 @@ describe('the tools', () => {
     expect(Object.keys(Tools.toolkit.tools).toSorted()).toEqual(
       [
         'lightocean_act',
-        'lightocean_advance',
+        'lightocean_step',
         'lightocean_compare',
         'lightocean_describe',
         'lightocean_hold',

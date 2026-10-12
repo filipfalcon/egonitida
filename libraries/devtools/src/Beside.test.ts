@@ -21,7 +21,7 @@ describe('the devtools beside a host', () => {
           received: Stream.fromQueue(toHost),
         },
       });
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
 
       const hello = yield* Queue.take(sent);
       yield* Queue.offer(toHost, {
@@ -33,7 +33,7 @@ describe('the devtools beside a host', () => {
 
       expect(hello).toEqual({ _tag: 'Hello', host: 'test-page-1', name: 'test' });
       expect(yield* Queue.take(sent)).toEqual({
-        _tag: 'Answer',
+        _tag: 'Answered',
         id: 1,
         answer: { oldest: 0, newest: 3 },
       });
@@ -47,7 +47,7 @@ describe('the devtools beside a host', () => {
       yield* Keep.serve(store, first, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
       yield* Fixtures.visit(first);
       yield* first.hold;
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
       const left = yield* first.state;
       const served: Array<number> = [];
 
@@ -73,7 +73,7 @@ describe('the devtools beside a host', () => {
         yield* Keep.serve(store, first, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
         const [, firstEnd] = yield* Transport.memoryPair;
         const player = yield* first.connect(firstEnd);
-        yield* Fixtures.advance(100);
+        yield* Fixtures.elapse(100);
         const joined: Array<number> = [];
 
         yield* Beside.host(

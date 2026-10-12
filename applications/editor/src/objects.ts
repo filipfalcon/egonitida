@@ -372,7 +372,7 @@ const turning = System.make({
   run: (context) => {
     for (const [entity, { speed }] of context.query(Spin)) {
       const { angle } = Option.getOrElse(context.get(entity, Turn), () => ({ angle: 0 }));
-      context.set(entity, Turn, { angle: angle + speed * context.time.stepSeconds });
+      context.set(entity, Turn, { angle: angle + speed * context.time.secondsPerStep });
     }
   },
 });

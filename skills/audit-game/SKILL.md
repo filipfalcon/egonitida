@@ -24,7 +24,7 @@ This skill reads and reports; it changes nothing. The rules are the repository's
 **Messages and commands.**
 
 - Actions and events are facts in the past tense. An action says what a player did, whatever device; an event what the game made of it.
-- Every action has a rule; no declared event is both never emitted and never handled.
+- Every action is handled by a rule; no declared event is unused, never emitted and never handled.
 - Something done outside the game is a command issued by a rule, defined beside it, whose foreseeable failures are among its result events. Systems issue none.
 
 **Steps and frames.** A system's or rule's `run` and a view's `draw` take randomness and time only from their context and run no Effect. `draw` changes only its own object and keeps nothing between frames.

@@ -111,7 +111,7 @@ export const make = (
     );
     return {
       frame: (seconds) => {
-        seen.timeline = Timeline.advance(seen.timeline, seconds);
+        seen.timeline = Timeline.elapse(seen.timeline, seconds);
         return Option.map(Timeline.view(seen.timeline), (view) => {
           const drawn = frameOf(view, seen.previous);
           seen.previous = Option.some(view);

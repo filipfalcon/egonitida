@@ -1,7 +1,7 @@
 import { type CallExpression, type Node, type Rule, calleeName } from '#src/ast.ts';
 
 /**
- * A component's values say absence with `Option`, and modes with tagged unions, never with a field that may be null or missing.
+ * A component's values say absence with `Option`, and modes with tagged unions, never with a field that may be null or absent.
  */
 
 const NULLABLE = new Set([

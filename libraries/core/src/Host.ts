@@ -105,8 +105,8 @@ export interface Host<Services = never> {
   readonly hold: Effect.Effect<void>;
   /** Lets go of time held beside the host; it runs on once no client holds it either. */
   readonly release: Effect.Effect<void>;
-  /** Takes `steps` steps at once, beside those real time owes, and shows them to every client: how time held is stepped through. */
-  readonly advance: (steps: number) => Effect.Effect<void>;
+  /** Takes `count` steps at once, beside those real time owes, and shows them to every client: how time held is stepped through. */
+  readonly step: (count: number) => Effect.Effect<void>;
   /** Shows every client `state` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
   readonly show: (state: State.State) => Effect.Effect<void>;
   /** Plays `setup` from now on, such as a new build of the game, from the state the host holds, read by the new game; refuses one that cannot read it, and plays on as it was. */
@@ -295,16 +295,21 @@ export const make = <Services = never>(
             if (message._tag === 'Ask') {
               return answerOf(message.question, entity).pipe(
                 Effect.match({
-                  onSuccess: (answer): Protocol.Answer['outcome'] => ({ _tag: 'Answered', answer }),
-                  onFailure: (reason): Protocol.Answer['outcome'] => ({
+                  onSuccess: (answer): Protocol.HostReliable => ({
+                    _tag: 'Answered',
+                    id: message.id,
+                    answer,
+                  }),
+                  onFailure: (reason): Protocol.HostReliable => ({
                     _tag: 'Unanswered',
+                    id: message.id,
                     reason,
                   }),
                 }),
-                Effect.flatMap((outcome) =>
+                Effect.flatMap((reply) =>
                   connection.send({
                     channel: 'reliable',
-                    payload: Protocol.encodeAnswer({ _tag: 'Answer', id: message.id, outcome }),
+                    payload: Protocol.encodeHostReliable(reply),
                   }),
                 ),
                 Effect.forkIn(scope),
@@ -457,9 +462,9 @@ export const make = <Services = never>(
         hosted.heldBeside = false;
         return settleHold;
       }),
-      advance: (steps) =>
+      step: (count) =>
         Effect.andThen(
-          Effect.provideContext(takeSteps(steps), made),
+          Effect.provideContext(takeSteps(count), made),
           Effect.suspend(() => broadcast(hosted.state)),
         ),
       show: (state) =>
@@ -474,7 +479,7 @@ export const make = <Services = never>(
               reason: `it steps ${setup.game.stepRate} times a second, not ${hosted.setup.game.stepRate}`,
             });
           }
-          // A state its own game cannot encode is a bug in the engine; one the new game cannot read is the new game's to answer for.
+          // A state its own game cannot encode is a bug in the engine; one the new game cannot read is the new game's to account for.
           const encoded = yield* Schema.encodeEffect(Game.schema(hosted.setup.game))(
             hosted.state,
           ).pipe(Effect.orDie);

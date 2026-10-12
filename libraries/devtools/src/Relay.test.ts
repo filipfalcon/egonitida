@@ -58,12 +58,12 @@ describe('a relay', () => {
         yield* relay.fromTool(tool, { _tag: 'Ask', id: 5, request: { _tag: 'Span' } });
         const asked = asks(second);
         yield* Effect.forEach(asked, ({ id }) =>
-          relay.fromHost(second, { _tag: 'Answer', id, answer: { oldest: 0, newest: 9 } }),
+          relay.fromHost(second, { _tag: 'Answered', id, answer: { oldest: 0, newest: 9 } }),
         );
 
         expect(asked).toMatchObject([{ _tag: 'Ask', host: 'horde-b', request: { _tag: 'Span' } }]);
         expect(tool.received).toEqual([
-          { _tag: 'Answer', id: 5, answer: { oldest: 0, newest: 9 } },
+          { _tag: 'Answered', id: 5, answer: { oldest: 0, newest: 9 } },
         ]);
         expect(other.received).toEqual([]);
       }),
@@ -93,15 +93,15 @@ describe('a relay', () => {
       yield* relay.fromTool(other, { _tag: 'Ask', id: 1, request: { _tag: 'Describe' } });
       const [toFirst, toSecond] = asks(second);
       yield* Effect.forEach(Option.toArray(Option.fromNullishOr(toSecond)), ({ id }) =>
-        relay.fromHost(second, { _tag: 'Refusal', id, reason: 'second' }),
+        relay.fromHost(second, { _tag: 'Unanswered', id, reason: 'second' }),
       );
       yield* Effect.forEach(Option.toArray(Option.fromNullishOr(toFirst)), ({ id }) =>
-        relay.fromHost(second, { _tag: 'Answer', id, answer: 'first' }),
+        relay.fromHost(second, { _tag: 'Answered', id, answer: 'first' }),
       );
 
       expect(toFirst?.id).not.toBe(toSecond?.id);
-      expect(tool.received).toEqual([{ _tag: 'Answer', id: 1, answer: 'first' }]);
-      expect(other.received).toEqual([{ _tag: 'Refusal', id: 1, reason: 'second' }]);
+      expect(tool.received).toEqual([{ _tag: 'Answered', id: 1, answer: 'first' }]);
+      expect(other.received).toEqual([{ _tag: 'Unanswered', id: 1, reason: 'second' }]);
     }),
   );
 
@@ -120,12 +120,12 @@ describe('a relay', () => {
 
       expect(tool.received).toEqual([
         {
-          _tag: 'Refusal',
+          _tag: 'Unanswered',
           id: 2,
           reason: 'no game is running: open it in a browser with the development server',
         },
         {
-          _tag: 'Refusal',
+          _tag: 'Unanswered',
           id: 3,
           reason: 'no host is called nowhere: horde-a and horde-b are running',
         },
@@ -144,7 +144,7 @@ describe('a relay', () => {
         yield* relay.fromTool(tool, { _tag: 'Hosts', id: 5 });
 
         expect(tool.received).toEqual([
-          { _tag: 'Refusal', id: 4, reason: 'horde-b went away before it answered' },
+          { _tag: 'Unanswered', id: 4, reason: 'horde-b went away before it answered' },
           { _tag: 'Hosts', id: 5, hosts: [{ host: 'horde-a', name: 'horde' }] },
         ]);
       }),
@@ -157,7 +157,7 @@ describe('a relay', () => {
       yield* relay.fromTool(tool, { _tag: 'Ask', id: 6, request: { _tag: 'Span' } });
       yield* relay.toolGone(tool);
       yield* Effect.forEach(asks(second), ({ id }) =>
-        relay.fromHost(second, { _tag: 'Answer', id, answer: 'late' }),
+        relay.fromHost(second, { _tag: 'Answered', id, answer: 'late' }),
       );
 
       expect(tool.received).toEqual([]);
@@ -169,7 +169,7 @@ describe('a relay', () => {
       const { relay, tool } = yield* relayed;
 
       yield* relay.fromTool(tool, 'nonsense');
-      yield* relay.fromHost(peer(), { _tag: 'Answer', id: 999, answer: 'unasked' });
+      yield* relay.fromHost(peer(), { _tag: 'Answered', id: 999, answer: 'unasked' });
 
       expect(tool.received).toEqual([]);
     }),
@@ -191,7 +191,7 @@ describe('a relay', () => {
         );
         yield* Effect.forEach(captures, ({ id }) =>
           relay.fromHost(newer, {
-            _tag: 'Answer',
+            _tag: 'Answered',
             id,
             answer: { png: 'iVBOR', width: 320, height: 200 },
           }),
@@ -203,7 +203,7 @@ describe('a relay', () => {
         expect(older.received).toEqual([]);
         expect(second.received).toEqual([]);
         expect(tool.received).toEqual([
-          { _tag: 'Answer', id: 3, answer: { png: 'iVBOR', width: 320, height: 200 } },
+          { _tag: 'Answered', id: 3, answer: { png: 'iVBOR', width: 320, height: 200 } },
         ]);
       }),
   );
@@ -221,7 +221,7 @@ describe('a relay', () => {
 
         expect(tool.received).toEqual([
           {
-            _tag: 'Refusal',
+            _tag: 'Unanswered',
             id: 4,
             reason: 'no page shows horde-b: open it in a browser with the development server',
           },

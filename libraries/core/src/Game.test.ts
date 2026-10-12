@@ -35,7 +35,7 @@ const move = System.make({
   emits: [],
   run: (context) => {
     for (const [entity, position, velocity] of context.query(Position, Velocity)) {
-      context.set(entity, Position, { x: position.x + velocity.x * context.time.stepSeconds });
+      context.set(entity, Position, { x: position.x + velocity.x * context.time.secondsPerStep });
     }
   },
 });
@@ -83,7 +83,7 @@ const spawnRunner = (x: number, health: number) =>
   State.spawn(State.empty({ seed: 7 }), runner(x, health));
 
 describe('Game.step', () => {
-  it('advances the tick and runs the systems', () => {
+  it('moves to the next tick and runs the systems', () => {
     const [state, runner] = spawnRunner(0, 100);
     const after = Game.step(game, state).state;
 
@@ -196,7 +196,7 @@ describe('input', () => {
     run: (context) => {
       for (const [entity, position, controls] of context.query(Position, Controls)) {
         context.set(entity, Position, {
-          x: position.x + controls.move * 10 * context.time.stepSeconds,
+          x: position.x + controls.move * 10 * context.time.secondsPerStep,
         });
       }
     },
@@ -358,7 +358,7 @@ describe('spawning and despawning within a step', () => {
     expect(after.nextEntity).toBe(runner + 1);
   });
 
-  it('lets the rules spawn and despawn in answer to an event', () => {
+  it('lets the rules spawn and despawn as they handle an event', () => {
     const replace = Rule.on(Died, {
       writes: [],
       emits: [],
@@ -613,7 +613,7 @@ describe('in development', () => {
   });
 });
 
-// What the type checker refuses: each line below must stay a compile error, or `vp check` fails on the unused directive.
+// What the type checker refuses: each line below must stay a compile error, or `vp check` fails on a directive that no longer expects an error.
 export const refused = () => {
   System.make({
     name: 'writesTheRules',
@@ -725,7 +725,7 @@ describe('Domain.make', () => {
       spawns: [Health, Owned],
       run: () => {},
     });
-    const answering = Rule.on(Died, { writes: [], emits: [Noticed], run: () => {} });
+    const noticing = Rule.on(Died, { writes: [], emits: [Noticed], run: () => {} });
     const Watcher = Domain.make({
       name: 'Watcher',
       requires: [Fixture],
@@ -733,7 +733,7 @@ describe('Domain.make', () => {
       actions: [],
       events: [Noticed],
       systems: [watching],
-      rules: [answering],
+      rules: [noticing],
     });
 
     expect(Game.make({ stepRate: 10, domains: [Fixture, Watcher] }).systems).toEqual([watching]);
@@ -896,20 +896,20 @@ describe('Game.make', () => {
     expect(made.events.map(({ tag }) => tag)).toEqual(['Bitten', 'Died']);
   });
 
-  it('refuses an action no rule answers, and an event nothing emits or handles', () => {
+  it('refuses an unhandled action, and an unused event', () => {
     const Pressed = Action.make('Pressed', {});
     const Forgotten = Event.make('Forgotten', {});
     const parts = { requires: [], components: [], systems: [], rules: [] } as const;
     const Mute = Domain.make({ ...parts, name: 'Mute', actions: [Pressed], events: [] });
     const Haunted = Domain.make({ ...parts, name: 'Haunted', actions: [], events: [Forgotten] });
 
-    // @ts-expect-error Pressed is a player doing something to no effect.
+    // @ts-expect-error Pressed is an unhandled action.
     Game.make({ stepRate: 10, domains: [Mute] });
-    // @ts-expect-error Forgotten is never emitted and never handled.
+    // @ts-expect-error Forgotten is an unused event: never emitted and never handled.
     Game.make({ stepRate: 10, domains: [Haunted] });
   });
 
-  it('lets an event go unanswered, as a domain’s offer to others', () => {
+  it('lets an event go unhandled, as a domain’s offer to others', () => {
     const Called = Event.make('Called', {});
     const calling = System.make({
       name: 'calling',

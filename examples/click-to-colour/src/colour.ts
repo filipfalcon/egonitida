@@ -2,7 +2,7 @@ import { Component, Domain, Game, Pointing, Rule, State } from '@lightocean/core
 import { Option, Schema } from 'effect';
 
 /**
- * The second example: cubes that a click paints the next colour of a palette. It adds one idea to the first: a game a player plays by clicking what is drawn, through the `Pointing` domain the engine gives, whose `Clicked` the rules here answer. Its view is in `colour.view.ts`.
+ * The second example: cubes that a click paints the next colour of a palette. It adds one idea to the first: a game a player plays by clicking what is drawn, through the `Pointing` domain the engine gives, whose `Clicked` the rules here handle. Its view is in `colour.view.ts`.
  */
 
 /** The colours a cube steps through, one per click, as hex. */

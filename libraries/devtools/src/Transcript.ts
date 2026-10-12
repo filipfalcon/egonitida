@@ -156,7 +156,7 @@ export const of = (
 };
 
 /** `lines` as the steps of a story, to tell with the game itself. */
-export const steps = (lines: ReadonlyArray<Line>): ReadonlyArray<Story.Step> =>
+export const steps = (lines: ReadonlyArray<Line>): ReadonlyArray<Story.Line> =>
   lines.map((line) => {
     switch (line._tag) {
       case 'GivenAs':

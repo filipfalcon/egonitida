@@ -145,10 +145,10 @@ const notSaved = Rule.on(ScoreNotSaved, {
   },
 });
 
-/** A round with no hits yet, playing for its time from `tick`, at steps `stepSeconds` apart. */
-const playingFrom = (tick: number, stepSeconds: number): typeof Round.schema.Type => ({
+/** A round with no hits yet, playing for its time from `tick`, at steps `secondsPerStep` apart. */
+const playingFrom = (tick: number, secondsPerStep: number): typeof Round.schema.Type => ({
   _tag: 'Playing',
-  endsAt: tick + Math.round(ROUND_SECONDS / stepSeconds),
+  endsAt: tick + Math.round(ROUND_SECONDS / secondsPerStep),
   hits: 0,
 });
 
@@ -159,7 +159,7 @@ const newRound = Rule.on(ChoseNewRound, {
   run: (context) => {
     for (const [round, mode] of context.query(Round)) {
       if (mode._tag === 'Saved' || mode._tag === 'Unsaved') {
-        context.set(round, Round, playingFrom(context.time.tick, context.time.stepSeconds));
+        context.set(round, Round, playingFrom(context.time.tick, context.time.secondsPerStep));
       }
     }
   },

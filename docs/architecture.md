@@ -29,7 +29,7 @@ Seven principles shape every API. Each builds on the ones before it.
 ### 2. Network: an authoritative server, from the start
 
 - The engine is built for multiplayer and for games split across many servers, as much as for singleplayer.
-- A server is a Cloudflare Durable Object: one object is one game, room, or zone. It steps the game and sends clients its state. A client predicts its own player so input answers at once, corrects itself when the server disagrees, and interpolates everything else between the states the server sent.
+- A server is a Cloudflare Durable Object: one object is one game, room, or zone. It steps the game and sends clients its state. A client predicts its own player so input takes effect at once, corrects itself when the server disagrees, and interpolates everything else between the states the server sent.
 - Every field declares its network role next to its owner:
   - **Server**: decided by the server and sent to every client.
   - **Predicted**: guessed by the client, confirmed by the server.
@@ -42,9 +42,9 @@ Seven principles shape every API. Each builds on the ones before it.
 
 ### 3. Time: a fixed step, smooth drawing
 
-- The simulation advances in fixed steps. The step rate is a setting of each game, given to `Game.make` and never defaulted by the engine, fixed for the game's lifetime, because tuning and recordings depend on it. Border steps at 60 Hz. A system that needs finer steps, such as a ragdoll, subdivides its own.
+- The simulation moves on in fixed steps, each one `secondsPerStep` long. The step rate is a setting of each game, given to `Game.make` and never defaulted by the engine, fixed for the game's lifetime, because tuning and recordings depend on it. Border steps at 60 Hz. A system that needs finer steps, such as a ragdoll, subdivides its own.
 - The step rate is one number everywhere: the server, a client predicting, and a replay all take the same steps, or prediction would not match. How often snapshots are sent is a separate, lower number when bandwidth calls for it, such as 20 or 30 Hz; clients interpolate between them.
-- Input is read once a step, so a step's length bounds how fast movement answers. Looking around is the client's alone, every frame, outside the simulation; the simulation only receives where the player looks as part of its input.
+- Input is read once a step, so a step's length bounds how fast movement responds. Looking around is the client's alone, every frame, outside the simulation; the simulation only receives where the player looks as part of its input.
 - A displayed frame reads input, runs as many fixed steps as real time calls for (each step: systems, then events, then rules), interpolates between the last two steps, and draws. The number of steps per frame is capped, so a slow machine slows the game briefly instead of falling ever further behind.
 - A game has one time, and it only moves forward, step by step, at the game's rate. Nothing inside the game scales it or stops it; only the host can hold it, by its policy.
 - Presentation never changes how the game runs, in singleplayer or multiplayer alike, because a game can always be switched between the two. A client keeps a timeline of recent states, which serves three things:
@@ -105,7 +105,7 @@ It is measured, not assumed:
 A game is played with whatever a player has, and its own state never knows which. The gamepad is preferred, the mouse and keyboard are full peers, and every other device a PC can reach is supported, output as much as input.
 
 - **The rules know no device.** What a device reads becomes a game's input components, and what a player does with it becomes the game's actions, through bindings the game declares as data, which a player can change. An action says what the player did whatever did it, so nothing in the simulation changes with a device.
-- **The gamepad first.** Bindings are made for the gamepad before anything else; the device a player last used is the one the game answers to and shows the controls of; and everything a pointer reaches, the accessible mirror and the UI included, can be reached with a pad: the directional pad moves focus, one button presses, another goes back.
+- **The gamepad first.** Bindings are made for the gamepad before anything else; the device a player last used is the one the game responds to and shows the controls of; and everything a pointer reaches, the accessible mirror and the UI included, can be reached with a pad: the directional pad moves focus, one button presses, another goes back.
 - **The mouse and keyboard in full.** Pointer lock with raw movement, every button and the wheel, keys by their place on the keyboard whatever its layout, labels by its layout, and the keyboard held in full screen.
 - **Every other device.** The Gamepad API reaches pads, wheels, and flight sticks, those with no standard layout through a layout given as data; WebHID reaches the rest, each through a driver that reads a device's reports into the shapes the engine knows.
 - **Output too.** Rumble and haptics, and a peripheral's lights, such as a keyboard's or a mouse's RGB, are drawn from the state of the game the way the scene is: a function of what is drawn, with what happens at a moment, such as a hit, shown once through `View.on`. Lights are reached through WebHID drivers, or through a vendor's own software where it holds the device, as Razer's Chroma does.
@@ -136,7 +136,7 @@ Everything that lives in 3D, an application as much as what is played, is a game
 
 ### The frame loop
 
-- Views draw every frame from the frame drawn; continuous motion, such as a spin, is a function of the frame's time or a local component, never data the engine advances outside the state.
+- Views draw every frame from the frame drawn; continuous motion, such as a spin, is a function of the frame's time or a local component, never data the engine moves on outside the state.
 - The per-frame work is tight synchronous code inside one Effect, with no Effect operation per object.
 
 ### UI
@@ -160,7 +160,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 **Messages.**
 
 - Actions and events are named facts in the past tense, never commands. An action says what a player did, whatever device they did it with (`PulledTrigger`, `ChoseRestart`); an event says what the game made of it (`Shot`, `LevelRestarted`). The pair shows where authority lies: what a player claims, and what the server decided.
-- Every action a game declares has at least one rule, since an action no rule answers is a player doing something to no effect. An event may go unanswered, since a domain offers its events to others and a game may not hold the one that listens; an event a game declares that nothing emits and nothing handles is dead, and an error. Either is an error in its type where TypeScript bears it, and otherwise when the game is made.
+- Every action a game declares is handled by at least one rule, since an unhandled action is a player doing something to no effect. An event may go unhandled, since a domain offers its events to others and a game may not hold the one that listens; an event a game declares that nothing emits and nothing handles is unused, and an error. Either is an error in its type where TypeScript bears it, and otherwise when the game is made.
 - Which systems and rules write, emit, spawn, and listen for what follows from the game's declarations, as a map of how its components change: in a game of systems there is no single `update` to read, so the declarations are what is read.
 - In development the values in a state are frozen, so changing one in place fails at once.
 
@@ -279,7 +279,7 @@ The API above is built in this order, each step test-first, and each breaking on
 1. The game declares its components, actions, and events, and the schema of its whole state follows from it; hosts and clients take them from the game. Tagged unions and `Option` travel in components and interpolate.
 2. `Story`, and the engine's own tests moved onto it.
 3. The map of changes, frozen states in development, and the fixtures named as facts.
-4. Domains: owning their components, requiring one another, every action answered and no event dead, and the `/internal` entry.
+4. Domains: owning their components, requiring one another, every action handled and no event unused, and the `/internal` entry.
 5. Commands.
 6. Local systems.
 7. Views (`View.each`, `View.on`, `View.during`, `View.rig`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.

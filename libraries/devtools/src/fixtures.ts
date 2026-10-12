@@ -104,7 +104,7 @@ export const host = (played: Played = game, mayHold = false) =>
   Host.make({ ...setup(played), state: State.empty({ seed: 7 }), mayHold });
 
 /** Lets `millis` of test time pass a little at a time, giving every fiber its turn. */
-export const advance = (millis: number) =>
+export const elapse = (millis: number) =>
   Effect.gen(function* () {
     for (let passed = 0; passed < millis; passed += 10) {
       yield* TestClock.adjust(`${Math.min(10, millis - passed)} millis`);
@@ -121,7 +121,7 @@ export const visit = (hosted: Host.Host, played: Played = game) =>
     const client = yield* Client.connect(clientEnd, { game: played }).pipe(Scope.provide(scope));
     yield* client.send([Stick.of({ move: 1 })]);
     yield* client.act(AskedToHeal, { amount: 50 });
-    yield* advance(100);
+    yield* elapse(100);
     yield* Scope.close(scope, Exit.void);
     yield* Effect.yieldNow;
     return entity;
@@ -131,7 +131,7 @@ export const visit = (hosted: Host.Host, played: Played = game) =>
 export const recorded = (played: Played = game) =>
   Effect.gen(function* () {
     const hosted = yield* host(played);
-    yield* advance(100);
+    yield* elapse(100);
     const recorder = yield* Recording.record(hosted, played);
     const entity = yield* visit(hosted, played);
     return { hosted, entity, recording: yield* recorder.recording };

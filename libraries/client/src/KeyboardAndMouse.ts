@@ -25,18 +25,18 @@ export interface Source {
 const listen = <K extends keyof WindowEventMap>(
   target: Window,
   type: K,
-  handler: (event: WindowEventMap[K]) => void,
+  listener: (event: WindowEventMap[K]) => void,
 ) =>
   Effect.acquireRelease(
-    Effect.sync(() => target.addEventListener(type, handler)),
-    () => Effect.sync(() => target.removeEventListener(type, handler)),
+    Effect.sync(() => target.addEventListener(type, listener)),
+    () => Effect.sync(() => target.removeEventListener(type, listener)),
   );
 
 /** Listens to `type` on `target`, an element, until the scope closes. */
-const listenOn = (target: EventTarget, type: string, handler: (event: Event) => void) =>
+const listenOn = (target: EventTarget, type: string, listener: (event: Event) => void) =>
   Effect.acquireRelease(
-    Effect.sync(() => target.addEventListener(type, handler)),
-    () => Effect.sync(() => target.removeEventListener(type, handler)),
+    Effect.sync(() => target.addEventListener(type, listener)),
+    () => Effect.sync(() => target.removeEventListener(type, listener)),
   );
 
 /** Whether `event` is typing into a field, which is the field's and no game's. */

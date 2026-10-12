@@ -22,7 +22,9 @@ const walk = System.make({
   emits: [],
   run: (context) => {
     for (const [player, steering, position] of context.query(Steering, Position)) {
-      context.set(player, Position, { x: position.x + steering.x * 3 * context.time.stepSeconds });
+      context.set(player, Position, {
+        x: position.x + steering.x * 3 * context.time.secondsPerStep,
+      });
     }
   },
 });

@@ -13,7 +13,7 @@ describe('a debugger beside a host', () => {
       Effect.gen(function* () {
         const hosted = yield* Fixtures.host(Fixtures.game, true);
         yield* Debugger.serve(hosted, Fixtures.setup(), { every: 2, keepSeconds: 10 });
-        yield* Fixtures.advance(100);
+        yield* Fixtures.elapse(100);
         yield* Fixtures.visit(hosted);
         const [clientEnd, hostEnd] = yield* Transport.memoryPair;
         yield* hosted.connect(hostEnd);

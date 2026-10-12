@@ -3,10 +3,10 @@ import { Option, Schema } from 'effect';
 /**
  * What a host and its clients say to each other, apart from the snapshots themselves.
  *
- * - Reliable, host to client: `Welcome`, naming the entity the client controls, and `Answer`, to a question the client asked.
+ * - Reliable, host to client: `Welcome`, naming the entity the client controls, and, to a question the client asked, `Answered`, with its answer, or `Unanswered`, with why there is none.
  * - Unreliable, host to client: snapshots, as `Snapshot` encodes them, each followed by `Acked`, the number of the client's newest input the state took in, so a client predicting its own player knows which of its inputs are yet to be.
  * - Unreliable, client to host: `Inputs`, the client's latest inputs repeated, so one lost message loses none of them.
- * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again, `Act`, an action the player takes, encoded by its own schema, `Control`, for whatever listens beside the host, and `Ask`, a question for whatever answers beside it, which the answer names by its `id`.
+ * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again, `Act`, an action the player takes, encoded by its own schema, `Control`, for whatever listens beside the host, and `Ask`, a question for whatever answers beside it, which the reply names by its `id`.
  */
 
 /** How many of its latest inputs a client repeats in each message. */
@@ -46,24 +46,22 @@ const ClientReliable = Schema.Union([
 ]);
 export type ClientReliable = typeof ClientReliable.Type;
 
-/** The answer to the question a client asked as `id`: what was answered, or why nothing was. */
-const Answer = Schema.TaggedStruct('Answer', {
-  id: Schema.Int,
-  outcome: Schema.Union([
-    Schema.TaggedStruct('Answered', { answer: Schema.Unknown }),
-    Schema.TaggedStruct('Unanswered', { reason: Schema.String }),
-  ]),
-});
-export type Answer = typeof Answer.Type;
+/** A host's reliable message besides its welcome: the answer to the question a client asked as `id`, or why it has none. */
+const HostReliable = Schema.Union([
+  Schema.TaggedStruct('Answered', { id: Schema.Int, answer: Schema.Unknown }),
+  Schema.TaggedStruct('Unanswered', { id: Schema.Int, reason: Schema.String }),
+]);
+export type HostReliable = typeof HostReliable.Type;
 
 const WelcomeJson = Schema.fromJsonString(Welcome);
-const AnswerJson = Schema.fromJsonString(Answer);
+const HostReliableJson = Schema.fromJsonString(HostReliable);
 
-/** An answer as it travels to the client that asked. */
-export const encodeAnswer = (answer: Answer): string => Schema.encodeSync(AnswerJson)(answer);
-/** The answer to a question this client asked; `None` for anything else. */
-export const decodeAnswer = (text: string): Option.Option<Answer> =>
-  Schema.decodeOption(AnswerJson)(text);
+/** A host's reliable message as it travels to the client that asked. */
+export const encodeHostReliable = (message: HostReliable): string =>
+  Schema.encodeSync(HostReliableJson)(message);
+/** What the host says to a question this client asked; `None` for anything else. */
+export const decodeHostReliable = (text: string): Option.Option<HostReliable> =>
+  Schema.decodeOption(HostReliableJson)(text);
 const ClientReliableJson = Schema.fromJsonString(ClientReliable);
 
 /** A client's reliable message as it travels to the host. */

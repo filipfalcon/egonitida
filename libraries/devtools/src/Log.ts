@@ -10,7 +10,7 @@ import * as Replay from '#src/Replay.ts';
 
 /** What a part did in a step: the values it set, by component, the entities it spawned and despawned, the events it emitted and the commands it issued, all as they encode; and the event or action a rule ran for. */
 export interface PartLine {
-  /** The part, by its domain and name: a rule by the event or action it answers. */
+  /** The part, by its domain and name: a rule by the event or action it handles. */
   readonly part: string;
   readonly cause: Option.Option<unknown>;
   readonly set: Readonly<Record<string, ReadonlyArray<State.Entity>>>;
@@ -35,7 +35,7 @@ export type Line =
   /** Where the replay the log is told from came apart, after which it tells nothing. */
   | ({ readonly _tag: 'CameApart' } & Replay.Divergence);
 
-/** How a part is named in a log, and wherever devtools name one: by its domain and name, a rule by what it answers. */
+/** How a part is named in a log, and wherever devtools name one: by its domain and name, a rule by what it handles. */
 export const nameOf = (part: Game.Part): string => {
   const domain = Option.getOrElse(part.domain, () => 'Game');
   if (part._tag !== 'Rule') {

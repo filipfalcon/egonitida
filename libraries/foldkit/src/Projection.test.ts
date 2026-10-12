@@ -35,8 +35,8 @@ const count = Rule.on(Counted, {
     );
   },
 });
-const ticking = System.make({
-  name: 'ticking',
+const counting = System.make({
+  name: 'counting',
   reads: [],
   writes: [Clock],
   emits: [],
@@ -55,7 +55,7 @@ const game = Game.make({
       components: [Tally, Clock],
       actions: [Counted],
       events: [],
-      systems: [ticking],
+      systems: [counting],
       rules: [count],
     }),
   ],

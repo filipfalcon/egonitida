@@ -13,7 +13,7 @@ const reloaded = Effect.gen(function* () {
   const recorder = yield* Recording.record(hosted, Fixtures.game);
   const watching = yield* Replay.alongside(hosted, Fixtures.setup()).pipe(Effect.forkChild);
   const rewind = yield* Rewind.make(hosted, Fixtures.setup(), { every: 3, keepSeconds: 10 });
-  yield* Fixtures.advance(100);
+  yield* Fixtures.elapse(100);
   const before = yield* hosted.state;
   yield* hosted.reload(Fixtures.setup(Fixtures.brisk));
   yield* Fixtures.visit(hosted, Fixtures.brisk);
@@ -42,7 +42,7 @@ describe('a game swapped for a new build', () => {
     Effect.gen(function* () {
       const { watching } = yield* reloaded;
 
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
 
       expect(watching.pollUnsafe()).toBeUndefined();
       yield* Fiber.interrupt(watching);
@@ -78,7 +78,7 @@ describe('hosting across builds', () => {
           served.push(state.tick);
         }),
       );
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
       yield* Reload.host(kept, options(Fixtures.brisk), () =>
         Effect.sync(() => {
           served.push(-1);

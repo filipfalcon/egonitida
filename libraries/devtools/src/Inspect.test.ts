@@ -11,7 +11,7 @@ const inspected = Effect.gen(function* () {
   const hosted = yield* Fixtures.host(Fixtures.game, true);
   const rewind = yield* Rewind.make(hosted, Fixtures.setup(), { every: 2, keepSeconds: 10 });
   const inspector = Inspect.make(hosted, rewind);
-  yield* Fixtures.advance(100);
+  yield* Fixtures.elapse(100);
   const entity = yield* Fixtures.visit(hosted);
   return { hosted, inspector, entity };
 });
@@ -196,11 +196,11 @@ describe('inspecting a hosted game', () => {
 
       yield* inspector.answer({ _tag: 'Hold' });
       const held = (yield* hosted.state).tick;
-      yield* Fixtures.advance(300);
-      yield* inspector.answer({ _tag: 'Advance', steps: 2 });
+      yield* Fixtures.elapse(300);
+      yield* inspector.answer({ _tag: 'Step', count: 2 });
       const stepped = (yield* hosted.state).tick;
       yield* inspector.answer({ _tag: 'Release' });
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
 
       expect(stepped).toBe(held + 2);
       expect((yield* hosted.state).tick).toBe(held + 5);
@@ -240,7 +240,7 @@ describe('inspecting a hosted game', () => {
       );
       yield* inspector.answer({ _tag: 'Input', entity, values: { Stick: { move: 3 } } });
       yield* inspector.answer({ _tag: 'Act', entity, action: { _tag: 'AskedToHeal', amount: 7 } });
-      yield* inspector.answer({ _tag: 'Advance', steps: 1 });
+      yield* inspector.answer({ _tag: 'Step', count: 1 });
       const played = yield* inspector.answer({ _tag: 'State', entity });
       yield* inspector.answer({ _tag: 'Leave', entity });
       const refused = yield* refusal(

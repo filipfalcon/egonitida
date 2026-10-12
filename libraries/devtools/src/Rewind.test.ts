@@ -33,7 +33,7 @@ describe('a rewind', () => {
     Effect.gen(function* () {
       const { hosted, rewind, stepped } = yield* rewound({ every: 4, keepSeconds: 10 });
       yield* Fixtures.visit(hosted);
-      yield* Fixtures.advance(200);
+      yield* Fixtures.elapse(200);
 
       const back = yield* Effect.forEach([2, 4, 5, 7, 9], (tick) =>
         Effect.map(rewind.stateAt(tick), Option.map(fingerprint)),
@@ -50,7 +50,7 @@ describe('a rewind', () => {
   it.effect('keeps only so far back', () =>
     Effect.gen(function* () {
       const { rewind } = yield* rewound({ every: 3, keepSeconds: 1 });
-      yield* Fixtures.advance(3000);
+      yield* Fixtures.elapse(3000);
 
       const { oldest, newest } = yield* rewind.span;
 
@@ -70,7 +70,7 @@ describe('rewinding from a page', () => {
     yield* hosted.connect(hostEnd);
     const client = yield* Client.connect(clientEnd, { game: Fixtures.game });
     yield* client.send([Fixtures.Stick.of({ move: 1 })]);
-    yield* Fixtures.advance(300);
+    yield* Fixtures.elapse(300);
     return { hosted, client, controls: Rewind.controls(client) };
   });
 
@@ -81,10 +81,10 @@ describe('rewinding from a page', () => {
 
       yield* controls.pause;
       yield* controls.seek(4);
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
       const shown = (yield* client.state).tick;
       yield* controls.live;
-      yield* Fixtures.advance(10);
+      yield* Fixtures.elapse(10);
 
       expect(shown).toBe(4);
       expect((yield* hosted.state).tick).toBe(live.tick);
@@ -99,10 +99,10 @@ describe('rewinding from a page', () => {
       yield* controls.pause;
       yield* controls.seek(6);
       yield* controls.step(-2);
-      yield* Fixtures.advance(10);
+      yield* Fixtures.elapse(10);
       const back = (yield* client.state).tick;
       yield* controls.step(3);
-      yield* Fixtures.advance(10);
+      yield* Fixtures.elapse(10);
 
       expect(back).toBe(4);
       expect((yield* client.state).tick).toBe(7);
@@ -116,7 +116,7 @@ describe('rewinding from a page', () => {
       yield* controls.pause;
       yield* controls.seek(4);
       yield* controls.playFromHere;
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
 
       expect((yield* hosted.state).tick).toBe(7);
     }),

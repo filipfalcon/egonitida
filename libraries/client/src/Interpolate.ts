@@ -1,18 +1,18 @@
 import { Option, Schema, SchemaAST } from 'effect';
 
 /**
- * Where a value lies between two others, for drawing between two steps. It is read off the value's schema, the way the editor's Details panel is: numbers move in a straight line, structs and tuples move field by field, a number annotated `interpolate: 'angle'` turns the short way round, and anything annotated `interpolate: 'step'` stays at the earlier value until the later one is reached.
+ * Where a value lies between two others, for drawing between two states. It is read off the value's schema, the way the editor's Details panel is: numbers move in a straight line, structs and tuples move field by field, a number annotated `interpolate: 'angle'` turns the short way round, and anything annotated `interpolate: 'previous'` holds the previous value until the later one is reached.
  *
- * The value moves in its canonical JSON form, and the result is decoded by the same schema, so its type is proven rather than claimed. Two modes of a tagged union, or an option and its absence, never blend: the earlier holds until the later is reached. A value that cannot lie between two others, such as a whole number, a boolean, or a choice, fails to decode in between and stays at the earlier value until the later one is reached.
+ * The value moves in its canonical JSON form, and the value between is decoded by the same schema, so its type is proven rather than claimed. Two modes of a tagged union, or an option and its absence, never blend: the earlier holds until the later is reached. A value that cannot lie between two others, such as a whole number, a boolean, or a choice, fails to decode in between and stays at the earlier value until the later one is reached.
  */
 
 declare module 'effect/Schema' {
   namespace Annotations {
     interface Annotations {
       /**
-       * How a value moves from one to the next: an angle turns the short way round; a step stays at the earlier value until the later one is reached, for a number that is really a choice, such as a stage.
+       * How a value moves from one to the next: an angle turns the short way round; previous holds the previous value until the later one is reached, for a number that is really a choice, such as a stage.
        */
-      readonly interpolate?: 'angle' | 'step' | undefined;
+      readonly interpolate?: 'angle' | 'previous' | undefined;
     }
   }
 }
@@ -27,7 +27,7 @@ const howOf = (ast: SchemaAST.AST | undefined) =>
 /** `a` moved toward `b` by `t`, in encoded form, following the schema's nodes where it has them. */
 const move = (ast: SchemaAST.AST | undefined, a: unknown, b: unknown, t: number): unknown => {
   const how = howOf(ast);
-  if (how === 'step') {
+  if (how === 'previous') {
     return a;
   }
   if (typeof a === 'number' && typeof b === 'number') {
@@ -71,9 +71,9 @@ export const between = <Value>(
   if (t >= 1) {
     return b;
   }
-  // Kept whole as a step, it is not worked through at all: what is drawn
-  // between holds the earlier value as it is.
-  if (t <= 0 || howOf(schema.ast) === 'step') {
+  // Held whole as the previous value, it is not worked through at all: what
+  // is drawn between is the earlier value as it is.
+  if (t <= 0 || howOf(schema.ast) === 'previous') {
     return a;
   }
   const json = Schema.toCodecJson(schema);

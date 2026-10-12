@@ -16,7 +16,7 @@ const bridged = Effect.gen(function* () {
     received: Stream.fromQueue(toHost),
   };
   yield* Bridge.serve(channel, Inspect.make(hosted, rewind), { name: 'test' });
-  yield* Fixtures.advance(100);
+  yield* Fixtures.elapse(100);
   const hello = yield* Queue.take(sent);
   const host = hello._tag === 'Hello' ? hello.host : '';
   return { sent, toHost, hello, host };
@@ -38,7 +38,7 @@ describe('a bridge from a host', () => {
       yield* Queue.offer(toHost, { _tag: 'Ask', id: 7, host, request: { _tag: 'Span' } });
 
       expect(yield* Queue.take(sent)).toEqual({
-        _tag: 'Answer',
+        _tag: 'Answered',
         id: 7,
         answer: { oldest: 0, newest: 3 },
       });
@@ -57,7 +57,7 @@ describe('a bridge from a host', () => {
       });
 
       expect(yield* Queue.take(sent)).toEqual({
-        _tag: 'Refusal',
+        _tag: 'Unanswered',
         id: 8,
         reason: 'tick 99 is not kept: ticks 0 to 3 are',
       });
@@ -77,7 +77,7 @@ describe('a bridge from a host', () => {
       yield* Queue.offer(toHost, 'nonsense');
       yield* Queue.offer(toHost, { _tag: 'Ask', id: 10, host, request: { _tag: 'Span' } });
 
-      expect(yield* Queue.take(sent)).toMatchObject({ _tag: 'Answer', id: 10 });
+      expect(yield* Queue.take(sent)).toMatchObject({ _tag: 'Answered', id: 10 });
     }),
   );
 
@@ -121,11 +121,11 @@ describe('a bridge from a host', () => {
       yield* Queue.offer(toHost, { _tag: 'Ask', id: 2, host, request: { _tag: 'Span' } });
 
       expect(broke).toEqual({
-        _tag: 'Refusal',
+        _tag: 'Unanswered',
         id: 1,
         reason: expect.stringContaining('the step threw'),
       });
-      expect(yield* Queue.take(sent)).toEqual({ _tag: 'Answer', id: 2, answer: 'fine' });
+      expect(yield* Queue.take(sent)).toEqual({ _tag: 'Answered', id: 2, answer: 'fine' });
     }),
   );
 });

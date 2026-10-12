@@ -165,7 +165,7 @@ describe('the stage at a glance', () => {
   it('tells the beats after the state emerges large too, in the order each term needs the one before', () => {
     expect(phrasesOf('Entities')).toEqual(['Entities', 'emerge.']);
     expect(phrasesOf('Components')).toEqual(['Components', 'give them form.']);
-    expect(phrasesOf('Step')).toEqual(['Time starts', 'ticking.']);
+    expect(phrasesOf('Step')).toEqual(['Time starts', 'stepping.']);
   });
 
   it('sets down each term in the table as the telling introduces it, and none before', () => {

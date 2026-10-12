@@ -30,8 +30,8 @@ export interface Simulation {
   readonly commands: ReadonlyArray<Command.Issued>;
 }
 
-/** One part of a story: what it does to the simulation told so far. */
-export type Step = (simulation: Simulation) => Simulation;
+/** One line of a story: what it does to the simulation told so far. */
+export type Line = (simulation: Simulation) => Simulation;
 
 const entityOf = (simulation: Simulation, name: string): State.Entity => {
   const entity = simulation.names.get(name);
@@ -41,9 +41,9 @@ const entityOf = (simulation: Simulation, name: string): State.Entity => {
   return entity;
 };
 
-/** Tells `steps` of `game` in order, from an empty state seeded with 0 unless one is given; returns where the story ends. */
-export const story = (game: Game.Game, ...steps: ReadonlyArray<Step>): Simulation =>
-  steps.reduce<Simulation>((simulation, step) => step(simulation), {
+/** Tells `lines` of `game` in order, from an empty state seeded with 0 unless one is given; returns where the story ends. */
+export const story = (game: Game.Game, ...lines: ReadonlyArray<Line>): Simulation =>
+  lines.reduce<Simulation>((simulation, line) => line(simulation), {
     game,
     state: State.empty({ seed: 0 }),
     names: new Map(),
@@ -57,12 +57,12 @@ export const story = (game: Game.Game, ...steps: ReadonlyArray<Step>): Simulatio
 
 /** Starts from `state`, built however a test likes, with its entities named by `names`; the names given so far are forgotten. */
 export const given =
-  (state: State.State, names: Readonly<Record<string, State.Entity>> = {}): Step =>
+  (state: State.State, names: Readonly<Record<string, State.Entity>> = {}): Line =>
   (simulation) => ({ ...simulation, state, names: new Map(Object.entries(names)) });
 
 /** Spawns an entity holding `instances`, by the name `name`. */
 export const spawn =
-  (name: string, instances: ReadonlyArray<Component.Instance>): Step =>
+  (name: string, instances: ReadonlyArray<Component.Instance>): Line =>
   (simulation) => {
     const [state, entity] = State.spawn(simulation.state, instances);
     return { ...simulation, state, names: new Map([...simulation.names, [name, entity]]) };
@@ -76,7 +76,7 @@ export const input =
     name: string,
     component: Component.Component<string, Value, 'input'>,
     value: Value,
-  ): Step =>
+  ): Line =>
   (simulation) => ({
     ...simulation,
     inputs: [...simulation.inputs, Input.of(entityOf(simulation, name), component, value)],
@@ -84,7 +84,7 @@ export const input =
 
 /** Takes `action` as from the player named `name`, sent and accepted as a host would; the rules handle it at the next step. */
 export const act =
-  <Sent>(name: string, action: Action.Action<string, Sent, Event.Tagged>, value: Sent): Step =>
+  <Sent>(name: string, action: Action.Action<string, Sent, Event.Tagged>, value: Sent): Line =>
   (simulation) =>
     Option.match(action.accept(action.encode(value), entityOf(simulation, name)), {
       onNone: () => {
@@ -98,7 +98,7 @@ export const happen =
   <Value extends Event.Tagged>(
     event: Event.Event<string, Value>,
     fields: Omit<Value, '_tag'>,
-  ): Step =>
+  ): Line =>
   (simulation) => {
     const value = { ...fields, _tag: event.tag };
     if (!event.is(value)) {
@@ -114,7 +114,7 @@ const frozen: Game.StepOptions = { freeze: true };
 
 /** Takes `count` steps: the waiting input and actions go into the first. */
 export const steps =
-  (count: number): Step =>
+  (count: number): Line =>
   (simulation) => {
     const events: Array<Event.Tagged> = [];
     const commands: Array<Command.Issued> = [];
@@ -138,7 +138,7 @@ export const until =
   (
     holds: (state: State.State, named: (name: string) => State.Entity) => boolean,
     options: { readonly limit?: number } = {},
-  ): Step =>
+  ): Line =>
   (simulation) => {
     const limit = options.limit ?? 600;
     const named = (name: string) => entityOf(simulation, name);
@@ -160,11 +160,11 @@ export const until =
   };
 
 /** Takes one step. */
-export const step = (): Step => steps(1);
+export const step = (): Line => steps(1);
 
 /** Takes as many steps as `seconds` take at the game's rate. */
 export const seconds =
-  (seconds: number): Step =>
+  (seconds: number): Line =>
   (simulation) =>
     steps(Math.round(seconds * simulation.game.stepRate))(simulation);
 
@@ -172,7 +172,7 @@ export const seconds =
 
 /** Expects the entity named `name` to hold `component`, and hands its value to `assert`. */
 export const expect =
-  <Value>(name: string, component: Of<Value>, assert: (value: Value) => void): Step =>
+  <Value>(name: string, component: Of<Value>, assert: (value: Value) => void): Line =>
   (simulation) =>
     Option.match(State.get(simulation.state, entityOf(simulation, name), component), {
       onNone: () => {
@@ -186,7 +186,7 @@ export const expect =
 
 /** Expects the entity named `name` to hold exactly `value` of `component`, compared as the component's schema encodes it. */
 export const expectEqual =
-  <Value>(name: string, component: Of<Value>, value: Value): Step =>
+  <Value>(name: string, component: Of<Value>, value: Value): Line =>
   (simulation) =>
     Option.match(State.get(simulation.state, entityOf(simulation, name), component), {
       onNone: () => {
@@ -205,7 +205,7 @@ export const expectEqual =
 
 /** Expects the entity named `name` not to hold `component`. */
 export const expectNone =
-  (name: string, component: Component.Any): Step =>
+  (name: string, component: Component.Any): Line =>
   (simulation) => {
     if (Option.isSome(State.get(simulation.state, entityOf(simulation, name), component))) {
       throw new Error(`${name} holds ${component.name}`);
@@ -218,7 +218,7 @@ export const expectEvent =
   <Value>(
     event: Event.Event<string, Value>,
     assert: (values: ReadonlyArray<Value>) => void = () => {},
-  ): Step =>
+  ): Line =>
   (simulation) => {
     const values = simulation.events.filter((happened) => event.is(happened));
     if (values.length === 0) {
@@ -233,7 +233,7 @@ export const expectCommand =
   <Args>(
     command: Command.Command<string, Args, Event.Any, unknown>,
     assert: (args: ReadonlyArray<Args>) => void = () => {},
-  ): Step =>
+  ): Line =>
   (simulation) => {
     const issued = simulation.commands.flatMap((one) =>
       Option.match(command.read(one), { onNone: () => [], onSome: (args) => [args] }),
@@ -250,7 +250,7 @@ export const resolve = <Results extends Event.Any, Value extends Event.Tagged>(
   command: Command.Command<string, unknown, Results, unknown>,
   result: Results & Event.Event<string, Value>,
   fields: Omit<Value, '_tag'>,
-): Step => {
+): Line => {
   if (!command.results.some((one) => one.tag === result.tag)) {
     throw new Error(`${result.tag} is not what ${command.name} comes to`);
   }
@@ -259,7 +259,7 @@ export const resolve = <Results extends Event.Any, Value extends Event.Tagged>(
 
 /** Expects no `event` among the events of the steps last taken. */
 export const expectNoEvent =
-  (event: Event.Any): Step =>
+  (event: Event.Any): Line =>
   (simulation) => {
     if (simulation.events.some((happened) => event.is(happened))) {
       throw new Error(`${event.tag} happened`);
@@ -269,7 +269,7 @@ export const expectNoEvent =
 
 /** Hands the whole state to `assert`, with a way to find a named entity, for what the other expectations cannot say. */
 export const state =
-  (assert: (state: State.State, named: (name: string) => State.Entity) => void): Step =>
+  (assert: (state: State.State, named: (name: string) => State.Entity) => void): Line =>
   (simulation) => {
     assert(simulation.state, (name) => entityOf(simulation, name));
     return simulation;
@@ -291,7 +291,7 @@ const encodedAs = (component: Component.Any) =>
 
 /** Starts from a state as the game's schema encodes it, with its entities named by `names`. */
 export const givenAs =
-  (encoded: unknown, names: Readonly<Record<string, State.Entity>> = {}): Step =>
+  (encoded: unknown, names: Readonly<Record<string, State.Entity>> = {}): Line =>
   (simulation) =>
     Option.match(Schema.decodeUnknownOption(Game.schema(simulation.game))(encoded), {
       onNone: () => {
@@ -302,7 +302,7 @@ export const givenAs =
 
 /** Sends input for the entity named `name`: a value of the input component called `component`, as it travels. */
 export const inputAs =
-  (name: string, component: string, value: unknown): Step =>
+  (name: string, component: string, value: unknown): Line =>
   (simulation) => {
     const found = simulation.game.components.find(
       (known): known is Input.InputComponent => known.name === component && known.owner === 'input',
@@ -323,7 +323,7 @@ export const inputAs =
 
 /** Takes an action as from the player named `name`: the action tagged with its name, with its fields but the player, as it travels. */
 export const actAs =
-  (name: string, action: unknown): Step =>
+  (name: string, action: unknown): Line =>
   (simulation) => {
     const player = entityOf(simulation, name);
     for (const known of simulation.game.actions) {
@@ -337,7 +337,7 @@ export const actAs =
 
 /** Has an event happen at the next step, as it travels: such as a command's result. */
 export const happenAs =
-  (event: unknown): Step =>
+  (event: unknown): Line =>
   (simulation) => {
     for (const known of [...simulation.game.events, ...simulation.game.actions]) {
       const decoded = Schema.decodeUnknownOption(Schema.toCodecJson(known.schema))(event);
@@ -350,7 +350,7 @@ export const happenAs =
 
 /** Expects the entity named `name` to hold exactly `value` of the component called `component`, as it travels. */
 export const expectAs =
-  (name: string, component: string, value: unknown): Step =>
+  (name: string, component: string, value: unknown): Line =>
   (simulation) => {
     const found = componentNamed(simulation, component);
     const held = State.get(simulation.state, entityOf(simulation, name), found);
@@ -376,7 +376,7 @@ export const expectAs =
 
 /** Expects the entity named `name` not to hold the component called `component`. */
 export const expectNoneAs =
-  (name: string, component: string): Step =>
+  (name: string, component: string): Line =>
   (simulation) =>
     expectNone(name, componentNamed(simulation, component))(simulation);
 

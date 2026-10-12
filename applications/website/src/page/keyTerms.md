@@ -40,11 +40,13 @@ A tick is a state's place in time: the number of steps taken to reach it. A game
 
 ### Step
 
-A step is the passage from one state to the state of the next tick. Each game fixes its step rate, such as 60 steps every second, and its time advances by exactly one step at a time, never by a fraction of one.
+A step turns a state into the state of the next tick. The host's step takes the players' input and actions; a client's local step takes nothing and changes only local components; a prediction step takes its player's input and changes only that player's predicted components.
 
-There are three kinds of step. The host's step takes the players' input and actions and may write any component. A client's local step takes neither and writes only the client's local components. A prediction step takes the input of the client's own player and writes only that player's predicted components.
+The host's step runs in the same order every time. The tick moves on to the next, and the players' input is written. The rules handle the actions players took. Then every system runs. Finally, the rules handle the events the systems emitted. By the time the next step begins, every consequence has already landed.
 
-The host's step runs in the same order every time. The players' input is written first, and the rules decide on the actions players took. Then every system runs. Finally, the rules decide on the events the systems emitted. By the time the next step begins, every consequence has already landed.
+Each game fixes its step rate, such as 60 steps every second, and its seconds per step follow from it: one sixtieth of a second at that rate. Time moves by exactly one step at a time, never by a fraction of one.
+
+An outcome records what one step produced: the next state, the events and commands that arose in it, and its trace. A trace records what each part of the game did in that step: what it wrote, spawned, emitted, and issued.
 
 Drawing happens between steps, at whatever rate the display runs, so motion stays smooth at 60, 120, or 144 Hz.
 
@@ -67,7 +69,7 @@ When two parts of the same data need different owners, they become two component
 
 An action is what a player did: pulled a trigger, chose to restart, clicked a light. It is made with `Action.make` and names the deed rather than the device, so a gamepad, a mouse, and a keyboard can all produce the same action.
 
-Actions read in the past tense, because by the time the game hears of one, it has already happened. Every action has a rule that decides what it means. What a player holds down continuously, such as a tilted stick, travels separately as input, which the player's own components carry.
+Actions read in the past tense, because by the time the game hears of one, it has already happened. Every action is handled by a rule, which decides what it means. What a player holds down continuously, such as a tilted stick, travels separately as input, which the player's own components carry.
 
 ### Event
 
@@ -83,7 +85,7 @@ A system declares what it reads, what it writes, and what events it may emit, an
 
 ### Rule
 
-A rule is what the game decides when an action or an event happens: a hit takes health, a click opens a door. It is made with `Rule.on`, naming the action or event it answers.
+A rule is what the game decides when an action or an event happens: a hit takes health, a click opens a door. It is made with `Rule.on`, naming the action or event it handles.
 
 A rule may read anything, but it writes only components the rules own, and it declares which ones. When its decision needs something done outside the game, it issues a command.
 
@@ -95,7 +97,7 @@ A rule issues a command as a value and moves on; the command never runs inside a
 
 ### View
 
-A view is how a client draws the game from its state. Each kind of view answers a different cause:
+A view is how a client draws the game from its state. Each kind of view suits a different cause:
 
 - **`View.each`** builds an object for every entity holding certain components and draws it every frame.
 - **`View.on`** reacts once when an entity gains a component or holds a new value of it, such as playing a sound on a hit.
@@ -113,7 +115,7 @@ A domain writes only its own components. To change another domain's components, 
 
 A game is its step rate and the list of its domains, made with `Game.make`. Their systems run in the order of that list, and everything the game's state is made of follows from it.
 
-`Game.make` also checks the game as a whole before it ever runs. A domain required but missing, an action no rule answers, or an event nothing emits or handles is a compile error, not a surprise at run time.
+`Game.make` also checks the game as a whole before it ever runs. A missing domain, one that another domain requires; an unhandled action; or an unused event, one that nothing emits and nothing handles, is a compile error, not a surprise at run time. An event that something emits may go unhandled: it is a domain's offer to others.
 
 ## Where a Game Runs
 

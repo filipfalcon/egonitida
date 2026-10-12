@@ -141,7 +141,7 @@ export const phrasesOf = (moment: Glance.Moment): ReadonlyArray<string> =>
     Match.when('State', () => ['Finally,', 'a state', 'emerges.']),
     Match.when('Entities', () => ['Entities', 'emerge.']),
     Match.when('Components', () => ['Components', 'give them form.']),
-    Match.when('Step', () => ['Time starts', 'ticking.']),
+    Match.when('Step', () => ['Time starts', 'stepping.']),
     Match.exhaustive,
   );
 

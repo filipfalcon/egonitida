@@ -54,7 +54,7 @@ describe('controls', () => {
     expect(first.values.button('restart')).toEqual({ held: false, pressed: false, value: 0 });
   });
 
-  it('answer to the device last used, the pad when both are used at once', () => {
+  it('respond to the device last used, the pad when both are used at once', () => {
     const keyboard = read({ ...idle, keys: new Set(['KeyR']) });
     const stillKeyboard = read(idle, keyboard);
     const both = read(

@@ -32,8 +32,8 @@ export const Request = Schema.Union([
   }),
   Schema.TaggedStruct('Hold', {}),
   Schema.TaggedStruct('Release', {}),
-  /** Takes so many steps at once, as time held is stepped through. */
-  Schema.TaggedStruct('Advance', { steps: Schema.Int }),
+  /** Takes `count` steps at once, as time held is stepped through. */
+  Schema.TaggedStruct('Step', { count: Schema.Int }),
   /** Shows the host's clients the state at a tick, while time is held. */
   Schema.TaggedStruct('Seek', { tick: Schema.Int }),
   /** Goes back to the state at a tick and plays on from it, the time after it gone. */
@@ -283,8 +283,8 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
           return yield* host.hold;
         case 'Release':
           return yield* host.release;
-        case 'Advance':
-          return yield* host.advance(request.steps);
+        case 'Step':
+          return yield* host.step(request.count);
         case 'Seek':
           return yield* host.show(yield* kept(request.tick));
         case 'PlayFrom':

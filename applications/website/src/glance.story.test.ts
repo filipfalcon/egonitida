@@ -7,7 +7,7 @@ const [withViewer, viewer] = Glance.setup.join(Glance.state);
 const given = Story.given(withViewer, { viewer });
 
 /** The telling as the viewer starts it, with `then` after. */
-const started = (...then: ReadonlyArray<Story.Step>) =>
+const started = (...then: ReadonlyArray<Story.Line>) =>
   Story.story(
     Glance.game,
     given,
@@ -17,7 +17,7 @@ const started = (...then: ReadonlyArray<Story.Step>) =>
   );
 
 /** The telling of `state` told on with `then`, the viewer still watching. */
-const from = (state: State.State, ...then: ReadonlyArray<Story.Step>) =>
+const from = (state: State.State, ...then: ReadonlyArray<Story.Line>) =>
   Story.story(Glance.game, Story.given(state, { viewer }), ...then);
 
 /** The viewer going on to the next beat. */
@@ -99,39 +99,39 @@ it('gives every entity its components, all there, even when the viewer goes on b
   expect(looksOf(hurried.state)).toHaveLength(Glance.PLANETS);
 });
 
-it('keeps the planets still until time starts ticking, and from then moves every one round a stride each step', () => {
+it('keeps the planets still until time starts stepping, and from then moves every one round a stride each step', () => {
   const given = into('Components');
-  const ticking = from(given.state, ...goneOn);
-  const next = Story.step()(ticking);
+  const stepped = from(given.state, ...goneOn);
+  const next = Story.step()(stepped);
 
   expect(anglesOf(from(given.state, Story.seconds(5)).state)).toEqual(anglesOf(given.state));
   const strides = anglesOf(next.state).map(
-    (angle, index) => (angle - (anglesOf(ticking.state)[index] ?? 0) + 360) % 360,
+    (angle, index) => (angle - (anglesOf(stepped.state)[index] ?? 0) + 360) % 360,
   );
-  const expected = State.query(ticking.state, Glance.Place).map(([, { distance }]) =>
+  const expected = State.query(stepped.state, Glance.Place).map(([, { distance }]) =>
     Glance.strideAt(distance),
   );
   expect(strides).toHaveLength(Glance.PLANETS);
   strides.forEach((stride, index) => expect(stride).toBeCloseTo(expected[index] ?? 0, 9));
 });
 
-it('comes to the step a state begins from as time starts ticking, and goes no further', () => {
-  const ticking = into('Step');
+it('comes to the step a state begins from as time starts stepping, and goes no further', () => {
+  const stepped = into('Step');
 
-  expect(Glance.isAboutToBegin(ticking.state)).toBe(true);
-  expect(beatOf(from(ticking.state, ...goneOn))).toBe('Step');
+  expect(Glance.isAboutToBegin(stepped.state)).toBe(true);
+  expect(beatOf(from(stepped.state, ...goneOn))).toBe('Step');
 });
 
-it('begins the state at its first tick as time starts ticking, holding all it held, every tick it remembers counted from there', () => {
-  const ticking = into('Step').state;
-  const state = Glance.begun(ticking);
+it('begins the state at its first tick as time starts stepping, holding all it held, every tick it remembers counted from there', () => {
+  const stepped = into('Step').state;
+  const state = Glance.begun(stepped);
   const sinceOf = (held: State.State) => entitiesOf(held).map(([, { since }]) => since);
 
   expect(state.tick).toBe(0);
   expect(Glance.momentOf(state)).toBe('Step');
   expect(Glance.isAboutToBegin(state)).toBe(false);
-  expect(State.entities(state)).toEqual(State.entities(ticking));
-  expect(sinceOf(state)).toEqual(sinceOf(ticking).map((since) => since - ticking.tick));
+  expect(State.entities(state)).toEqual(State.entities(stepped));
+  expect(sinceOf(state)).toEqual(sinceOf(stepped).map((since) => since - stepped.tick));
   expect(State.holding(state, [Glance.Eye])).toEqual([viewer]);
 });
 

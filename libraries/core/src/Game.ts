@@ -13,7 +13,9 @@ import * as State from '#src/State.ts';
 /**
  * A game: its fixed step rate and the domains it is made of, and from them everything its state is made of (its components, the actions its players take, and the events its steps emit), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
  *
- * One step: the tick advances; the step's input is written to the entities it is aimed at; the players' actions are handled by the rules, in the order they came; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
+ * A step turns a state into the state of the next tick. The host's step takes the players' input and actions; a client's local step takes nothing and changes only local components; a prediction step takes its player's input and changes only that player's predicted components.
+ *
+ * Within the host's step, the order is fixed: the tick moves on to the next; the step's input is written to the entities it is aimed at; the players' actions are handled by the rules, in the order they came; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
  */
 
 export interface Game<
@@ -40,14 +42,14 @@ type Missing<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
   Domains[number]['name']
 >;
 
-/** The tags of the actions no rule of `Domains` answers. */
-type Unanswered<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
+/** The tags of the actions no rule of `Domains` handles. */
+type Unhandled<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
   Domains[number]['actions'][number]['tag'],
   Parts<Domains>['handles']
 >;
 
-/** The tags of the events `Domains` declare that nothing emits and nothing handles. */
-type Dead<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
+/** The tags of the unused events `Domains` declare: those that nothing emits and nothing handles. */
+type Unused<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
   Domains[number]['events'][number]['tag'],
   Parts<Domains>['handles'] | Parts<Domains>['emits']
 >;
@@ -60,11 +62,11 @@ type Refuse<Name extends string, Found> = [Found] extends [never]
   : { readonly [K in Name]: Found };
 
 /**
- * What a game of `Domains` must not be: missing a domain one requires, holding an action no rule answers, a player doing something to no effect, or an event nothing emits or handles. An event that is emitted and goes unanswered is a domain's offer to others, and is fine.
+ * A game is rejected if it is missing a domain that another domain requires, holds an unhandled action, or declares an unused event: one that nothing emits and nothing handles.
  */
 type Requirements<Domains extends ReadonlyArray<Domain.Any>> = Refuse<'missing', Missing<Domains>> &
-  Refuse<'unanswered', Unanswered<Domains>> &
-  Refuse<'dead', Dead<Domains>>;
+  Refuse<'unhandled', Unhandled<Domains>> &
+  Refuse<'unused', Unused<Domains>>;
 
 /** The names that come more than once among `names`, each once. */
 const repeated = (names: ReadonlyArray<string>): ReadonlyArray<string> => [
@@ -80,7 +82,7 @@ const refuseRepeated = (names: ReadonlyArray<string>, what: string) => {
 };
 
 /**
- * A game made of `domains`: their components, actions, and events, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an action no rule answers, and an event nothing emits or handles do not compile. Two components of one name, which a state keeps in one store, two actions or events of one tag, and two commands of one name are refused when the game is made.
+ * A game made of `domains`: their components, actions, and events, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an unhandled action, and an unused event do not compile. Two components of one name, which a state keeps in one store, two actions or events of one tag, and two commands of one name are refused when the game is made.
  */
 export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
   game: { readonly stepRate: number; readonly domains: Domains } & Requirements<Domains>,
@@ -163,7 +165,8 @@ export const only = <
   rules: parts.rules,
 });
 
-export interface Step<Commands extends Command.Any = Command.Any> {
+/** An outcome records what one step produced: the next state, the events and commands that arose in it, and its trace. */
+export interface Outcome<Commands extends Command.Any = Command.Any> {
   readonly state: State.State;
   /** Every event of the step, in the order it happened. */
   readonly events: ReadonlyArray<Event.Tagged>;
@@ -243,7 +246,7 @@ export const step = <Commands extends Command.Any>(
   inputs: ReadonlyArray<Input.Input> = [],
   actions: ReadonlyArray<Event.Tagged> = [],
   options: StepOptions = {},
-): Step<Commands> => {
+): Outcome<Commands> => {
   // The state a step is given is frozen too, so even what it was spawned with fails at once when changed in place.
   const freezing = options.freeze === true ? game.components : [];
   for (const component of freezing) {
@@ -311,7 +314,7 @@ export const step = <Commands extends Command.Any>(
   // Systems and rules share one context at run time; their types are what keep each to what it declared.
   const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> &
     Rule.Context<Component.Any, Event.Any, Component.Any, true, Commands> = {
-    time: { tick: draft.tick, stepSeconds: 1 / game.stepRate },
+    time: { tick: draft.tick, secondsPerStep: 1 / game.stepRate },
     random: () => {
       const [value, counter] = Random.next(draft.random);
       draft.random = counter;
@@ -380,7 +383,7 @@ export const stepLocal = (
   const draft = State.draft(state);
   const drawn = { counter: (state.random ^ Math.imul(options.tick, 0x9e3779b1)) >>> 0 };
   const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> = {
-    time: { tick: options.tick, stepSeconds: 1 / game.stepRate },
+    time: { tick: options.tick, secondsPerStep: 1 / game.stepRate },
     random: () => {
       const [value, counter] = Random.next(drawn.counter);
       drawn.counter = counter;

@@ -47,15 +47,15 @@ const seaAt = (across: number, back: number, seconds: number) =>
   0.18 * Math.sin(0.7 * across + 1.3 * seconds) +
   0.14 * Math.sin(0.55 * back - 0.9 * seconds + 1.1);
 
-/** How high `ripple` lifts the light at its place, `seconds` into the game, `stepSeconds` a step: most where its crest is, less the longer it has run. */
+/** How high `ripple` lifts the light at its place, `seconds` into the game, `secondsPerStep` a step: most where its crest is, less the longer it has run. */
 const rippleAt = (
   ripple: Component.ValueOf<typeof Ripple>,
   across: number,
   back: number,
   seconds: number,
-  stepSeconds: number,
+  secondsPerStep: number,
 ) => {
-  const age = seconds - ripple.since * stepSeconds;
+  const age = seconds - ripple.since * secondsPerStep;
   if (age < 0 || age >= RIPPLE_SECONDS) {
     return 0;
   }
@@ -87,9 +87,9 @@ const calm = System.make({
   emits: [],
   despawns: true,
   run: (context) => {
-    const { tick, stepSeconds } = context.time;
+    const { tick, secondsPerStep } = context.time;
     for (const [entity, { since }] of context.query(Ripple)) {
-      if ((tick - since) * stepSeconds >= RIPPLE_SECONDS) {
+      if ((tick - since) * secondsPerStep >= RIPPLE_SECONDS) {
         context.despawn(entity);
       }
     }
@@ -103,13 +103,13 @@ const swell = System.make({
   writes: [Swell],
   emits: [],
   run: (context) => {
-    const { tick, stepSeconds } = context.time;
-    const seconds = tick * stepSeconds;
+    const { tick, secondsPerStep } = context.time;
+    const seconds = tick * secondsPerStep;
     const ripples = context.query(Ripple);
     for (const [light, { across, back }] of context.query(Light)) {
       let height = seaAt(across, back, seconds);
       for (const [, passing] of ripples) {
-        height += rippleAt(passing, across, back, seconds, stepSeconds);
+        height += rippleAt(passing, across, back, seconds, secondsPerStep);
       }
       context.set(light, Swell, { height });
     }

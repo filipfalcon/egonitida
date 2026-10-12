@@ -3,7 +3,7 @@ import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
 import * as Http from '#src/Http.ts';
 
-describe('a Fetch handler mounted on a development server', () => {
+describe('a Fetch application mounted on a development server', () => {
   it.live('takes each request as the Fetch Request it is, and sends back its Response', () =>
     Effect.gen(function* () {
       const handled = Http.mounted(

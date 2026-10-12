@@ -13,11 +13,11 @@ Write down, before any code:
 
 - **Components** it owns, each with its owner: `simulation` (systems change it every step), `rules` (rules change it when something happens), or `input` (players change it); and its network role: `server`, `predicted`, or `local` (a client keeps it for itself).
 - **Actions**: what a player does, whatever device they do it with, as facts in the past tense (`PulledTrigger`, `AskedForCube`).
-- **Events**: what the game made of something, also in the past tense; the events of other domains it emits or answers.
+- **Events**: what the game made of something, also in the past tense; the events of other domains it emits or handles.
 - **Commands**: anything done outside the game, such as saving to storage, with the events its result may be, failure included.
 - **Requires**: the domains beneath it whose components it reads, spawns, or whose events it emits.
 
-Check the plan against the rules: it writes only its own components, two domains never require each other, every action has a rule, and an event nothing emits and nothing handles is not declared.
+Check the plan against the rules: it writes only its own components, two domains never require each other, every action is handled by a rule, and no unused event, one that nothing emits and nothing handles, is declared.
 
 ## 2. Tell its behaviour first
 

@@ -2,7 +2,7 @@ import { Component, Domain, Game, System, State } from '@lightocean/core';
 import { Schema } from 'effect';
 
 /**
- * The example over the network: a room many players share, hosted in a Durable Object, each player a walker of a colour of their own, steered by the keys. It adds one idea to those before: the game is not on the player's machine but across a network, and every page that opens the room sees the same walkers. A player's own walker is predicted, so it answers their keys at once, and goes over to where the room says it is if the two disagree.
+ * The example over the network: a room many players share, hosted in a Durable Object, each player a walker of a colour of their own, steered by the keys. It adds one idea to those before: the game is not on the player's machine but across a network, and every page that opens the room sees the same walkers. A player's own walker is predicted, so it responds to their keys at once, and goes over to where the room says it is if the two disagree.
  */
 
 /** How fast a walker walks, in metres a second. */
@@ -48,7 +48,7 @@ const walk = System.make({
     for (const [walker, steering, position] of context.query(Steering, Position)) {
       const length = Math.hypot(steering.x, steering.z);
       if (length > 0) {
-        const pace = (SPEED * context.time.stepSeconds) / Math.max(length, 1);
+        const pace = (SPEED * context.time.secondsPerStep) / Math.max(length, 1);
         context.set(walker, Position, {
           x: Math.min(HALF_SIZE, Math.max(-HALF_SIZE, position.x + steering.x * pace)),
           z: Math.min(HALF_SIZE, Math.max(-HALF_SIZE, position.z + steering.z * pace)),

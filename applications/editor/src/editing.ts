@@ -3,7 +3,7 @@ import { Option, Schema } from 'effect';
 import * as Objects from '#src/objects.ts';
 
 /**
- * Editing a document, as a state: whoever edits it is a player, and every edit is their action, which the rules here answer by the events of the `Objects` domain, so an edit is checked against the components' schemas wherever it comes from, a panel, a click, or an agent. What each editor has selected is theirs, on their own entity. A document playing is another game, without this domain, so nothing is edited while it plays.
+ * Editing a document, as a state: whoever edits it is a player, and every edit is their action, which the rules here handle by the events of the `Objects` domain, so an edit is checked against the components' schemas wherever it comes from, a panel, a click, or an agent. What each editor has selected is theirs, on their own entity. A document playing is another game, without this domain, so nothing is edited while it plays.
  */
 
 // COMPONENTS

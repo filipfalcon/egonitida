@@ -434,7 +434,7 @@ const drawBare = (
   setOpacity(glow, (1 - emerged) * 0.9 + 0.1);
 };
 
-/** Draws a planet into `object` as it was `back` steps before `frame`: from its place in the row, taking its look and its place, its size and its colour, as it is given them; and, once time starts ticking, going round the middle. */
+/** Draws a planet into `object` as it was `back` steps before `frame`: from its place in the row, taking its look and its place, its size and its colour, as it is given them; and, once time starts stepping, going round the middle. */
 const drawPlanet = (
   object: Three.Object3D,
   body: Component.ValueOf<typeof Glance.Body>,
@@ -468,7 +468,7 @@ export const bare = View.each([Glance.Body], {
   },
 });
 
-/** Every planet, an entity with its look and its place: taking them, and, once time starts ticking, going round the middle. */
+/** Every planet, an entity with its look and its place: taking them, and, once time starts stepping, going round the middle. */
 export const planets = View.each([Glance.Body, Glance.Look, Glance.Place], {
   acquire: () =>
     Effect.acquireRelease(Effect.sync(planetParts), (object) =>

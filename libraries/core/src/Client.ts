@@ -110,24 +110,23 @@ export const connect = (
       return Option.map(Snapshot.apply(base, text, options.game), ({ state }) => state);
     };
 
-    // A snapshot of an earlier era, or older than the state already held in this one, arrived out of order, and is of no use.
     // The questions asked and not yet answered, by their ids.
     const asked = { next: 0, waiting: new Map<number, Deferred.Deferred<unknown, Unanswered>>() };
-    const answered = ({ id, outcome }: Protocol.Answer) =>
+    const replied = (message: Protocol.HostReliable) =>
       Effect.suspend(() => {
-        const waiting = asked.waiting.get(id);
-        asked.waiting.delete(id);
+        const waiting = asked.waiting.get(message.id);
+        asked.waiting.delete(message.id);
         return waiting === undefined
           ? Effect.void
-          : outcome._tag === 'Answered'
-            ? Deferred.succeed(waiting, outcome.answer)
-            : Deferred.fail(waiting, new Unanswered({ reason: outcome.reason }));
+          : message._tag === 'Answered'
+            ? Deferred.succeed(waiting, message.answer)
+            : Deferred.fail(waiting, new Unanswered({ reason: message.reason }));
       });
 
     const receive = (frame: Transport.Frame) =>
       frame.channel === 'reliable'
-        ? Option.match(Protocol.decodeAnswer(frame.payload), {
-            onSome: (answer) => Effect.asVoid(answered(answer)),
+        ? Option.match(Protocol.decodeHostReliable(frame.payload), {
+            onSome: (message) => Effect.asVoid(replied(message)),
             onNone: () =>
               Option.match(Protocol.decodeWelcome(frame.payload), {
                 onNone: () => Effect.void,
@@ -151,6 +150,7 @@ export const connect = (
                 onNone: () => Effect.void,
                 onSome: ({ era, state }) =>
                   Effect.suspend(() => {
+                    // A snapshot of an earlier era, or older than the state already held in this one, arrived out of order, and is of no use.
                     if (
                       era < receiving.era ||
                       (era === receiving.era && state.tick <= receiving.state.tick)

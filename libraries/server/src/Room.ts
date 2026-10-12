@@ -3,7 +3,7 @@ import { Transport } from '@lightocean/core/internal';
 import { type Cause, Effect, Exit, Option, Queue, Schema, Scope, Semaphore, Stream } from 'effect';
 
 /**
- * A game hosted for the players who reach it across a network, as a Cloudflare Durable Object hosts one room: one host, joined by every socket that opens to it, one player each, and let go of when its socket closes. It knows nothing of Cloudflare: whatever runs it hands it each socket as it opens, the text each one receives, and when each closes, as a Durable Object's WebSocket handlers do.
+ * A game hosted for the players who reach it across a network, as a Cloudflare Durable Object hosts one room: one host, joined by every socket that opens to it, one player each, and let go of when its socket closes. It knows nothing of Cloudflare: whatever runs it hands it each socket as it opens, the text each one receives, and when each closes, as a Durable Object's WebSocket methods do.
  *
  * Time stands while no one is in it, so a room with no one in it takes no steps and keeps nothing awake. What it holds lives as long as whatever runs it: a Durable Object that sleeps forgets its state.
  */

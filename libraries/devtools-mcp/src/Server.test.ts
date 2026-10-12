@@ -18,11 +18,11 @@ const post = (body: object, clientId?: string) =>
 describe('the MCP server over HTTP', () => {
   it.live('answers an MCP client at its path, with the same tools as over stdio', () =>
     Effect.gen(function* () {
-      const { handler, dispose } = Server.webHandler(process.cwd());
+      const { handler: respond, dispose } = Server.web(process.cwd());
       yield* Effect.addFinalizer(() => Effect.promise(dispose));
 
       const initialized = yield* Effect.promise(() =>
-        handler(
+        respond(
           post({
             id: 1,
             method: 'initialize',
@@ -37,7 +37,7 @@ describe('the MCP server over HTTP', () => {
       const clientId = initialized.headers.get('mcp-session-id') ?? undefined;
       const greeting = yield* Effect.promise(() => initialized.text());
       const listed = yield* Effect.promise(() =>
-        handler(post({ id: 2, method: 'tools/list', params: {} }, clientId)).then((response) =>
+        respond(post({ id: 2, method: 'tools/list', params: {} }, clientId)).then((response) =>
           response.text(),
         ),
       );
@@ -52,12 +52,12 @@ describe('the MCP server over HTTP', () => {
     'refuses a request from a page in a browser, so only tools on this machine reach it',
     () =>
       Effect.gen(function* () {
-        const { handler, dispose } = Server.webHandler(process.cwd());
+        const { handler: respond, dispose } = Server.web(process.cwd());
         yield* Effect.addFinalizer(() => Effect.promise(dispose));
         const fromAPage = post({ id: 1, method: 'tools/list', params: {} });
         fromAPage.headers.set('origin', 'http://localhost:5173');
 
-        const refused = yield* Effect.promise(() => handler(fromAPage));
+        const refused = yield* Effect.promise(() => respond(fromAPage));
 
         expect(refused.status).toBe(403);
       }).pipe(Effect.scoped),

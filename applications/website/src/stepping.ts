@@ -9,18 +9,18 @@ import { Effect, Match, Schema, type Scope, Stream } from 'effect';
 /** What a page asks of a game stepped by hand: to be shown the state as it stands, as a host sends its state only after each step it takes; or one step on. */
 export const Control = Schema.Union([
   Schema.TaggedStruct('Show', {}),
-  Schema.TaggedStruct('Advance', {}),
+  Schema.TaggedStruct('Step', {}),
 ]);
 export type Control = typeof Control.Type;
 
-/** Answers the controls `host`'s pages send, until the scope closes, whoever holds its time. */
-export const answer = (host: Host.Host): Effect.Effect<void, never, Scope.Scope> =>
+/** Carries out the controls `host`'s pages send, until the scope closes, whoever holds its time. */
+export const carryOut = (host: Host.Host): Effect.Effect<void, never, Scope.Scope> =>
   host.controls.pipe(
     Stream.filterMap(({ payload }) => Schema.decodeUnknownResult(Control)(payload)),
     Stream.runForEach((control) =>
       Match.value(control).pipe(
         Match.tag('Show', () => Effect.flatMap(host.state, host.show)),
-        Match.tag('Advance', () => host.advance(1)),
+        Match.tag('Step', () => host.step(1)),
         Match.exhaustive,
       ),
     ),
@@ -28,9 +28,9 @@ export const answer = (host: Host.Host): Effect.Effect<void, never, Scope.Scope>
     Effect.asVoid,
   );
 
-/** Holds `host`'s time, and answers the controls its pages send, until the scope closes. */
+/** Holds `host`'s time, and carries out the controls its pages send, until the scope closes. */
 export const serve = (host: Host.Host): Effect.Effect<void, never, Scope.Scope> =>
-  Effect.andThen(host.hold, answer(host));
+  Effect.andThen(host.hold, carryOut(host));
 
 const send = (client: Client.Client, control: Control) =>
   client.control(Schema.encodeSync(Control)(control));
@@ -39,8 +39,7 @@ const send = (client: Client.Client, control: Control) =>
 export const show = (client: Client.Client): Effect.Effect<void> => send(client, { _tag: 'Show' });
 
 /** Asks the host `client` is joined to for one step. */
-export const step = (client: Client.Client): Effect.Effect<void> =>
-  send(client, { _tag: 'Advance' });
+export const step = (client: Client.Client): Effect.Effect<void> => send(client, { _tag: 'Step' });
 
 /** Asks the host `client` is joined to to go back to the state it was at, at `tick`, and step on from there, through the rewind of the debugger beside it: what came after is gone. Its time stays held, by the host itself. */
 export const goBack = (client: Client.Client, tick: number): Effect.Effect<void> => {

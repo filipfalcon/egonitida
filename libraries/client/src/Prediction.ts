@@ -4,7 +4,7 @@ import type * as Drawing from '#src/Drawing.ts';
 import * as Interpolate from '#src/Interpolate.ts';
 
 /**
- * A player's own client playing ahead of its host, so the player's input answers at once across a network. The client sends the input the player holds once a step, numbered, as the host takes one a step; the host says which number each state it sends took in. What the player's own entity holds of predicted components is drawn from the newest state the host sent, stepped on with every input it has not taken in yet. When the host disagrees with what was predicted, what is drawn goes over to it in a few frames, never in a jump. Everything else is drawn as the host sent it.
+ * A player's own client playing ahead of its host, so the player's input takes effect at once across a network. The client sends the input the player holds once a step, numbered, as the host takes one a step; the host says which number each state it sends took in. What the player's own entity holds of predicted components is drawn from the newest state the host sent, stepped on with every input it has not taken in yet. When the host disagrees with what was predicted, what is drawn goes over to it in a few frames, never in a jump. Everything else is drawn as the host sent it.
  */
 
 /** How fast what is drawn of the player goes over to what is predicted: the share of the way left it closes in a second, as a rate. */

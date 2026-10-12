@@ -29,8 +29,12 @@ export const serve = (
       }
       return options.capture(message.width).pipe(
         Effect.match({
-          onSuccess: (shot): Bridge.FromHost => ({ _tag: 'Answer', id: message.id, answer: shot }),
-          onFailure: (reason): Bridge.FromHost => ({ _tag: 'Refusal', id: message.id, reason }),
+          onSuccess: (shot): Bridge.FromHost => ({
+            _tag: 'Answered',
+            id: message.id,
+            answer: shot,
+          }),
+          onFailure: (reason): Bridge.FromHost => ({ _tag: 'Unanswered', id: message.id, reason }),
         }),
         Effect.flatMap(channel.send),
       );

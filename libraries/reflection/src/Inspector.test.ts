@@ -94,7 +94,7 @@ describe('Inspector', () => {
     });
 
     it('rejects a key the schema does not have', () => {
-      expect(Inspector.edit(Thing, thing, 'missing', 1)).toEqual(Option.none());
+      expect(Inspector.edit(Thing, thing, 'absent', 1)).toEqual(Option.none());
     });
   });
 });

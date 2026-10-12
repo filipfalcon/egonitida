@@ -53,12 +53,12 @@ describe('replaying a recording in which the host went back in time', () => {
     Effect.gen(function* () {
       const hosted = yield* Fixtures.host();
       const recorder = yield* Recording.record(hosted, Fixtures.game);
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
       const past = yield* hosted.state;
       yield* Fixtures.visit(hosted);
 
       yield* hosted.restore(past);
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
       const recording = yield* recorder.recording;
 
       expect(recording.entries.some((entry) => entry._tag === 'Restored')).toBe(true);
@@ -91,7 +91,7 @@ describe('replaying beside a host', () => {
       const watching = yield* Replay.alongside(hosted, Fixtures.setup()).pipe(Effect.forkChild);
 
       yield* Fixtures.visit(hosted);
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
 
       expect(watching.pollUnsafe()).toBeUndefined();
     }),
@@ -101,7 +101,7 @@ describe('replaying beside a host', () => {
     Effect.gen(function* () {
       const drifting = Fixtures.drifting();
       const hosted = yield* Fixtures.host(drifting);
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
       const watching = yield* Replay.alongside(hosted, Fixtures.setup(drifting)).pipe(
         Effect.forkChild,
       );

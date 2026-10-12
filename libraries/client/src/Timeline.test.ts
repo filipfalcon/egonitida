@@ -37,14 +37,14 @@ describe('Timeline', () => {
   });
 
   it('draws between the two newest states, a step behind the newest', () => {
-    const timeline = Timeline.advance(receiveAll(start, [1, 2]), STEP / 2);
+    const timeline = Timeline.elapse(receiveAll(start, [1, 2]), STEP / 2);
 
     expect(Option.getOrElse(drawn(timeline), () => 0)).toBeCloseTo(1.5);
   });
 
   it('keeps a step behind the newest while states arrive every step', () => {
     const timeline = [3, 4, 5, 6, 7, 8].reduce(
-      (current, tick) => Timeline.advance(Timeline.receive(current, stateAt(tick)), STEP),
+      (current, tick) => Timeline.elapse(Timeline.receive(current, stateAt(tick)), STEP),
       receiveAll(start, [1, 2]),
     );
 
@@ -53,15 +53,15 @@ describe('Timeline', () => {
   });
 
   it('never runs past the newest state, however long none arrives', () => {
-    const timeline = Timeline.advance(receiveAll(start, [1, 2]), 5);
+    const timeline = Timeline.elapse(receiveAll(start, [1, 2]), 5);
 
     expect(drawn(timeline)).toEqual(Option.some(2));
   });
 
   it('does not jump when states arrive late and together, but moves on at nearly real time', () => {
-    const steady = Timeline.advance(receiveAll(start, [1, 2]), STEP);
+    const steady = Timeline.elapse(receiveAll(start, [1, 2]), STEP);
     // Two steps' worth of time passes with nothing new, then both states arrive at once.
-    const late = Timeline.advance(receiveAll(steady, [3, 4]), STEP);
+    const late = Timeline.elapse(receiveAll(steady, [3, 4]), STEP);
     const before = Option.getOrElse(drawn(steady), () => 0);
     const after = Option.getOrElse(drawn(late), () => 0);
 
@@ -72,13 +72,13 @@ describe('Timeline', () => {
 
   it('catches up at once when it is far behind, as when it first joins', () => {
     const ticks = Array.from({ length: 60 }, (_, index) => index + 1);
-    const timeline = Timeline.advance(receiveAll(start, ticks), STEP / 10);
+    const timeline = Timeline.elapse(receiveAll(start, ticks), STEP / 10);
 
     expect(Option.getOrElse(drawn(timeline), () => 0)).toBeCloseTo(59, 0);
   });
 
   it('draws an older state at once when one arrives, as when the host goes back in time', () => {
-    const steady = Timeline.advance(receiveAll(start, [10, 11, 12]), STEP);
+    const steady = Timeline.elapse(receiveAll(start, [10, 11, 12]), STEP);
 
     const back = Timeline.receive(steady, stateAt(5));
 
@@ -88,7 +88,7 @@ describe('Timeline', () => {
 
   it('shows an entity from the moment the state it appears in is reached', () => {
     const [withOther] = State.spawn(stateAt(2), [Position.of({ x: 100 })]);
-    const timeline = Timeline.advance(
+    const timeline = Timeline.elapse(
       Timeline.receive(Timeline.receive(start, stateAt(1)), withOther),
       STEP / 2,
     );
@@ -99,7 +99,7 @@ describe('Timeline', () => {
 
   it('keeps an entity until the state it is gone from is reached', () => {
     const gone = State.despawn(stateAt(2), 0);
-    const timeline = Timeline.advance(
+    const timeline = Timeline.elapse(
       Timeline.receive(Timeline.receive(start, stateAt(1)), gone),
       STEP / 2,
     );
@@ -111,7 +111,7 @@ describe('Timeline', () => {
     /** Ticks 1 and 2, the second with another entity at x = 100, drawn halfway between them. */
     const halfway = (() => {
       const [withOther] = State.spawn(stateAt(2), [Position.of({ x: 100 })]);
-      return Timeline.advance(
+      return Timeline.elapse(
         Timeline.receive(Timeline.receive(start, stateAt(1)), withOther),
         STEP / 2,
       );
@@ -128,7 +128,7 @@ describe('Timeline', () => {
     });
 
     it('gives an entity from the moment the state it appears in is reached', () => {
-      const reached = Timeline.advance(halfway, STEP);
+      const reached = Timeline.elapse(halfway, STEP);
 
       expect(rows(reached)).toEqual(
         Option.some([
@@ -143,18 +143,18 @@ describe('Timeline', () => {
 
     it('gives an entity until the state it is gone from is reached', () => {
       const gone = State.despawn(stateAt(2), 0);
-      const between = Timeline.advance(
+      const between = Timeline.elapse(
         Timeline.receive(Timeline.receive(start, stateAt(1)), gone),
         STEP / 2,
       );
 
       expect(rows(between)).toEqual(Option.some([[0, { x: 1 }]]));
-      expect(rows(Timeline.advance(between, STEP))).toEqual(Option.some([]));
+      expect(rows(Timeline.elapse(between, STEP))).toEqual(Option.some([]));
     });
   });
 
   describe('presentations', () => {
-    const recorded = Timeline.advance(
+    const recorded = Timeline.elapse(
       receiveAll(
         start,
         Array.from({ length: 60 }, (_, index) => index + 1),
@@ -163,7 +163,7 @@ describe('Timeline', () => {
     );
 
     it('plays a past moment at its own pace', () => {
-      const slowed = Timeline.advance(
+      const slowed = Timeline.elapse(
         Timeline.present(recorded, { from: 20 * STEP, rate: 0.25 }),
         4 * STEP,
       );
@@ -174,17 +174,17 @@ describe('Timeline', () => {
 
     it('is not moved by states that arrive meanwhile', () => {
       const frozen = Timeline.present(recorded, { from: 20 * STEP, rate: 0 });
-      const meanwhile = Timeline.advance(receiveAll(frozen, [61, 62, 63]), STEP);
+      const meanwhile = Timeline.elapse(receiveAll(frozen, [61, 62, 63]), STEP);
 
       expect(Option.getOrElse(drawn(meanwhile), () => 0)).toBeCloseTo(20);
     });
 
     it('returns to the live state when it ends', () => {
-      const presented = Timeline.advance(
+      const presented = Timeline.elapse(
         Timeline.present(recorded, { from: 20 * STEP, rate: 0 }),
         STEP,
       );
-      const back = Timeline.advance(Timeline.live(receiveAll(presented, [61])), STEP / 10);
+      const back = Timeline.elapse(Timeline.live(receiveAll(presented, [61])), STEP / 10);
 
       expect(Option.getOrElse(drawn(back), () => 0)).toBeCloseTo(60, 0);
     });

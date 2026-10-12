@@ -28,7 +28,7 @@ const INFO: Parameters<typeof McpServer.layerStdio>[0] = {
 export const tools = (from: string) =>
   Layer.mergeAll(
     McpServer.toolkit(Tools.toolkit).pipe(
-      Layer.provide(Tools.toolkit.toLayer(Tools.handlers(from))),
+      Layer.provide(Tools.toolkit.toLayer(Tools.implementations(from))),
     ),
     Layer.effectDiscard(
       Effect.gen(function* () {
@@ -45,8 +45,8 @@ export const tools = (from: string) =>
 /** The tools over stdio, as an agent starts the server. */
 export const stdio = (from: string) => tools(from).pipe(Layer.provide(McpServer.layerStdio(INFO)));
 
-/** The tools over HTTP at `PATH`, as a Fetch handler a development server mounts; a request from a page in a browser is refused, so only tools on this machine reach it. */
-export const webHandler = (from: string) =>
+/** The tools over HTTP at `PATH`, as a Fetch application a development server mounts; a request from a page in a browser is refused, so only tools on this machine reach it. */
+export const web = (from: string) =>
   HttpRouter.toWebHandler(
     tools(from).pipe(Layer.provideMerge(McpServer.layerHttp({ ...INFO, path: PATH }))),
     { disableLogger: true },

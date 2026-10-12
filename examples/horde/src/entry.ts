@@ -55,11 +55,11 @@ const asked = (event: KeyboardEvent): Option.Option<Asked> => {
 /** Listens to `type` on the window until the scope closes. */
 const listen = <K extends keyof WindowEventMap>(
   type: K,
-  handler: (event: WindowEventMap[K]) => void,
+  listener: (event: WindowEventMap[K]) => void,
 ) =>
   Effect.acquireRelease(
-    Effect.sync(() => window.addEventListener(type, handler)),
-    () => Effect.sync(() => window.removeEventListener(type, handler)),
+    Effect.sync(() => window.addEventListener(type, listener)),
+    () => Effect.sync(() => window.removeEventListener(type, listener)),
   );
 
 /** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the state kept for the tab. */

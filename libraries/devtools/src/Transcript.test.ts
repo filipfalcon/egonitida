@@ -9,7 +9,7 @@ import * as Transcript from '#src/Transcript.ts';
 const visited = Effect.gen(function* () {
   const hosted = yield* Fixtures.host(Fixtures.game, true);
   const rewind = yield* Rewind.make(hosted, Fixtures.setup(), { every: 2, keepSeconds: 10 });
-  yield* Fixtures.advance(100);
+  yield* Fixtures.elapse(100);
   yield* Fixtures.visit(hosted);
   return rewind;
 });

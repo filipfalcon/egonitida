@@ -13,7 +13,7 @@ describe('a state kept across reloads of the page', () => {
       yield* Keep.serve(store, hosted, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
       yield* Fixtures.visit(hosted);
       yield* hosted.hold;
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
       const now = yield* hosted.state;
 
       const kept = yield* Keep.load(store, Fixtures.game, 'tab-1');
@@ -38,7 +38,7 @@ describe('a state kept across reloads of the page', () => {
       const hosted = yield* Fixtures.host();
       yield* Keep.serve(store, hosted, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
       yield* hosted.reload(Fixtures.setup(Fixtures.brisk));
-      yield* Fixtures.advance(100);
+      yield* Fixtures.elapse(100);
 
       const kept = yield* Keep.load(store, Fixtures.brisk, 'tab-1');
 
@@ -58,7 +58,7 @@ describe('a state kept across reloads of the page', () => {
         const player = yield* hosted.connect(hostEnd);
         void clientEnd;
         yield* hosted.join;
-        yield* Fixtures.advance(100);
+        yield* Fixtures.elapse(100);
 
         const kept = yield* Keep.load(store, Fixtures.game, 'tab-1');
 

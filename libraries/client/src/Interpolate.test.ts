@@ -57,17 +57,17 @@ describe('Interpolate', () => {
     expect(between(Schema.Int, 3, 5, 0.5)).toEqual(4);
   });
 
-  it('keeps a whole value annotated as a step as it is, without working it through', () => {
+  it('keeps a whole value annotated as previous as it is, without working it through', () => {
     const Field = Schema.Struct({ depths: Schema.Array(Schema.Finite) }).annotate({
-      interpolate: 'step',
+      interpolate: 'previous',
     });
     const earlier = { depths: [0, 1, 2] };
 
     expect(between(Field, earlier, { depths: [3, 4, 5] }, 0.5)).toBe(earlier);
   });
 
-  it('keeps a number annotated as a step at the earlier value, whatever lies between', () => {
-    const Stage = Schema.Int.annotate({ interpolate: 'step' });
+  it('keeps a number annotated as previous at the earlier value, whatever lies between', () => {
+    const Stage = Schema.Int.annotate({ interpolate: 'previous' });
 
     expect(between(Stage, 0, 2, 0.5)).toEqual(0);
     expect(between(Stage, 0, 2, 1)).toEqual(2);

@@ -27,7 +27,7 @@ const turn = System.make({
   emits: [],
   run: (context) => {
     for (const [cube, spin] of context.query(Spin)) {
-      const angle = spin.angle + spin.speed * Math.PI * 2 * context.time.stepSeconds;
+      const angle = spin.angle + spin.speed * Math.PI * 2 * context.time.secondsPerStep;
       context.set(cube, Spin, { ...spin, angle });
     }
   },

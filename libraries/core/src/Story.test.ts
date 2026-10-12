@@ -16,7 +16,7 @@ const steer = System.make({
   run: (context) => {
     for (const [entity, position, controls] of context.query(Position, Controls)) {
       context.set(entity, Position, {
-        x: position.x + controls.move * 10 * context.time.stepSeconds,
+        x: position.x + controls.move * 10 * context.time.secondsPerStep,
       });
     }
   },
@@ -263,7 +263,7 @@ describe('Story, told by name', () => {
   });
 
   it('says plainly what it cannot read', () => {
-    const told = (step: Story.Step) => () =>
+    const told = (step: Story.Line) => () =>
       Story.story(game, Story.givenAs(encoded, { her: 0 }), step);
 
     expect(told(Story.inputAs('her', 'Health', { current: 1 }))).toThrow(

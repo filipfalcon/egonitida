@@ -213,7 +213,7 @@ export const Control = Schema.Union([
 ]);
 export type Control = typeof Control.Type;
 
-/** Answers the controls the host's clients send `rewind`, until the scope closes. */
+/** Carries out the controls the host's clients send `rewind`, until the scope closes. */
 export const serve = (host: Host.Host, rewind: Rewind): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function* () {
     const seeking = { shown: Option.none<number>() };
@@ -227,7 +227,7 @@ export const serve = (host: Host.Host, rewind: Rewind): Effect.Effect<void, neve
           yield* host.show(state.value);
         }
       });
-    const answer = (control: Control) =>
+    const carryOut = (control: Control) =>
       Effect.gen(function* () {
         switch (control._tag) {
           case 'Seek':
@@ -256,7 +256,7 @@ export const serve = (host: Host.Host, rewind: Rewind): Effect.Effect<void, neve
     yield* host.controls.pipe(
       Stream.filterMap(({ payload }) => Schema.decodeUnknownResult(Control)(payload)),
       Stream.runForEach((control) =>
-        answer(control).pipe(
+        carryOut(control).pipe(
           Effect.catch((unreadable) =>
             Effect.logError('The game cannot be gone back in', unreadable),
           ),

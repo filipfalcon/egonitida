@@ -24,7 +24,7 @@ const steer = System.make({
   run: (context) => {
     for (const [entity, position, controls] of context.query(Position, Controls)) {
       context.set(entity, Position, {
-        x: position.x + controls.move * 30 * context.time.stepSeconds,
+        x: position.x + controls.move * 30 * context.time.secondsPerStep,
       });
     }
   },
@@ -82,7 +82,7 @@ const session = Effect.gen(function* () {
 /**
  * Lets `millis` of test time pass the way real time does: a little at a time, giving every fiber its turn. One jump would wake the host's loop once, to find all of it owed at once, as after a stall.
  */
-const advance = (millis: number) =>
+const elapse = (millis: number) =>
   Effect.gen(function* () {
     for (let passed = 0; passed < millis; passed += 10) {
       yield* TestClock.adjust(`${Math.min(10, millis - passed)} millis`);
@@ -98,7 +98,7 @@ describe('a session between a host and its clients', () => {
     Effect.gen(function* () {
       const host = yield* startHost;
 
-      yield* advance(1000);
+      yield* elapse(1000);
 
       const state = yield* host.state;
       expect(state.tick).toBe(30);
@@ -119,7 +119,7 @@ describe('a session between a host and its clients', () => {
       const { host, client } = yield* session;
 
       yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(100);
+      yield* elapse(100);
 
       // Three steps of a thirtieth of a second, at 30 a second.
       const state = yield* host.state;
@@ -132,7 +132,7 @@ describe('a session between a host and its clients', () => {
       const { host, client } = yield* session;
 
       yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(100);
+      yield* elapse(100);
 
       const seen = yield* client.state;
       const stepped = yield* host.state;
@@ -146,10 +146,10 @@ describe('a session between a host and its clients', () => {
       const { host, client } = yield* session;
 
       const first = yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(100);
+      yield* elapse(100);
       const second = yield* client.send([Controls.of({ move: 0, fire: false })]);
       const before = yield* client.state;
-      yield* advance(100);
+      yield* elapse(100);
       const after = yield* client.state;
 
       expect([first, second]).toEqual([1, 2]);
@@ -168,7 +168,7 @@ describe('a session between a host and its clients', () => {
         channel: 'unreliable',
         payload: JSON.stringify({ inputs: [{ seq: 99, values: { Position: { x: 999 } } }] }),
       });
-      yield* advance(100);
+      yield* elapse(100);
 
       const state = yield* host.state;
       expect(positionIn(state, client.entity)).toEqual(Option.some(0));
@@ -194,7 +194,7 @@ describe('a session between a host and its clients', () => {
       const { host, client } = yield* session;
 
       yield* client.send([Controls.of({ move: -1, fire: false })]);
-      yield* advance(1000);
+      yield* elapse(1000);
 
       const state = yield* host.state;
       expect(positionIn(state, client.entity)).toEqual(Option.some(-30));
@@ -218,7 +218,7 @@ describe('a session between a host and its clients', () => {
         Effect.forkChild,
       );
 
-      yield* advance(200);
+      yield* elapse(200);
 
       const states = yield* Fiber.join(received);
       expect(states.map((state) => state.tick)).toEqual([1, 2, 3]);
@@ -231,12 +231,12 @@ describe('a session between a host and its clients', () => {
         const { host, client } = yield* session;
 
         yield* client.hold;
-        yield* advance(1000);
+        yield* elapse(1000);
         const held = yield* host.state;
         expect(held.tick).toBe(0);
 
         yield* client.release;
-        yield* advance(100);
+        yield* elapse(100);
         // Three steps, not the thirty the held second would have owed.
         const resumed = yield* host.state;
         expect(resumed.tick).toBe(3);
@@ -251,7 +251,7 @@ describe('a session between a host and its clients', () => {
         const client = yield* Client.connect(clientEnd, { game });
 
         yield* client.hold;
-        yield* advance(1000);
+        yield* elapse(1000);
 
         const state = yield* host.state;
         expect(state.tick).toBe(30);
@@ -267,9 +267,9 @@ describe('a session between a host and its clients', () => {
         const client = yield* Client.connect(clientEnd, { game });
 
         yield* client.hold;
-        yield* advance(500);
+        yield* elapse(500);
         yield* Scope.close(scope, Exit.void);
-        yield* advance(100);
+        yield* elapse(100);
 
         const state = yield* host.state;
         expect(state.tick).toBe(3);
@@ -286,7 +286,7 @@ describe('a session between a host and its clients', () => {
         const { host, client } = yield* session;
 
         yield* client.act(AskedToHeal, { amount: 50 });
-        yield* advance(50);
+        yield* elapse(50);
 
         const state = yield* host.state;
         expect(healthOf(state, client.entity)).toEqual(Option.some(50));
@@ -299,7 +299,7 @@ describe('a session between a host and its clients', () => {
 
         yield* client.act(AskedToHeal, { amount: 50 });
         yield* client.act(AskedToHeal, { amount: 70 });
-        yield* advance(50);
+        yield* elapse(50);
 
         const state = yield* host.state;
         expect(healthOf(state, client.entity)).toEqual(Option.some(70));
@@ -314,7 +314,7 @@ describe('a session between a host and its clients', () => {
           channel: 'reliable',
           payload: JSON.stringify({ _tag: 'Act', action: { _tag: 'Teleport', x: 1 } }),
         });
-        yield* advance(50);
+        yield* elapse(50);
 
         const state = yield* host.state;
         expect(healthOf(state, client.entity)).toEqual(Option.some(0));
@@ -327,12 +327,12 @@ describe('a session between a host and its clients', () => {
 
         yield* client.hold;
         yield* client.act(AskedToHeal, { amount: 50 });
-        yield* advance(500);
+        yield* elapse(500);
         const held = yield* host.state;
         expect(healthOf(held, client.entity)).toEqual(Option.some(0));
 
         yield* client.release;
-        yield* advance(50);
+        yield* elapse(50);
         const resumed = yield* host.state;
         expect(healthOf(resumed, client.entity)).toEqual(Option.some(50));
       }),
@@ -346,7 +346,7 @@ describe('watching a host', () => {
     () =>
       Effect.gen(function* () {
         const host = yield* startHost;
-        yield* advance(100);
+        yield* elapse(100);
         const watching = yield* host.watch;
         const told = yield* watching.happenings.pipe(
           Stream.takeUntil((happening) => happening._tag === 'Left'),
@@ -360,7 +360,7 @@ describe('watching a host', () => {
 
         yield* client.send([Controls.of({ move: 1, fire: false })]);
         yield* client.act(AskedToHeal, { amount: 50 });
-        yield* advance(100);
+        yield* elapse(100);
         yield* Scope.close(scope, Exit.void);
         const happenings = yield* Fiber.join(told);
 
@@ -398,9 +398,9 @@ describe('going back in time', () => {
       Effect.gen(function* () {
         const { host, client } = yield* session;
         yield* client.send([Controls.of({ move: 1, fire: false })]);
-        yield* advance(100);
+        yield* elapse(100);
         const past = yield* host.state;
-        yield* advance(200);
+        yield* elapse(200);
         const now = yield* host.state;
 
         yield* host.show(past);
@@ -418,12 +418,12 @@ describe('going back in time', () => {
     Effect.gen(function* () {
       const { host, client } = yield* session;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(100);
+      yield* elapse(100);
       const past = yield* host.state;
-      yield* advance(200);
+      yield* elapse(200);
 
       yield* host.restore(past);
-      yield* advance(100);
+      yield* elapse(100);
 
       const state = yield* host.state;
       expect(state.tick).toBe(past.tick + 3);
@@ -434,9 +434,9 @@ describe('going back in time', () => {
   it.effect('is told to whoever watches it', () =>
     Effect.gen(function* () {
       const host = yield* startHost;
-      yield* advance(100);
+      yield* elapse(100);
       const past = yield* host.state;
-      yield* advance(100);
+      yield* elapse(100);
       const watching = yield* host.watch;
       const told = yield* watching.happenings.pipe(
         Stream.filter((happening) => happening._tag === 'Restored'),
@@ -472,7 +472,7 @@ describe('reloading a game', () => {
             run: (context) => {
               for (const [entity, position, controls] of context.query(Position, Controls)) {
                 context.set(entity, Position, {
-                  x: position.x + controls.move * 60 * context.time.stepSeconds,
+                  x: position.x + controls.move * 60 * context.time.secondsPerStep,
                 });
               }
             },
@@ -503,11 +503,11 @@ describe('reloading a game', () => {
     Effect.gen(function* () {
       const { host, client } = yield* session;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(100);
+      yield* elapse(100);
       const before = yield* host.state;
 
       yield* host.reload(setupOf(brisk));
-      yield* advance(100);
+      yield* elapse(100);
 
       const after = yield* host.state;
       expect(after.tick).toBe(before.tick + 3);
@@ -521,11 +521,11 @@ describe('reloading a game', () => {
     Effect.gen(function* () {
       const { host, client } = yield* session;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(100);
+      yield* elapse(100);
       const before = yield* host.state;
 
       const refused = yield* host.reload(setupOf(unhealthy)).pipe(Effect.flip);
-      yield* advance(100);
+      yield* elapse(100);
 
       expect(refused._tag).toBe('Unreadable');
       expect(positionIn(yield* host.state, client.entity)).toEqual(
@@ -537,7 +537,7 @@ describe('reloading a game', () => {
   it.effect('is told to whoever watches it, with the state the new game read', () =>
     Effect.gen(function* () {
       const host = yield* startHost;
-      yield* advance(100);
+      yield* elapse(100);
       const watching = yield* host.watch;
       const told = yield* watching.happenings.pipe(Stream.runHead, Effect.forkChild);
       yield* Effect.yieldNow;
@@ -558,16 +558,16 @@ describe('time held beside the host', () => {
     Effect.gen(function* () {
       const { host, client } = yield* session;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(100);
+      yield* elapse(100);
 
       yield* host.hold;
       const held = yield* host.state;
-      yield* advance(500);
+      yield* elapse(500);
       const stood = yield* host.state;
-      yield* host.advance(4);
+      yield* host.step(4);
       const stepped = yield* host.state;
       yield* host.release;
-      yield* advance(100);
+      yield* elapse(100);
 
       expect(stood.tick).toBe(held.tick);
       expect(stepped.tick).toBe(held.tick + 4);
@@ -586,13 +586,13 @@ describe('playing from beside the host', () => {
       const { host, client } = yield* session;
       yield* host.hold;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* advance(10);
+      yield* elapse(10);
       const before = yield* host.state;
 
       yield* host.input(client.entity, [
         { component: 'Controls', value: { move: -2, fire: false } },
       ]);
-      yield* host.advance(1);
+      yield* host.step(1);
 
       expect(positionIn(yield* host.state, client.entity)).toEqual(
         Option.map(positionIn(before, client.entity), (x) => x - 2),
@@ -606,7 +606,7 @@ describe('playing from beside the host', () => {
       yield* host.hold;
 
       yield* host.act(client.entity, { _tag: 'AskedToHeal', amount: 42 });
-      yield* host.advance(1);
+      yield* host.step(1);
 
       expect(State.get(yield* host.state, client.entity, Health)).toEqual(
         Option.some({ current: 42 }),
@@ -631,7 +631,7 @@ describe('playing from beside the host', () => {
       const second = yield* host.join;
       yield* host.input(first, [{ component: 'Controls', value: { move: 1, fire: false } }]);
       yield* host.input(second, [{ component: 'Controls', value: { move: -1, fire: false } }]);
-      yield* host.advance(1);
+      yield* host.step(1);
       const played = yield* host.state;
       yield* host.leave(first);
 
@@ -700,7 +700,7 @@ describe('controls', () => {
       yield* Effect.yieldNow;
 
       yield* client.control({ _tag: 'Seek', tick: 5 });
-      yield* advance(100);
+      yield* elapse(100);
 
       expect(heard.pollUnsafe()).toBeUndefined();
     }),
@@ -863,7 +863,7 @@ describe('commands', () => {
         });
 
         yield* client.act(AskedToHeal, { amount: 40 });
-        yield* advance(100);
+        yield* elapse(100);
 
         expect(kept).toEqual([40]);
         expect(keptIn(yield* host.state, client.entity)).toEqual(Option.some('Yes'));
@@ -875,7 +875,7 @@ describe('commands', () => {
       const { host, client } = yield* keeping({ keep: () => Effect.succeed(false) });
 
       yield* client.act(AskedToHeal, { amount: 40 });
-      yield* advance(100);
+      yield* elapse(100);
 
       expect(keptIn(yield* host.state, client.entity)).toEqual(Option.some('No'));
     }),
@@ -886,7 +886,7 @@ describe('commands', () => {
       const { host, client } = yield* keeping({ keep: () => Effect.die('the vault is gone') });
 
       yield* client.act(AskedToHeal, { amount: 40 });
-      yield* advance(100);
+      yield* elapse(100);
       const state = yield* host.state;
 
       expect(state.tick).toBeGreaterThan(2);
@@ -949,7 +949,7 @@ describe('what a client keeps for itself', () => {
       Effect.gen(function* () {
         const { host, client } = yield* walk;
 
-        yield* advance(200);
+        yield* elapse(200);
         const mine = yield* client.state;
         const prints = State.query(mine, Footprint);
 
@@ -966,10 +966,10 @@ describe('what a client keeps for itself', () => {
   it.effect('is shown as the client kept it at the tick of a past state it is shown', () =>
     Effect.gen(function* () {
       const { host, client } = yield* walk;
-      yield* advance(100);
+      yield* elapse(100);
       const past = yield* host.state;
       const keptThen = State.query(yield* client.state, Footprint);
-      yield* advance(200);
+      yield* elapse(200);
 
       yield* host.show(past);
       yield* Effect.yieldNow;

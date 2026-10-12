@@ -73,7 +73,7 @@ export const restart = Rule.on(ChoseRestart, {
   },
 });
 
-/** Everything the small game is made of, as one domain answering its own actions and events, with no systems: a test gives the ones it is about. */
+/** Everything the small game is made of, as one domain handling its own actions and events, with no systems: a test gives the ones it is about. */
 export const Fixture = Domain.make({
   name: 'Fixture',
   requires: [],

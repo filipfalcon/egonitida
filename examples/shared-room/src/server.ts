@@ -68,7 +68,7 @@ export class SharedRoom extends Cloudflare.DurableObject<SharedRoom>()(
                 typeof message === 'string' ? opened.received(message) : Effect.void,
             }),
           ),
-        // The code a socket closed with may be one only the platform may send, such as 1006 for a page that dropped, so the room answers with its own.
+        // The code a socket closed with may be one only the platform may send, such as 1006 for a page that dropped, so the room closes with its own.
         webSocketClose: (socket: Cloudflare.WebSocket) =>
           Effect.andThen(letGo(socket), socket.close(1000, 'Left the room.')),
         webSocketError: (socket: Cloudflare.WebSocket) => letGo(socket),

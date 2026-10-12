@@ -30,8 +30,8 @@ export const FromRelay = Schema.Union([
     id: Schema.Int,
     hosts: Schema.Array(Schema.Struct({ host: Schema.String, name: Schema.String })),
   }),
-  Schema.TaggedStruct('Answer', { id: Schema.Int, answer: Schema.Unknown }),
-  Schema.TaggedStruct('Refusal', { id: Schema.Int, reason: Schema.String }),
+  Schema.TaggedStruct('Answered', { id: Schema.Int, answer: Schema.Unknown }),
+  Schema.TaggedStruct('Unanswered', { id: Schema.Int, reason: Schema.String }),
 ]);
 export type FromRelay = typeof FromRelay.Type;
 
@@ -116,11 +116,15 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
             { page: message.page, host: message.host, peer },
           ];
         });
-      case 'Answer':
-        return answerTool(message.id, ({ id }) => ({ _tag: 'Answer', id, answer: message.answer }));
-      case 'Refusal':
+      case 'Answered':
         return answerTool(message.id, ({ id }) => ({
-          _tag: 'Refusal',
+          _tag: 'Answered',
+          id,
+          answer: message.answer,
+        }));
+      case 'Unanswered':
+        return answerTool(message.id, ({ id }) => ({
+          _tag: 'Unanswered',
           id,
           reason: message.reason,
         }));
@@ -158,7 +162,7 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
     }
     const target = hostFor(message.host);
     if (Result.isFailure(target)) {
-      return tool.send({ _tag: 'Refusal', id: message.id, reason: target.failure });
+      return tool.send({ _tag: 'Unanswered', id: message.id, reason: target.failure });
     }
     const id = known.nextId;
     known.nextId += 1;
@@ -166,7 +170,7 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
       const page = known.pages.findLast(({ host }) => host === target.success.host);
       if (page === undefined) {
         return tool.send({
-          _tag: 'Refusal',
+          _tag: 'Unanswered',
           id: message.id,
           reason: `no page shows ${target.success.host}: open it in a browser with the development server`,
         });
@@ -203,7 +207,7 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
           unanswered,
           ([id, { host }]) =>
             answerTool(id, (waiting) => ({
-              _tag: 'Refusal',
+              _tag: 'Unanswered',
               id: waiting.id,
               reason: `${host} went away before it answered`,
             })),

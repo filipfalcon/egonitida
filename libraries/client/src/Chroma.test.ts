@@ -73,7 +73,7 @@ describe('Chroma', () => {
     },
   );
 
-  it.effect('is refused where no Razer software answers', () =>
+  it.effect('is refused where no Razer software responds', () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(Effect.scoped(Chroma.connect(app)));
 

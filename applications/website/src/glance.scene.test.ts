@@ -12,7 +12,7 @@ const [withViewer, viewer] = Glance.setup.join(Glance.state);
 const goneOn = [Story.act('viewer', Glance.ChoseNext, {}), Story.step()];
 
 /** `state` told on with `then`, the viewer still watching. */
-const on = (state: State.State, ...then: ReadonlyArray<Story.Step>) =>
+const on = (state: State.State, ...then: ReadonlyArray<Story.Line>) =>
   Story.story(Glance.game, Story.given(state, { viewer }), ...then).state;
 
 /** The state `seconds` into the ideas, as the viewer starts the telling and goes on to them. */
@@ -28,7 +28,7 @@ const ideasFor = (seconds: number) =>
 /** The state as it emerges, the viewer going on to it a second into the ideas. */
 const emerged = on(ideasFor(1), ...goneOn);
 
-/** The state `seconds` into `beat`, the viewer going on to it a few seconds into every beat from the state's; as time starts ticking, begun anew by its host. */
+/** The state `seconds` into `beat`, the viewer going on to it a few seconds into every beat from the state's; as time starts stepping, begun anew by its host. */
 const at = (beat: Glance.Moment, seconds: number) => {
   const reached = on(
     emerged,
@@ -131,7 +131,7 @@ it.effect(
 );
 
 it.effect(
-  'draws each entity taking the look and the place it is given, and going round once time starts ticking',
+  'draws each entity taking the look and the place it is given, and going round once time starts stepping',
   () =>
     Effect.gen(function* () {
       const scene = yield* Scene.make(GlanceView.views);
@@ -152,9 +152,9 @@ it.effect(
 
       const taking = yield* drawnIn(given);
       const taken = yield* drawnIn(on(given, Story.seconds(3)));
-      const ticking = at('Step', 0.5);
-      const goneRound = yield* drawnIn(on(ticking, Story.seconds(1)));
-      const before = yield* drawnIn(ticking);
+      const stepped = at('Step', 0.5);
+      const goneRound = yield* drawnIn(on(stepped, Story.seconds(1)));
+      const before = yield* drawnIn(stepped);
 
       expect(
         Option.map(Option.all([taking, look]), ([drawn, { radius }]) => drawn.size < radius),
@@ -177,10 +177,10 @@ it.effect(
 it.effect('draws the state a frame to a step in the film strip', () =>
   Effect.gen(function* () {
     const scene = yield* Scene.make(GlanceView.stepViews);
-    const ticking = at('Step', 1);
-    yield* scene.show(ticking);
+    const stepped = at('Step', 1);
+    yield* scene.show(stepped);
 
-    const frames = Option.flatMap(first(ticking, Glance.Bang), (bang) =>
+    const frames = Option.flatMap(first(stepped, Glance.Bang), (bang) =>
       Option.map(
         scene.find(GlanceView.film, bang),
         (strip) =>

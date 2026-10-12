@@ -108,7 +108,7 @@ export const Message = defineMessageUnion({
   FailedGoBack: { reason: Schema.String },
   PointedAtState: { index: Schema.Int },
   LeftStates: {},
-  AdvancedFrame: { milliseconds: Schema.Finite },
+  ElapsedFrame: { milliseconds: Schema.Finite },
   ChangedMotionPreference: { isReduced: Schema.Boolean },
 });
 export type Message = typeof Message.Type;
@@ -164,7 +164,7 @@ export const StepGame = Command.define('StepGame', {
 // STEP
 
 /** How long one step of the press takes, in seconds. */
-const STEP_SECONDS = 1.6;
+const SECONDS_PER_STEP = 1.6;
 
 /** The share of a step at which the new state is stamped: the counter, the dial, and the readout turn to it there. */
 const STAMPED = 0.5;
@@ -192,7 +192,7 @@ export const poseOf = (model: Model): Pose => {
   if (model.press._tag === 'Resting') {
     return RESTING;
   }
-  const share = model.press.seconds / STEP_SECONDS;
+  const share = model.press.seconds / SECONDS_PER_STEP;
   return {
     leaving: model.states.length < SHOWN ? 0 : between(share, 0, 0.14),
     slid: between(share, 0.08, 0.36),
@@ -341,7 +341,7 @@ export const update = (model: Model, message: Message): Return =>
     }),
     LeftStates: () => ({ model: modifyFields(model, { maybePicked: () => Option.none() }) }),
     // A frame after a long pause, as when the tab was hidden, moves the press no further than a short one.
-    AdvancedFrame: ({ milliseconds }) => {
+    ElapsedFrame: ({ milliseconds }) => {
       const press = model.press;
       if (press._tag === 'Resting') {
         return { model };
@@ -349,7 +349,7 @@ export const update = (model: Model, message: Message): Return =>
       const seconds = press.seconds + Math.min(milliseconds, 50) / 1000;
       return {
         model:
-          seconds < STEP_SECONDS
+          seconds < SECONDS_PER_STEP
             ? modifyFields(model, {
                 press: (): Pressing => ({ _tag: 'Stepping', seconds, made: press.made }),
               })
@@ -388,7 +388,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
   ),
   frames: Subscription.animationFrameEntry({
     isActive: (model: Model) => model.press._tag === 'Stepping',
-    toMessage: (milliseconds) => Message.AdvancedFrame({ milliseconds }),
+    toMessage: (milliseconds) => Message.ElapsedFrame({ milliseconds }),
   }),
   motion: entry(
     {},

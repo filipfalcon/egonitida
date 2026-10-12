@@ -38,12 +38,12 @@ describe('a page that draws a host', () => {
       yield* Queue.offer(toPage, { _tag: 'Capture', id: 7, page });
 
       expect(yield* Queue.take(sent)).toEqual({
-        _tag: 'Answer',
+        _tag: 'Answered',
         id: 5,
         answer: { png: 'iVBOR', width: 320, height: 400 },
       });
       expect(yield* Queue.take(sent)).toMatchObject({
-        _tag: 'Answer',
+        _tag: 'Answered',
         id: 7,
         answer: { width: 640 },
       });
@@ -60,7 +60,7 @@ describe('a page that draws a host', () => {
       yield* Queue.offer(toPage, { _tag: 'Who' });
 
       expect(yield* Queue.take(sent)).toEqual({
-        _tag: 'Refusal',
+        _tag: 'Unanswered',
         id: 8,
         reason: 'the renderer has not started',
       });

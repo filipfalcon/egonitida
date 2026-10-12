@@ -13,8 +13,8 @@ export const FromHost = Schema.Union([
   Schema.TaggedStruct('Hello', { host: Schema.String, name: Schema.String }),
   /** A page that draws a host, by the host's id, says hello with an id of its own. */
   Schema.TaggedStruct('Showing', { page: Schema.String, host: Schema.String }),
-  Schema.TaggedStruct('Answer', { id: Schema.Int, answer: Schema.Unknown }),
-  Schema.TaggedStruct('Refusal', { id: Schema.Int, reason: Schema.String }),
+  Schema.TaggedStruct('Answered', { id: Schema.Int, answer: Schema.Unknown }),
+  Schema.TaggedStruct('Unanswered', { id: Schema.Int, reason: Schema.String }),
 ]);
 export type FromHost = typeof FromHost.Type;
 
@@ -31,7 +31,7 @@ export const ToHost = Schema.Union([
 ]);
 export type ToHost = typeof ToHost.Type;
 
-const refusal = (id: number, reason: string): FromHost => ({ _tag: 'Refusal', id, reason });
+const unanswered = (id: number, reason: string): FromHost => ({ _tag: 'Unanswered', id, reason });
 
 /** A way between a host and a relay: what the host sends, and what reaches it, as it arrived. */
 export interface Channel {
@@ -61,14 +61,18 @@ export const serve = (
       }
       return inspector.answerUnknown(message.request).pipe(
         Effect.match({
-          onSuccess: (answered): FromHost => ({ _tag: 'Answer', id: message.id, answer: answered }),
-          onFailure: ({ reason }): FromHost => ({ _tag: 'Refusal', id: message.id, reason }),
+          onSuccess: (answered): FromHost => ({
+            _tag: 'Answered',
+            id: message.id,
+            answer: answered,
+          }),
+          onFailure: ({ reason }): FromHost => ({ _tag: 'Unanswered', id: message.id, reason }),
         }),
         // Answering that breaks, such as a step that throws, is a bug in the game or the engine: it is told to whoever asked and to the console, and the bridge goes on answering.
         Effect.catchCause((cause) =>
           Effect.as(
             Effect.logError('Answering a request broke', cause),
-            refusal(message.id, `answering broke: ${Cause.pretty(cause)}`),
+            unanswered(message.id, `answering broke: ${Cause.pretty(cause)}`),
           ),
         ),
         Effect.flatMap(channel.send),

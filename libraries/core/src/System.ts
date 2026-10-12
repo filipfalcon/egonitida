@@ -12,10 +12,10 @@ type Of<Value> = Component.Component<string, Value, Component.Owner>;
  */
 
 export interface Time {
-  /** The step being taken, counted from one. */
+  /** The tick the step reaches, counted from one. */
   readonly tick: number;
-  /** The fixed length of every step. */
-  readonly stepSeconds: number;
+  /** The length of one step in seconds: the inverse of the game's step rate. */
+  readonly secondsPerStep: number;
 }
 
 /** Spawning: an entity made with components declared for it, and its id at once. Being born is no change to anyone's components, so who owns a component does not limit it; the declaration does. */

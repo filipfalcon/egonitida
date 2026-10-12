@@ -2,7 +2,7 @@ import { Action, Component, Domain, Game, Rule, System, State } from '@lightocea
 import { Option, Schema } from 'effect';
 
 /**
- * The game the section First Things First teaches with, one like any other, drawn by the engine's own renderer above the section's text. It waits for the viewer to start it, and then tells the engine's first terms, each in the order it needs the one before: at first there is nothing; then the ideas start coming, strands of light drifting in from beyond the edges into a chaos, pressed ever smaller into one point; the point bursts, and a state emerges, a sun at its middle; entities emerge in it, one after another, alike and holding nothing but which of them each is; components then give each what it is, its look and its place, and each takes them; and time starts ticking, the state's host beginning it anew at its first tick, every planet going round a stride a step. Each beat lasts until the viewer goes on to the next, or back a beat, while the game's time runs on within it. It takes only a few steps a second, so each step can be seen. Its views are in `glance.view.ts`.
+ * The game the section First Things First teaches with, one like any other, drawn by the engine's own renderer above the section's text. It waits for the viewer to start it, and then tells the engine's first terms, each in the order it needs the one before: at first there is nothing; then the ideas start coming, strands of light drifting in from beyond the edges into a chaos, pressed ever smaller into one point; the point bursts, and a state emerges, a sun at its middle; entities emerge in it, one after another, alike and holding nothing but which of them each is; components then give each what it is, its look and its place, and each takes them; and time starts stepping, the state's host beginning it anew at its first tick, every planet going round a stride a step. Each beat lasts until the viewer goes on to the next, or back a beat, while the game's time runs on within it. It takes only a few steps a second, so each step can be seen. Its views are in `glance.view.ts`.
  */
 
 /** How many steps the game takes a second: few, so each one can be seen. */
@@ -83,7 +83,7 @@ export const Place = Component.make(
   'Place',
   Schema.Struct({
     distance: Schema.Finite,
-    angle: Schema.Finite.annotate({ interpolate: 'step' }),
+    angle: Schema.Finite.annotate({ interpolate: 'previous' }),
     height: Schema.Finite,
   }),
   { owner: 'simulation', network: 'server' },
@@ -246,7 +246,7 @@ const give = System.make({
   },
 });
 
-/** Once time starts ticking, every planet goes on round the middle, a stride every step, the nearer the faster. */
+/** Once time starts stepping, every planet goes on round the middle, a stride every step, the nearer the faster. */
 const orbit = System.make({
   name: 'orbit',
   reads: [Telling],
@@ -299,12 +299,12 @@ export const momentOf = (state: State.State): Moment =>
     (): Moment => 'Waiting',
   );
 
-/** Whether time has started ticking in `state`, and the state is yet to begin from there: the step beat, reached by a telling that did not begin there. */
+/** Whether time has started stepping in `state`, and the state is yet to begin from there: the step beat, reached by a telling that did not begin there. */
 export const isAboutToBegin = (state: State.State): boolean =>
   State.query(state, Telling).some(([, { beat, since }]) => beat === 'Step' && since > 0);
 
 /**
- * The state `state` begins as, once time starts ticking in it: everything it holds, as it was, at its first tick, every tick it remembers counted from there, so what came before is before tick 0. Its host goes on from it in place of the state before, so the game's time starts there.
+ * The state `state` begins as, once time starts stepping in it: everything it holds, as it was, at its first tick, every tick it remembers counted from there, so what came before is before tick 0. Its host goes on from it in place of the state before, so the game's time starts there.
  */
 export const begun = (state: State.State): State.State => {
   const { tick } = state;

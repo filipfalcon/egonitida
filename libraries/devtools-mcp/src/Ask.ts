@@ -96,9 +96,9 @@ export const request = (
       request: asked,
     });
     switch (answer._tag) {
-      case 'Answer':
+      case 'Answered':
         return answer.answer;
-      case 'Refusal':
+      case 'Unanswered':
         return yield* new Failed({ reason: answer.reason });
       case 'Hosts':
         return yield* new Failed({ reason: 'the relay answered something it was not asked' });
@@ -120,11 +120,11 @@ export const capture = (
       ...(options.width === undefined ? {} : { width: options.width }),
     });
     switch (answer._tag) {
-      case 'Answer':
+      case 'Answered':
         return yield* Schema.decodeUnknownEffect(Page.Shot)(answer.answer).pipe(
           Effect.mapError(() => new Failed({ reason: 'the page answered with no shot' })),
         );
-      case 'Refusal':
+      case 'Unanswered':
         return yield* new Failed({ reason: answer.reason });
       case 'Hosts':
         return yield* new Failed({ reason: 'the relay answered something it was not asked' });

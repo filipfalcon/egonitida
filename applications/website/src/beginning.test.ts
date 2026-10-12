@@ -16,7 +16,7 @@ const pass = (millis: number) =>
 
 const [withViewer, viewer] = Glance.setup.join(Glance.state);
 
-/** The telling as the viewer goes on to the step time starts ticking at, before the state begins from it. */
+/** The telling as the viewer goes on to the step time starts stepping at, before the state begins from it. */
 const atPoint = Story.story(
   Glance.game,
   Story.given(withViewer, { viewer }),
@@ -31,7 +31,7 @@ const atPoint = Story.story(
 
 describe('a state begun by its host', () => {
   it.effect(
-    'goes on from the state begun at its first tick, once time starts ticking in the telling',
+    'goes on from the state begun at its first tick, once time starts stepping in the telling',
     () =>
       Effect.gen(function* () {
         const host = yield* Host.make({ ...Glance.setup, state: atPoint, mayHold: true });
@@ -47,7 +47,7 @@ describe('a state begun by its host', () => {
       }),
   );
 
-  it.effect('leaves a state in which time has not started ticking as it is', () =>
+  it.effect('leaves a state in which time has not started stepping as it is', () =>
     Effect.gen(function* () {
       const host = yield* Host.make({ ...Glance.setup, state: withViewer, mayHold: true });
       yield* Beginning.serve(host);
