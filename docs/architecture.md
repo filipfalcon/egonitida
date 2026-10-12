@@ -166,14 +166,15 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 **Commands.** A rule that needs something done outside the world, such as saving progress, returns a command: a declared value with a name, arguments, and the events its result may be, failure included. Systems never issue them, since they run every step. The host executes a command outside the step with the services of its Layers, and its result enters the world as an event at a later step, recorded, so a replay or a prediction never executes one. A command is defined beside the rule that issues it.
 
-**Views.** A game's client draws through three primitives over the drawn frame, each releasing what it holds through a `Scope`:
+**Views.** A game's client draws through four primitives over the drawn frame, each releasing what it holds through a `Scope`:
 
-| What causes it                                           | Primitive                                                                                                                                                |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A rule decided something should happen outside the world | a command                                                                                                                                                |
-| An entity is in the drawing                              | `View.each(components, { acquire, draw })`: `acquire` builds its objects when the entity comes in, and the scope closes when it leaves or stops matching |
-| An entity just gained a component                        | `View.on`: a one-off output that is not state, such as a sound or a haptic pulse                                                                         |
-| A condition holds                                        | `View.during`: a resource held while a condition over the drawn world and the UI Model holds, such as music, an `AudioContext`, or pointer lock          |
+| What causes it                                           | Primitive                                                                                                                                                  |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A rule decided something should happen outside the world | a command                                                                                                                                                  |
+| An entity is in the drawing                              | `View.each(components, { acquire, draw })`: `acquire` builds its objects when the entity comes in, and the scope closes when it leaves or stops matching   |
+| An entity just gained a component                        | `View.on`: a one-off output that is not state, such as a sound or a haptic pulse                                                                           |
+| A condition holds                                        | `View.during`: a resource held while a condition over the drawn world and the UI Model holds, such as music, an `AudioContext`, or pointer lock            |
+| The player looks at the world                            | `View.rig(components, draw)`: the camera, drawn for the player's entity after every other view, from what they drew this frame, such as the eyes of a body |
 
 - `draw` changes only its own objects, from the drawn values, the UI Model, and the frame's time, in place and without allocating: what is drawn is a function of the state even though the scene is kept between frames. Building and diffing a whole tree every frame would allocate at the display's rate. A view keeps nothing between frames; what it must remember is a local component.
 - A view's identity is the pair of its declaration and its entity, and entity ids are never reused, so nothing one entity's objects held carries over to another.
@@ -281,7 +282,7 @@ The API above is built in this order, each step test-first, and each breaking on
 4. Domains: owning their components, requiring one another, every action answered and no event dead, and the `/internal` entry.
 5. Commands.
 6. Local systems.
-7. Views (`View.each`, `View.on`, `View.during`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.
+7. Views (`View.each`, `View.on`, `View.during`, `View.rig`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.
 8. The lint plugin, and `AGENTS.md`.
 9. Devtools: recording, the log, rewinding, the determinism check, and reloading with the world kept, with the horde example.
 10. The agent bridge.

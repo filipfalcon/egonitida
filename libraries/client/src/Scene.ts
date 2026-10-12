@@ -1,6 +1,6 @@
 import type { World } from '@lightocean/core';
 import { Effect, Option, type Scope } from 'effect';
-import type * as Three from 'three/webgpu';
+import * as Three from 'three/webgpu';
 import * as Drawing from '#src/Drawing.ts';
 import * as Timeline from '#src/Timeline.ts';
 import * as View from '#src/View.ts';
@@ -13,6 +13,8 @@ import * as View from '#src/View.ts';
 export interface Scene<R = never> {
   /** Everything the views drew. */
   readonly root: Three.Group;
+  /** The camera the views' rigs draw for the player, as a client's would. */
+  readonly camera: Three.PerspectiveCamera;
   /** Draws `world` as the next frame. */
   readonly show: (world: World.World) => Effect.Effect<void, never, R>;
   /** What `view` drew for `entity` in the last frame shown, if anything. */
@@ -21,15 +23,21 @@ export interface Scene<R = never> {
   readonly pick: View.Views<R>['pick'];
 }
 
-/** A scene drawn through `views`, until the scope closes. */
+/** A scene drawn through `views`, until the scope closes, with its camera drawn by their rigs for `player`, if there is one. */
 export const make = <R = never>(
   views: ReadonlyArray<View.View<R>>,
+  player: Option.Option<World.Entity> = Option.none(),
 ): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
-    const working = yield* View.make(views);
+    const camera = new Three.PerspectiveCamera();
+    const working = yield* View.make(
+      views,
+      Option.map(player, (entity) => ({ camera, player: entity })),
+    );
     const state = { previous: Option.none<Timeline.View>() };
     return {
       root: working.root,
+      camera,
       show: (world) =>
         Effect.suspend(() => {
           const view = Timeline.still(world);

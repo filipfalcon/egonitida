@@ -77,6 +77,25 @@ describe('Scene', () => {
     }),
   );
 
+  it.effect("draws its camera for the player through the views' rigs, from what they drew", () =>
+    Effect.gen(function* () {
+      const [world, crate] = World.spawn(World.empty({ seed: 1 }), [
+        Crate.of({}),
+        Position.of({ x: 3 }),
+      ]);
+      const behind = View.rig([Crate], (camera, _held, _frame, drawn) =>
+        Option.map(drawn(crates, crate), (mesh) => {
+          camera.position.set(mesh.position.x, 0, 5);
+        }),
+      );
+      const scene = yield* Scene.make([crates, behind], Option.some(crate));
+
+      yield* scene.show(world);
+
+      expect(scene.camera.position.toArray()).toEqual([3, 0, 5]);
+    }),
+  );
+
   it.effect('finds the entity under a point of the screen, as a click would', () =>
     Effect.gen(function* () {
       const told = Story.story(

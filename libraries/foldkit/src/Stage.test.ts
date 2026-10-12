@@ -160,6 +160,24 @@ describe('a stage', () => {
       }).pipe(Effect.scoped),
   );
 
+  it.live("draws the camera for the player who joined, through the views' rigs", () =>
+    Effect.gen(function* () {
+      const { joined } = yield* joinedLamp;
+      const { viewport } = yield* played;
+      const backedOff = View.rig([], (camera) => {
+        camera.position.set(0, 0, 7);
+      });
+
+      yield* Stage.show(viewport, joined, {
+        views: [lamps, backedOff],
+        mirror: document.createElement('div'),
+      });
+      yield* Effect.sleep('300 millis');
+
+      expect(viewport.camera.position.z).toBe(7);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect(
     'says the world is not joined, rather than failing, when the Model believes it is but it is not',
     () =>

@@ -263,3 +263,73 @@ describe('objects of an entity', () => {
     }),
   );
 });
+
+describe('View.rig', () => {
+  /** A player's body, drawn as a group where it stands. */
+  const bodies = View.each([Position], {
+    acquire: () => Effect.succeed(new Three.Group()),
+    draw: (group, held) => {
+      group.position.x = held(Position).x;
+    },
+  });
+  /** Eyes 1.6 metres up whatever the player is drawn as. */
+  const eyes = View.rig([Position], (camera, _held, _frame, drawn) => {
+    camera.position.y = 1.6;
+    Option.map(drawn(bodies, player), (body) => {
+      camera.position.x = body.position.x;
+    });
+  });
+  const [world, player] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 4 })]);
+  const [withOther, other] = World.spawn(world, [Position.of({ x: 9 })]);
+
+  it.effect('draws the camera for the player after every view has drawn, from what they drew', () =>
+    Effect.gen(function* () {
+      const camera = new Three.PerspectiveCamera();
+      const views = yield* View.make([eyes, bodies], Option.some({ camera, player }));
+
+      yield* play(views, [world]);
+
+      expect([camera.position.x, camera.position.y]).toEqual([4, 1.6]);
+    }),
+  );
+
+  it.effect('draws nothing for anyone but the player, nor while the player holds too little', () =>
+    Effect.gen(function* () {
+      const drawnFor: Array<number> = [];
+      const following = View.rig([Position, Crate], (_camera, held) => {
+        drawnFor.push(held(Position).x);
+      });
+      const camera = new Three.PerspectiveCamera();
+      const views = yield* View.make([following], Option.some({ camera, player: other }));
+      const [crated] = World.spawn(withOther, crateAt(7));
+
+      yield* play(views, [withOther, crated]);
+
+      expect(drawnFor).toEqual([]);
+    }),
+  );
+
+  it.effect('draws rigs one after another, in the order they are given', () =>
+    Effect.gen(function* () {
+      const shaken = View.rig([Position], (camera) => {
+        camera.position.y += 0.1;
+      });
+      const camera = new Three.PerspectiveCamera();
+      const views = yield* View.make([shaken, bodies, eyes], Option.some({ camera, player }));
+
+      yield* play(views, [world]);
+
+      expect(camera.position.y).toBeCloseTo(1.6);
+    }),
+  );
+
+  it.effect('leaves rigs undrawn where the views are given no camera and no player', () =>
+    Effect.gen(function* () {
+      const views = yield* View.make([bodies, eyes]);
+
+      const [drawn] = yield* play(views, [world]);
+
+      expect(drawn).toHaveLength(1);
+    }),
+  );
+});

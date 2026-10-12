@@ -11,6 +11,7 @@ import type * as Drawing from '#src/Drawing.ts';
  * | An entity is in the drawing | `each`: builds its objects when the entity comes, draws them every frame, and lets them go when it leaves |
  * | An entity just gained a component, or holds another value of it | `on`: a one-off output that is not state, such as a sound |
  * | A condition holds | `during`: a resource held while it holds, such as music or pointer lock |
+ * | The player looks at the world | `rig`: the camera, drawn for the player after every other view, from what they drew |
  *
  * Whatever a view acquires is released through a `Scope`, never by hand. What a view draws is a function of the frame: it keeps nothing between frames, and what it must remember is a local component instead.
  */
@@ -47,7 +48,25 @@ export interface During<R> {
   readonly acquire: Effect.Effect<unknown, never, R | Scope.Scope>;
 }
 
-export type View<R = never> = Each<R, Three.Object3D> | On<R> | During<R>;
+/** What `view` drew for `entity` this frame, if anything. */
+export type Drawn = <Built extends Three.Object3D>(
+  view: Each<unknown, Built>,
+  entity: World.Entity,
+) => Option.Option<Built>;
+
+export interface Rig {
+  readonly _tag: 'Rig';
+  readonly components: ReadonlyArray<Component.Any>;
+  /** Draws `camera` for the player's `entity`, which holds every one of `components`, after every other view has drawn `frame`. */
+  draw(
+    camera: Three.PerspectiveCamera,
+    entity: World.Entity,
+    frame: Drawing.Frame,
+    drawn: Drawn,
+  ): void;
+}
+
+export type View<R = never> = Each<R, Three.Object3D> | On<R> | During<R> | Rig;
 
 /** What `entity` holds in `frame`, of components it is known to hold. */
 const heldIn =
@@ -119,6 +138,24 @@ export const during = <R = never>(
   acquire: Effect.Effect<unknown, never, R | Scope.Scope>,
 ): View<R> => ({ _tag: 'During', holds, acquire });
 
+/**
+ * The camera, drawn for the player whose entity holds all of `components`: after every other view has drawn the frame, so `drawn` gives what they drew this frame, such as the body whose eyes it looks out of. Rigs draw one after another in the order they are given, so one can move the camera on from where another put it, as a shake does. `draw` changes only the camera, in place, and allocates nothing; what it must remember, such as where the player looks or how far behind the camera trails, is a local component.
+ */
+export const rig = <const Components extends ReadonlyArray<Component.Any>>(
+  components: Components,
+  draw: (
+    camera: Three.PerspectiveCamera,
+    held: Held<Components[number]>,
+    frame: Drawing.Frame,
+    drawn: Drawn,
+  ) => void,
+): View<never> => ({
+  _tag: 'Rig',
+  components,
+  draw: (camera, entity, frame, drawn) =>
+    draw(camera, heldIn<Components[number]>(frame, entity), frame, drawn),
+});
+
 /** What is under a point of the screen: the entity whose object is nearest there, the view that drew it, and where it was hit, in the world. */
 export interface Picked {
   readonly entity: World.Entity;
@@ -152,9 +189,16 @@ interface Kept {
   readonly scope: Scope.Closeable;
 }
 
-/** `views` at work, until the scope closes, which lets go of everything they hold. Each view is given its own scope for what it acquires, so a frame needs no scope of its own. */
+/** Whose eyes the views' rigs draw the camera for, and the camera they draw. */
+export interface Looking {
+  readonly camera: Three.PerspectiveCamera;
+  readonly player: World.Entity;
+}
+
+/** `views` at work, until the scope closes, which lets go of everything they hold. Each view is given its own scope for what it acquires, so a frame needs no scope of its own. Their rigs draw `looking`'s camera for its player; with no one looking, none is drawn. */
 export const make = <R = never>(
   views: ReadonlyArray<View<R>>,
+  looking: Option.Option<Looking> = Option.none(),
 ): Effect.Effect<Views<Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
     const root = new Three.Group();
@@ -247,6 +291,21 @@ export const make = <R = never>(
       return owner === undefined ? ownerOf(hit.parent) : Option.some(owner);
     };
 
+    const drawn: Drawn = (view, entity) =>
+      Option.flatMap(Option.fromNullishOr(kept.get(view)?.get(entity)), ({ object }) =>
+        view.own(object),
+      );
+    const rigs = views.filter((view): view is Rig => view._tag === 'Rig');
+
+    const drawRigs = (frame: Drawing.Frame) =>
+      Option.map(looking, ({ camera, player }) => {
+        for (const rig of rigs) {
+          if (rig.components.every((component) => Option.isSome(frame.get(player, component)))) {
+            rig.draw(camera, player, frame, drawn);
+          }
+        }
+      });
+
     return {
       root,
       pick: (camera, point) => {
@@ -272,20 +331,22 @@ export const make = <R = never>(
               )
             : [],
         ),
-      find: (view, entity) =>
-        Option.flatMap(Option.fromNullishOr(kept.get(view)?.get(entity)), ({ object }) =>
-          view.own(object),
-        ),
+      find: drawn,
       frame: (frame) =>
-        Effect.forEach(
-          views,
-          (view) =>
-            view._tag === 'Each'
-              ? drawEach(view, frame)
-              : view._tag === 'On'
-                ? react(view, frame)
-                : hold(view, frame),
-          { discard: true },
+        Effect.andThen(
+          Effect.forEach(
+            views,
+            (view) =>
+              view._tag === 'Each'
+                ? drawEach(view, frame)
+                : view._tag === 'On'
+                  ? react(view, frame)
+                  : view._tag === 'During'
+                    ? hold(view, frame)
+                    : Effect.void,
+            { discard: true },
+          ),
+          Effect.sync(() => drawRigs(frame)),
         ),
     };
   });

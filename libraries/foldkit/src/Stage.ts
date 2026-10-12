@@ -18,14 +18,17 @@ export interface Options<R> {
     | undefined;
 }
 
-/** Shows `joined` on `viewport` through `options.views` until the scope closes: every click on the canvas acts on what is under it, and every labelled entity stands as a button in `mirror`. */
+/** Shows `joined` on `viewport` through `options.views` until the scope closes, their rigs drawing its camera for the player who joined: every click on the canvas acts on what is under it, and every labelled entity stands as a button in `mirror`. */
 export const show = <R>(
   viewport: Viewport.Viewport,
   joined: World.Joined,
   options: Options<R> & { readonly mirror: HTMLElement },
 ): Effect.Effect<void, never, R | Scope.Scope> =>
   Effect.gen(function* () {
-    const views = yield* View.make(options.views);
+    const views = yield* View.make(
+      options.views,
+      Option.some({ camera: viewport.camera, player: joined.client.entity }),
+    );
     viewport.scene.add(views.root);
     options.setup?.(viewport);
     yield* Clicking.serve({

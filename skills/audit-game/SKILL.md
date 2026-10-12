@@ -29,7 +29,7 @@ This skill reads and reports; it changes nothing. The rules are the repository's
 
 **Steps and frames.** A system's or rule's `run` and a view's `draw` take randomness and time only from their context and run no Effect. `draw` changes only its own object and keeps nothing between frames.
 
-**Drawing.** Each output uses the view its cause calls for: `View.each`, `View.on`, `View.during`, or a command. A domain's module imports no Three.js.
+**Drawing.** Each output uses the view its cause calls for: `View.each`, `View.on`, `View.during`, `View.rig` for the camera, or a command. A domain's module imports no Three.js.
 
 **Types.** No `any`; no `as` but `as const`; no non-null `!`; absence is `Option`; states are tagged unions, never boolean flags beside fields that hold only in some state; no sentinels such as `-1`.
 
