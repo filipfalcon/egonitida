@@ -81,17 +81,17 @@ describe('Story', () => {
     Story.story(
       game,
       Story.spawn('her', her),
-      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.demand('her', Controls, { move: 1, fire: false }),
       Story.step(),
       Story.expect('her', Position, (position) => expect(position.x).toBe(1)),
     );
   });
 
-  it('keeps an input in the state after the step it reached', () => {
+  it('keeps a demand in the state after the step it reached', () => {
     Story.story(
       game,
       Story.spawn('her', her),
-      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.demand('her', Controls, { move: 1, fire: false }),
       Story.steps(3),
       Story.expect('her', Position, (position) => expect(position.x).toBe(3)),
     );
@@ -101,7 +101,7 @@ describe('Story', () => {
     Story.story(
       game,
       Story.spawn('her', her),
-      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.demand('her', Controls, { move: 1, fire: false }),
       Story.seconds(0.5),
       Story.expect('her', Position, (position) => expect(position.x).toBe(5)),
     );
@@ -177,11 +177,11 @@ describe('Story', () => {
     ).toThrow('her holds Health {"current":50}, not {"current":1}');
   });
 
-  it('steps until something holds, and fails if it never does within a limit', () => {
+  it('steps until something comes to pass, and fails if it never does within a limit', () => {
     const walked = Story.story(
       game,
       Story.spawn('her', her),
-      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.demand('her', Controls, { move: 1, fire: false }),
       Story.until((state, named) =>
         Option.exists(State.get(state, named('her'), Position), ({ x }) => x >= 4),
       ),
@@ -203,7 +203,7 @@ describe('Story', () => {
         Story.story(
           game,
           Story.spawn('her', her),
-          Story.input('her', Controls, { move, fire: false }),
+          Story.demand('her', Controls, { move, fire: false }),
           Story.steps(5),
         ),
         'her',
@@ -254,7 +254,7 @@ describe('Story, told by name', () => {
     Story.story(
       game,
       Story.givenAs(encoded, { her: 0 }),
-      Story.inputAs('her', 'Controls', { move: 1, fire: false }),
+      Story.demandAs('her', 'Controls', { move: 1, fire: false }),
       Story.actAs('her', { _tag: 'ChoseRestart', x: 0 }),
       Story.step(),
       Story.expectAs('her', 'Position', { x: 1 }),
@@ -322,10 +322,10 @@ describe('Story, told by name', () => {
     const told = (step: Story.Line) => () =>
       Story.story(game, Story.givenAs(encoded, { her: 0 }), step);
 
-    expect(told(Story.inputAs('her', 'Health', { current: 1 }))).toThrow(
-      'Health is no input of the game',
+    expect(told(Story.demandAs('her', 'Health', { current: 1 }))).toThrow(
+      'Health is no demand of the game',
     );
-    expect(told(Story.inputAs('her', 'Controls', { move: 'far' }))).toThrow('Controls');
+    expect(told(Story.demandAs('her', 'Controls', { move: 'far' }))).toThrow('Controls');
     expect(told(Story.actAs('her', { _tag: 'Flew' }))).toThrow(
       'Flew is no action a player of the game takes',
     );

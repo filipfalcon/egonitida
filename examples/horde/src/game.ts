@@ -4,7 +4,7 @@ import * as Horde from '#src/horde.ts';
 import * as Survivor from '#src/survivor.ts';
 
 /**
- * The fourth example: survivors in an arena against a horde that keeps rising. Small as it is, it holds what a game is made of: domains requiring one another and sharing where bodies are, input and actions, events between domains, randomness, and entities spawned and despawned. Its views are in `survivor.view.ts` and `horde.view.ts`.
+ * The fourth example: survivors in an arena against a horde that keeps rising. Small as it is, it holds what a game is made of: domains requiring one another and sharing where bodies are, demands and actions, events between domains, randomness, and entities spawned and despawned. Its views are in `survivor.view.ts` and `horde.view.ts`.
  */
 
 /** Survivors walk first, the horde follows them, and every body is then kept within the arena. */

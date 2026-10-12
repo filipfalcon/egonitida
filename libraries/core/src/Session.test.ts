@@ -55,7 +55,7 @@ const game = Game.make({
   ],
 });
 
-const hostOptions = (mayHold: boolean): Host.Options => ({
+const hostOptions = (maySuspend: boolean): Host.Options => ({
   game,
   state: State.empty({ seed: 1 }),
   join: (state) =>
@@ -65,7 +65,7 @@ const hostOptions = (mayHold: boolean): Host.Options => ({
       Health.of({ current: 0 }),
     ]),
   leave: State.despawn,
-  mayHold,
+  maySuspend,
 });
 
 const startHost = Host.make(hostOptions(true));
@@ -114,7 +114,7 @@ describe('a session between a host and its clients', () => {
     }),
   );
 
-  it.effect('moves a client’s entity by the input it sends', () =>
+  it.effect('moves a client’s entity by the demands it sends', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
 
@@ -141,7 +141,7 @@ describe('a session between a host and its clients', () => {
     }),
   );
 
-  it.effect('tells a client which of its inputs each state took in, by their numbers', () =>
+  it.effect('tells a client which of its demands each state took in, by their numbers', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
 
@@ -159,14 +159,14 @@ describe('a session between a host and its clients', () => {
     }),
   );
 
-  it.effect('ignores what a client sends for anything but input', () =>
+  it.effect('ignores what a client sends for anything but a demand', () =>
     Effect.gen(function* () {
       const { host, client, clientEnd } = yield* session;
 
       // A client sending a position for itself, as a cheat would.
       yield* clientEnd.send({
         channel: 'unreliable',
-        payload: JSON.stringify({ inputs: [{ seq: 99, values: { Position: { x: 999 } } }] }),
+        payload: JSON.stringify({ demands: [{ seq: 99, values: { Position: { x: 999 } } }] }),
       });
       yield* elapse(100);
 
@@ -189,7 +189,7 @@ describe('a session between a host and its clients', () => {
     }),
   );
 
-  it.effect('keeps a held input across steps that bring no new one', () =>
+  it.effect('keeps a demand across steps that bring no new one', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
 
@@ -225,32 +225,32 @@ describe('a session between a host and its clients', () => {
     }),
   );
 
-  describe('holding time', () => {
-    it.effect('holds time while a client asks, where the host allows it', () =>
+  describe('suspending time', () => {
+    it.effect('suspends time while a client asks, where the host allows it', () =>
       Effect.gen(function* () {
         const { host, client } = yield* session;
 
-        yield* client.hold;
+        yield* client.suspend;
         yield* elapse(1000);
-        const held = yield* host.state;
-        expect(held.tick).toBe(0);
+        const suspended = yield* host.state;
+        expect(suspended.tick).toBe(0);
 
-        yield* client.release;
+        yield* client.resume;
         yield* elapse(100);
-        // Three steps, not the thirty the held second would have owed.
+        // Three steps, not the thirty the suspended second would have owed.
         const resumed = yield* host.state;
         expect(resumed.tick).toBe(3);
       }),
     );
 
-    it.effect('refuses to hold time where the host does not allow it', () =>
+    it.effect('refuses to suspend time where the host does not allow it', () =>
       Effect.gen(function* () {
         const host = yield* Host.make(hostOptions(false));
         const [clientEnd, hostEnd] = yield* Transport.memoryPair;
         yield* host.connect(hostEnd);
         const client = yield* Client.connect(clientEnd, { game });
 
-        yield* client.hold;
+        yield* client.suspend;
         yield* elapse(1000);
 
         const state = yield* host.state;
@@ -258,7 +258,7 @@ describe('a session between a host and its clients', () => {
       }),
     );
 
-    it.effect('lets time go when the client holding it leaves', () =>
+    it.effect('resumes time when the client suspending it leaves', () =>
       Effect.gen(function* () {
         const host = yield* startHost;
         const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -266,7 +266,7 @@ describe('a session between a host and its clients', () => {
         yield* host.connect(hostEnd).pipe(Scope.provide(scope));
         const client = yield* Client.connect(clientEnd, { game });
 
-        yield* client.hold;
+        yield* client.suspend;
         yield* elapse(500);
         yield* Scope.close(scope, Exit.void);
         yield* elapse(100);
@@ -321,17 +321,17 @@ describe('a session between a host and its clients', () => {
       }),
     );
 
-    it.effect('carries out an action sent while time is held once it runs again', () =>
+    it.effect('carries out an action sent while time is suspended once it runs again', () =>
       Effect.gen(function* () {
         const { host, client } = yield* session;
 
-        yield* client.hold;
+        yield* client.suspend;
         yield* client.act(AskedToHeal, { amount: 50 });
         yield* elapse(500);
-        const held = yield* host.state;
-        expect(healthOf(held, client.entity)).toEqual(Option.some(0));
+        const suspended = yield* host.state;
+        expect(healthOf(suspended, client.entity)).toEqual(Option.some(0));
 
-        yield* client.release;
+        yield* client.resume;
         yield* elapse(50);
         const resumed = yield* host.state;
         expect(healthOf(resumed, client.entity)).toEqual(Option.some(50));
@@ -553,43 +553,45 @@ describe('reloading a game', () => {
   );
 });
 
-describe('time held beside the host', () => {
-  it.effect('stands while held, steps only as far as it is told, and runs on once let go', () =>
-    Effect.gen(function* () {
-      const { host, client } = yield* session;
-      yield* client.send([Controls.of({ move: 1, fire: false })]);
-      yield* elapse(100);
+describe('time suspended beside the host', () => {
+  it.effect(
+    'stands while suspended, steps only as far as it is told, and runs on once resumed',
+    () =>
+      Effect.gen(function* () {
+        const { host, client } = yield* session;
+        yield* client.send([Controls.of({ move: 1, fire: false })]);
+        yield* elapse(100);
 
-      yield* host.hold;
-      const held = yield* host.state;
-      yield* elapse(500);
-      const stood = yield* host.state;
-      yield* host.step(4);
-      const stepped = yield* host.state;
-      yield* host.release;
-      yield* elapse(100);
+        yield* host.suspend;
+        const suspended = yield* host.state;
+        yield* elapse(500);
+        const stood = yield* host.state;
+        yield* host.step(4);
+        const stepped = yield* host.state;
+        yield* host.resume;
+        yield* elapse(100);
 
-      expect(stood.tick).toBe(held.tick);
-      expect(stepped.tick).toBe(held.tick + 4);
-      expect(positionIn(stepped, client.entity)).toEqual(
-        Option.map(positionIn(held, client.entity), (x) => x + 4),
-      );
-      expect((yield* client.state).tick).toBeGreaterThan(stepped.tick);
-      expect((yield* host.state).tick).toBe(stepped.tick + 3);
-    }),
+        expect(stood.tick).toBe(suspended.tick);
+        expect(stepped.tick).toBe(suspended.tick + 4);
+        expect(positionIn(stepped, client.entity)).toEqual(
+          Option.map(positionIn(suspended, client.entity), (x) => x + 4),
+        );
+        expect((yield* client.state).tick).toBeGreaterThan(stepped.tick);
+        expect((yield* host.state).tick).toBe(stepped.tick + 3);
+      }),
   );
 });
 
 describe('playing from beside the host', () => {
-  it.effect('takes input for an entity, read by its component, over what its client sends', () =>
+  it.effect('takes demands on an entity, read by its component, over what its client sends', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
-      yield* host.hold;
+      yield* host.suspend;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
       yield* elapse(10);
       const before = yield* host.state;
 
-      yield* host.input(client.entity, [
+      yield* host.demand(client.entity, [
         { component: 'Controls', value: { move: -2, fire: false } },
       ]);
       yield* host.step(1);
@@ -603,7 +605,7 @@ describe('playing from beside the host', () => {
   it.effect('takes an action as from the player of an entity', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
-      yield* host.hold;
+      yield* host.suspend;
 
       yield* host.act(client.entity, { _tag: 'AskedToHeal', amount: 42 });
       yield* host.step(1);
@@ -617,7 +619,7 @@ describe('playing from beside the host', () => {
   it.effect('joins players with no client, plays each, and lets them go, as watching tells', () =>
     Effect.gen(function* () {
       const host = yield* startHost;
-      yield* host.hold;
+      yield* host.suspend;
       const watching = yield* host.watch;
       const told = yield* watching.happenings.pipe(
         Stream.filter(({ _tag }) => _tag !== 'Stepped'),
@@ -629,8 +631,8 @@ describe('playing from beside the host', () => {
 
       const first = yield* host.join;
       const second = yield* host.join;
-      yield* host.input(first, [{ component: 'Controls', value: { move: 1, fire: false } }]);
-      yield* host.input(second, [{ component: 'Controls', value: { move: -1, fire: false } }]);
+      yield* host.demand(first, [{ component: 'Controls', value: { move: 1, fire: false } }]);
+      yield* host.demand(second, [{ component: 'Controls', value: { move: -1, fire: false } }]);
       yield* host.step(1);
       const played = yield* host.state;
       yield* host.leave(first);
@@ -649,7 +651,7 @@ describe('playing from beside the host', () => {
   );
 
   it.effect(
-    'refuses what the game cannot read: no input component, no value of it, no action',
+    'refuses what the game cannot read: no demand component, no value of it, no action',
     () =>
       Effect.gen(function* () {
         const { host, client } = yield* session;
@@ -659,15 +661,15 @@ describe('playing from beside the host', () => {
           );
 
         const reasons = [
-          yield* refusal(host.input(client.entity, [{ component: 'Position', value: { x: 9 } }])),
+          yield* refusal(host.demand(client.entity, [{ component: 'Position', value: { x: 9 } }])),
           yield* refusal(
-            host.input(client.entity, [{ component: 'Controls', value: { move: 'far' } }]),
+            host.demand(client.entity, [{ component: 'Controls', value: { move: 'far' } }]),
           ),
           yield* refusal(host.act(client.entity, { _tag: 'Flew' })),
         ];
 
         expect(reasons).toEqual([
-          'Position is no input of the game',
+          'Position is no demand of the game',
           expect.stringContaining('Controls'),
           'Flew is no action a player of the game takes, or not one like it',
         ]);
@@ -690,7 +692,7 @@ describe('controls', () => {
     }),
   );
 
-  it.effect('reach nothing from a host that lets no client hold time', () =>
+  it.effect('reach nothing from a host that lets no client suspend time', () =>
     Effect.gen(function* () {
       const host = yield* Host.make(hostOptions(false));
       const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -741,7 +743,7 @@ describe('questions', () => {
     }),
   );
 
-  it.effect('go unanswered by a host that lets no client hold time', () =>
+  it.effect('go unanswered by a host that lets no client suspend time', () =>
     Effect.gen(function* () {
       const host = yield* Host.make(hostOptions(false));
       const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -825,7 +827,7 @@ describe('commands', () => {
         state: State.empty({ seed: 1 }),
         join: (state) => State.spawn(state, [Health.of({ current: 0 })]),
         leave: State.despawn,
-        mayHold: false,
+        maySuspend: false,
       });
       const [clientEnd, hostEnd] = yield* Transport.memoryPair;
       yield* host.connect(hostEnd);
@@ -843,7 +845,7 @@ describe('commands', () => {
       state: State.empty({ seed: 1 }),
       join: (state) => State.spawn(state, [Health.of({ current: 0 })]),
       leave: State.despawn,
-      mayHold: false,
+      maySuspend: false,
     });
     // Both the type checker and Effect's own check refuse it: hosting a game that keeps health needs a vault to keep it in.
     // @ts-expect-error The vault is not given.
@@ -958,7 +960,7 @@ describe('what a client keeps for itself', () => {
       state: State.empty({ seed: 1 }),
       join: (state) => State.spawn(state, [Position.of({ x: 0 })]),
       leave: State.despawn,
-      mayHold: false,
+      maySuspend: false,
     });
     const [clientEnd, hostEnd] = yield* Transport.memoryPair;
     yield* host.connect(hostEnd);

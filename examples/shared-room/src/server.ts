@@ -24,7 +24,7 @@ export class SharedRoom extends Cloudflare.DurableObject<SharedRoom>()(
         state: Walkers.state,
         join: Walkers.join,
         leave: State.despawn,
-        mayHold: false,
+        maySuspend: false,
       }).pipe(Scope.provide(lives));
       const inside = new Map<string, Room.Opened>();
 

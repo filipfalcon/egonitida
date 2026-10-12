@@ -213,7 +213,7 @@ const CLAIMS: ReadonlyArray<{ readonly title: string; readonly text: string }> =
   },
   {
     title: 'Determinism',
-    text: 'Systems take randomness and time only from their context, and a lint rule holds them to it. The same build and the same inputs give the same states, which rewinding, recordings, and the check in development rest on.',
+    text: 'Systems take randomness and time only from their context, and a lint rule holds them to it. The same state and the same input give the same next state, which rewinding, recordings, and the check in development rest on.',
   },
   {
     title: 'One shape for one player and many',

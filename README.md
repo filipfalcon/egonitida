@@ -119,10 +119,10 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 
 - **One owner for every field.** A component says whether the rules or the simulation own it, and whether it is sent to clients, kept on the client, or kept on the server. A system that writes what it does not own does not compile.
 - **Domains instead of a pile of code.** A game is a list of domains. A domain writes only its own components and changes another's components only by emitting an event that domain declares. Asking who changes a component is one call to `Game.changes`.
-- **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same build and the same inputs give the same state, which is what rewinding, recordings, and the determinism check in development rest on.
+- **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same state and the same input give the same next state, which is what rewinding, recordings, and the determinism check in development rest on.
 - **One shape for one player and many.** A singleplayer game runs its server in a Web Worker. The same game can be hosted for players across a network in a Durable Object; that hosting is experimental, and prediction for it is planned.
 - **Effects at the edges.** Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the game, such as saving a score.
-- **Tools for agents.** In development, the `lightocean-devtools` MCP server lets an agent read the state of the running game, hold and step time, play as one player or several, take screenshots, and turn what it played into a test.
+- **Tools for agents.** In development, the `lightocean-devtools` MCP server lets an agent read the state of the running game, suspend and step time, play as one player or several, take screenshots, and turn what it played into a test.
 
 ## Built on
 
@@ -160,7 +160,7 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 | `examples/spinning-cube`   | A cube that turns                                                                 |
 | `examples/click-to-colour` | Cubes a click paints                                                              |
 | `examples/save-score`      | A round whose score a rule saves through a command, to a Worker over KV           |
-| `examples/horde`           | Survivors against a horde: several domains, input, randomness, spawning           |
+| `examples/horde`           | Survivors against a horde: several domains, demands, randomness, spawning         |
 | `examples/shared-room`     | Walkers in a room many share across the network, each player's own predicted      |
 | `skills`                   | Agent skills for starting out, adding a domain, and auditing a game               |
 

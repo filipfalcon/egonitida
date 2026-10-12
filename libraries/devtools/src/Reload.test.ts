@@ -64,7 +64,7 @@ describe('a game swapped for a new build', () => {
 const options = (played = Fixtures.game) => ({
   ...Fixtures.setup(played),
   state: State.empty({ seed: 7 }),
-  mayHold: false,
+  maySuspend: false,
 });
 
 describe('hosting across builds', () => {

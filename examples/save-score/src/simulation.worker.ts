@@ -20,7 +20,7 @@ const options: Host.Options<Scores.Scores> = {
   join: (state: State.State) => State.spawn(state, []),
   leave: State.despawn,
   state: Score.state,
-  mayHold: true,
+  maySuspend: true,
 };
 
 Effect.runFork(

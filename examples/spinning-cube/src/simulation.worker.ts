@@ -10,6 +10,6 @@ Effect.runFork(
     state: Cube.state,
     join: (state) => State.spawn(state, []),
     leave: State.despawn,
-    mayHold: true,
+    maySuspend: true,
   }).pipe(Effect.provide(BrowserWorkerRunner.layer), Effect.scoped),
 );

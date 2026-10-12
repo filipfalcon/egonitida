@@ -23,7 +23,7 @@ const SHORT: Layout = { sticks: 0, triggers: 7, buttons: 4 };
 /** A stick's byte, from 0 to 255 with 128 at rest, as from -1 to 1. */
 const axis = (byte: number) => Math.max(-1, Math.min(1, (byte - 128) / 127));
 
-/** Which directions the directional pad's hat holds: 0 up, then round to 7, and 8 for none. */
+/** Which way the directional pad's hat points: 0 up, then round to 7, and 8 for none. */
 const HAT: ReadonlyArray<ReadonlyArray<Devices.PadButton>> = [
   ['Up'],
   ['Up', 'Right'],

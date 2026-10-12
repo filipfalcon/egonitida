@@ -34,7 +34,7 @@ describe('a state begun by its host', () => {
     'goes on from the state begun at its first tick, once time starts stepping in the telling',
     () =>
       Effect.gen(function* () {
-        const host = yield* Host.make({ ...Glance.setup, state: atPoint, mayHold: true });
+        const host = yield* Host.make({ ...Glance.setup, state: atPoint, maySuspend: true });
         yield* Beginning.serve(host);
         yield* pass(1500);
         const state = yield* host.state;
@@ -49,7 +49,7 @@ describe('a state begun by its host', () => {
 
   it.effect('leaves a state in which time has not started stepping as it is', () =>
     Effect.gen(function* () {
-      const host = yield* Host.make({ ...Glance.setup, state: withViewer, mayHold: true });
+      const host = yield* Host.make({ ...Glance.setup, state: withViewer, maySuspend: true });
       yield* Beginning.serve(host);
       yield* pass(1500);
 

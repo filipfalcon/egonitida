@@ -20,7 +20,7 @@ const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }),
   network: 'predicted',
 });
 const Controls = Component.make('Controls', Schema.Struct({ move: Schema.Finite }), {
-  owner: 'input',
+  owner: 'demand',
   network: 'predicted',
 });
 
@@ -57,8 +57,8 @@ const hostOptions = {
   join: (state: State.State) =>
     State.spawn(state, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
   leave: State.despawn,
-  // A local server for one player lets that player hold time.
-  mayHold: true,
+  // A local server for one player lets that player suspend time.
+  maySuspend: true,
 };
 
 describe('a local server', () => {

@@ -12,7 +12,7 @@ it.effect('draws every walker where it stands, in its own colour', () =>
     const walked = Story.story(
       Walkers.game,
       Story.given(twice, { first, second }),
-      Story.input('first', Walkers.Steering, { x: 1, z: 0 }),
+      Story.demand('first', Walkers.Steering, { x: 1, z: 0 }),
       Story.seconds(1),
     );
     const scene = yield* Scene.make(WalkersView.views);

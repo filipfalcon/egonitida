@@ -10,7 +10,7 @@ const options = {
   join: Editing.join,
   leave: State.despawn,
   state: Editing.document,
-  mayHold: true,
+  maySuspend: true,
 };
 
 Effect.runFork(

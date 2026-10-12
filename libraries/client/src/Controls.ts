@@ -2,7 +2,7 @@ import { Option } from 'effect';
 import type * as Devices from '#src/Devices.ts';
 
 /**
- * A game's controls, bound to devices as data: each control a name the game gives, such as `move` or `fire`, with how every kind of device works it, the pad's way first. Reading them over what the devices do gives each control's value, a stick as a direction no longer than a full tilt and a button as held or just pressed, and the kind of device the player is using now: the one last used, the pad when both are used at once. What a game makes of the values, its input and its actions, is its own: no device reaches its rules.
+ * A game's controls, bound to devices as data: each control a name the game gives, such as `move` or `fire`, with how every kind of device works it, the pad's way first. Reading them over what the devices do gives each control's value, a stick as a direction no longer than a full tilt and a button as held or just pressed, and the kind of device the player is using now: the one last used, the pad when both are used at once. What a game makes of the values, its demands and its actions, is its own: no device reaches its rules.
  */
 
 /** A stick of a pad, by the side it is on. */

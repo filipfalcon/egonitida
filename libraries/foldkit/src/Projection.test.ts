@@ -70,7 +70,7 @@ const joined = Effect.gen(function* () {
     join: (state: State.State) =>
       State.spawn(state, [Tally.of({ count: 0 }), Clock.of({ steps: 0 })]),
     leave: State.despawn,
-    mayHold: false,
+    maySuspend: false,
   }).pipe(Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)), Effect.forkScoped);
   return yield* Session.join(game, () => channel.port1);
 });

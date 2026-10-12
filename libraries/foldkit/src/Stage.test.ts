@@ -56,7 +56,7 @@ const joinedLamp = Effect.gen(function* () {
     state,
     join: (joining: State.State) => State.spawn(joining, []),
     leave: State.despawn,
-    mayHold: false,
+    maySuspend: false,
   }).pipe(Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)), Effect.forkScoped);
   return { lamp, joined: yield* Session.join(game, () => channel.port1) };
 });

@@ -9,7 +9,7 @@ import type * as Transport from '#src/Transport.ts';
 import * as State from '#src/State.ts';
 
 /**
- * A player's side of a session: joins a host, sends it the player's input, and keeps the newest state the host sent, with what the client keeps for itself stepped by the game's local systems through every tick the state reached. It draws nothing and predicts nothing yet; it is what both are built on.
+ * A player's side of a session: joins a host, sends it the player's demands and actions, and keeps the newest state the host sent, with what the client keeps for itself stepped by the game's local systems through every tick the state reached. It draws nothing and predicts nothing yet; it is what both are built on.
  */
 
 export interface Options {
@@ -26,14 +26,14 @@ export interface Client {
   readonly state: Effect.Effect<State.State>;
   /** Every state the client receives from now on that is newer than the one before, in order. */
   readonly states: Stream.Stream<State.State>;
-  /** Sends the player's input, as values of input components, and gives the number it was sent as. */
+  /** Sends the player's demands, as values of demand components, for the next step, and gives the number they were sent as. */
   readonly send: (values: ReadonlyArray<Component.Instance>) => Effect.Effect<number>;
-  /** The number of the newest input of this client's that the state at `tick` took in, if the host said so: 0 for none yet. Inputs numbered above it are yet to be, which a client predicting its own player plays ahead. */
+  /** The number of the newest demands of this client's that the state at `tick` took in, if the host said so: 0 for none yet. Demands numbered above it are yet to be, which a client predicting its own player plays ahead. */
   readonly ackedAt: (tick: number) => Option.Option<number>;
-  /** Asks the host to hold time; a host that does not allow it goes on. */
-  readonly hold: Effect.Effect<void>;
-  /** Lets go of time this client held. */
-  readonly release: Effect.Effect<void>;
+  /** Asks the host to suspend time; a host that does not allow it goes on. */
+  readonly suspend: Effect.Effect<void>;
+  /** Resumes time this client suspended. */
+  readonly resume: Effect.Effect<void>;
   /** Sends the host a control, such as a development tool's, which whatever listens beside the host reads; the game never sees it. */
   readonly control: (payload: unknown) => Effect.Effect<void>;
   /** Asks whatever answers beside the host a question, such as a debugger's, and waits for its answer; the game never sees it. */
@@ -48,12 +48,12 @@ export interface Client {
 /** Why a question went unanswered: nothing beside the host answers, it refused, or the host answers no client's questions. */
 export class Unanswered extends Data.TaggedError('Unanswered')<{ readonly reason: string }> {}
 
-type SentInput = Protocol.Inputs['inputs'][number];
+type SentDemands = Protocol.Demands['demands'][number];
 
-const encodeValues = (values: ReadonlyArray<Component.Instance>): SentInput['values'] =>
+const encodeValues = (values: ReadonlyArray<Component.Instance>): SentDemands['values'] =>
   Object.fromEntries(
     values
-      .filter((instance) => instance.component.owner === 'input')
+      .filter((instance) => instance.component.owner === 'demand')
       .map((instance) => [instance.component.name, instance.encoded()]),
   );
 
@@ -78,8 +78,8 @@ export const connect = (
       /** The states lately received, oldest first, with what the client kept for itself at each. */
       kept: ReadonlyArray<State.State>;
       seq: number;
-      history: ReadonlyArray<SentInput>;
-      /** The number of the newest input each lately received state took in, by its tick. */
+      history: ReadonlyArray<SentDemands>;
+      /** The number of the newest demands each lately received state took in, by its tick. */
       acked: Map<number, number>;
     } = {
       state: State.empty({ seed: 0 }),
@@ -183,11 +183,11 @@ export const connect = (
         receiving.history = [
           { seq: receiving.seq, values: encodeValues(values) },
           ...receiving.history,
-        ].slice(0, Protocol.MAX_REPEATED_INPUTS);
+        ].slice(0, Protocol.MAX_REPEATED_DEMANDS);
         return connection
           .send({
             channel: 'unreliable',
-            payload: Protocol.encodeInputs({ inputs: receiving.history }),
+            payload: Protocol.encodeDemands({ demands: receiving.history }),
           })
           .pipe(Effect.as(receiving.seq));
       });
@@ -212,8 +212,8 @@ export const connect = (
       states: Stream.fromPubSub(received),
       send,
       ackedAt: (tick) => Option.fromNullishOr(receiving.acked.get(tick)),
-      hold: tell({ _tag: 'Hold' }),
-      release: tell({ _tag: 'Release' }),
+      suspend: tell({ _tag: 'Suspend' }),
+      resume: tell({ _tag: 'Resume' }),
       act: (action, value) => tell({ _tag: 'Act', action: action.encode(value) }),
       control: (payload) => tell({ _tag: 'Control', payload }),
       ask,

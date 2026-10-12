@@ -36,7 +36,7 @@ describe('a stretch of a recording, told as a story', () => {
         expect(told).toEqual(
           Result.succeed([
             { _tag: 'GivenAs', state: expect.anything(), names: { e0: 0 } },
-            { _tag: 'InputAs', name: 'e0', component: 'Stick', value: { move: 1 } },
+            { _tag: 'DemandAs', name: 'e0', component: 'Stick', value: { move: 1 } },
             { _tag: 'ActAs', name: 'e0', action: { _tag: 'AskedToHeal', amount: 50 } },
             { _tag: 'Steps', count: 2 },
             { _tag: 'ExpectAs', name: 'e0', component: 'Position', value: { x: 2 } },
@@ -68,7 +68,7 @@ describe('a stretch of a recording, told as a story', () => {
 
       expect(source).toContain("import { game } from '#src/game.ts';");
       expect(source).toContain("it('heals a player who asks', () => {");
-      expect(source).toContain("    Story.inputAs('e0', 'Stick', {\"move\":1}),");
+      expect(source).toContain("    Story.demandAs('e0', 'Stick', {\"move\":1}),");
       expect(source).toContain('    Story.actAs(\'e0\', {"_tag":"AskedToHeal","amount":50}),');
       expect(source).toContain('    Story.steps(2),');
       expect(source).toContain("    Story.expectAs('e0', 'Health', {\"current\":50}),");

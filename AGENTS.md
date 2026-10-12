@@ -23,7 +23,7 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 **State.** A game is its domains (`Domain.make`), and its whole state is their components.
 
 - A domain writes only its own components. It changes another domain's components only by emitting an event that domain declares, which that domain's rules decide on. It shares a component (`shares`) only for values many domains change every step, such as where a body is.
-- Systems change what the simulation owns, every step; rules change what the rules own, when an event or action happens; players change only input components.
+- Systems change what the simulation owns, every step; rules change what the rules own, when an event or action happens; players change only demand components.
 - What only a client keeps, such as a ragdoll or a fire, is a local component, changed by a domain's `localSystems`.
 - Requiring is one way: two domains never require each other, so what both need belongs in a domain beneath them.
 
@@ -62,8 +62,8 @@ A view's `draw` changes only the object its view built, from the frame, and keep
 
 ## A running game
 
-- With a game's development server running and its page open, the `lightocean-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `lightocean_hosts` and `lightocean_describe`; read the state with `lightocean_state`, `lightocean_compare`, and `lightocean_log`; hold and step time with `lightocean_hold` and `lightocean_step` to look closely; and play, as one player or many, with `lightocean_join`, `lightocean_input`, and `lightocean_act`.
-- Check a change on the running game yourself rather than asking the person to: hold time, step, and read what came of it, and see how it looks with `lightocean_screenshot`, after `lightocean_seek` to see the past. Asking them is for what neither tells, such as how it feels to play.
+- With a game's development server running and its page open, the `lightocean-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `lightocean_hosts` and `lightocean_describe`; read the state with `lightocean_state`, `lightocean_compare`, and `lightocean_log`; suspend and step time with `lightocean_suspend` and `lightocean_step` to look closely, and resume it with `lightocean_resume`; and play, as one player or many, with `lightocean_join`, `lightocean_demand`, and `lightocean_act`.
+- Check a change on the running game yourself rather than asking the person to: suspend time, step, and read what came of it, and see how it looks with `lightocean_screenshot`, after `lightocean_seek` to see the past. Asking them is for what neither tells, such as how it feels to play.
 - What you find by playing becomes a test: `lightocean_story` writes a stretch as the source of a story test. Keep the expectations that tell the behaviour, drop the rest, and name the entities for what they are.
 - A game serves its host this way through `Devtools.plugin()` in its Vite config, `Beside.host` in its worker, and `Page.serve` in its page, in development.
 

@@ -12,7 +12,7 @@ describe('a state kept across reloads of the page', () => {
       const hosted = yield* Fixtures.host();
       yield* Keep.serve(store, hosted, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
       yield* Fixtures.visit(hosted);
-      yield* hosted.hold;
+      yield* hosted.suspend;
       yield* Fixtures.elapse(100);
       const now = yield* hosted.state;
 

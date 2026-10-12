@@ -37,11 +37,11 @@ export const make = <Services = never>(
     const host = yield* Host.make(options);
     const present = { inside: 0 };
     const turns = yield* Semaphore.make(1);
-    yield* host.hold;
+    yield* host.suspend;
 
-    /** Holds time while no one is in the room, and lets it run while someone is, by how many are in it now; one at a time, so what one finds is what it does, and the last to settle finds the room as it is. */
+    /** Suspends time while no one is in the room, and resumes it while someone is, by how many are in it now; one at a time, so what one finds is what it does, and the last to settle finds the room as it is. */
     const settle = turns.withPermit(
-      Effect.suspend(() => (present.inside === 0 ? host.hold : host.release)),
+      Effect.suspend(() => (present.inside === 0 ? host.suspend : host.resume)),
     );
 
     const open = (socket: Socket): Effect.Effect<Opened> =>

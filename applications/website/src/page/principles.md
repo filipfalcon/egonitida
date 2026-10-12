@@ -14,7 +14,7 @@ Every component has exactly one owner, declared in its schema:
 
 - **Rules** own the facts the game decides, such as health, ammunition, or an open door. Only rules change them, and only when an action or an event happens.
 - **Simulation** owns whatever changes every step, such as positions. Only its systems change it.
-- **Input** owns what players control, such as a tilted stick or a pulled trigger. The engine writes it at the start of each step, and nothing else may.
+- **Demand** owns what players demand, what they are doing with their controls, such as a tilted stick or a trigger held halfway. The engine writes it at the start of each step, and nothing else may.
 
 A game declares everything its state is made of: its components, actions, and events. One schema for the whole state follows from that declaration, covering its components, its tick, and its counters for the next entity id and for randomness. Snapshots, saves, recordings, and the debugger all speak that same schema.
 

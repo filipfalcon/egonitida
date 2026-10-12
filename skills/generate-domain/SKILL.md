@@ -11,7 +11,7 @@ A domain is one part of a game's state: the components it owns, and the actions,
 
 Write down, before any code:
 
-- **Components** it owns, each with its owner: `simulation` (systems change it every step), `rules` (rules change it when something happens), or `input` (players change it); and its network role: `server`, `predicted`, or `local` (a client keeps it for itself).
+- **Components** it owns, each with its owner: `simulation` (systems change it every step), `rules` (rules change it when something happens), or `demand` (players change it, by what they do with their controls); and its network role: `server`, `predicted`, or `local` (a client keeps it for itself).
 - **Actions**: what a player does, whatever device they do it with, as facts in the past tense (`PulledTrigger`, `AskedForCube`).
 - **Events**: what the game made of something, also in the past tense; the events of other domains it emits or handles.
 - **Commands**: anything done outside the game, such as saving to storage, with the results it may come to (`Command.result`), failure included; each result is an action, and a rule must handle it.
@@ -23,7 +23,7 @@ Check the plan against the rules: it writes only its own components, two domains
 
 Write `name.story.test.ts` beside the domain, after the exemplar story `AGENTS.md` names:
 
-- `Story.given` a state and names for its entities; `Story.act`, `Story.input`, `Story.happen`; `Story.step` or `Story.seconds`; then `Story.expect` or `Story.expectEqual`.
+- `Story.given` a state and names for its entities; `Story.act`, `Story.demand`, `Story.happen`, `Story.resolve`; `Story.step` or `Story.seconds`; then `Story.expect` or `Story.expectEqual`.
 - A command never runs in a story: `Story.expectCommand` it, then `Story.resolve` it with one of its results.
 
 Run the tests and see them fail.

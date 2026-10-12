@@ -17,7 +17,7 @@ const hostOf = (opening: string) =>
           state,
           join: (joining: State.State) => State.spawn(joining, []),
           leave: State.despawn,
-          mayHold: true,
+          maySuspend: true,
         };
         const host = yield* Host.make(options);
         yield* import.meta.env.DEV

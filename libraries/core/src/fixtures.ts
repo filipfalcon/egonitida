@@ -28,7 +28,7 @@ export const Health = Component.make('Health', Schema.Struct({ current: Schema.I
 export const Controls = Component.make(
   'Controls',
   Schema.Struct({ move: Schema.Finite, fire: Schema.Boolean }),
-  { owner: 'input', network: 'predicted' },
+  { owner: 'demand', network: 'predicted' },
 );
 
 /** A blood splat: drawn by each client for itself, never sent. */

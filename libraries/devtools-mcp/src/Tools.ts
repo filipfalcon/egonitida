@@ -5,7 +5,7 @@ import * as Ask from '#src/Ask.ts';
 import * as Discovery from '#src/Discovery.ts';
 
 /**
- * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the state at any tick kept, compare two ticks, read the log between them; hold, step, show, and play on from time; play the game, as one player or many; and write what happened as a story test. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
+ * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the state at any tick kept, compare two ticks, read the log between them; suspend, step, show, and resume time, or play on from a past tick; play the game, as one player or many; and write what happened as a story test. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
  */
 
 const host = Schema.optionalKey(Schema.String).annotate({
@@ -113,14 +113,14 @@ export const toolkit = Toolkit.make(
   reading(
     asking(
       'lightocean_log',
-      'Reads the log of what happened after the state at one tick, up to the state at another: joins and leaves, the actions each step took, and what each system and rule did, and for what. Input is left out unless asked for.',
-      { from: tick, to: tick, inputs: Schema.optionalKey(Schema.Boolean) },
+      'Reads the log of what happened after the state at one tick, up to the state at another: joins and leaves, the actions each step took, and what each system and rule did, and for what. The demands are left out unless asked for.',
+      { from: tick, to: tick, demands: Schema.optionalKey(Schema.Boolean) },
     ),
   ),
   reading(
     asking(
       'lightocean_story',
-      "Writes what happened after the state at one tick, up to the state at another, as the source of a story test: the state at the first tick, the input and actions of every step, and every value that came of them, by name. Save it as a *.story.test.ts file in the game's package. A stretch in which a player joined or left cannot be told; start after it, or end before.",
+      "Writes what happened after the state at one tick, up to the state at another, as the source of a story test: the state at the first tick, the input of every step, and every value that came of them, by name. Save it as a *.story.test.ts file in the game's package. A stretch in which a player joined or left cannot be told; start after it, or end before.",
       {
         from: tick,
         to: tick,
@@ -135,20 +135,28 @@ export const toolkit = Toolkit.make(
     ),
   ),
   steering(
-    asking('lightocean_hold', 'Holds time: the game stands still until it is released.', {}),
+    asking(
+      'lightocean_suspend',
+      'Suspends time: the game stands still, stepping only when told to, until it is resumed.',
+      {},
+    ),
     true,
   ),
-  steering(asking('lightocean_release', 'Lets time run again.', {}), true),
+  steering(asking('lightocean_resume', 'Resumes time: the game runs again.', {}), true),
   steering(
-    asking('lightocean_step', 'Takes so many steps at once, as held time is stepped through.', {
-      count: Schema.Int,
-    }),
+    asking(
+      'lightocean_step',
+      'Takes so many steps at once, as suspended time is stepped through.',
+      {
+        count: Schema.Int,
+      },
+    ),
     false,
   ),
   steering(
     asking(
       'lightocean_seek',
-      "Shows the page the state at a past tick, while time is held, without changing the host's state.",
+      "Shows the page the state at a past tick, while time is suspended, without changing the host's state.",
       { tick },
     ),
     true,
@@ -174,8 +182,8 @@ export const toolkit = Toolkit.make(
   playing(asking('lightocean_leave', 'Lets go of the player of an entity.', { entity })),
   playing(
     asking(
-      'lightocean_input',
-      'Gives an entity input for the next step, as its player holds it: values of input components by name, as lightocean_describe gives their schemas. It goes in after what a page sends.',
+      'lightocean_demand',
+      'Gives an entity demands for the next step, what its player is doing with their controls: values of demand components by name, as lightocean_describe gives their schemas. They go in after what a page sends.',
       { entity, values: Schema.Record(Schema.String, Schema.Unknown) },
     ),
   ),
@@ -209,15 +217,15 @@ export const implementations = (from: string) => {
     lightocean_log: ({ host, ...asked }) => ask({ _tag: 'Log', ...asked }, host),
     lightocean_story: ({ host, gameFrom, gameName, ...asked }) =>
       ask({ _tag: 'Story', ...asked, game: { from: gameFrom, name: gameName } }, host),
-    lightocean_hold: ({ host }) => ask({ _tag: 'Hold' }, host),
-    lightocean_release: ({ host }) => ask({ _tag: 'Release' }, host),
+    lightocean_suspend: ({ host }) => ask({ _tag: 'Suspend' }, host),
+    lightocean_resume: ({ host }) => ask({ _tag: 'Resume' }, host),
     lightocean_step: ({ host, count }) => ask({ _tag: 'Step', count }, host),
     lightocean_seek: ({ host, tick: at }) => ask({ _tag: 'Seek', tick: at }, host),
     lightocean_play_from: ({ host, tick: at }) => ask({ _tag: 'PlayFrom', tick: at }, host),
     lightocean_live: ({ host }) => ask({ _tag: 'Live' }, host),
     lightocean_join: ({ host }) => ask({ _tag: 'Join' }, host),
     lightocean_leave: ({ host, ...asked }) => ask({ _tag: 'Leave', ...asked }, host),
-    lightocean_input: ({ host, ...asked }) => ask({ _tag: 'Input', ...asked }, host),
+    lightocean_demand: ({ host, ...asked }) => ask({ _tag: 'Demand', ...asked }, host),
     lightocean_act: ({ host, ...asked }) => ask({ _tag: 'Act', ...asked }, host),
   });
 };

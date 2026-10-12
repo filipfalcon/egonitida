@@ -27,9 +27,9 @@ import * as SurvivorView from '#src/survivor.view.ts';
 
 // The page: joins the local server in a worker as a survivor, sends what the player does with a pad, or the keyboard and the mouse, draws the arena through the game's views at every frame the display shows, makes the player feel what happens to their survivor through their pads, and lights their pads and their Razer devices from it. In development, keys drive the rewind beside the host.
 
-/** What each key asks of the rewind beside the host, in development: to hold time, to step back or forth, to play on from the tick shown, or to go live. */
+/** What each key asks of the rewind beside the host, in development: to suspend time, to step back or forth, to play on from the tick shown, or to go live. */
 type Asked =
-  | { readonly _tag: 'Pause' }
+  | { readonly _tag: 'Suspend' }
   | { readonly _tag: 'Step'; readonly steps: number }
   | { readonly _tag: 'PlayFromHere' }
   | { readonly _tag: 'Live' };
@@ -38,7 +38,7 @@ const asked = (event: KeyboardEvent): Option.Option<Asked> => {
   const by = event.shiftKey ? 10 : 1;
   switch (event.code) {
     case 'KeyP':
-      return Option.some({ _tag: 'Pause' });
+      return Option.some({ _tag: 'Suspend' });
     case 'Comma':
       return Option.some({ _tag: 'Step', steps: -by });
     case 'Period':
@@ -177,23 +177,23 @@ const main = Effect.gen(function* () {
         }),
     });
   }
-  const time = { paused: false };
-  /** Does what a key asked of the rewind; while time is held, the player does nothing else. */
+  const time = { suspended: false };
+  /** Does what a key asked of the rewind; while time is suspended, the player does nothing else. */
   const answer = (asking: Asked) => {
     switch (asking._tag) {
-      case 'Pause':
-        if (time.paused) {
+      case 'Suspend':
+        if (time.suspended) {
           return Effect.void;
         }
-        time.paused = true;
-        return rewind.pause;
+        time.suspended = true;
+        return rewind.suspend;
       case 'Step':
-        return time.paused ? rewind.step(asking.steps) : Effect.void;
+        return time.suspended ? rewind.step(asking.steps) : Effect.void;
       case 'PlayFromHere':
-        time.paused = false;
+        time.suspended = false;
         return rewind.playFromHere;
       case 'Live':
-        time.paused = false;
+        time.suspended = false;
         return rewind.live;
     }
   };
@@ -232,13 +232,13 @@ const main = Effect.gen(function* () {
           const now = HordeControls.play(devices, played.last, mouseAim);
           played.last = now;
           yield* Effect.forEach(done.asked.splice(0), answer, { discard: true });
-          if (!time.paused) {
+          if (!time.suspended) {
             yield* client.send([Survivor.Stick.of(now.stick)]);
           }
-          if (now.fired && !time.paused) {
+          if (now.fired && !time.suspended) {
             yield* client.act(Survivor.PulledTrigger, {});
           }
-          if (now.restarted && !time.paused) {
+          if (now.restarted && !time.suspended) {
             yield* client.act(Survivor.ChoseRestart, {});
           }
           yield* felt(views.frame(frame));
@@ -257,15 +257,15 @@ const main = Effect.gen(function* () {
                     ? `health ${life.health}`
                     : `dead: ${Option.contains(played.last.controls.active, 'Pad') ? 'Start' : 'R'} to rise again`,
                   `kills ${tally.kills}`,
-                  ...(time.paused
+                  ...(time.suspended
                     ? [
                         '',
-                        `paused at tick ${Math.round(frame.tick)}`,
+                        `suspended at tick ${Math.round(frame.tick)}`,
                         ', . step back and forth (shift: by ten)',
                         'enter plays on from here, L goes live',
                       ]
                     : import.meta.env.DEV
-                      ? ['', 'P pauses']
+                      ? ['', 'P suspends time']
                       : []),
                   ...(Hid.available() && hid.connections().length === 0
                     ? ['H connects a DualSense through WebHID']

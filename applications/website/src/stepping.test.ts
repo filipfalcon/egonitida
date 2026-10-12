@@ -16,9 +16,9 @@ const pass = (millis: number) =>
     }
   });
 
-/** The press hosted with time held and the engine's debugger beside it, as its worker hosts it, and a page joined to it. */
+/** The press hosted with time suspended and the engine's debugger beside it, as its worker hosts it, and a page joined to it. */
 const paged = Effect.gen(function* () {
-  const host = yield* Host.make({ ...Press.setup, state: Press.state, mayHold: true });
+  const host = yield* Host.make({ ...Press.setup, state: Press.state, maySuspend: true });
   yield* Debugger.serve(host, Press.setup);
   yield* Stepping.serve(host);
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -94,7 +94,7 @@ describe('a game stepped by hand', () => {
       }),
   );
 
-  it.effect('stays held once it has gone back', () =>
+  it.effect('stays suspended once it has gone back', () =>
     Effect.gen(function* () {
       const { host, client } = yield* paged;
       yield* Stepping.step(client);
@@ -108,27 +108,27 @@ describe('a game stepped by hand', () => {
   );
 
   it.effect(
-    'serves a page that holds time itself, stepping when it asks, and letting time run once it lets go',
+    'serves a page that suspends time itself, stepping when it asks, and running on once it resumes it',
     () =>
       Effect.gen(function* () {
-        const host = yield* Host.make({ ...Press.setup, state: Press.state, mayHold: true });
+        const host = yield* Host.make({ ...Press.setup, state: Press.state, maySuspend: true });
         yield* Stepping.carryOut(host);
         const [clientEnd, hostEnd] = yield* Transport.memoryPair;
         yield* host.connect(hostEnd);
         const client = yield* Client.connect(clientEnd, { game: Press.game });
-        yield* client.hold;
+        yield* client.suspend;
         yield* pass(100);
-        const held = (yield* host.state).tick;
+        const suspended = (yield* host.state).tick;
         yield* pass(2000);
-        const stillHeld = (yield* host.state).tick;
+        const stillSuspended = (yield* host.state).tick;
         yield* Stepping.step(client);
         yield* pass(100);
         const stepped = (yield* host.state).tick;
-        yield* client.release;
+        yield* client.resume;
         yield* pass(2000);
 
-        expect(stillHeld).toBe(held);
-        expect(stepped).toBe(held + 1);
+        expect(stillSuspended).toBe(suspended);
+        expect(stepped).toBe(suspended + 1);
         expect((yield* host.state).tick).toBeGreaterThan(stepped);
       }),
   );

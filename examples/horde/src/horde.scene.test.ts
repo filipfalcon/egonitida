@@ -22,7 +22,7 @@ const shotDown = () => {
   return Story.story(
     Game.game,
     Story.given(state, { survivor, zombie }),
-    Story.input('survivor', Survivor.Stick, { x: 0, z: 0, aim: Math.PI / 2 }),
+    Story.demand('survivor', Survivor.Stick, { x: 0, z: 0, aim: Math.PI / 2 }),
     Story.step(),
     Story.act('survivor', Survivor.PulledTrigger, {}),
     Story.step(),

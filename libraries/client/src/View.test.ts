@@ -125,7 +125,7 @@ describe('View.on', () => {
 });
 
 describe('View.during', () => {
-  it.effect('holds what it acquires while a condition holds, and lets it go once it does not', () =>
+  it.effect('holds what it acquires while a condition is true, and lets it go once it is not', () =>
     Effect.gen(function* () {
       const events: Array<string> = [];
       const crowded = View.during(

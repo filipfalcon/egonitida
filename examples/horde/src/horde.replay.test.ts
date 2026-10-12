@@ -14,7 +14,7 @@ const PLAYING = 30_000;
 
 /** Twenty seconds of a survivor circling the arena, turning and firing as the horde comes, recorded. */
 const played = Effect.gen(function* () {
-  const host = yield* Host.make({ ...setup, state: Game.state, mayHold: false });
+  const host = yield* Host.make({ ...setup, state: Game.state, maySuspend: false });
   const recorder = yield* Recording.record(host, Game.game);
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);

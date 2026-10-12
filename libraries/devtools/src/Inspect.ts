@@ -5,7 +5,7 @@ import type * as Rewind from '#src/Rewind.ts';
 import * as Transcript from '#src/Transcript.ts';
 
 /**
- * A hosted game as an agent asks after it: what the game is made of, the state at any tick kept, how two ticks differ, what happened between them, and time itself, held, stepped, or played on from a past tick; and the game played, by players joined with no client, or any player, through input and actions the game reads. Every request and every answer is plain data, so it travels as JSON to whatever asks, such as an MCP server; nothing here knows how.
+ * A hosted game as an agent asks after it: what the game is made of, the state at any tick kept, how two ticks differ, what happened between them, and time itself, suspended, stepped, or played on from a past tick; and the game played, by players joined with no client, or any player, through demands and actions the game reads. Every request and every answer is plain data, so it travels as JSON to whatever asks, such as an MCP server; nothing here knows how.
  */
 
 const OptionalInt = Schema.OptionFromOptionalKey(Schema.Int);
@@ -24,17 +24,19 @@ export const Request = Schema.Union([
   }),
   /** How the state at `to` differs from the state at `from`, component by component. */
   Schema.TaggedStruct('Compare', { from: Schema.Int, to: Schema.Int }),
-  /** What happened after the state at `from`, up to the state at `to`, step by step, as text; with input if asked. */
+  /** What happened after the state at `from`, up to the state at `to`, step by step, as text; with the demands if asked. */
   Schema.TaggedStruct('Log', {
     from: Schema.Int,
     to: Schema.Int,
-    inputs: Schema.OptionFromOptionalKey(Schema.Boolean),
+    demands: Schema.OptionFromOptionalKey(Schema.Boolean),
   }),
-  Schema.TaggedStruct('Hold', {}),
-  Schema.TaggedStruct('Release', {}),
-  /** Takes `count` steps at once, as time held is stepped through. */
+  /** Suspends time: the host takes steps only when told to. */
+  Schema.TaggedStruct('Suspend', {}),
+  /** Resumes time. */
+  Schema.TaggedStruct('Resume', {}),
+  /** Takes `count` steps at once, as suspended time is stepped through. */
   Schema.TaggedStruct('Step', { count: Schema.Int }),
-  /** Shows the host's clients the state at a tick, while time is held. */
+  /** Shows the host's clients the state at a tick, while time is suspended. */
   Schema.TaggedStruct('Seek', { tick: Schema.Int }),
   /** Goes back to the state at a tick and plays on from it, the time after it gone. */
   Schema.TaggedStruct('PlayFrom', { tick: Schema.Int }),
@@ -51,8 +53,8 @@ export const Request = Schema.Union([
   Schema.TaggedStruct('Join', {}),
   /** Lets go of the player of an entity. */
   Schema.TaggedStruct('Leave', { entity: Schema.Int }),
-  /** Gives an entity input, by its input components' names, each value as it travels. */
-  Schema.TaggedStruct('Input', {
+  /** Gives an entity demands, by its demand components' names, each value as it travels. */
+  Schema.TaggedStruct('Demand', {
     entity: Schema.Int,
     values: Schema.Record(Schema.String, Schema.Unknown),
   }),
@@ -251,7 +253,7 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
             yield* rewind.setup,
             stretch.value.state,
             stretch.value.entries,
-            { inputs: Option.getOrElse(request.inputs, () => false) },
+            { demands: Option.getOrElse(request.demands, () => false) },
           ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
           return { text: Log.format(lines) };
         }
@@ -279,10 +281,10 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
             source: Transcript.source(lines.success, { title: request.title, game: request.game }),
           };
         }
-        case 'Hold':
-          return yield* host.hold;
-        case 'Release':
-          return yield* host.release;
+        case 'Suspend':
+          return yield* host.suspend;
+        case 'Resume':
+          return yield* host.resume;
         case 'Step':
           return yield* host.step(request.count);
         case 'Seek':
@@ -298,9 +300,9 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
           return { entity: yield* host.join };
         case 'Leave':
           return yield* host.leave(request.entity);
-        case 'Input':
+        case 'Demand':
           return yield* host
-            .input(
+            .demand(
               request.entity,
               Object.entries(request.values).map(([component, value]) => ({ component, value })),
             )

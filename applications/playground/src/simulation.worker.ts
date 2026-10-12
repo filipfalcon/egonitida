@@ -10,7 +10,7 @@ const options = {
   join: (state: State.State) => State.spawn(state, []),
   leave: State.despawn,
   state: Cubes.state,
-  mayHold: true,
+  maySuspend: true,
 };
 
 Effect.runFork(

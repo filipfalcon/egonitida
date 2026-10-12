@@ -10,9 +10,9 @@ import { Option, Schema } from 'effect';
 export type Entity = number;
 
 /**
- * Who may change a component: the rules, through events; the systems, every step; or the players, whose input the engine writes at the start of a step and nothing else may.
+ * Who may change a component: the rules, through actions and events; the systems, every step; or the players, whose demands the engine writes at the start of a step and nothing else may.
  */
-export type Owner = 'rules' | 'simulation' | 'input';
+export type Owner = 'rules' | 'simulation' | 'demand';
 
 /**
  * How a component travels: decided by the server and sent to every client; guessed by a client and confirmed by the server; kept on the client alone; or kept on the server alone, for what a client does not need, builds for itself, or must not see.

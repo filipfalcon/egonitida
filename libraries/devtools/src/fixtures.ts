@@ -29,7 +29,7 @@ export const Health = Component.make('Health', Schema.Struct({ current: Schema.I
 });
 
 export const Stick = Component.make('Stick', Schema.Struct({ move: Schema.Finite }), {
-  owner: 'input',
+  owner: 'demand',
   network: 'predicted',
 });
 
@@ -99,9 +99,9 @@ export const join = (state: State.State) =>
 
 export const setup = (played: Played = game) => ({ game: played, join, leave: State.despawn });
 
-/** Hosts `played`, until the scope closes; a host that lets clients hold time if `mayHold`, as a local server for one player does. */
-export const host = (played: Played = game, mayHold = false) =>
-  Host.make({ ...setup(played), state: State.empty({ seed: 7 }), mayHold });
+/** Hosts `played`, until the scope closes; a host that lets clients suspend time if `maySuspend`, as a local server for one player does. */
+export const host = (played: Played = game, maySuspend = false) =>
+  Host.make({ ...setup(played), state: State.empty({ seed: 7 }), maySuspend });
 
 /** Lets `millis` of test time pass a little at a time, giving every fiber its turn. */
 export const elapse = (millis: number) =>

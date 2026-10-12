@@ -123,7 +123,7 @@ export type Services = ManagedResource.ServiceOf<typeof PressSession>;
 
 // COMMANDS
 
-/** Asks the press's game for the state as it stands, which a host whose time is held sends no page until it steps. */
+/** Asks the press's game for the state as it stands, which a host whose time is suspended sends no page until it steps. */
 export const ShowState = Command.define('ShowState', {
   messages: [Message.ShowedState, Message.FailedShowState],
   execute: PressSession.get.pipe(

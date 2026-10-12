@@ -10,7 +10,7 @@ import type * as Drawing from '#src/Drawing.ts';
  * | --- | --- |
  * | An entity is in the drawing | `each`: builds its objects when the entity comes, draws them every frame, and lets them go when it leaves |
  * | An entity just gained a component, or holds another value of it | `on`: a one-off output that is not part of the state, such as a sound |
- * | A condition holds | `during`: a resource held while it holds, such as music or pointer lock |
+ * | A condition is true | `during`: a resource held while `when` is true, such as music or pointer lock |
  * | The player looks at the game | `rig`: the camera, drawn for the player after every other view, from what they drew |
  *
  * Whatever a view acquires is released through a `Scope`, never by hand. What a view draws is a function of the frame: it keeps nothing between frames, and what it must remember is a local component instead.
@@ -44,7 +44,7 @@ export interface On<R> {
 
 export interface During<R> {
   readonly _tag: 'During';
-  readonly holds: (frame: Drawing.Frame) => boolean;
+  readonly when: (frame: Drawing.Frame) => boolean;
   readonly acquire: Effect.Effect<unknown, never, R | Scope.Scope>;
 }
 
@@ -132,11 +132,11 @@ export const on = <Value, R = never>(
     }),
 });
 
-/** A view that holds what `acquire` acquires for as long as `holds` says so of the frame drawn. */
+/** A view that holds what `acquire` acquires for as long as `when` is true of the frame drawn: a resource held while `when` is true. */
 export const during = <R = never>(
-  holds: (frame: Drawing.Frame) => boolean,
+  when: (frame: Drawing.Frame) => boolean,
   acquire: Effect.Effect<unknown, never, R | Scope.Scope>,
-): View<R> => ({ _tag: 'During', holds, acquire });
+): View<R> => ({ _tag: 'During', when, acquire });
 
 /**
  * The camera, drawn for the player whose entity holds all of `components`: after every other view has drawn the frame, so `drawn` gives what they drew this frame, such as the body whose eyes it looks out of. Rigs draw one after another in the order they are given, so one can move the camera on from where another put it, as a shake does. `draw` changes only the camera, in place, and allocates nothing; what it must remember, such as where the player looks or how far behind the camera trails, is a local component.
@@ -211,7 +211,7 @@ export const make = <R = never>(
       { readonly view: Each<R, Three.Object3D>; readonly entity: State.Entity }
     >();
     const raycaster = new Three.Raycaster();
-    // The scope each `during` view holds open, while its condition holds.
+    // The scope each `during` view holds open, while its condition is true.
     const held = new Map<During<R>, Scope.Closeable>();
 
     const letGo = (keeping: Kept) =>
@@ -266,12 +266,12 @@ export const make = <R = never>(
     const hold = (view: During<R>, frame: Drawing.Frame) =>
       Effect.gen(function* () {
         const open = held.get(view);
-        const holds = view.holds(frame);
-        if (holds && open === undefined) {
+        const wanted = view.when(frame);
+        if (wanted && open === undefined) {
           const own = yield* Scope.fork(scope);
           yield* view.acquire.pipe(Scope.provide(own));
           held.set(view, own);
-        } else if (!holds && open !== undefined) {
+        } else if (!wanted && open !== undefined) {
           held.delete(view);
           yield* Scope.close(open, Exit.void);
         }

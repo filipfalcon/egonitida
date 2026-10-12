@@ -42,9 +42,9 @@ export interface Options<Services = never> extends Setup<Services> {
   /** Freezes every state the host steps to, so a system or rule that changes a value in place throws at once; for development, since it walks the whole state every step. */
   readonly freeze?: boolean;
   /**
-   * Whether a client may hold time, and send controls: a local server for one player grants it, a room shared with others refuses. Holding time is the host's to allow, never the game's.
+   * Whether a client may suspend time, and send controls: a local server for one player grants it, a room shared with others refuses. Suspending time is the host's to allow, never the game's.
    */
-  readonly mayHold: boolean;
+  readonly maySuspend: boolean;
 }
 
 /** What replaced a host's state: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a state it was given or taking up another game, or a step taken, with its input. */
@@ -85,9 +85,9 @@ export interface Host<Services = never> {
     connection: Transport.Connection,
   ) => Effect.Effect<State.Entity, never, Scope.Scope>;
   readonly state: Effect.Effect<State.State>;
-  /** The controls clients send, such as a development tool's, from now on, as they come; a host that lets no client hold time passes on none. */
+  /** The controls clients send, such as a development tool's, from now on, as they come; a host that lets no client suspend time passes on none. */
   readonly controls: Stream.Stream<Control>;
-  /** Answers the questions clients ask, such as a debugger's, by `answer`, until the scope closes, as from the player of the entity that asked; what it fails with is the reason a question goes unanswered. A host that lets no client hold time answers none. */
+  /** Answers the questions clients ask, such as a debugger's, by `answer`, until the scope closes, as from the player of the entity that asked; what it fails with is the reason a question goes unanswered. A host that lets no client suspend time answers none. */
   readonly answering: (
     answer: (question: unknown, entity: State.Entity) => Effect.Effect<unknown, string>,
   ) => Effect.Effect<void, never, Scope.Scope>;
@@ -95,20 +95,20 @@ export interface Host<Services = never> {
   readonly join: Effect.Effect<State.Entity>;
   /** Lets go of the player of `entity`, by the game's own `leave`, whoever joined it. */
   readonly leave: (entity: State.Entity) => Effect.Effect<void>;
-  /** Takes input for `entity` from beside the host, such as from an agent playing it, each value read by its component's schema as it travels: it reaches the next step after what the entity's client sent, so it is what the step takes. */
-  readonly input: (
+  /** Takes demands on `entity` from beside the host, such as from an agent playing it, each value read by its component's schema as it travels: they reach the next step after what the entity's client sent, so they are what the step takes. */
+  readonly demand: (
     entity: State.Entity,
     values: ReadonlyArray<{ readonly component: string; readonly value: unknown }>,
   ) => Effect.Effect<void, Unreadable>;
   /** Takes an action as from the player of `entity`, from beside the host, read by the game's actions as one from a client is. */
   readonly act: (entity: State.Entity, action: unknown) => Effect.Effect<void, Unreadable>;
-  /** Holds time for whatever runs beside the host, such as a development tool, as a client may hold it for itself. */
-  readonly hold: Effect.Effect<void>;
-  /** Lets go of time held beside the host; it runs on once no client holds it either. */
-  readonly release: Effect.Effect<void>;
-  /** Takes `count` steps at once, beside those real time owes, and shows them to every client: how time held is stepped through. */
+  /** Suspends time for whatever runs beside the host, such as a development tool, as a client may suspend it for itself: the host takes steps only on `step`. */
+  readonly suspend: Effect.Effect<void>;
+  /** Resumes time suspended beside the host; it runs on once no client suspends it either. */
+  readonly resume: Effect.Effect<void>;
+  /** Takes `count` steps at once, beside those real time owes, and shows them to every client: how suspended time is stepped through. */
   readonly step: (count: number) => Effect.Effect<void>;
-  /** Shows every client `state` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
+  /** Shows every client `state` in place of the one the host holds, such as a past one while time is suspended, and keeps its own: a step taken after shows them its own again. */
   readonly show: (state: State.State) => Effect.Effect<void>;
   /** Plays `setup` from now on, such as a new build of the game, from the state the host holds, read by the new game; refuses one that cannot read it, and plays on as it was. */
   reload(setup: Setup<Services>): Effect.Effect<void, Unreadable>;
@@ -126,7 +126,7 @@ export const make = <Services = never>(
     const demandsOf = (game: Setup<Services>['game']) =>
       new Map(
         game.components
-          .filter((component): component is Demand.DemandComponent => component.owner === 'input')
+          .filter((component): component is Demand.DemandComponent => component.owner === 'demand')
           .map((component) => [component.name, component]),
       );
     const hosted = {
@@ -146,13 +146,13 @@ export const make = <Services = never>(
         maxSteps: options.maxCatchUpSteps ?? 5,
       }),
       done: 0,
-      /** The clients holding time now; time stands while there is any. */
-      holders: new Set<State.Entity>(),
-      /** Whether whatever runs beside the host, such as a development tool, holds time. */
-      heldBeside: false,
+      /** The clients suspending time now; time stands while there is any. */
+      suspending: new Set<State.Entity>(),
+      /** Whether whatever runs beside the host, such as a development tool, suspends time. */
+      suspendedBeside: false,
       /** The actions waiting for the next step, the players' and the commands' results, in the order they arrived. */
       acted: new Array<Input.Action>(),
-      heldSince: Option.none<number>(),
+      suspendedSince: Option.none<number>(),
       /** Counts every time the host showed its clients another state than the one it stepped to, so they take it even if it is older. */
       era: 0,
     };
@@ -167,25 +167,25 @@ export const make = <Services = never>(
     };
     /** The answer to `question`, asked by the player of `entity`, or why there is none. */
     const answerOf = (question: unknown, entity: State.Entity) =>
-      !options.mayHold
+      !options.maySuspend
         ? Effect.fail('This host answers no client’s questions.')
         : Option.match(answers.answer, {
             onNone: () => Effect.fail('Nothing beside the host answers questions.'),
             onSome: (answer) => answer(question, entity),
           });
-    // Open while time runs; the loop waits here while it is held.
+    // Open while time runs; the loop waits here while it is suspended.
     const running = yield* Latch.make(true);
 
-    /** Stops or lets go of time to match whether anyone holds it; on letting go, the time held is never owed. */
-    const settleHold = Effect.gen(function* () {
+    /** Suspends or resumes time to match whether anyone suspends it; on resuming, the time suspended is never owed. */
+    const settleSuspended = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const held = hosted.heldBeside || hosted.holders.size > 0;
-      if (held && Option.isNone(hosted.heldSince)) {
-        hosted.heldSince = Option.some(now);
+      const suspended = hosted.suspendedBeside || hosted.suspending.size > 0;
+      if (suspended && Option.isNone(hosted.suspendedSince)) {
+        hosted.suspendedSince = Option.some(now);
         yield* Latch.close(running);
-      } else if (!held && Option.isSome(hosted.heldSince)) {
-        hosted.pace = Pace.resume(hosted.pace, now - hosted.heldSince.value);
-        hosted.heldSince = Option.none();
+      } else if (!suspended && Option.isSome(hosted.suspendedSince)) {
+        hosted.pace = Pace.resume(hosted.pace, now - hosted.suspendedSince.value);
+        hosted.suspendedSince = Option.none();
         yield* Latch.open(running);
       }
     });
@@ -247,7 +247,7 @@ export const make = <Services = never>(
 
     // Every step real time owes: the waiting input goes into the first, the rest only move time on.
     const takeDueSteps = Effect.gen(function* () {
-      if (Option.isSome(hosted.heldSince)) {
+      if (Option.isSome(hosted.suspendedSince)) {
         return;
       }
       const { steps, pace } = Pace.due(hosted.pace, hosted.done, yield* Clock.currentTimeMillis);
@@ -269,7 +269,7 @@ export const make = <Services = never>(
       yield* takeDueSteps;
     }).pipe(Effect.forever, Effect.forkScoped);
 
-    /** Holds or lets go of time for a client, if the host allows holding at all, and answers its questions in `scope`, apart from its frames, so a slow answer holds nothing up. */
+    /** Takes a client's actions, suspends or resumes time for it, if the host allows suspending at all, and answers its questions in `scope`, apart from its frames, so a slow answer holds nothing up. */
     const receiveReliable = (
       entity: State.Entity,
       frame: Transport.Frame,
@@ -313,28 +313,28 @@ export const make = <Services = never>(
                 Effect.asVoid,
               );
             }
-            if (!options.mayHold) {
+            if (!options.maySuspend) {
               return Effect.void;
             }
             if (message._tag === 'Control') {
               return PubSub.publish(controlled, { entity, payload: message.payload });
             }
-            if (message._tag === 'Hold') {
-              hosted.holders.add(entity);
+            if (message._tag === 'Suspend') {
+              hosted.suspending.add(entity);
             } else {
-              hosted.holders.delete(entity);
+              hosted.suspending.delete(entity);
             }
-            return settleHold;
+            return settleSuspended;
           }),
       });
 
-    /** Keeps a client's newest input, decoded by the schemas of input components only. */
+    /** Keeps a client's newest demands, decoded by the schemas of demand components only. */
     const receive = (entity: State.Entity, frame: Transport.Frame) => {
-      Option.map(Protocol.decodeInputs(frame.payload), ({ inputs }) => {
+      Option.map(Protocol.decodeDemands(frame.payload), ({ demands }) => {
         const last = hosted.lastSeq.get(entity) ?? 0;
-        const newest = inputs.reduce<Protocol.Inputs['inputs'][number] | undefined>(
-          (found, input) =>
-            input.seq > last && (found === undefined || input.seq > found.seq) ? input : found,
+        const newest = demands.reduce<Protocol.Demands['demands'][number] | undefined>(
+          (found, sent) =>
+            sent.seq > last && (found === undefined || sent.seq > found.seq) ? sent : found,
           undefined,
         );
         if (newest === undefined) {
@@ -367,11 +367,11 @@ export const make = <Services = never>(
             hosted.connections.delete(connection);
             hosted.pending.delete(entity);
             hosted.lastSeq.delete(entity);
-            hosted.holders.delete(entity);
+            hosted.suspending.delete(entity);
             hosted.state = hosted.setup.leave(hosted.state, entity);
             PubSub.publishUnsafe(happened, { _tag: 'Left', entity });
-            // A client that leaves lets go of time it was holding.
-            return settleHold;
+            // A client that leaves resumes time it was suspending.
+            return settleSuspended;
           }),
         );
         yield* connection.send({
@@ -416,13 +416,13 @@ export const make = <Services = never>(
           hosted.state = hosted.setup.leave(hosted.state, entity);
           PubSub.publishUnsafe(happened, { _tag: 'Left', entity });
         }),
-      input: (entity, values) =>
+      demand: (entity, values) =>
         Effect.gen(function* () {
-          const inputs = yield* Effect.forEach(values, ({ component: name, value }) =>
+          const demands = yield* Effect.forEach(values, ({ component: name, value }) =>
             Effect.gen(function* () {
               const component = hosted.demandComponents.get(name);
               if (component === undefined) {
-                return yield* new Unreadable({ reason: `${name} is no input of the game` });
+                return yield* new Unreadable({ reason: `${name} is no demand of the game` });
               }
               const decoded = yield* Schema.decodeUnknownEffect(
                 Schema.toCodecJson(component.schema),
@@ -432,7 +432,7 @@ export const make = <Services = never>(
               return Demand.of(entity, component, decoded);
             }),
           );
-          hosted.pendingBeside.set(entity, inputs);
+          hosted.pendingBeside.set(entity, demands);
         }),
       act: (entity, action) =>
         Effect.suspend(() => {
@@ -453,13 +453,13 @@ export const make = <Services = never>(
             }),
           );
         }),
-      hold: Effect.suspend(() => {
-        hosted.heldBeside = true;
-        return settleHold;
+      suspend: Effect.suspend(() => {
+        hosted.suspendedBeside = true;
+        return settleSuspended;
       }),
-      release: Effect.suspend(() => {
-        hosted.heldBeside = false;
-        return settleHold;
+      resume: Effect.suspend(() => {
+        hosted.suspendedBeside = false;
+        return settleSuspended;
       }),
       step: (count) =>
         Effect.andThen(

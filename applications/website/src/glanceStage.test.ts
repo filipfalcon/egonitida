@@ -3,10 +3,10 @@ import { Option } from 'effect';
 import { Story } from 'foldkit';
 import {
   ChooseBeat,
-  HoldTime,
+  SuspendTime,
   Message,
   type Model,
-  ReleaseTime,
+  ResumeTime,
   initialModel,
   isWaiting,
   conceptsOf,
@@ -103,14 +103,14 @@ describe('the stage at a glance', () => {
       update,
       Story.given(shown),
       Story.message(Message.PressedStop()),
-      Story.Command.expectExact(HoldTime),
-      Story.Command.resolve(HoldTime, Message.ControlledGame()),
+      Story.Command.expectExact(SuspendTime),
+      Story.Command.resolve(SuspendTime, Message.ControlledGame()),
       Story.model((model) => {
-        expect(model.time).toBe('Held');
+        expect(model.time).toBe('Suspended');
       }),
       Story.message(Message.PressedStart()),
-      Story.Command.expectExact(ReleaseTime),
-      Story.Command.resolve(ReleaseTime, Message.ControlledGame()),
+      Story.Command.expectExact(ResumeTime),
+      Story.Command.resolve(ResumeTime, Message.ControlledGame()),
       Story.model((model) => {
         expect(model.time).toBe('Running');
       }),
@@ -122,13 +122,13 @@ describe('the stage at a glance', () => {
       update,
       Story.given(shown),
       Story.message(Message.PressedNext()),
-      Story.Command.expectExact(ChooseBeat({ choice: 'Next', isHeld: false })),
+      Story.Command.expectExact(ChooseBeat({ choice: 'Next', isSuspended: false })),
       Story.Command.resolve(ChooseBeat, Message.ControlledGame()),
       Story.message(Message.PressedStop()),
-      Story.Command.expectExact(HoldTime),
-      Story.Command.resolve(HoldTime, Message.ControlledGame()),
+      Story.Command.expectExact(SuspendTime),
+      Story.Command.resolve(SuspendTime, Message.ControlledGame()),
       Story.message(Message.PressedBack()),
-      Story.Command.expectExact(ChooseBeat({ choice: 'Back', isHeld: true })),
+      Story.Command.expectExact(ChooseBeat({ choice: 'Back', isSuspended: true })),
       Story.Command.resolve(ChooseBeat, Message.ControlledGame()),
     );
   });
@@ -150,7 +150,7 @@ describe('the stage at a glance', () => {
       update,
       Story.given({ ...shown, maybeMoment: Option.some('Waiting') }),
       Story.message(Message.PressedPlay()),
-      Story.Command.expectExact(ChooseBeat({ choice: 'Start', isHeld: false })),
+      Story.Command.expectExact(ChooseBeat({ choice: 'Start', isSuspended: false })),
       Story.Command.resolve(ChooseBeat, Message.ControlledGame()),
     );
   });

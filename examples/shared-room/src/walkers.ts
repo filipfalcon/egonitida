@@ -20,7 +20,7 @@ const STEP_RATE = 30;
 export const Steering = Component.make(
   'Steering',
   Schema.Struct({ x: Schema.Finite, z: Schema.Finite }),
-  { owner: 'input', network: 'predicted' },
+  { owner: 'demand', network: 'predicted' },
 );
 
 /** Where a walker stands on the floor. */

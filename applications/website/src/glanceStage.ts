@@ -37,7 +37,7 @@ export const Model = Schema.Struct({
   stage: StageState,
   maybeMoment: Schema.Option(Glance.Moment),
   maybeTick: Schema.Option(Schema.Int),
-  time: Schema.Literals(['Running', 'Held']),
+  time: Schema.Literals(['Running', 'Suspended']),
 });
 export type Model = typeof Model.Type;
 
@@ -90,30 +90,30 @@ const notJoined = ({ resource }: { readonly resource: string }) =>
   Effect.succeed(Message.FailedControlGame({ reason: `The session ${resource} is not joined.` }));
 
 /** Stops the game's time for the viewer. */
-export const HoldTime = Command.define('HoldTime', {
+export const SuspendTime = Command.define('SuspendTime', {
   messages: [Message.ControlledGame, Message.FailedControlGame],
   execute: GlanceSession.get.pipe(
-    Effect.flatMap(({ client }) => client.hold),
+    Effect.flatMap(({ client }) => client.suspend),
     Effect.as(Message.ControlledGame()),
     Effect.catch(notJoined),
   ),
 });
 
 /** Lets the game's time run again. */
-export const ReleaseTime = Command.define('ReleaseTime', {
+export const ResumeTime = Command.define('ResumeTime', {
   messages: [Message.ControlledGame, Message.FailedControlGame],
   execute: GlanceSession.get.pipe(
-    Effect.flatMap(({ client }) => client.release),
+    Effect.flatMap(({ client }) => client.resume),
     Effect.as(Message.ControlledGame()),
     Effect.catch(notJoined),
   ),
 });
 
-/** Starts the telling, or chooses the beat before or after, as the viewer; while the game's time is held, it takes one step, so the game takes the choice in. */
+/** Starts the telling, or chooses the beat before or after, as the viewer; while the game's time is suspended, it takes one step, so the game takes the choice in. */
 export const ChooseBeat = Command.define('ChooseBeat', {
-  args: { choice: Schema.Literals(['Start', 'Back', 'Next']), isHeld: Schema.Boolean },
+  args: { choice: Schema.Literals(['Start', 'Back', 'Next']), isSuspended: Schema.Boolean },
   messages: [Message.ControlledGame, Message.FailedControlGame],
-  execute: ({ choice, isHeld }) =>
+  execute: ({ choice, isSuspended }) =>
     GlanceSession.get.pipe(
       Effect.flatMap(({ client }) =>
         Effect.andThen(
@@ -123,7 +123,7 @@ export const ChooseBeat = Command.define('ChooseBeat', {
             Match.when('Next', () => client.act(Glance.ChoseNext, {})),
             Match.exhaustive,
           ),
-          isHeld ? Stepping.step(client) : Effect.void,
+          isSuspended ? Stepping.step(client) : Effect.void,
         ),
       ),
       Effect.as(Message.ControlledGame()),
@@ -212,25 +212,37 @@ export const update = (model: Model, message: Message): Return =>
     // The controls act on the game only once it is joined.
     PressedPlay: () =>
       isJoined(model)
-        ? { model, commands: [ChooseBeat({ choice: 'Start', isHeld: model.time === 'Held' })] }
+        ? {
+            model,
+            commands: [ChooseBeat({ choice: 'Start', isSuspended: model.time === 'Suspended' })],
+          }
         : { model },
     PressedBack: () =>
       isJoined(model)
-        ? { model, commands: [ChooseBeat({ choice: 'Back', isHeld: model.time === 'Held' })] }
+        ? {
+            model,
+            commands: [ChooseBeat({ choice: 'Back', isSuspended: model.time === 'Suspended' })],
+          }
         : { model },
     PressedNext: () =>
       isJoined(model)
-        ? { model, commands: [ChooseBeat({ choice: 'Next', isHeld: model.time === 'Held' })] }
+        ? {
+            model,
+            commands: [ChooseBeat({ choice: 'Next', isSuspended: model.time === 'Suspended' })],
+          }
         : { model },
     PressedStop: () =>
       isJoined(model)
-        ? { model: modifyFields(model, { time: () => 'Held' as const }), commands: [HoldTime()] }
+        ? {
+            model: modifyFields(model, { time: () => 'Suspended' as const }),
+            commands: [SuspendTime()],
+          }
         : { model },
     PressedStart: () =>
       isJoined(model)
         ? {
             model: modifyFields(model, { time: () => 'Running' as const }),
-            commands: [ReleaseTime()],
+            commands: [ResumeTime()],
           }
         : { model },
     ControlledGame: () => ({ model }),

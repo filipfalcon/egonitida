@@ -14,7 +14,7 @@ export const SPEED = 4;
 
 // COMPONENTS
 
-/** What the player holds: which way to walk, as a direction on the floor no longer than one, and which way to aim, in radians from x towards z. */
+/** What the player demands: which way to walk, as a direction on the floor no longer than one, and which way to aim, in radians from x towards z. */
 export const Stick = Component.make(
   'Stick',
   Schema.Struct({
@@ -22,7 +22,7 @@ export const Stick = Component.make(
     z: Schema.Finite,
     aim: Schema.Finite.annotate({ interpolate: 'angle' }),
   }),
-  { owner: 'input', network: 'predicted' },
+  { owner: 'demand', network: 'predicted' },
 );
 
 /** Whether a survivor lives: alive, with the health left and the tick they last rose at, or dead since a tick. */

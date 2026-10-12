@@ -49,7 +49,7 @@ export interface Taken {
 const taking = (setup: Setup, options: { readonly trace: boolean }) => {
   const demands = new Map(
     setup.game.components
-      .filter((component): component is Demand.DemandComponent => component.owner === 'input')
+      .filter((component): component is Demand.DemandComponent => component.owner === 'demand')
       .map((component) => [
         component.name,
         (entity: State.Entity, value: unknown) =>

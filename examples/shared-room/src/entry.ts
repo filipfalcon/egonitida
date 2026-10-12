@@ -75,7 +75,7 @@ const main = Effect.gen(function* () {
             { ...Devices.idle, ...keyboardAndMouse.read() },
             steered.last,
           );
-          prediction.hold([Walkers.Steering.of(steered.last.steering)]);
+          prediction.demand([Walkers.Steering.of(steered.last.steering)]);
           return views.frame(prediction.frame(frame, seconds));
         }),
     }),

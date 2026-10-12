@@ -234,7 +234,7 @@ export const OpenPlay = Command.define('OpenPlay', {
   ),
 });
 
-/** Holds the time of the document playing and shows it, the canvas too, as it was after `tick`, with the state then. */
+/** Suspends the time of the document playing and shows it, the canvas too, as it was after `tick`, with the state then. */
 export const ShowPast = Command.define('ShowPast', {
   args: { tick: Schema.Int },
   messages: [Message.ShowedPast, Message.FailedDebug],
@@ -243,7 +243,7 @@ export const ShowPast = Command.define('ShowPast', {
       Effect.flatMap(({ client }) =>
         Effect.gen(function* () {
           const rewind = Rewind.controls(client);
-          yield* rewind.pause;
+          yield* rewind.suspend;
           yield* rewind.seek(tick);
           return yield* Inspect.ask(client, { _tag: 'State', tick });
         }),

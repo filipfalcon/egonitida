@@ -22,7 +22,7 @@ describe('a survivor', () => {
     Story.story(
       Horde.game,
       standing,
-      Story.input('survivor', Survivor.Stick, { x: 1, z: 1, aim: 0 }),
+      Story.demand('survivor', Survivor.Stick, { x: 1, z: 1, aim: 0 }),
       Story.seconds(1),
       Story.expect('survivor', Body.Position, ({ x, z }) => {
         expect(Math.hypot(x, z)).toBeCloseTo(Survivor.SPEED);
@@ -35,7 +35,7 @@ describe('a survivor', () => {
     Story.story(
       Horde.game,
       standing,
-      Story.input('survivor', Survivor.Stick, { x: 1, z: 0, aim: 0 }),
+      Story.demand('survivor', Survivor.Stick, { x: 1, z: 0, aim: 0 }),
       Story.seconds(10),
       Story.expect('survivor', Body.Position, ({ x }) => expect(x).toBeCloseTo(Body.ARENA_RADIUS)),
     );
@@ -68,7 +68,7 @@ describe('a survivor', () => {
       Horde.game,
       hurt,
       Story.happen(Survivor.Bitten, { survivor, damage: 10 }),
-      Story.input('survivor', Survivor.Stick, { x: 1, z: 0, aim: 0 }),
+      Story.demand('survivor', Survivor.Stick, { x: 1, z: 0, aim: 0 }),
       Story.seconds(1),
       Story.expectEqual('survivor', Body.Position, { x: 0, z: 0 }),
     );

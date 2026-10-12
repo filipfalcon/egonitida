@@ -5,7 +5,7 @@ import { encoderOf } from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';
 
 /**
- * What happened in a recording, step by step, for people and agents: who joined and left, the actions each step took, and what each system and rule did in it, and for what. Input is left out unless asked for, since it reaches nearly every step and says little on its own. It is told from a replay of the recording, which is how everything but the recording follows from it.
+ * What happened in a recording, step by step, for people and agents: who joined and left, the actions each step took, and what each system and rule did in it, and for what. The demands are left out unless asked for, since they reach nearly every step and say little on their own. It is told from a replay of the recording, which is how everything but the recording follows from it.
  */
 
 /** What a part did in a step: the values it set, by component, the entities it spawned and despawned, the events it emitted and the commands it issued, all as they encode; and the event or action a rule ran for. */
@@ -27,8 +27,8 @@ export type Line =
   | {
       readonly _tag: 'Stepped';
       readonly tick: number;
-      /** The input that reached the step, if asked for. */
-      readonly inputs: Option.Option<ReadonlyArray<Recording.Demand>>;
+      /** The demands that reached the step, if asked for. */
+      readonly demands: Option.Option<ReadonlyArray<Recording.Demand>>;
       readonly actions: ReadonlyArray<unknown>;
       readonly parts: ReadonlyArray<PartLine>;
     }
@@ -47,12 +47,12 @@ export const nameOf = (part: Game.Part): string => {
   });
 };
 
-/** The log of `entries`, replayed with `setup` from `state`; with the input of every step if `inputs` is asked for. */
+/** The log of `entries`, replayed with `setup` from `state`; with the demands of every step if `demands` is asked for. */
 export const from = (
   setup: Replay.Setup,
   state: State.State,
   entries: ReadonlyArray<Recording.Entry>,
-  options: { readonly inputs?: boolean } = {},
+  options: { readonly demands?: boolean } = {},
 ): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
   Effect.gen(function* () {
     const encode = encoderOf(setup.game);
@@ -68,7 +68,7 @@ export const from = (
       return {
         _tag: 'Stepped',
         tick: entry.tick,
-        inputs: options.inputs === true ? Option.some(entry.input.demands) : Option.none(),
+        demands: options.demands === true ? Option.some(entry.input.demands) : Option.none(),
         actions: entry.input.actions,
         parts: trace.map((done) => ({
           part: nameOf(done.part),
@@ -93,11 +93,11 @@ export const from = (
     });
   });
 
-/** The log of `recording`, replayed with `setup`; with the input of every step if `inputs` is asked for. */
+/** The log of `recording`, replayed with `setup`; with the demands of every step if `demands` is asked for. */
 export const of = (
   setup: Replay.Setup,
   recording: Recording.Recording,
-  options: { readonly inputs?: boolean } = {},
+  options: { readonly demands?: boolean } = {},
 ): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
   Effect.flatMap(Replay.first(setup.game, recording.first), (state) =>
     from(setup, state, recording.entries, options),
@@ -156,9 +156,9 @@ const lineText = (line: Line): string => {
     case 'Stepped':
       return [
         `tick ${line.tick}`,
-        ...Option.getOrElse(line.inputs, () => []).map(
+        ...Option.getOrElse(line.demands, () => []).map(
           ({ entity, component, value }) =>
-            `  input ${component} of ${entity} ${JSON.stringify(value)}`,
+            `  demand ${component} of ${entity} ${JSON.stringify(value)}`,
         ),
         ...line.actions.map((action) => `  action ${told(action)}`),
         ...line.parts.flatMap(partText),

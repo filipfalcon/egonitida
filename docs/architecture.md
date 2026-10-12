@@ -17,8 +17,8 @@ Seven principles shape every API. Each builds on the ones before it.
 - Every component has exactly one owner, declared in its schema:
   - **Rules** own the facts the game's rules decide, such as health, ammunition, or an open door. Only rules change them, when an action or an event happens.
   - **Simulation** owns what changes every step, such as positions. Only systems change them.
-  - **Input** owns what players control, such as a stick or a trigger. The engine writes it at the start of a step, and nothing else may.
-- A game declares everything its state is made of: its components, actions, and events. One schema of the whole state, its components with its tick, randomness, and next entity, follows from the game, and snapshots, saves, recordings, and the debugger all use it.
+  - **Demand** owns what players demand, what they are doing with their controls, such as a stick held to the left or a trigger held halfway. The engine writes it at the start of a step, and nothing else may.
+- A game declares everything its state is made of: its components, actions, events, and commands with their results. One schema of the whole state, its components with its tick, randomness, and next entity, follows from the game, and snapshots, saves, recordings, and the debugger all use it.
 - A system declares what it reads, what it writes, and what it emits. Writing what it does not own is a compile error, not a runtime bug. Everything is readable by everyone, so nothing is ever copied and kept in sync.
 - What the client alone keeps, such as a ragdoll, blood, or casings, lives in its state as local components, changed by local systems: the same kind of system, run only on the client after each step, which reads everything but writes and spawns only local components, and draws from its own randomness. A snapshot never replaces local components and a prediction's rewind never takes them back, so they only move forward. A client steps them through every tick the server's state reaches, a lost snapshot included. What they spawn takes ids counting down from -1, which never meet the server's, and what they draw comes of the tick and the state's randomness there, the same on every client; what a client keeps on an entity of the server's goes when the server's state no longer holds it.
 - Events a system emits are applied by the rules at a defined point in the step, so the next step already sees their result. Nothing waits on an asynchronous queue.
@@ -29,22 +29,22 @@ Seven principles shape every API. Each builds on the ones before it.
 ### 2. Network: an authoritative server, from the start
 
 - The engine is built for multiplayer and for games split across many servers, as much as for singleplayer.
-- A server is a Cloudflare Durable Object: one object is one game, room, or zone. It steps the game and sends clients its state. A client predicts its own player so input takes effect at once, corrects itself when the server disagrees, and interpolates everything else between the states the server sent.
+- A server is a Cloudflare Durable Object: one object is one game, room, or zone. It steps the game and sends clients its state. A client predicts its own player so what the player does takes effect at once, corrects itself when the server disagrees, and interpolates everything else between the states the server sent.
 - Every field declares its network role next to its owner:
   - **Server**: decided by the server and sent to every client.
   - **Predicted**: guessed by the client, confirmed by the server.
   - **Local**: kept on the client only and never sent, such as blood, casings, or a ragdoll after death. Most of what is expensive in Border is local.
   - **Private**: kept on the server only and never sent: what clients do not need, such as the size of a body; what each builds for itself, such as a level's walls; and, with several players, what a player must not see.
-- The engine always has the client–server shape. Singleplayer is the same code with the server running in a Web Worker in the browser, the way Minecraft runs an integrated server; switching to multiplayer is configuration. The price is that a singleplayer game also sends its input as commands and marks what is local.
+- The engine always has the client–server shape. Singleplayer is the same code with the server running in a Web Worker in the browser, the way Minecraft runs an integrated server; switching to multiplayer is configuration. The price is that a singleplayer game also sends its demands and actions to a host and marks what is local.
 - There is no single player in the API, only the set of players.
-- Whether time may stop is the host's policy, not the game's: a local server grants a player's pause, a shared room refuses it. Switching a game to multiplayer turns its pause into a menu that does not stop anything, and the game has to live with that.
+- Whether time may be suspended is the host's policy, not the game's: a local server lets its player suspend it, a shared room refuses. Switching a game to multiplayer turns its pause into a menu that does not stop anything, and the game has to live with that.
 - Schemas double as the wire format, and change detection decides what is sent.
 
 ### 3. Time: a fixed step, smooth drawing
 
 - The simulation moves on in fixed steps, each one `secondsPerStep` long. The step rate is a setting of each game, given to `Game.make` and never defaulted by the engine, fixed for the game's lifetime, because tuning and recordings depend on it. Border steps at 60 Hz. A system that needs finer steps, such as a ragdoll, subdivides its own.
 - The step rate is one number everywhere: the server, a client predicting, and a replay all take the same steps, or prediction would not match. How often snapshots are sent is a separate, lower number when bandwidth calls for it, such as 20 or 30 Hz; clients interpolate between them.
-- Input is read once a step, so a step's length bounds how fast movement responds. Looking around is the client's alone, every frame, outside the simulation; the simulation only receives where the player looks as part of its input.
+- Demands are read once a step, so a step's length bounds how fast movement responds. Looking around is the client's alone, every frame, outside the simulation; the simulation only receives where the player looks as one of their demands.
 - A displayed frame reads input, runs as many fixed steps as real time calls for (each step: systems, then events, then rules), interpolates between the last two steps, and draws. The number of steps per frame is capped, so a slow machine slows the game briefly instead of falling ever further behind.
 - A game has one time, and it only moves forward, step by step, at the game's rate. Nothing inside the game scales it or stops it; only the host can hold it, by its policy.
 - Presentation never changes how the game runs, in singleplayer or multiplayer alike, because a game can always be switched between the two. A client keeps a timeline of recent states, which serves three things:
@@ -58,7 +58,7 @@ Seven principles shape every API. Each builds on the ones before it.
 ### 4. Determinism: the whole state replays
 
 - Determinism is a cornerstone of the engine. With the same build and the same inputs, the server's game steps to exactly the same states.
-- One mechanism serves three purposes: the client's prediction rewinds to the server's state and replays the inputs not yet confirmed; the debugger rewinds the whole game, not only the rules; and games can build replays, spectating, and death cameras on real recordings. A recording also makes a test.
+- One mechanism serves three purposes: the client's prediction rewinds to the server's state and replays the demands not yet confirmed; the debugger rewinds the whole game, not only the rules; and games can build replays, spectating, and death cameras on real recordings. A recording also makes a test.
 - Systems take randomness only from the engine's `Random` resource and time only from its `Time` resource; `Math.random` and `Date.now` are lint errors there. Asynchronous results enter as recorded actions.
 - In development the engine replays alongside the running game and compares the fingerprints of its states, reporting the first step and component where the two diverge.
 - Cosmetics are deterministic too: an event carries a seed, so every client generates the same blood from it without anything more being sent.
@@ -66,7 +66,7 @@ Seven principles shape every API. Each builds on the ones before it.
 
 ### 5. Boundaries: everything is a domain
 
-- The engine is made of domains, and its own features (drawing, physics, audio, input, network) are domains too. A game can do whatever the engine does, and can replace any domain, as Border would replace physics with its own ragdoll.
+- The engine is made of domains, and its own features (drawing, physics, audio, devices, network) are domains too. A game can do whatever the engine does, and can replace any domain, as Border would replace physics with its own ragdoll.
 - A domain is a part of a game that owns some of its components, as Border's undead, her, and the lab's doors are each one. It is not something optional added to a finished game, as a plugin is in a browser or in Unreal; what is added from outside is a mod, below.
 - A domain is a value: the components, actions, events, systems, rules, and commands it brings, and the domains it requires. A game is the list of its domains, flattened by `Game.make` in order, so nothing is wired by hand. The services a domain needs while running, such as storage for its commands or a renderer for its views, are Effect Layers the host provides, and tests swap in other Layers.
 - A domain writes only its own components. Any domain reads any component, but changes another domain's components only by emitting an event that domain declared, and that domain's rules decide what it means. Writing another domain's component, or reading one from a domain not in `requires`, is a compile error.
@@ -74,7 +74,7 @@ Seven principles shape every API. Each builds on the ones before it.
 - Systems run in the order of the domains in the game, then the order each lists them; requiring decides only what a domain may touch, not when it runs. A domain others require may still run last, as one keeping bodies out of walls runs after everything that moves them. Whether this needs named phases, as Bevy's schedules have, waits until a game shows it.
 - Packages come in three layers:
   - **core**: the state, systems, schedule, time, randomness, replay, network protocol, and game rules. It runs everywhere, and it compiles without the DOM's types, so the simulation always runs in a Durable Object.
-  - **client**: drawing, audio, input, haptics, cosmetics. Browser only.
+  - **client**: drawing, audio, devices, haptics, cosmetics. Browser only.
   - **server**: hosting a game in a Durable Object, and persistence.
 - A game's domains split the same way: a domain's core part in one module, its client part (local systems and views) in a `.view` module, so a worker or a Durable Object never imports Three.js.
 - One program runs everywhere, with no annotations saying where: the roles of components and the split of a domain say what runs where.
@@ -86,7 +86,7 @@ Frame pacing is a requirement, not a polish pass. A frame is presented on time a
 
 - **Time from the display.** Interpolation and motion read the timestamp `requestAnimationFrame` hands a frame, the moment it is presented, never the moment code happens to run.
 - **No allocation in the hot path.** Nothing that runs every frame or every step creates objects; it works on pools, typed arrays, and preallocated vectors. This is a requirement on how simulation components are stored.
-- **The simulation off the main thread.** A singleplayer game's local server runs in a Web Worker, so the main thread only reads input, interpolates, and draws.
+- **The simulation off the main thread.** A singleplayer game's local server runs in a Web Worker, so the main thread only reads the devices, interpolates, and draws.
 - **The network never jumps.**
   - Other entities are drawn slightly in the past, interpolated by tick number with an adaptive buffer, so irregular arrival and skipped ticks never show.
   - The client's clock follows the server's by speeding up or slowing down playback by a percent or two, never by snapping.
@@ -102,9 +102,9 @@ It is measured, not assumed:
 
 ### 7. Devices: every device a PC has, the gamepad first
 
-A game is played with whatever a player has, and its own state never knows which. The gamepad is preferred, the mouse and keyboard are full peers, and every other device a PC can reach is supported, output as much as input.
+A game is played with whatever a player has, and its own state never knows which. The gamepad is preferred, the mouse and keyboard are full peers, and every other device a PC can reach is supported, what it outputs as much as what it reads.
 
-- **The rules know no device.** What a device reads becomes a game's input components, and what a player does with it becomes the game's actions, through bindings the game declares as data, which a player can change. An action says what the player did whatever did it, so nothing in the simulation changes with a device.
+- **The rules know no device.** What a device reads becomes a game's demand components, and what a player does with it once becomes the game's actions, through bindings the game declares as data, which a player can change. An action says what the player did whatever did it, so nothing in the simulation changes with a device.
 - **The gamepad first.** Bindings are made for the gamepad before anything else; the device a player last used is the one the game responds to and shows the controls of; and everything a pointer reaches, the accessible mirror and the UI included, can be reached with a pad: the directional pad moves focus, one button presses, another goes back.
 - **The mouse and keyboard in full.** Pointer lock with raw movement, every button and the wheel, keys by their place on the keyboard whatever its layout, labels by its layout, and the keyboard held in full screen.
 - **Every other device.** The Gamepad API reaches pads, wheels, and flight sticks, those with no standard layout through a layout given as data; WebHID reaches the rest, each through a driver that reads a device's reports into the shapes the engine knows.
@@ -160,7 +160,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 **Messages.**
 
 - Actions and events are named facts in the past tense, never commands. An action says what a player did, whatever device they did it with (`PulledTrigger`, `ChoseRestart`); an event says what the game made of it (`Shot`, `LevelRestarted`). The pair shows where authority lies: what a player claims, and what the server decided.
-- Every action a game declares is handled by at least one rule, since an unhandled action is a player doing something to no effect. An event may go unhandled, since a domain offers its events to others and a game may not hold the one that listens; an event a game declares that nothing emits and nothing handles is unused, and an error. Either is an error in its type where TypeScript bears it, and otherwise when the game is made.
+- Every action a game declares, a player's or a command's result, is handled by at least one rule, since an unhandled action is something that happened outside the state to no effect. An event may go unhandled, since a domain offers its events to others and a game may not hold the one that listens; an event a game declares that nothing emits and nothing handles is unused, and an error. Either is an error in its type where TypeScript bears it, and otherwise when the game is made.
 - Which systems and rules write, emit, spawn, and listen for what follows from the game's declarations, as a map of how its components change: in a game of systems there is no single `update` to read, so the declarations are what is read.
 - In development the values in a state are frozen, so changing one in place fails at once.
 
@@ -173,7 +173,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 | A rule decided something should happen outside the game | a command                                                                                                                                                  |
 | An entity is in the drawing                             | `View.each(components, { acquire, draw })`: `acquire` builds its objects when the entity comes in, and the scope closes when it leaves or stops matching   |
 | An entity just gained a component                       | `View.on`: a one-off output that is not part of the state, such as a sound or a haptic pulse                                                               |
-| A condition holds                                       | `View.during`: a resource held while a condition over the drawn state and the UI Model holds, such as music, an `AudioContext`, or pointer lock            |
+| A condition is true                                     | `View.during`: a resource held while `when`, a condition over the drawn state and the UI Model, is true, such as music, an `AudioContext`, or pointer lock |
 | The player looks at the game                            | `View.rig(components, draw)`: the camera, drawn for the player's entity after every other view, from what they drew this frame, such as the eyes of a body |
 
 - `draw` changes only its own objects, from the drawn values, the UI Model, and the frame's time, in place and without allocating: what is drawn is a function of the state even though the scene is kept between frames. Building and diffing a whole tree every frame would allocate at the display's rate. A view keeps nothing between frames; what it must remember is a local component.
@@ -187,9 +187,9 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 - `Story`, in core, steps a game from a state built with named entities, takes actions, and expects components, events, and commands; a command never executes, and the test resolves it with a result. Files are `*.story.test.ts`.
 - `Scene`, in client, plays states through a game's views frame by frame and finds what they drew by view and entity, never by walking the scene graph; outputs such as sounds go through a recording Layer. Files are `*.scene.test.ts`.
 
-**Inspection.** In development the host records a game's first state and, for every step, its input, actions, and command results; everything else follows from them. A log for people and agents adds what each step emitted, issued, and changed, and by which system or rule, and hides input unless asked. The debugger rewinds from a keyframe every few steps, keeps a bounded span of time, and draws a past step through the same views. A client's timeline keeps local components with each state, so a presentation of the past shows them as they were, and local systems do not run while it plays. A replay runs beside the game and reports the first step and component where the two diverge. All of it is in `@lightocean/devtools`, which only a development entry imports.
+**Inspection.** In development the host records a game's first state and, for every step, its input: the demands and the actions, command results among them; everything else follows from them. A log for people and agents adds what each step emitted, issued, and changed, and by which system or rule, and hides the demands unless asked. The debugger rewinds from a keyframe every few steps, keeps a bounded span of time, and draws a past step through the same views. A client's timeline keeps local components with each state, so a presentation of the past shows them as they were, and local systems do not run while it plays. A replay runs beside the game and reports the first step and component where the two diverge. All of it is in `@lightocean/devtools`, which only a development entry imports.
 
-**Agents.** `@lightocean/devtools-mcp` lets an agent read a game's schema and its map of changes, query any step's state, read the log, and compare steps; and, on a local server, hold time, act as a player through the game's own schemas, step, and turn what it did into a `Story` test. Secrets never enter the state, which travels to clients; credentials stay in the services of Layers, and a secret in a command's arguments is `Schema.Redacted`.
+**Agents.** `@lightocean/devtools-mcp` lets an agent read a game's schema and its map of changes, query any step's state, read the log, and compare steps; and, on a local server, suspend time, act as a player through the game's own schemas, step, and turn what it did into a `Story` test. Secrets never enter the state, which travels to clients; credentials stay in the services of Layers, and a secret in a command's arguments is `Schema.Redacted`.
 
 **Enforcement.** A rule is a type where it can be, a lint rule where it cannot, and written down only where neither can tell. `@lightocean/oxlint-plugin` has one rule per convention a type cannot hold, scoped by the call its code sits in rather than by file name, with a message that says what to do instead, and with a fixture it must fail on and one it must pass. The first rules: no `Math.random`, `Date.now`, `performance.now`, `crypto`, or Effect inside a system's or rule's `run` or a view's `draw`; no nullable or optional fields in a component's schema; no `let` or mutable closures in a view; no key derived from an index; no Three.js outside a `.view` module; secrets in commands' arguments are `Schema.Redacted`. CI runs `vp check` and `vp test` on every pull request.
 
@@ -242,14 +242,14 @@ LightOcean is sold by its structure, not its stack: _Your game is data. LightOce
 - **Outliner, Viewport, and Details**, as in Unreal. The panels read the document through projections, and send it every edit as a Command. The Details panel is generated: a schema field annotated with `inspector` shows with the widget it names, and a field without the annotation cannot be edited there.
 - **Behaviour is low-code rules.** An object holds reactions of the form _when clicked, make a change to a target_. Each kind of change is itself an annotated schema, so its settings use the same generated form.
 - **Play-in-Editor** plays the document in a worker of its own, which the page opens with the document as it is, in a game that has no editing in it: a click makes objects react, and nothing is edited meanwhile. Stopping ends the worker, and everything that happened while playing with it.
-- **The debugger is part of the editor**, not a development tool. Beside the game playing, it keeps its last stretch of time and answers the page's questions over the game's own connection, so it works wherever the editor plays: each step in which something happened, what each part changed, and the state after any of them, on the canvas too, while the document's time is held.
+- **The debugger is part of the editor**, not a development tool. Beside the game playing, it keeps its last stretch of time and answers the page's questions over the game's own connection, so it works wherever the editor plays: each step in which something happened, what each part changed, and the state after any of them, on the canvas too, while the document's time is suspended.
 - Foldkit's own DevTools stay available in development, for debugging the editor itself.
 
 ## Repository
 
 - `libraries/core`: the state, components, actions, events, systems, rules, the game, the host, the client, transports, and snapshots; and, as experimental, `SocketTransport`, a connection to a host over a WebSocket.
 - `libraries/server`: as experimental, `Room`, a game hosted for players across a network, one room in each Durable Object, standing still while no one is in it, and `Room.Id`, a room's address, refused at the Worker before a Durable Object is reached.
-- `libraries/client`: the timeline, interpolation, and the drawing; and, as experimental, `Prediction`, a player's own client playing ahead of its host, its input sent once a step and replayed on the newest state until the host says it took it in, and what is drawn going over to the host's in a few frames when they disagree.
+- `libraries/client`: the timeline, interpolation, and the drawing; and, as experimental, `Prediction`, a player's own client playing ahead of its host, its demands sent once a step and replayed on the newest state until the host says it took it in, and what is drawn going over to the host's in a few frames when they disagree.
 - `libraries/foldkit`: a game in an application built on Foldkit: `Session`, a player's connection to it, joined in a worker the page starts and held as a Foldkit Managed Resource while the application's Model wants it; and `Stage`, the game shown on a canvas Foldkit keeps, through the game's views, played by a click, and mirrored for the keyboard, while a Subscription runs, with what the application runs beside it, such as serving the canvas to the devtools, or drawn by the page itself on an element of its own, such as with a renderer of its own, its Messages going on to the application (`Stage.run`); `Projection`, what an application shows of a game's state, kept in its Model, told as it is and again only when it changes; and `Styled`, StyleX on Foldkit's elements.
 - `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a state told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent or a page asks of a hosted game, answered as data, to a page over the game's own connection; `Debugger`, the past kept beside a host and its clients' questions answered, wherever it runs; and `Bridge` and `Relay`, the way an agent's requests travel from a tool to a host and back.
 - `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__lightocean/mcp`; and a banner saying what is served and where both are reached.
@@ -263,7 +263,7 @@ LightOcean is sold by its structure, not its stack: _Your game is data. LightOce
 - `examples/click-to-colour`: cubes a click paints the next colour of a palette: a game played by clicking what is drawn, through the `Pointing` domain the engine gives.
 - `examples/save-score`: a round against the clock whose score is saved: a rule that issues a command, the `Scores` service it needs, a Worker that keeps every score in Cloudflare KV, deployed by Alchemy with the namespace bound to it, and a page on Foldkit that says how the round goes.
 - `examples/shared-room`: walkers in a room many players share, steered by the keys: a Worker that sends a page to its room, a Durable Object for each room hosting it with `Room`, and a page that opens it over a WebSocket and predicts its own player with `Prediction`, deployed by Alchemy.
-- `examples/horde`: survivors in an arena against a horde that keeps rising: three domains requiring one another and sharing where bodies are, input and actions, events between domains, randomness, and entities spawned and despawned; what the devtools are shown on.
+- `examples/horde`: survivors in an arena against a horde that keeps rising: three domains requiring one another and sharing where bodies are, demands and actions, events between domains, randomness, and entities spawned and despawned; what the devtools are shown on.
 
 The packages are `core` (with commands, domains, and `Story`), `client` (with local systems, views, `Viewport`, and `Scene`), `server` (hosting in a Durable Object; persistence is to come), `foldkit`, `reflection`, `devtools`, `devtools-mcp`, `vite-plugin`, and `oxlint-plugin`.
 

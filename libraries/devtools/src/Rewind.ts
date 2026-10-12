@@ -4,7 +4,7 @@ import * as Recording from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';
 
 /**
- * Going back in a hosted game: the state the host was at, at any tick of a bounded span of time, shown to its clients through the same views while time is held, and played on from if asked. It keeps a keyframe, a state the host stepped to, every so many steps, and what happened after each, and comes to any tick by replaying from the keyframe before it, so a tick costs at most a few steps.
+ * Going back in a hosted game: the state the host was at, at any tick of a bounded span of time, shown to its clients through the same views while time is suspended, and played on from if asked. It keeps a keyframe, a state the host stepped to, every so many steps, and what happened after each, and comes to any tick by replaying from the keyframe before it, so a tick costs at most a few steps.
  *
  * It runs beside a host, in development; a page drives it with controls. When the host takes up a new build of its game, it starts over from there, since the past was played by another.
  */
@@ -266,14 +266,14 @@ export const serve = (host: Host.Host, rewind: Rewind): Effect.Effect<void, neve
     );
   });
 
-/** A page's way to drive a rewind beside the host it is joined to: pausing holds time, and playing on or going live lets go of it. */
+/** A page's way to drive a rewind beside the host it is joined to: it suspends time, and playing on or going live resumes it. */
 export const controls = (client: Client.Client) => {
   const send = (control: Control) => client.control(Schema.encodeSync(Control)(control));
   return {
-    pause: client.hold,
+    suspend: client.suspend,
     seek: (tick: number) => send({ _tag: 'Seek', tick }),
     step: (steps: number) => send({ _tag: 'Step', steps }),
-    playFromHere: Effect.andThen(send({ _tag: 'PlayFromHere' }), client.release),
-    live: Effect.andThen(send({ _tag: 'Live' }), client.release),
+    playFromHere: Effect.andThen(send({ _tag: 'PlayFromHere' }), client.resume),
+    live: Effect.andThen(send({ _tag: 'Live' }), client.resume),
   };
 };

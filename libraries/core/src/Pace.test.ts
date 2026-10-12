@@ -61,8 +61,8 @@ describe('pace', () => {
     expect(Pace.nextAt(pace, 5)).toBe(2034);
   });
 
-  it('owes nothing for time spent held, once it is let go', () => {
-    // Three steps by 1100, then held for four seconds.
+  it('owes nothing for time spent suspended, once it is resumed', () => {
+    // Three steps by 1100, then suspended for four seconds.
     const resumed = Pace.resume(started, 4000);
 
     expect(Pace.due(resumed, 3, 5100).steps).toBe(0);

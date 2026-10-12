@@ -47,7 +47,7 @@ export const counting = Game.make({
   ],
 });
 
-/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time held, and each drawn by a page whose every shot is one pixel. */
+/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time suspended, and each drawn by a page whose every shot is one pixel. */
 export const served = (names: ReadonlyArray<string>, directory?: string) =>
   Effect.gen(function* () {
     const relay = yield* Relay.make;
@@ -63,9 +63,9 @@ export const served = (names: ReadonlyArray<string>, directory?: string) =>
       const host = yield* Host.make({
         ...setup,
         state: State.spawn(State.empty({ seed: 1 }), [Count.of({ value: 0 })])[0],
-        mayHold: true,
+        maySuspend: true,
       });
-      yield* host.hold;
+      yield* host.suspend;
       const rewind = yield* Rewind.make(host, setup, { every: 5, keepSeconds: 10 });
       const toHost = yield* Queue.unbounded<unknown>();
       const peer: Relay.Peer<Bridge.ToHost> = {

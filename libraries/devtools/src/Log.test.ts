@@ -24,7 +24,7 @@ describe('the log of a recording', () => {
         {
           _tag: 'Stepped',
           tick: 4,
-          inputs: Option.none(),
+          demands: Option.none(),
           actions: [asked],
           parts: [
             {
@@ -36,20 +36,20 @@ describe('the log of a recording', () => {
             steered,
           ],
         },
-        { _tag: 'Stepped', tick: 5, inputs: Option.none(), actions: [], parts: [steered] },
-        { _tag: 'Stepped', tick: 6, inputs: Option.none(), actions: [], parts: [steered] },
+        { _tag: 'Stepped', tick: 5, demands: Option.none(), actions: [], parts: [steered] },
+        { _tag: 'Stepped', tick: 6, demands: Option.none(), actions: [], parts: [steered] },
         { _tag: 'Left', tick: 6, entity },
       ]);
     }),
   );
 
-  it.effect('tells the input that reached each step, when asked to', () =>
+  it.effect('tells the demands that reached each step, when asked to', () =>
     Effect.gen(function* () {
       const { recording, entity } = yield* Fixtures.recorded();
 
-      const lines = yield* Log.of(Fixtures.setup(), recording, { inputs: true });
+      const lines = yield* Log.of(Fixtures.setup(), recording, { demands: true });
 
-      expect(lines.flatMap((line) => (line._tag === 'Stepped' ? [line.inputs] : []))).toEqual([
+      expect(lines.flatMap((line) => (line._tag === 'Stepped' ? [line.demands] : []))).toEqual([
         Option.some([{ entity, component: 'Stick', value: { move: 1 } }]),
         Option.some([]),
         Option.some([]),

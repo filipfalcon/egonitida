@@ -7,7 +7,7 @@ import * as State from '#src/State.ts';
  * Only the engine writes a demand, so a recording of a game is its first state and the input of every step after it. A client repeats its demands unreliably, since the newest one is all a step needs.
  */
 
-export type DemandComponent = Component.Component<string, unknown, 'input'>;
+export type DemandComponent = Component.Component<string, unknown, 'demand'>;
 
 /** A demand on an entity. Its value stays inside `writeInto`, made where the value's type is known, so no demand can carry a value its component does not hold. */
 export interface Demand {
@@ -21,7 +21,7 @@ export interface Demand {
 
 export const of = <Value>(
   entity: State.Entity,
-  component: Component.Component<string, Value, 'input'>,
+  component: Component.Component<string, Value, 'demand'>,
   value: Value,
 ): Demand => ({
   entity,

@@ -187,7 +187,7 @@ describe('determinism', () => {
   });
 });
 
-describe('input', () => {
+describe('demands', () => {
   /** Moves every controlled entity by its stick, at 10 a second. */
   const steer = System.make({
     name: 'steer',
@@ -218,17 +218,17 @@ describe('input', () => {
     Story.story(
       steered,
       Story.spawn('her', player),
-      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.demand('her', Controls, { move: 1, fire: false }),
       Story.step(),
       Story.expect('her', Position, (position) => expect(position.x).toBe(1)),
     );
   });
 
-  it('stays as it was in a step given no new input, the way a held stick does', () => {
+  it('stays as it was in a step given no new demand, the way a held stick does', () => {
     Story.story(
       steered,
       Story.spawn('her', player),
-      Story.input('her', Controls, { move: 1, fire: false }),
+      Story.demand('her', Controls, { move: 1, fire: false }),
       Story.steps(2),
       Story.expect('her', Position, (position) => expect(position.x).toBe(2)),
     );
@@ -238,7 +238,7 @@ describe('input', () => {
     Story.story(
       steered,
       Story.spawn('bystander', [Position.of({ x: 5 })]),
-      Story.input('bystander', Controls, { move: 1, fire: false }),
+      Story.demand('bystander', Controls, { move: 1, fire: false }),
       Story.step(),
       Story.expectNone('bystander', Controls),
       Story.expect('bystander', Position, (position) => expect(position.x).toBe(5)),
@@ -671,9 +671,9 @@ export const refused = () => {
   });
 
   System.make({
-    name: 'writesTheInput',
+    name: 'writesTheDemand',
     reads: [],
-    // @ts-expect-error Controls belong to the input; only the engine writes them, from what players send.
+    // @ts-expect-error Controls are a demand; only the engine writes them, from what players send.
     writes: [Controls],
     emits: [],
     run: () => {},

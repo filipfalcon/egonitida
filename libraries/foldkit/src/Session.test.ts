@@ -53,7 +53,7 @@ const hosted = Effect.gen(function* () {
     state: State.empty({ seed: 1 }),
     join: (state: State.State) => State.spawn(state, [Tally.of({ count: 0 })]),
     leave: State.despawn,
-    mayHold: false,
+    maySuspend: false,
   }).pipe(Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)), Effect.forkScoped);
   return () => channel.port1;
 });
@@ -123,7 +123,7 @@ describe('a session from Foldkit', () => {
           state: State.empty({ seed: 1 }),
           join: (state: State.State) => State.spawn(state, [Tally.of({ count: Number(opening) })]),
           leave: State.despawn,
-          mayHold: false,
+          maySuspend: false,
         }),
       ).pipe(
         Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)),

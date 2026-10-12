@@ -11,7 +11,7 @@ const options = {
   join: Survivor.join,
   leave: State.despawn,
   state: Game.state,
-  mayHold: true,
+  maySuspend: true,
 };
 
 Effect.runFork(

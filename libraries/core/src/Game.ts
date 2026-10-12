@@ -65,7 +65,7 @@ type Refuse<Name extends string, Found> = [Found] extends [never]
   : { readonly [K in Name]: Found };
 
 /**
- * A game is rejected if it is missing a domain that another domain requires, holds an unhandled action, a player's or a command's result, since every action must be handled by a rule, or declares an unused event: one that nothing emits and nothing handles.
+ * A game is rejected if it is missing a domain that another domain requires, declares an unhandled action, a player's or a command's result, since every action must be handled by a rule, or declares an unused event: one that nothing emits and nothing handles.
  */
 type Requirements<Domains extends ReadonlyArray<Domain.Any>> = Refuse<'missing', Missing<Domains>> &
   Refuse<'unhandled', Unhandled<Domains>> &

@@ -4,42 +4,42 @@ import { Option, Schema } from 'effect';
  * What a host and its clients say to each other, apart from the snapshots themselves.
  *
  * - Reliable, host to client: `Welcome`, naming the entity the client controls, and, to a question the client asked, `Answered`, with its answer, or `Unanswered`, with why there is none.
- * - Unreliable, host to client: snapshots, as `Snapshot` encodes them, each followed by `Acked`, the number of the client's newest input the state took in, so a client predicting its own player knows which of its inputs are yet to be.
- * - Unreliable, client to host: `Inputs`, the client's latest inputs repeated, so one lost message loses none of them.
- * - Reliable, client to host: `Hold` and `Release`, asking the host to stop time and let it go again, `Act`, an action the player takes, encoded by its own schema, `Control`, for whatever listens beside the host, and `Ask`, a question for whatever answers beside it, which the reply names by its `id`.
+ * - Unreliable, host to client: snapshots, as `Snapshot` encodes them, each followed by `Acked`, the number of the client's newest demands the state took in, so a client predicting its own player knows which of its demands are yet to be.
+ * - Unreliable, client to host: `Demands`, the client's latest demands repeated, so one lost message loses none of them.
+ * - Reliable, client to host: `Suspend` and `Resume`, asking the host to suspend time and resume it, `Act`, an action the player takes, encoded by its own schema, `Control`, for whatever listens beside the host, and `Ask`, a question for whatever answers beside it, which the reply names by its `id`.
  */
 
-/** How many of its latest inputs a client repeats in each message. */
-export const MAX_REPEATED_INPUTS = 8;
+/** How many of its latest demands a client repeats in each message. */
+export const MAX_REPEATED_DEMANDS = 8;
 
 const Welcome = Schema.Struct({ entity: Schema.Int, stepRate: Schema.Int });
 export type Welcome = typeof Welcome.Type;
 
-const Inputs = Schema.Struct({
-  inputs: Schema.Array(
+const Demands = Schema.Struct({
+  demands: Schema.Array(
     Schema.Struct({
       seq: Schema.Int,
-      /** Input values by component name, each encoded by its component's schema. */
+      /** Demand values by component name, each encoded by its component's schema. */
       values: Schema.Record(Schema.String, Schema.Unknown),
     }),
   ),
 });
-export type Inputs = typeof Inputs.Type;
+export type Demands = typeof Demands.Type;
 
-/** The number of the newest input of a client's that the state at `tick` took in; none taken yet is 0. */
+/** The number of the newest demands of a client's that the state at `tick` took in; none taken yet is 0. */
 const Acked = Schema.TaggedStruct('Acked', { tick: Schema.Int, seq: Schema.Int });
 export type Acked = typeof Acked.Type;
 const AckedJson = Schema.fromJsonString(Acked);
 
-/** What the state took in of a client's inputs, as it travels to the client. */
+/** What the state took in of a client's demands, as it travels to the client. */
 export const encodeAcked = (acked: Acked): string => Schema.encodeSync(AckedJson)(acked);
-/** What the state took in of this client's inputs; `None` for anything else, such as a snapshot. */
+/** What the state took in of this client's demands; `None` for anything else, such as a snapshot. */
 export const decodeAcked = (text: string): Option.Option<Acked> =>
   Schema.decodeOption(AckedJson)(text);
 
 const ClientReliable = Schema.Union([
-  Schema.TaggedStruct('Hold', {}),
-  Schema.TaggedStruct('Release', {}),
+  Schema.TaggedStruct('Suspend', {}),
+  Schema.TaggedStruct('Resume', {}),
   Schema.TaggedStruct('Act', { action: Schema.Unknown }),
   Schema.TaggedStruct('Control', { payload: Schema.Unknown }),
   Schema.TaggedStruct('Ask', { id: Schema.Int, question: Schema.Unknown }),
@@ -70,7 +70,7 @@ export const encodeClientReliable = (message: ClientReliable): string =>
 /** A client's reliable message; `None` for anything else. */
 export const decodeClientReliable = (text: string): Option.Option<ClientReliable> =>
   Schema.decodeOption(ClientReliableJson)(text);
-const InputsJson = Schema.fromJsonString(Inputs);
+const DemandsJson = Schema.fromJsonString(Demands);
 
 /** A welcome as it travels to the client joining. */
 export const encodeWelcome = (welcome: Welcome): string => Schema.encodeSync(WelcomeJson)(welcome);
@@ -78,12 +78,12 @@ export const encodeWelcome = (welcome: Welcome): string => Schema.encodeSync(Wel
 export const decodeWelcome = (text: string): Option.Option<Welcome> =>
   Schema.decodeOption(WelcomeJson)(text);
 
-/** A client's latest inputs as they travel to the host. */
-export const encodeInputs = (inputs: Inputs): string => Schema.encodeSync(InputsJson)(inputs);
+/** A client's latest demands as they travel to the host. */
+export const encodeDemands = (demands: Demands): string => Schema.encodeSync(DemandsJson)(demands);
 
-/** The inputs a client sent; `None` for anything else, including more inputs than a client ever repeats. */
-export const decodeInputs = (text: string): Option.Option<Inputs> =>
+/** The demands a client sent; `None` for anything else, including more than a client ever repeats. */
+export const decodeDemands = (text: string): Option.Option<Demands> =>
   Option.filter(
-    Schema.decodeOption(InputsJson)(text),
-    (decoded) => decoded.inputs.length <= MAX_REPEATED_INPUTS,
+    Schema.decodeOption(DemandsJson)(text),
+    (decoded) => decoded.demands.length <= MAX_REPEATED_DEMANDS,
   );

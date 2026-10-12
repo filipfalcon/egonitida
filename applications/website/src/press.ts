@@ -107,7 +107,7 @@ export const domain = Domain.make({
   rules: [wither],
 });
 
-/** The press's game: its one domain, two steps a second for as long as time is not held. */
+/** The press's game: its one domain, two steps a second for as long as time is not suspended. */
 export const game = Game.make({ stepRate: 2, domains: [domain] });
 
 /** How a page joins the press: as an entity that holds nothing, which only watches. */

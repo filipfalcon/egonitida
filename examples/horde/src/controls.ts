@@ -2,7 +2,7 @@ import { Controls, type Devices } from '@lightocean/client';
 import { Option } from 'effect';
 
 /**
- * How a survivor is played, with whatever the player holds: the controls bound to every kind of device, the pad's way first, and what a moment of them comes to in the horde's own input and actions.
+ * How a survivor is played, with whatever the player holds: the controls bound to every kind of device, the pad's way first, and what a moment of them comes to in the horde's own demands and actions.
  */
 
 /** Walking and aiming as sticks, firing and rising again as buttons; walking by WASD or the arrows, and on a pad, Start rises again, as Options on a DualSense. */

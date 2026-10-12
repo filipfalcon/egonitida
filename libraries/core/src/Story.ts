@@ -85,10 +85,10 @@ const withAction = (simulation: Simulation, action: Input.Action): Simulation =>
 });
 
 /** Sends a demand on the entity named `name`, as its client would; it reaches the next step, and stays in the state after it. */
-export const input =
+export const demand =
   <Value>(
     name: string,
-    component: Component.Component<string, Value, 'input'>,
+    component: Component.Component<string, Value, 'demand'>,
     value: Value,
   ): Line =>
   (simulation) =>
@@ -155,11 +155,11 @@ export const steps =
   };
 
 /**
- * Takes one step at a time until `holds` says so of the state, taking the waiting input into the first; fails if that does not come to pass within `limit` steps, 600 unless given. The events expected afterwards are those of every step it took.
+ * Takes one step at a time until `reached` is true of the state, taking the waiting input into the first; fails if that does not come to pass within `limit` steps, 600 unless given. The events expected afterwards are those of every step it took.
  */
 export const until =
   (
-    holds: (state: State.State, named: (name: string) => State.Entity) => boolean,
+    reached: (state: State.State, named: (name: string) => State.Entity) => boolean,
     options: { readonly limit?: number } = {},
   ): Line =>
   (simulation) => {
@@ -168,7 +168,7 @@ export const until =
     const events: Array<Event.Tagged> = [];
     const commands: Array<Command.Issued> = [];
     const go = (current: Simulation, taken: number): Simulation => {
-      if (holds(current.state, named)) {
+      if (reached(current.state, named)) {
         return { ...current, events, commands };
       }
       if (taken === limit) {
@@ -326,15 +326,15 @@ export const givenAs =
     });
 
 /** Sends a demand on the entity named `name`: a value of the demand component called `component`, as it travels. */
-export const inputAs =
+export const demandAs =
   (name: string, component: string, value: unknown): Line =>
   (simulation) => {
     const found = simulation.game.components.find(
       (known): known is Demand.DemandComponent =>
-        known.name === component && known.owner === 'input',
+        known.name === component && known.owner === 'demand',
     );
     if (found === undefined) {
-      throw new Error(`${component} is no input of the game`);
+      throw new Error(`${component} is no demand of the game`);
     }
     return Option.match(Schema.decodeUnknownOption(Schema.toCodecJson(found.schema))(value), {
       onNone: () => {

@@ -10,7 +10,7 @@ const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }),
   network: 'predicted',
 });
 const Controls = Component.make('Controls', Schema.Struct({ move: Schema.Finite }), {
-  owner: 'input',
+  owner: 'demand',
   network: 'predicted',
 });
 
@@ -58,7 +58,7 @@ const session = Effect.gen(function* () {
     state: State.empty({ seed: 1 }),
     join: (state) => State.spawn(state, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
     leave: State.despawn,
-    mayHold: true,
+    maySuspend: true,
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);
@@ -74,7 +74,7 @@ const marked = Effect.gen(function* () {
     state: State.empty({ seed: 1 }),
     join: (state) => State.spawn(state, []),
     leave: State.despawn,
-    mayHold: true,
+    maySuspend: true,
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);

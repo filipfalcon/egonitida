@@ -74,12 +74,12 @@ describe('rewinding from a page', () => {
     return { hosted, client, controls: Rewind.controls(client) };
   });
 
-  it.effect('holds time and shows the page a past tick, then the live state again', () =>
+  it.effect('suspends time and shows the page a past tick, then the live state again', () =>
     Effect.gen(function* () {
       const { hosted, client, controls } = yield* paged;
       const live = yield* hosted.state;
 
-      yield* controls.pause;
+      yield* controls.suspend;
       yield* controls.seek(4);
       yield* Fixtures.elapse(100);
       const shown = (yield* client.state).tick;
@@ -96,7 +96,7 @@ describe('rewinding from a page', () => {
     Effect.gen(function* () {
       const { client, controls } = yield* paged;
 
-      yield* controls.pause;
+      yield* controls.suspend;
       yield* controls.seek(6);
       yield* controls.step(-2);
       yield* Fixtures.elapse(10);
@@ -113,7 +113,7 @@ describe('rewinding from a page', () => {
     Effect.gen(function* () {
       const { hosted, controls } = yield* paged;
 
-      yield* controls.pause;
+      yield* controls.suspend;
       yield* controls.seek(4);
       yield* controls.playFromHere;
       yield* Fixtures.elapse(100);

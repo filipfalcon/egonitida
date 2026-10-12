@@ -9,13 +9,13 @@ describe('walkers in a shared room', () => {
     Story.story(
       Walkers.game,
       Story.given(state, { walker }),
-      Story.input('walker', Walkers.Steering, { x: 1, z: 0 }),
+      Story.demand('walker', Walkers.Steering, { x: 1, z: 0 }),
       Story.seconds(1),
       Story.expect('walker', Walkers.Position, ({ x, z }) => {
         expect(x).toBeCloseTo(Walkers.SPEED);
         expect(z).toBe(0);
       }),
-      Story.input('walker', Walkers.Steering, { x: 0, z: 0 }),
+      Story.demand('walker', Walkers.Steering, { x: 0, z: 0 }),
       Story.seconds(1),
       Story.expect('walker', Walkers.Position, ({ x }) => expect(x).toBeCloseTo(Walkers.SPEED)),
     );
@@ -27,7 +27,7 @@ describe('walkers in a shared room', () => {
     Story.story(
       Walkers.game,
       Story.given(state, { walker }),
-      Story.input('walker', Walkers.Steering, { x: 0, z: -1 }),
+      Story.demand('walker', Walkers.Steering, { x: 0, z: -1 }),
       Story.seconds(10),
       Story.expect('walker', Walkers.Position, ({ z }) => expect(z).toBe(-Walkers.HALF_SIZE)),
     );

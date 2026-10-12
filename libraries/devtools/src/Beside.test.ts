@@ -46,13 +46,13 @@ describe('the devtools beside a host', () => {
       const first = yield* Fixtures.host();
       yield* Keep.serve(store, first, Fixtures.game, { key: 'tab-1', everyMillis: 50 });
       yield* Fixtures.visit(first);
-      yield* first.hold;
+      yield* first.suspend;
       yield* Fixtures.elapse(100);
       const left = yield* first.state;
       const served: Array<number> = [];
 
       yield* Beside.host(
-        { ...Fixtures.setup(), state: State.empty({ seed: 7 }), mayHold: true },
+        { ...Fixtures.setup(), state: State.empty({ seed: 7 }), maySuspend: true },
         { name: 'test', id: 'tab-1', kept: {}, store: Option.some(store) },
         (hosted) =>
           Effect.map(hosted.state, ({ tick }) => {
@@ -77,7 +77,7 @@ describe('the devtools beside a host', () => {
         const joined: Array<number> = [];
 
         yield* Beside.host(
-          { ...Fixtures.setup(), state: State.empty({ seed: 7 }), mayHold: true },
+          { ...Fixtures.setup(), state: State.empty({ seed: 7 }), maySuspend: true },
           { name: 'test', id: 'tab-1', kept: {}, store: Option.some(store) },
           (hosted) =>
             Effect.gen(function* () {

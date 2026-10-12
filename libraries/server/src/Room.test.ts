@@ -29,7 +29,7 @@ const options = {
   state: State.empty({ seed: 1 }),
   join: (state: State.State) => State.spawn(state, [Someone.of({})]),
   leave: State.despawn,
-  mayHold: false,
+  maySuspend: false,
 };
 
 /** A player in `room` over a socket in memory, as a page reaches a Durable Object over a WebSocket: the room's side opened, and the client joined over the page's side. */

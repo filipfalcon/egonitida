@@ -17,7 +17,7 @@ export type Line =
       readonly names: Readonly<Record<string, State.Entity>>;
     }
   | {
-      readonly _tag: 'InputAs';
+      readonly _tag: 'DemandAs';
       readonly name: string;
       readonly component: string;
       readonly value: unknown;
@@ -50,7 +50,7 @@ const stepLines = (actionTags: ReadonlySet<string>, entry: Recording.Entry): Rea
     ? []
     : [
         ...entry.input.demands.map(({ entity, component, value }): Line => ({
-          _tag: 'InputAs',
+          _tag: 'DemandAs',
           name: nameOf(entity),
           component,
           value,
@@ -161,8 +161,8 @@ export const steps = (lines: ReadonlyArray<Line>): ReadonlyArray<Story.Line> =>
     switch (line._tag) {
       case 'GivenAs':
         return Story.givenAs(line.state, line.names);
-      case 'InputAs':
-        return Story.inputAs(line.name, line.component, line.value);
+      case 'DemandAs':
+        return Story.demandAs(line.name, line.component, line.value);
       case 'ActAs':
         return Story.actAs(line.name, line.action);
       case 'ResolveAs':
@@ -185,8 +185,8 @@ const sourceOf = (line: Line): string => {
   switch (line._tag) {
     case 'GivenAs':
       return `Story.givenAs(${json(line.state)}, ${json(line.names)})`;
-    case 'InputAs':
-      return `Story.inputAs(${quoted(line.name)}, ${quoted(line.component)}, ${json(line.value)})`;
+    case 'DemandAs':
+      return `Story.demandAs(${quoted(line.name)}, ${quoted(line.component)}, ${json(line.value)})`;
     case 'ActAs':
       return `Story.actAs(${quoted(line.name)}, ${json(line.action)})`;
     case 'ResolveAs':

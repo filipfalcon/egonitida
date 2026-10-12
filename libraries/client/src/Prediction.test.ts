@@ -7,7 +7,7 @@ import * as Prediction from '#src/Prediction.ts';
 
 /** Which way the player steers, and where they stand, which their own client predicts. */
 const Steering = Component.make('Steering', Schema.Struct({ x: Schema.Finite }), {
-  owner: 'input',
+  owner: 'demand',
   network: 'predicted',
 });
 const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }), {
@@ -50,7 +50,7 @@ const faraway = Effect.gen(function* () {
     state: State.empty({ seed: 1 }),
     join: (state) => State.spawn(state, [Steering.of({ x: 0 }), Position.of({ x: 0 })]),
     leave: State.despawn,
-    mayHold: false,
+    maySuspend: false,
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   const conditions = { latencyMillis: 100, loss: 0, random: () => 1 };
@@ -79,7 +79,7 @@ describe('a player predicted by their own client', () => {
       const { prediction, drawn, confirmed } = yield* faraway;
       yield* Effect.sleep('300 millis');
 
-      prediction.hold([Steering.of({ x: 1 })]);
+      prediction.demand([Steering.of({ x: 1 })]);
       yield* Effect.sleep('120 millis');
 
       expect(yield* confirmed).toEqual(Option.some(0));
@@ -92,9 +92,9 @@ describe('a player predicted by their own client', () => {
       const { prediction, drawn, confirmed } = yield* faraway;
       yield* Effect.sleep('300 millis');
 
-      prediction.hold([Steering.of({ x: 1 })]);
+      prediction.demand([Steering.of({ x: 1 })]);
       yield* Effect.sleep('300 millis');
-      prediction.hold([Steering.of({ x: 0 })]);
+      prediction.demand([Steering.of({ x: 0 })]);
       yield* Effect.sleep('600 millis');
       for (let frame = 0; frame < 30; frame += 1) {
         drawn(1 / 60);

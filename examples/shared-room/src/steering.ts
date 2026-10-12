@@ -1,7 +1,7 @@
 import { Controls, type Devices } from '@lightocean/client';
 
 /**
- * How a walker is steered: by the arrows or WASD, or the left stick on a pad, and what a moment of them comes to in the room's input.
+ * How a walker is steered: by the arrows or WASD, or the left stick on a pad, and what a moment of them comes to in the room's demands.
  */
 
 /** Steering as a stick: the arrows or WASD, or the left stick. */

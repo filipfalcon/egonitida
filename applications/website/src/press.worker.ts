@@ -5,8 +5,8 @@ import { Effect } from 'effect';
 import * as Press from '#src/press.ts';
 import * as Stepping from '#src/stepping.ts';
 
-// The press's local server: its game, stepped off the main thread, its time held from the start and stepped one step at a page's click. The engine's debugger is always beside it, keeping the past a page goes back to. In development it goes on from the state kept for the tab whatever code changed, with the rest of the devtools beside it too, by the id the page named this worker with.
-const options = { ...Press.setup, state: Press.state, mayHold: true };
+// The press's local server: its game, stepped off the main thread, its time suspended from the start and stepped one step at a page's click. The engine's debugger is always beside it, keeping the past a page goes back to. In development it goes on from the state kept for the tab whatever code changed, with the rest of the devtools beside it too, by the id the page named this worker with.
+const options = { ...Press.setup, state: Press.state, maySuspend: true };
 
 /** Serves `host` to the page, stepped by hand. */
 const serving = (host: Host.Host) =>
