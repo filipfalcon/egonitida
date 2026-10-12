@@ -8,13 +8,14 @@ import { defineRouteUnion, literal, mapTo, oneOf, parseUrlWithFallback, root } f
 /** Every page of the website: the home page, the pages of the documentation, and a page that is not found, which keeps the path asked for. */
 export const AppRoute = defineRouteUnion({
   Home: {},
+  Principles: {},
   Architecture: {},
   NotFound: { path: Schema.String },
 });
 export type AppRoute = typeof AppRoute.Type;
 
 /** The pages drawn inside the documentation, with its navigation beside them. A page that is not found is one, so a mistyped address still leads somewhere to go on from. */
-export const DocsRoute = AppRoute.subset(['Architecture', 'NotFound']);
+export const DocsRoute = AppRoute.subset(['Principles', 'Architecture', 'NotFound']);
 export type DocsRoute = typeof DocsRoute.Type;
 
 /** Whether `route` is drawn inside the documentation. */
@@ -25,10 +26,13 @@ export const isDocsRoute = Schema.is(DocsRoute);
 /** The root of the site, the home page. */
 export const homeRouter = pipe(root, mapTo(AppRoute.Home));
 
+/** The principles the engine stands on. */
+export const principlesRouter = pipe(literal('principles'), mapTo(AppRoute.Principles));
+
 /** Why the engine is built the way it is. */
 export const architectureRouter = pipe(literal('architecture'), mapTo(AppRoute.Architecture));
 
-const routeParser = oneOf(homeRouter, architectureRouter);
+const routeParser = oneOf(homeRouter, principlesRouter, architectureRouter);
 
 /** The route a URL leads to: a page that is not found where no router reads it. */
 export const urlToAppRoute = parseUrlWithFallback(routeParser, AppRoute.NotFound);
@@ -37,6 +41,7 @@ export const urlToAppRoute = parseUrlWithFallback(routeParser, AppRoute.NotFound
 export const routeToUrlPath = (route: AppRoute): string =>
   AppRoute.match(route, {
     Home: () => homeRouter(),
+    Principles: () => principlesRouter(),
     Architecture: () => architectureRouter(),
     NotFound: ({ path }) => path,
   });

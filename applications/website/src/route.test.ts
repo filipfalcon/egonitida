@@ -15,6 +15,11 @@ describe('the routes', () => {
     expect(Route.routeToUrlPath(Route.AppRoute.Home())).toBe('/');
   });
 
+  it('leads /principles to the principles, and builds it back', () => {
+    expect(routeAt('/principles')).toEqual(Route.AppRoute.Principles());
+    expect(Route.routeToUrlPath(Route.AppRoute.Principles())).toBe('/principles');
+  });
+
   it('leads /architecture to the architecture, and builds it back', () => {
     expect(routeAt('/architecture')).toEqual(Route.AppRoute.Architecture());
     expect(Route.routeToUrlPath(Route.AppRoute.Architecture())).toBe('/architecture');
@@ -32,6 +37,7 @@ describe('the routes', () => {
   it('draws a page that is not found inside the documentation, and the home page outside it', () => {
     expect(Route.isDocsRoute(routeAt('/nowhere'))).toBe(true);
     expect(Route.isDocsRoute(routeAt('/architecture'))).toBe(true);
+    expect(Route.isDocsRoute(routeAt('/principles'))).toBe(true);
     expect(Route.isDocsRoute(routeAt('/'))).toBe(false);
   });
 });
