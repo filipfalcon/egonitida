@@ -8,7 +8,7 @@ import cube from '../../../../examples/spinning-cube/src/cube.ts?raw';
 import cubeView from '../../../../examples/spinning-cube/src/cube.view.ts?raw';
 import { DISCORD, REPOSITORY, inRepository } from '#src/links.ts';
 import type { Message, Model } from '#src/main.ts';
-import { architectureRouter } from '#src/route.ts';
+import { architectureRouter, principlesRouter } from '#src/route.ts';
 import { CANVAS_ID, MountCanvas } from '#src/world.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from '../tokens.stylex.ts';
@@ -291,9 +291,10 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.nav(
         [h.AriaLabel('Main'), ...Styled.attributes(h, styles.links)],
         [
+          // The documentation, from its first page.
           h.a(
-            [h.Href(architectureRouter()), ...Styled.attributes(h, styles.link, styles.wide)],
-            ['Architecture'],
+            [h.Href(principlesRouter()), ...Styled.attributes(h, styles.link, styles.wide)],
+            ['Docs'],
           ),
           external(`${REPOSITORY}/tree/main/examples`, 'Examples', [styles.link, styles.wide]),
           external(REPOSITORY, 'GitHub'),
