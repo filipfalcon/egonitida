@@ -6,10 +6,11 @@ import type { Html, HtmlBuilder } from 'foldkit/html';
 import cubeStory from '../../../../examples/spinning-cube/src/cube.story.test.ts?raw';
 import cube from '../../../../examples/spinning-cube/src/cube.ts?raw';
 import cubeView from '../../../../examples/spinning-cube/src/cube.view.ts?raw';
+import { docsSections, firstPageOf } from '#src/docsNav.ts';
 import { DISCORD, REPOSITORY, inRepository } from '#src/links.ts';
 import type { Message, Model } from '#src/main.ts';
-import { architectureRouter, principlesRouter } from '#src/route.ts';
-import { CANVAS_ID, MountCanvas } from '#src/world.ts';
+import { architectureRouter } from '#src/route.ts';
+import { CANVAS_ID, MountCanvas } from '#src/session.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from '../tokens.stylex.ts';
 
@@ -208,11 +209,11 @@ const CLAIMS: ReadonlyArray<{ readonly title: string; readonly text: string }> =
   },
   {
     title: 'Domains, not a pile of code',
-    text: "A game is a list of domains. A domain writes only its own components and changes another's state by emitting an event that domain declares, so who changes what can be read off the game.",
+    text: "A game is a list of domains. A domain writes only its own components and changes another's components only by emitting an event that domain declares, so who changes what can be read off the game.",
   },
   {
     title: 'Determinism',
-    text: 'Systems take randomness and time only from their context, and a lint rule holds them to it. The same build and the same inputs give the same world, which rewinding, recordings, and the check in development rest on.',
+    text: 'Systems take randomness and time only from their context, and a lint rule holds them to it. The same build and the same inputs give the same states, which rewinding, recordings, and the check in development rest on.',
   },
   {
     title: 'One shape for one player and many',
@@ -220,11 +221,11 @@ const CLAIMS: ReadonlyArray<{ readonly title: string; readonly text: string }> =
   },
   {
     title: 'Effects at the edges',
-    text: 'Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the world, such as saving a score.',
+    text: 'Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the game, such as saving a score.',
   },
   {
     title: 'Tools for agents',
-    text: 'In development, an MCP server lets an agent read the running world, hold and step time, play as one player or several, take screenshots, and turn what it played into a test.',
+    text: 'In development, an MCP server lets an agent read the state of the running game, hold and step time, play as one player or several, take screenshots, and turn what it played into a test.',
   },
 ];
 
@@ -246,7 +247,7 @@ const PARTS: ReadonlyArray<{ readonly name: string; readonly role: string }> = [
 /** When another tool fits better. */
 const ELSEWHERE: ReadonlyArray<string> = [
   'You need React and the React Three Fiber ecosystem.',
-  'You are building a 3D showcase with no state; plain Three.js does that.',
+  'You are building a 3D showcase with nothing to simulate; plain Three.js does that.',
   'You need a ready physics engine or high-end graphics; Unity, Godot, or Unreal fit better.',
   'You need thousands of entities today. Performance has not been measured and optimized yet.',
 ];
@@ -291,11 +292,13 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.nav(
         [h.AriaLabel('Main'), ...Styled.attributes(h, styles.links)],
         [
-          // The documentation, from its first page.
-          h.a(
-            [h.Href(principlesRouter()), ...Styled.attributes(h, styles.link, styles.wide)],
-            ['Docs'],
-          ),
+          // The documentation, from whichever page its navigation starts at.
+          ...Option.match(firstPageOf(docsSections), {
+            onNone: () => [],
+            onSome: ({ href }) => [
+              h.a([h.Href(href), ...Styled.attributes(h, styles.link, styles.wide)], ['Docs']),
+            ],
+          }),
           external(`${REPOSITORY}/tree/main/examples`, 'Examples', [styles.link, styles.wide]),
           external(REPOSITORY, 'GitHub'),
           external(DISCORD, 'Discord'),
@@ -320,7 +323,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.div(Styled.attributes(h, styles.heroText), [
         h.h1(Styled.attributes(h, styles.title), ['Build games agents understand.']),
         h.p(Styled.attributes(h, styles.lead), [
-          'LightOcean is an engine for real-time web applications and games. Every piece of state has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.',
+          'LightOcean is an engine for real-time web applications and games. Every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.',
         ]),
         h.div(Styled.attributes(h, styles.actions), [
           h.a([h.Href('#start'), ...Styled.attributes(h, styles.primary)], ['Get started']),
@@ -332,7 +335,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
         Option.match(model.maybeError, {
           onNone: () =>
             h.p(Styled.attributes(h, styles.caption), [
-              'This ocean is a world on the engine, stepped in a worker beside this page. Click a light to send a ripple out from it.',
+              'This ocean is a game on the engine, stepped in a worker beside this page. Click a light to send a ripple out from it.',
             ]),
           onSome: (reason) =>
             h.p(Styled.attributes(h, styles.caption, styles.error), [
@@ -357,7 +360,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       ),
       file(
         'cube.story.test.ts',
-        "The story. It steps the game itself: time is the world's step, so there are no mocks and no fake timers.",
+        "The story. It steps the game itself: time is the game's step, so there are no mocks and no fake timers.",
         cubeStory,
       ),
     ]),

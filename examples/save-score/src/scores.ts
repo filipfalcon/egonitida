@@ -2,7 +2,7 @@ import { Context, Data, Effect, Layer, Schema } from 'effect';
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/http';
 
 /**
- * Where the best score is kept, outside the world: a score saved, and the best kept so far told back. The game reaches it only through its `SaveScore` command, so how it is kept is its Layer's to say: over HTTP to the scores Worker, which keeps the best in Cloudflare KV, or recording, in a test.
+ * Where the best score is kept, outside the game: a score saved, and the best kept so far told back. The game reaches it only through its `SaveScore` command, so how it is kept is its Layer's to say: over HTTP to the scores Worker, which keeps the best in Cloudflare KV, or recording, in a test.
  */
 
 /** Why a score was not saved. */

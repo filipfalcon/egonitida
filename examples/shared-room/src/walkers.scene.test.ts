@@ -7,7 +7,7 @@ import * as WalkersView from '#src/walkers.view.ts';
 
 it.effect('draws every walker where it stands, in its own colour', () =>
   Effect.gen(function* () {
-    const [once, first] = Walkers.join(Walkers.world);
+    const [once, first] = Walkers.join(Walkers.state);
     const [twice, second] = Walkers.join(once);
     const walked = Story.story(
       Walkers.game,
@@ -17,7 +17,7 @@ it.effect('draws every walker where it stands, in its own colour', () =>
     );
     const scene = yield* Scene.make(WalkersView.views);
 
-    yield* scene.show(walked.world);
+    yield* scene.show(walked.state);
 
     const drawn = (walker: number) =>
       scene.find(WalkersView.walkers, walker).pipe(

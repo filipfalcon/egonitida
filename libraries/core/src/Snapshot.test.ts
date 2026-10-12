@@ -5,29 +5,29 @@ import { Controls, fixture, Health, Position, Splat, Velocity, Wall } from '#src
 import * as Game from '#src/Game.ts';
 import * as Domain from '#src/Domain.ts';
 import * as Snapshot from '#src/Snapshot.ts';
-import * as World from '#src/World.ts';
+import * as State from '#src/State.ts';
 
 const game = Game.only(fixture, { systems: [], rules: [] });
 
-const [withRunner] = World.spawn(World.empty({ seed: 9 }), [
+const [withRunner] = State.spawn(State.empty({ seed: 9 }), [
   Position.of({ x: 3 }),
   Velocity.of({ x: 1 }),
   Health.of({ current: 80 }),
   Controls.of({ move: 0.5, fire: true }),
 ]);
-const [withSplat, splat] = World.spawn(withRunner, [Position.of({ x: 4 }), Splat.of({ size: 2 })]);
-const [server] = World.spawn(withSplat, [Wall.of({ x: 12 })]);
+const [withSplat, splat] = State.spawn(withRunner, [Position.of({ x: 4 }), Splat.of({ size: 2 })]);
+const [server] = State.spawn(withSplat, [Wall.of({ x: 12 })]);
 
 describe('Snapshot', () => {
-  it('carries a world to a client, component for component', () => {
-    const received = Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game), game);
-    const { world } = Option.getOrThrow(received);
+  it('carries a state to a client, component for component', () => {
+    const received = Snapshot.apply(State.empty({ seed: 0 }), Snapshot.encode(server, game), game);
+    const { state } = Option.getOrThrow(received);
 
-    expect(world.tick).toBe(server.tick);
-    expect(world.nextEntity).toBe(server.nextEntity);
-    expect(world.random).toBe(server.random);
+    expect(state.tick).toBe(server.tick);
+    expect(state.nextEntity).toBe(server.nextEntity);
+    expect(state.random).toBe(server.random);
     const sameIn = <Value>(component: Component.Component<string, Value, Component.Owner>) =>
-      expect(World.query(world, component)).toEqual(World.query(server, component));
+      expect(State.query(state, component)).toEqual(State.query(server, component));
     sameIn(Position);
     sameIn(Velocity);
     sameIn(Health);
@@ -35,55 +35,55 @@ describe('Snapshot', () => {
   });
 
   it('never sends what is local, and leaves the client its own', () => {
-    const [client] = World.spawn(World.empty({ seed: 0 }), [Splat.of({ size: 7 })]);
-    const world = Option.getOrThrow(
+    const [client] = State.spawn(State.empty({ seed: 0 }), [Splat.of({ size: 7 })]);
+    const state = Option.getOrThrow(
       Snapshot.apply(client, Snapshot.encode(server, game), game),
-    ).world;
+    ).state;
 
     expect(Snapshot.encode(server, game)).not.toContain('Splat');
-    expect(World.get(world, splat, Splat)).toEqual(Option.none());
-    expect(World.query(world, Splat).map(([, value]) => value)).toEqual([{ size: 7 }]);
+    expect(State.get(state, splat, Splat)).toEqual(Option.none());
+    expect(State.query(state, Splat).map(([, value]) => value)).toEqual([{ size: 7 }]);
   });
 
   it('takes what a client keeps on an entity the server no longer holds away with it', () => {
-    const [onRunner] = World.spawn(World.empty({ seed: 0 }), [Splat.of({ size: 1 })]);
-    const gone = World.despawn(server, 0);
-    const world = Option.getOrThrow(
+    const [onRunner] = State.spawn(State.empty({ seed: 0 }), [Splat.of({ size: 1 })]);
+    const gone = State.despawn(server, 0);
+    const state = Option.getOrThrow(
       Snapshot.apply(onRunner, Snapshot.encode(gone, game), game),
-    ).world;
+    ).state;
 
-    expect(World.query(world, Splat)).toEqual([]);
+    expect(State.query(state, Splat)).toEqual([]);
   });
 
   it('keeps the entities a client spawned for itself, and the count of their ids', () => {
-    const draft = World.draft(World.empty({ seed: 0 }));
-    const own = World.spawnLocalInto(draft, [Splat.of({ size: 3 })]);
-    const client = World.finish(draft);
-    const world = Option.getOrThrow(
+    const draft = State.draft(State.empty({ seed: 0 }));
+    const own = State.spawnLocalInto(draft, [Splat.of({ size: 3 })]);
+    const client = State.finish(draft);
+    const state = Option.getOrThrow(
       Snapshot.apply(client, Snapshot.encode(server, game), game),
-    ).world;
+    ).state;
 
-    expect(World.get(world, own, Splat)).toEqual(Option.some({ size: 3 }));
-    expect(world.nextLocal).toBe(client.nextLocal);
+    expect(State.get(state, own, Splat)).toEqual(Option.some({ size: 3 }));
+    expect(state.nextLocal).toBe(client.nextLocal);
   });
 
   it('never sends what is private to the server', () => {
-    const { world } = Option.getOrThrow(
-      Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game), game),
+    const { state } = Option.getOrThrow(
+      Snapshot.apply(State.empty({ seed: 0 }), Snapshot.encode(server, game), game),
     );
 
     expect(Snapshot.encode(server, game)).not.toContain('Wall');
-    expect(World.query(world, Wall)).toEqual([]);
+    expect(State.query(state, Wall)).toEqual([]);
   });
 
-  it('carries the era a world was sent in', () => {
-    const sent = Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game, 3), game);
+  it('carries the era a state was sent in', () => {
+    const sent = Snapshot.apply(State.empty({ seed: 0 }), Snapshot.encode(server, game, 3), game);
 
     expect(Option.map(sent, ({ era }) => era)).toEqual(Option.some(3));
   });
 
   it('rejects a snapshot it cannot trust, keeping nothing of it', () => {
-    const client = World.empty({ seed: 0 });
+    const client = State.empty({ seed: 0 });
     const forged = Snapshot.encode(server, game).replace('"current":80', '"current":"lots"');
 
     expect(Snapshot.apply(client, 'not json', game)).toEqual(Option.none());
@@ -107,17 +107,17 @@ describe('Snapshot', () => {
     });
 
     expect(
-      Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(server, game), smaller),
+      Snapshot.apply(State.empty({ seed: 0 }), Snapshot.encode(server, game), smaller),
     ).toEqual(Option.none());
   });
 
   it('takes away what the server no longer holds', () => {
-    const [client] = World.spawn(World.empty({ seed: 0 }), [Health.of({ current: 5 })]);
-    const [empty] = World.spawn(World.empty({ seed: 0 }), [Position.of({ x: 1 })]);
-    const world = Option.getOrThrow(
+    const [client] = State.spawn(State.empty({ seed: 0 }), [Health.of({ current: 5 })]);
+    const [empty] = State.spawn(State.empty({ seed: 0 }), [Position.of({ x: 1 })]);
+    const state = Option.getOrThrow(
       Snapshot.apply(client, Snapshot.encode(empty, game), game),
-    ).world;
+    ).state;
 
-    expect(World.query(world, Health)).toEqual([]);
+    expect(State.query(state, Health)).toEqual([]);
   });
 });

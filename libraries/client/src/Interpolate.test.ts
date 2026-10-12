@@ -83,20 +83,20 @@ describe('Interpolate', () => {
   });
 });
 
-describe('Interpolate, over states', () => {
+describe('Interpolate, over modes', () => {
   const Fuse = Schema.Union([
     Schema.TaggedStruct('Standing', {}),
     Schema.TaggedStruct('Burning', { left: Schema.Finite }),
     Schema.TaggedStruct('Smouldering', { left: Schema.Finite }),
   ]);
 
-  it('moves the fields of one state', () => {
+  it('moves the fields of one mode', () => {
     expect(between(Fuse, { _tag: 'Burning', left: 1 }, { _tag: 'Burning', left: 0 }, 0.25)).toEqual(
       { _tag: 'Burning', left: 0.75 },
     );
   });
 
-  it('keeps the earlier state until the later one is reached, though both have the same field', () => {
+  it('keeps the earlier mode until the later one is reached, though both have the same field', () => {
     expect(
       between(Fuse, { _tag: 'Burning', left: 1 }, { _tag: 'Smouldering', left: 0 }, 0.9),
     ).toEqual({ _tag: 'Burning', left: 1 });

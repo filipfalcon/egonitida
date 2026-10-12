@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, Domain, Game, Story, System, World } from '@lightocean/core';
+import { Component, Domain, Game, Story, System, State } from '@lightocean/core';
 import { Context, Effect, Option, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Scene from '#src/Scene.ts';
@@ -68,7 +68,7 @@ describe('Scene', () => {
       );
       const scene = yield* Scene.make([crates]);
 
-      yield* scene.show(told.world);
+      yield* scene.show(told.state);
 
       const crate = Story.named(told, 'crate');
       expect(Option.map(scene.find(crates, crate), (mesh) => mesh.position.x)).toEqual(
@@ -79,7 +79,7 @@ describe('Scene', () => {
 
   it.effect("draws its camera for the player through the views' rigs, from what they drew", () =>
     Effect.gen(function* () {
-      const [world, crate] = World.spawn(World.empty({ seed: 1 }), [
+      const [state, crate] = State.spawn(State.empty({ seed: 1 }), [
         Crate.of({}),
         Position.of({ x: 3 }),
       ]);
@@ -90,7 +90,7 @@ describe('Scene', () => {
       );
       const scene = yield* Scene.make([crates, behind], Option.some(crate));
 
-      yield* scene.show(world);
+      yield* scene.show(state);
 
       expect(scene.camera.position.toArray()).toEqual([3, 0, 5]);
     }),
@@ -112,7 +112,7 @@ describe('Scene', () => {
       camera.position.set(0, 0, 5);
       const scene = yield* Scene.make([boxes]);
 
-      yield* scene.show(told.world);
+      yield* scene.show(told.state);
 
       expect(Option.map(scene.pick(camera, { x: 0, y: 0 }), ({ entity }) => entity)).toEqual(
         Option.some(Story.named(told, 'crate')),
@@ -123,8 +123,8 @@ describe('Scene', () => {
   it.effect('records what views put out through the services a test gives', () => {
     const played: Array<string> = [];
     return Effect.gen(function* () {
-      const [quiet, crate] = World.spawn(World.empty({ seed: 1 }), [Crate.of({})]);
-      const [rung] = World.spawn(World.despawn(quiet, crate), [Crate.of({}), Rung.of({ at: 1 })]);
+      const [quiet, crate] = State.spawn(State.empty({ seed: 1 }), [Crate.of({})]);
+      const [rung] = State.spawn(State.despawn(quiet, crate), [Crate.of({}), Rung.of({ at: 1 })]);
       const scene = yield* Scene.make([rings]);
 
       yield* scene.show(quiet);

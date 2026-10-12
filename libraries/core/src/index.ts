@@ -9,7 +9,7 @@ export * as Host from '#src/Host.ts';
 export * as Input from '#src/Input.ts';
 export * as Pointing from '#src/Pointing.ts';
 export * as Rule from '#src/Rule.ts';
+export * as State from '#src/State.ts';
 export * as Story from '#src/Story.ts';
 export * as System from '#src/System.ts';
 export * as WorkerTransport from '#src/WorkerTransport.ts';
-export * as World from '#src/World.ts';

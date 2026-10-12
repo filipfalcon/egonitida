@@ -1,4 +1,4 @@
-import { type Host, World } from '@lightocean/core';
+import { type Host, State } from '@lightocean/core';
 import { Effect, Option, type Scope } from 'effect';
 import * as Bridge from '#src/Bridge.ts';
 import * as Debugger from '#src/Debugger.ts';
@@ -48,7 +48,7 @@ export const serve = (
   });
 
 /**
- * Hosts a game in development with everything the devtools give: from the world kept for the tab the host is known by, if the game can read it; kept on every second, so reloading the page goes on from it; handed each new build of the game as its code changes, by what outlives each run of the module that hosts it (`kept`, its hot data); and with the devtools beside it. `serving` serves the host, the first time only.
+ * Hosts a game in development with everything the devtools give: from the state kept for the tab the host is known by, if the game can read it; kept on every second, so reloading the page goes on from it; handed each new build of the game as its code changes, by what outlives each run of the module that hosts it (`kept`, its hot data); and with the devtools beside it. `serving` serves the host, the first time only.
  */
 export const host = <Services = never, E = never, R = never>(
   options: Host.Options<Services>,
@@ -58,7 +58,7 @@ export const host = <Services = never, E = never, R = never>(
     readonly id: string;
     /** What outlives each run of the module that hosts the game, such as its hot data. */
     readonly kept: object | undefined;
-    /** Where worlds are kept; the browser's IndexedDB unless given. */
+    /** Where states are kept; the browser's IndexedDB unless given. */
     readonly store?: Option.Option<Keep.Store> | undefined;
   },
   serving: (host: Host.Host<Services>) => Effect.Effect<void, E, R>,
@@ -70,20 +70,20 @@ export const host = <Services = never, E = never, R = never>(
       onSome: (found) => Keep.load(found, options.game, devtools.id),
     });
     const players = Option.match(kept, { onNone: () => [], onSome: (taken) => taken.players });
-    // The players of the kept world, given back one to each client that joins, the first first, while the world holds them.
+    // The players of the kept state, given back one to each client that joins, the first first, while the state holds them.
     const waiting = [...players];
-    const join = (world: World.World): readonly [World.World, World.Entity] => {
+    const join = (state: State.State): readonly [State.State, State.Entity] => {
       const player = waiting.shift();
-      return player !== undefined && World.entities(world).includes(player)
-        ? [world, player]
-        : options.join(world);
+      return player !== undefined && State.entities(state).includes(player)
+        ? [state, player]
+        : options.join(state);
     };
     yield* Reload.host(
       devtools.kept,
       {
         ...options,
         join,
-        world: Option.match(kept, { onNone: () => options.world, onSome: (taken) => taken.world }),
+        state: Option.match(kept, { onNone: () => options.state, onSome: (taken) => taken.state }),
       },
       (hosted) =>
         Effect.gen(function* () {

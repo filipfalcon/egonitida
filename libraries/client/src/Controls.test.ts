@@ -18,12 +18,12 @@ const bindings = {
 const idle = Devices.idle;
 
 /** A pad holding `pad`, and nothing else held. */
-const onPad = (pad: Partial<Devices.Pad>): Devices.State => ({
+const onPad = (pad: Partial<Devices.Pad>): Devices.Reading => ({
   ...idle,
   pads: [{ ...Devices.idlePad, ...pad }],
 });
 
-const read = (devices: Devices.State, previous = Controls.start(bindings)) =>
+const read = (devices: Devices.Reading, previous = Controls.start(bindings)) =>
   Controls.read(bindings, devices, previous);
 
 describe('controls', () => {
@@ -84,7 +84,8 @@ describe('controls', () => {
         mouse: [0, 2],
       }),
     };
-    const reading = (devices: Devices.State) => Controls.read(many, devices, Controls.start(many));
+    const reading = (devices: Devices.Reading) =>
+      Controls.read(many, devices, Controls.start(many));
 
     expect(reading({ ...idle, keys: new Set(['ArrowUp']) }).values.stick('move')).toEqual({
       x: 0,

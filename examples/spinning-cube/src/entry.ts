@@ -6,7 +6,7 @@ import * as Three from 'three/webgpu';
 import * as Cube from '#src/cube.ts';
 import * as CubeView from '#src/cube.view.ts';
 
-// The page: joins the local server in a worker, and draws its world through the cube's views at every frame the display shows.
+// The page: joins the local server in a worker, and draws its state through the cube's views at every frame the display shows.
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');
   if (!(canvas instanceof HTMLCanvasElement)) {

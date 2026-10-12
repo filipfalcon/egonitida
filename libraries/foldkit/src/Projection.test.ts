@@ -8,13 +8,13 @@ import {
   Rule,
   System,
   WorkerTransport,
-  World as Worlds,
+  State,
 } from '@lightocean/core';
 import { Effect, Option, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Held from '#src/Held.ts';
 import * as Projection from '#src/Projection.ts';
-import * as World from '#src/World.ts';
+import * as Session from '#src/Session.ts';
 
 /** A tally a player adds to, one at a time, and a clock that runs on every step whatever the player does. */
 const Tally = Component.make('Tally', Schema.Struct({ count: Schema.Int }), {
@@ -66,20 +66,20 @@ const joined = Effect.gen(function* () {
   const channel = new MessageChannel();
   yield* WorkerTransport.serve({
     game,
-    world: Worlds.empty({ seed: 1 }),
-    join: (world: Worlds.World) =>
-      Worlds.spawn(world, [Tally.of({ count: 0 }), Clock.of({ steps: 0 })]),
-    leave: Worlds.despawn,
+    state: State.empty({ seed: 1 }),
+    join: (state: State.State) =>
+      State.spawn(state, [Tally.of({ count: 0 }), Clock.of({ steps: 0 })]),
+    leave: State.despawn,
     mayHold: false,
   }).pipe(Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)), Effect.forkScoped);
-  return yield* World.join(game, () => channel.port1);
+  return yield* Session.join(game, () => channel.port1);
 });
 
 /** How many the player has counted, as an application shows it. */
 const counted = {
   schema: Schema.Struct({ count: Schema.Int }),
-  project: (world: Worlds.World, player: Worlds.Entity) => ({
-    count: Option.match(Worlds.get(world, player, Tally), {
+  project: (state: State.State, player: State.Entity) => ({
+    count: Option.match(State.get(state, player, Tally), {
       onNone: () => 0,
       onSome: ({ count }) => count,
     }),
@@ -89,12 +89,12 @@ const counted = {
 describe('a projection', () => {
   // Real time: frames between the two ports travel on the event loop, as they do between a page and its worker.
   it.live(
-    'tells what an application shows of the world as it is, then each time it changes, and never while it stays',
+    'tells what an application shows of the game as it is, then each time it changes, and never while it stays',
     () =>
       Effect.gen(function* () {
-        const world = yield* joined;
+        const session = yield* joined;
         const told: Array<{ readonly count: number }> = [];
-        yield* Projection.changes(world, counted).pipe(
+        yield* Projection.changes(session, counted).pipe(
           Stream.runForEach((value) =>
             Effect.sync(() => {
               told.push(value);
@@ -104,11 +104,11 @@ describe('a projection', () => {
         );
 
         yield* Effect.sleep('200 millis');
-        yield* world.client.act(Counted, {});
+        yield* session.client.act(Counted, {});
         yield* Effect.sleep('200 millis');
-        yield* world.client.act(Counted, {});
+        yield* session.client.act(Counted, {});
         yield* Effect.sleep('300 millis');
-        const clock = Worlds.get(yield* world.client.world, world.client.entity, Clock);
+        const clock = State.get(yield* session.client.state, session.client.entity, Clock);
 
         expect(Option.map(clock, ({ steps }) => steps > 10)).toEqual(Option.some(true));
         expect(told).toEqual([{ count: 0 }, { count: 1 }, { count: 2 }]);
@@ -116,10 +116,10 @@ describe('a projection', () => {
   );
 
   it.effect(
-    'says the world is not joined, rather than telling nothing, when the Model believes it is but it is not',
+    'says the session is not joined, rather than telling nothing, when the Model believes it is but it is not',
     () =>
       Effect.gen(function* () {
-        const resource = ManagedResource.tag<World.Joined>()('Tallies');
+        const resource = ManagedResource.tag<Session.Joined>()('Tallies');
         const told = yield* Projection.stream({
           ...counted,
           resource,
@@ -128,7 +128,7 @@ describe('a projection', () => {
         }).pipe(
           Stream.runCollect,
           // As Foldkit holds a resource it has not acquired, such as one a Model restored after a reload says is.
-          Held.holding(resource, yield* Ref.make(Option.none<World.Joined>())),
+          Held.holding(resource, yield* Ref.make(Option.none<Session.Joined>())),
         );
 
         expect(told).toEqual(['not joined']);

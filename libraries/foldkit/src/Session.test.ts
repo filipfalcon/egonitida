@@ -8,12 +8,12 @@ import {
   Host,
   Rule,
   WorkerTransport,
-  World as Worlds,
+  State,
 } from '@lightocean/core';
 import { Effect, Option, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Held from '#src/Held.ts';
-import * as World from '#src/World.ts';
+import * as Session from '#src/Session.ts';
 
 /** A tally a player adds to, one at a time. */
 const Tally = Component.make('Tally', Schema.Struct({ count: Schema.Int }), {
@@ -50,15 +50,15 @@ const hosted = Effect.gen(function* () {
   const channel = new MessageChannel();
   yield* WorkerTransport.serve({
     game,
-    world: Worlds.empty({ seed: 1 }),
-    join: (world: Worlds.World) => Worlds.spawn(world, [Tally.of({ count: 0 })]),
-    leave: Worlds.despawn,
+    state: State.empty({ seed: 1 }),
+    join: (state: State.State) => State.spawn(state, [Tally.of({ count: 0 })]),
+    leave: State.despawn,
     mayHold: false,
   }).pipe(Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)), Effect.forkScoped);
   return () => channel.port1;
 });
 
-/** What an application's Model says of the world here: whether it wants it joined. */
+/** What an application's Model says of the session here: whether it wants it joined. */
 interface Model {
   readonly playing: boolean;
 }
@@ -67,17 +67,17 @@ type Message =
   | { readonly _tag: 'Left' }
   | { readonly _tag: 'FailedToJoin'; readonly reason: string };
 
-describe('a world from Foldkit', () => {
+describe('a session from Foldkit', () => {
   // Real time: frames between the two ports travel on the event loop, as they do between a page and its worker.
   it.live('is joined in a worker, played through its client, and drawn', () =>
     Effect.gen(function* () {
       const worker = yield* hosted;
 
-      const joined = yield* World.join(game, worker);
+      const joined = yield* Session.join(game, worker);
       yield* joined.client.act(Counted, {});
       yield* Effect.sleep('300 millis');
 
-      const tally = Worlds.get(yield* joined.client.world, joined.client.entity, Tally);
+      const tally = State.get(yield* joined.client.state, joined.client.entity, Tally);
       expect(Option.map(tally, ({ count }) => count)).toEqual(Option.some(1));
       expect(Option.isSome(joined.drawing.frame(0.3))).toBe(true);
     }).pipe(Effect.scoped),
@@ -86,8 +86,8 @@ describe('a world from Foldkit', () => {
   it.live("is joined while the application's Model wants it, and says so in its Messages", () =>
     Effect.gen(function* () {
       const worker = yield* hosted;
-      const managed = World.managed({
-        resource: ManagedResource.tag<World.Joined>()('World'),
+      const managed = Session.managed({
+        resource: ManagedResource.tag<Session.Joined>()('Session'),
         game,
         worker,
         joins: ({ playing }: Model) => playing,
@@ -97,7 +97,7 @@ describe('a world from Foldkit', () => {
       });
       // Foldkit takes it as one of an application's Managed Resources.
       ManagedResource.make<Model, Message>()((entry) => ({
-        world: entry(World.Requirements, managed),
+        session: entry(Session.Requirements, managed),
       }));
 
       const joined = yield* managed.acquire();
@@ -120,18 +120,17 @@ describe('a world from Foldkit', () => {
       yield* WorkerTransport.serveOpened((opening) =>
         Host.make({
           game,
-          world: Worlds.empty({ seed: 1 }),
-          join: (world: Worlds.World) =>
-            Worlds.spawn(world, [Tally.of({ count: Number(opening) })]),
-          leave: Worlds.despawn,
+          state: State.empty({ seed: 1 }),
+          join: (state: State.State) => State.spawn(state, [Tally.of({ count: Number(opening) })]),
+          leave: State.despawn,
           mayHold: false,
         }),
       ).pipe(
         Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)),
         Effect.forkScoped,
       );
-      const opened = World.opened({
-        resource: ManagedResource.tag<World.Joined>()('Counting'),
+      const opened = Session.opened({
+        resource: ManagedResource.tag<Session.Joined>()('Counting'),
         game,
         worker: () => channel.port1,
         opens: ({ startingAt }: { readonly startingAt: Option.Option<string> }) => startingAt,
@@ -148,23 +147,23 @@ describe('a world from Foldkit', () => {
       );
       expect(
         Option.map(
-          Worlds.get(yield* joined.client.world, joined.client.entity, Tally),
+          State.get(yield* joined.client.state, joined.client.entity, Tally),
           ({ count }) => count,
         ),
       ).toEqual(Option.some(5));
     }).pipe(Effect.scoped),
   );
 
-  // Real time: the world is joined a while after the Model says it is not, as a worker joins.
-  it.live('says once that a world is joined, however long after the Model said it was not', () =>
+  // Real time: the session is joined a while after the Model says it is not, as a worker joins.
+  it.live('says once that a session is joined, however long after the Model said it was not', () =>
     Effect.gen(function* () {
-      const resource = ManagedResource.tag<World.Joined>()('Late');
+      const resource = ManagedResource.tag<Session.Joined>()('Late');
       // As Foldkit holds a resource, acquired a while after the Stream starts looking.
-      const held = yield* Ref.make(Option.none<World.Joined>());
-      const joined = yield* hosted.pipe(Effect.flatMap((worker) => World.join(game, worker)));
+      const held = yield* Ref.make(Option.none<Session.Joined>());
+      const joined = yield* hosted.pipe(Effect.flatMap((worker) => Session.join(game, worker)));
       yield* Ref.set(held, Option.some(joined)).pipe(Effect.delay('150 millis'), Effect.forkScoped);
 
-      const told = yield* World.whenJoined({ resource, onJoined: () => 'joined' }).pipe(
+      const told = yield* Session.whenJoined({ resource, onJoined: () => 'joined' }).pipe(
         Stream.runCollect,
         Held.holding(resource, held),
       );
@@ -173,15 +172,15 @@ describe('a world from Foldkit', () => {
     }).pipe(Effect.scoped),
   );
 
-  // Real time: a world that never joins, looked for until the Model stops asking.
-  it.live('says nothing of a world never joined, and stops looking when asked to', () =>
+  // Real time: a session that never joins, looked for until the Model stops asking.
+  it.live('says nothing of a session never joined, and stops looking when asked to', () =>
     Effect.gen(function* () {
-      const resource = ManagedResource.tag<World.Joined>()('Never');
+      const resource = ManagedResource.tag<Session.Joined>()('Never');
 
-      const told = yield* World.whenJoined({ resource, onJoined: () => 'joined' }).pipe(
+      const told = yield* Session.whenJoined({ resource, onJoined: () => 'joined' }).pipe(
         Stream.runCollect,
         Effect.timeoutOption('300 millis'),
-        Held.holding(resource, yield* Ref.make(Option.none<World.Joined>())),
+        Held.holding(resource, yield* Ref.make(Option.none<Session.Joined>())),
       );
 
       expect(told).toEqual(Option.none());

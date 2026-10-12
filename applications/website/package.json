@@ -15,6 +15,7 @@
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
     "@foldkit/markdown": "0.14.2",
+    "@fontsource/unbounded": "5.3.0",
     "@lightocean/client": "*",
     "@lightocean/core": "*",
     "@lightocean/devtools": "*",

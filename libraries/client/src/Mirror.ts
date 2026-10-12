@@ -1,4 +1,4 @@
-import { type Client, Pointing, type World } from '@lightocean/core';
+import { type Client, Pointing, type State } from '@lightocean/core';
 import { Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import type * as Drawing from '#src/Drawing.ts';
@@ -26,7 +26,7 @@ export const make = (options: {
 }): Effect.Effect<Mirror, never, Scope.Scope> =>
   Effect.gen(function* () {
     const run = Effect.runForkWith(yield* Effect.context<never>());
-    const buttons = new Map<World.Entity, HTMLButtonElement>();
+    const buttons = new Map<State.Entity, HTMLButtonElement>();
 
     const list = yield* Effect.acquireRelease(
       Effect.sync(() => {
@@ -54,7 +54,7 @@ export const make = (options: {
     );
 
     /** The button standing for `entity`, made the first time. */
-    const buttonFor = (entity: World.Entity) => {
+    const buttonFor = (entity: State.Entity) => {
       const known = buttons.get(entity);
       if (known !== undefined) {
         return known;

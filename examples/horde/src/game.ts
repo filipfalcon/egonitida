@@ -1,4 +1,4 @@
-import { Game, World } from '@lightocean/core';
+import { Game, State } from '@lightocean/core';
 import * as Body from '#src/body.ts';
 import * as Horde from '#src/horde.ts';
 import * as Survivor from '#src/survivor.ts';
@@ -14,4 +14,4 @@ export const game = Game.make({
 });
 
 /** The arena before anyone has joined: empty, but for when the next zombie rises. */
-export const [world] = World.spawn(World.empty({ seed: 1 }), [Horde.Tide.of({ nextAt: 0 })]);
+export const [state] = State.spawn(State.empty({ seed: 1 }), [Horde.Tide.of({ nextAt: 0 })]);

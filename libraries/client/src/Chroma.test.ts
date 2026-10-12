@@ -11,10 +11,10 @@ const app: Chroma.App = {
   category: 'game',
 };
 
-/** Where the session that Chroma starts is reached. */
-const SESSION = 'http://localhost:55000/chromasdk';
+/** Where the connection that Chroma makes is reached. */
+const CONNECTION = 'http://localhost:55000/chromasdk';
 
-/** Chroma as Razer's software serves it: a session for the app that asks, and every other request answered as done; what is asked of it is kept in order. */
+/** Chroma as Razer's software serves it: a connection for the app that asks, and every other request answered as done; what is asked of it is kept in order. */
 const recording = () => {
   const asked: Array<{ readonly method: string; readonly url: string; readonly body: unknown }> =
     [];
@@ -25,7 +25,7 @@ const recording = () => {
           ? JSON.parse(new TextDecoder().decode(request.body.body))
           : undefined;
       asked.push({ method: request.method, url: request.url, body });
-      const answer = request.method === 'POST' ? { sessionid: 7, uri: SESSION } : { result: 0 };
+      const answer = request.method === 'POST' ? { sessionid: 7, uri: CONNECTION } : { result: 0 };
       return HttpClientResponse.fromWeb(request, new Response(JSON.stringify(answer)));
     }),
   );
@@ -34,7 +34,7 @@ const recording = () => {
 
 describe('Chroma', () => {
   it.effect(
-    'lights every kind of Razer device through a session of its own, kept alive, and ended with the scope',
+    'lights every kind of Razer device through a connection of its own, kept alive, and ended with the scope',
     () => {
       const chroma = recording();
       return Effect.gen(function* () {
@@ -61,13 +61,13 @@ describe('Chroma', () => {
         expect(chroma.asked.slice(1, lighting)).toEqual(
           Chroma.DEVICES.map((device) => ({
             method: 'PUT',
-            url: `${SESSION}/${device}`,
+            url: `${CONNECTION}/${device}`,
             body: { effect: 'CHROMA_STATIC', param: { color: 0x0080ff } },
           })),
         );
         expect(chroma.asked.slice(lighting).map(({ method, url }) => [method, url])).toEqual([
-          ['PUT', `${SESSION}/heartbeat`],
-          ['DELETE', SESSION],
+          ['PUT', `${CONNECTION}/heartbeat`],
+          ['DELETE', CONNECTION],
         ]);
       }).pipe(Effect.provideService(HttpClient.HttpClient, chroma.client));
     },

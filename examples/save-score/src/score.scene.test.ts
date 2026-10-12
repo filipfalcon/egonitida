@@ -9,13 +9,13 @@ it.effect('draws every target where it stands, and where it moved to once hit', 
   Effect.gen(function* () {
     const hit = Story.story(
       Score.game,
-      Story.given(Score.world, { target: Score.firstTarget, player: Score.player }),
+      Story.given(Score.state, { target: Score.firstTarget, player: Score.player }),
       Story.act('player', Pointing.Clicked, { entity: Score.firstTarget }),
       Story.step(),
     );
     const scene = yield* Scene.make(ScoreView.views);
 
-    yield* scene.show(hit.world);
+    yield* scene.show(hit.state);
 
     const { x, z } = Story.valueOf(hit, 'target', Score.Target);
     expect(

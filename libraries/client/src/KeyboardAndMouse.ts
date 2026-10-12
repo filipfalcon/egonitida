@@ -18,7 +18,7 @@ declare global {
 
 export interface Source {
   /** The keys and the mouse since the last reading: what is held, what was tapped meanwhile, and how far the mouse and its wheel moved. */
-  readonly read: () => Pick<Devices.State, 'keys' | 'mouse'>;
+  readonly read: () => Pick<Devices.Reading, 'keys' | 'mouse'>;
 }
 
 /** Listens to `type` on `target` until the scope closes. */
@@ -225,19 +225,19 @@ export const pointerLock = (
 ): Effect.Effect<PointerLock, never, Scope.Scope> =>
   Effect.gen(function* () {
     const lost = yield* PubSub.unbounded<void>();
-    const state = { held: false, letting: false };
+    const pointer = { held: false, letting: false };
     const run = Effect.runForkWith(yield* Effect.context<never>());
     yield* listenOn(locking, 'pointerlockchange', () => {
       const held = locking.pointerLockElement === element;
-      if (state.held && !held && !state.letting) {
+      if (pointer.held && !held && !pointer.letting) {
         run(PubSub.publish(lost, undefined));
       }
-      state.held = held;
-      state.letting = false;
+      pointer.held = held;
+      pointer.letting = false;
     });
     const release = Effect.sync(() => {
       if (locking.pointerLockElement === element) {
-        state.letting = true;
+        pointer.letting = true;
         locking.exitPointerLock();
       }
     });

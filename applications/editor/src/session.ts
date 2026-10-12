@@ -1,6 +1,6 @@
 import { Tab, type Viewport } from '@lightocean/client';
-import { Pointing, World as Worlds } from '@lightocean/core';
-import { Projection, Stage, World } from '@lightocean/foldkit';
+import { Pointing, State } from '@lightocean/core';
+import { Projection, Session, Stage } from '@lightocean/foldkit';
 import { Bridge, Inspect, Log, Page } from '@lightocean/devtools';
 import { Effect, Option, Schedule, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
@@ -20,7 +20,7 @@ import * as Objects from '#src/objects.ts';
 import * as ObjectsView from '#src/objects.view.ts';
 import * as Playing from '#src/playing.ts';
 
-// Where the document meets the page: joined in a worker while the editor is open, shown on the canvas once Foldkit has it in the page, and read for the outliner and the panels of what is selected. While it plays, a second worker plays it, and the canvas shows that world instead.
+// Where the document meets the page: joined in a worker while the editor is open, shown on the canvas once Foldkit has it in the page, and read for the outliner and the panels of what is selected. While it plays, a second worker plays it, and the canvas shows that game instead.
 
 /** The id the devtools know the editor's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the document kept for the tab. */
 const host = Tab.id('editor');
@@ -45,8 +45,8 @@ const capturedAs = (host: string) => (viewport: Viewport.Viewport) =>
 /** The document, joined while the editor is open, and the document playing, opened with the document as it was, while it plays. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
   document: entry(
-    World.Requirements,
-    World.managed<Model, Message, Services>({
+    Session.Requirements,
+    Session.managed<Model, Message, Services>({
       resource: Document,
       game: Editing.game,
       worker: () =>
@@ -61,8 +61,8 @@ export const managedResources = ManagedResource.make<Model, Message>()((entry) =
     }),
   ),
   played: entry(
-    World.Opening,
-    World.opened<Model, Message, Services>({
+    Session.Opening,
+    Session.opened<Model, Message, Services>({
       resource: Played,
       game: Playing.game,
       worker: () =>
@@ -100,13 +100,13 @@ const setUp = ({
 };
 
 /** Every object in the document, as the outliner lists it, in the order they were made. */
-const outlineOf = (world: Worlds.World): ReadonlyArray<OutlineEntry> =>
-  Worlds.holding(world, [Objects.Shape]).flatMap((entity) =>
+const outlineOf = (state: State.State): ReadonlyArray<OutlineEntry> =>
+  State.holding(state, [Objects.Shape]).flatMap((entity) =>
     Option.toArray(
       Option.all({
-        shape: Worlds.get(world, entity, Objects.Shape),
-        label: Worlds.get(world, entity, Pointing.Label),
-        behaviour: Worlds.get(world, entity, Objects.Behaviour),
+        shape: State.get(state, entity, Objects.Shape),
+        label: State.get(state, entity, Pointing.Label),
+        behaviour: State.get(state, entity, Objects.Behaviour),
       }).pipe(
         Option.map(({ shape, label, behaviour }) => ({
           entity,
@@ -119,18 +119,18 @@ const outlineOf = (world: Worlds.World): ReadonlyArray<OutlineEntry> =>
   );
 
 /** The object `editor` has selected, as the panels show it, if they have one. */
-const selectedBy = (world: Worlds.World, editor: Worlds.Entity): Option.Option<Selected> =>
+const selectedBy = (state: State.State, editor: State.Entity): Option.Option<Selected> =>
   Option.flatMap(
-    Option.flatMap(Worlds.get(world, editor, Editing.Selection), ({ selected }) => selected),
+    Option.flatMap(State.get(state, editor, Editing.Selection), ({ selected }) => selected),
     (entity) =>
       Option.map(
         Option.all({
-          label: Worlds.get(world, entity, Pointing.Label),
-          shape: Worlds.get(world, entity, Objects.Shape),
-          transform: Worlds.get(world, entity, Objects.Transform),
-          colour: Worlds.get(world, entity, Objects.Colour),
-          spin: Worlds.get(world, entity, Objects.Spin),
-          behaviour: Worlds.get(world, entity, Objects.Behaviour),
+          label: State.get(state, entity, Pointing.Label),
+          shape: State.get(state, entity, Objects.Shape),
+          transform: State.get(state, entity, Objects.Transform),
+          colour: State.get(state, entity, Objects.Colour),
+          spin: State.get(state, entity, Objects.Spin),
+          behaviour: State.get(state, entity, Objects.Behaviour),
         }),
         ({ label, behaviour, ...rest }) => ({
           entity,
@@ -141,7 +141,7 @@ const selectedBy = (world: Worlds.World, editor: Worlds.Entity): Option.Option<S
       ),
   );
 
-/** What the canvas shows: nothing until it and the document are there, then the document being edited, or the document playing once its world is joined. */
+/** What the canvas shows: nothing until it and the document are there, then the document being edited, or the document playing once its session is joined. */
 const shownBy = (model: Model): 'Nothing' | 'Editing' | 'Playing' => {
   if (model.document._tag !== 'Joined' || model.document.canvas !== 'Mounted') {
     return 'Nothing';
@@ -149,7 +149,7 @@ const shownBy = (model: Model): 'Nothing' | 'Editing' | 'Playing' => {
   if (model.play._tag === 'Editing') {
     return 'Editing';
   }
-  return model.play.world === 'Joined' ? 'Playing' : 'Nothing';
+  return model.play.session === 'Joined' ? 'Playing' : 'Nothing';
 };
 
 /** The ticks the debugger of the document playing keeps. */
@@ -187,7 +187,7 @@ const stepsTold: Stream.Stream<Message, never, Services> = Stream.unwrap(
 
 /** The canvas showing the document or the document playing, the steps the debugger tells, and what the outliner and the panels show of the document. */
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
-  // The canvas shows the document being edited, with what is selected outlined, or the document playing, once its world is joined.
+  // The canvas shows the document being edited, with what is selected outlined, or the document playing, once its session is joined.
   stage: entry(
     { shown: Schema.Literals(['Nothing', 'Editing', 'Playing']) },
     {
@@ -224,7 +224,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
     { isPlayJoined: Schema.Boolean },
     {
       modelToDependencies: ({ play }) => ({
-        isPlayJoined: play._tag === 'Playing' && play.world === 'Joined',
+        isPlayJoined: play._tag === 'Playing' && play.session === 'Joined',
       }),
       dependenciesToStream: ({ isPlayJoined }) => (isPlayJoined ? stepsTold : Stream.empty),
     },
@@ -261,14 +261,14 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
           : Stream.empty,
     },
   ),
-  // While the Model says the document, or the world playing it, is not joined, it may already be: joined a moment before the stage found it was not.
+  // While the Model says the document, or the game playing it, is not joined, it may already be: joined a moment before the stage found it was not.
   documentJoining: entry(
     { isJoining: Schema.Boolean },
     {
       modelToDependencies: ({ document }) => ({ isJoining: document._tag === 'Joining' }),
       dependenciesToStream: ({ isJoining }) =>
         isJoining
-          ? World.whenJoined({
+          ? Session.whenJoined({
               resource: Document,
               onJoined: (): Message => Message.FoundDocumentJoined(),
             })
@@ -279,11 +279,11 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
     { isJoining: Schema.Boolean },
     {
       modelToDependencies: ({ play }) => ({
-        isJoining: play._tag === 'Playing' && play.world === 'Opening',
+        isJoining: play._tag === 'Playing' && play.session === 'Opening',
       }),
       dependenciesToStream: ({ isJoining }) =>
         isJoining
-          ? World.whenJoined({
+          ? Session.whenJoined({
               resource: Played,
               onJoined: (): Message => Message.FoundPlayJoined(),
             })

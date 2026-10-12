@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
 import { Scene } from '@lightocean/client';
-import { Story, World } from '@lightocean/core';
+import { Story, State } from '@lightocean/core';
 import { Effect, Option } from 'effect';
 import * as Body from '#src/body.ts';
 import * as Game from '#src/game.ts';
@@ -14,14 +14,14 @@ const views = [SurvivorView.survivors, ...HordeView.views];
 
 /** A survivor aiming along z at a zombie three metres off, who has just shot it down. */
 const shotDown = () => {
-  const [withSurvivor, survivor] = Survivor.join(World.empty({ seed: 1 }));
-  const [world, zombie] = World.spawn(
+  const [withSurvivor, survivor] = Survivor.join(State.empty({ seed: 1 }));
+  const [state, zombie] = State.spawn(
     withSurvivor,
     Horde.risen({ x: 0, z: 3, health: 1, speed: 1 }),
   );
   return Story.story(
     Game.game,
-    Story.given(world, { survivor, zombie }),
+    Story.given(state, { survivor, zombie }),
     Story.input('survivor', Survivor.Stick, { x: 0, z: 0, aim: Math.PI / 2 }),
     Story.step(),
     Story.act('survivor', Survivor.PulledTrigger, {}),
@@ -34,7 +34,7 @@ it.effect('draws a survivor where they stand, turned the way they aim', () =>
     const told = shotDown();
     const scene = yield* Scene.make(views);
 
-    yield* scene.show(told.world);
+    yield* scene.show(told.state);
 
     const drawn = scene.find(SurvivorView.survivors, Story.named(told, 'survivor'));
     const { x, z } = Story.valueOf(told, 'survivor', Body.Position);
@@ -52,9 +52,9 @@ it.effect('draws a shot the moment it is fired, and not long after', () =>
     const scene = yield* Scene.make(views);
     const survivor = Story.named(told, 'survivor');
 
-    yield* scene.show(told.world);
+    yield* scene.show(told.state);
     const fired = Option.map(scene.find(HordeView.shots, survivor), ({ visible }) => visible);
-    yield* scene.show(later.world);
+    yield* scene.show(later.state);
     const faded = Option.map(scene.find(HordeView.shots, survivor), ({ visible }) => visible);
 
     expect(fired).toEqual(Option.some(true));
@@ -65,17 +65,17 @@ it.effect('draws a shot the moment it is fired, and not long after', () =>
 it.effect('draws a zombie upright while it shambles, and lying once it falls', () =>
   Effect.gen(function* () {
     const told = shotDown();
-    const [shambling, walker] = World.spawn(
-      World.empty({ seed: 1 }),
+    const [shambling, walker] = State.spawn(
+      State.empty({ seed: 1 }),
       Horde.risen({ x: 0, z: 3, health: 1, speed: 1 }),
     );
     const upright = yield* Scene.make(views);
     const lying = yield* Scene.make(views);
 
     yield* upright.show(shambling);
-    yield* lying.show(told.world);
+    yield* lying.show(told.state);
 
-    const tilt = (scene: typeof upright, zombie: World.Entity) =>
+    const tilt = (scene: typeof upright, zombie: State.Entity) =>
       Option.map(scene.find(HordeView.zombies, zombie), ({ rotation }) => rotation.x);
     expect(tilt(upright, walker)).toEqual(Option.some(0));
     expect(tilt(lying, Story.named(told, 'zombie'))).toEqual(Option.some(-Math.PI / 2));

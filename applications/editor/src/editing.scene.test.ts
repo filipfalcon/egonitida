@@ -6,7 +6,7 @@ import * as Editing from '#src/editing.ts';
 import * as EditingView from '#src/editing.view.ts';
 import * as Objects from '#src/objects.ts';
 
-const given = Story.given(Editing.joined.world, {
+const given = Story.given(Editing.joined.state, {
   editor: Editing.joined.editor,
   sphere: Editing.sphere,
 });
@@ -23,19 +23,19 @@ it.effect(
       );
       const letGo = Story.story(
         Editing.game,
-        Story.given(selected.world, { editor: Editing.joined.editor }),
+        Story.given(selected.state, { editor: Editing.joined.editor }),
         Story.act('editor', Editing.Deselected, {}),
         Story.step(),
       );
       const scene = yield* Scene.make(EditingView.views);
       const outline = () => scene.find(EditingView.selections, Editing.joined.editor);
 
-      yield* scene.show(selected.world);
+      yield* scene.show(selected.state);
       const around = Option.map(outline(), ({ visible, box }) => ({
         visible,
         centre: box.getCenter(box.min.clone()).toArray(),
       }));
-      yield* scene.show(letGo.world);
+      yield* scene.show(letGo.state);
       const gone = Option.map(outline(), ({ visible }) => visible);
 
       expect(around).toEqual(

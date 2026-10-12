@@ -9,14 +9,14 @@ import * as Pace from '#src/Pace.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import type * as Transport from '#src/Transport.ts';
-import type * as World from '#src/World.ts';
+import type * as State from '#src/State.ts';
 
 /**
- * Hosts a game: steps its world at the game's rate, takes the input its clients send, and sends every client the world after each step. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
+ * Hosts a game: steps it at its rate, takes the input its clients send, and sends every client the state after each step. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
  *
- * Everything that changes its world can be watched, so the world can be told again from where watching began: a client joining or leaving, which happens between steps, and every step, with the input and actions that went into it. Command results enter as actions, so they are among them.
+ * Everything that replaces its state can be watched, so its states can be told again from where watching began: a client joining or leaving, which happens between steps, and every step, with the input and actions that went into it. Command results enter as actions, so they are among them.
  *
- * It also runs the commands the game's rules issue, once the step that issued them is over, with the services of the Layers it is given; so hosting a game that saves needs whatever it saves to. A command's result enters the world at the next step taken after it comes, as actions do. A command that breaks is reported, has no result, and stops nothing.
+ * It also runs the commands the game's rules issue, once the step that issued them is over, with the services of the Layers it is given; so hosting a game that saves needs whatever it saves to. A command's result enters the game at the next step taken after it comes, as actions do. A command that breaks is reported, has no result, and stops nothing.
  */
 
 /** What a host plays: a game whose commands need `Services`, and how a client joins it and leaves. */
@@ -28,92 +28,92 @@ export interface Setup<Services = never> {
     Command.Command<string, unknown, Event.Any, Services>
   >;
   /** Spawns the entity a joining client will control. */
-  readonly join: (world: World.World) => readonly [World.World, World.Entity];
+  readonly join: (state: State.State) => readonly [State.State, State.Entity];
   /** Removes what a leaving client controlled. */
-  readonly leave: (world: World.World, entity: World.Entity) => World.World;
+  readonly leave: (state: State.State, entity: State.Entity) => State.State;
 }
 
-/** What it takes to host a game whose commands need `Services`: what it plays, and the world it starts from. */
+/** What it takes to host a game whose commands need `Services`: what it plays, and the state it starts from. */
 export interface Options<Services = never> extends Setup<Services> {
-  readonly world: World.World;
+  readonly state: State.State;
   /** The most steps taken at once to catch up after a stall. */
   readonly maxCatchUpSteps?: number;
-  /** Freezes every world the host steps to, so a system or rule that changes a value in place throws at once; for development, since it walks the whole world every step. */
+  /** Freezes every state the host steps to, so a system or rule that changes a value in place throws at once; for development, since it walks the whole state every step. */
   readonly freeze?: boolean;
   /**
-   * Whether a client may hold time, and send controls: a local server for one player grants it, a world shared with others refuses. Holding time is the host's to allow, never the world's.
+   * Whether a client may hold time, and send controls: a local server for one player grants it, a room shared with others refuses. Holding time is the host's to allow, never the game's.
    */
   readonly mayHold: boolean;
 }
 
-/** What changed a host's world: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a world it was given or taking up another game, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
+/** What replaced a host's state: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a state it was given or taking up another game, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
 export type Happening =
   /** A player joined: through a client's connection, or from beside the host with no client. */
-  | { readonly _tag: 'Joined'; readonly entity: World.Entity; readonly client: boolean }
-  | { readonly _tag: 'Left'; readonly entity: World.Entity }
-  /** The host went back to a world it was given, such as a past one, and steps on from it. */
-  | { readonly _tag: 'Restored'; readonly world: World.World }
-  /** The host plays another game from now on, such as a new build of its own, from the world it held, as the new game read it. */
-  | ({ readonly _tag: 'Reloaded'; readonly world: World.World } & Setup<unknown>)
+  | { readonly _tag: 'Joined'; readonly entity: State.Entity; readonly client: boolean }
+  | { readonly _tag: 'Left'; readonly entity: State.Entity }
+  /** The host went back to a state it was given, such as a past one, and steps on from it. */
+  | { readonly _tag: 'Restored'; readonly state: State.State }
+  /** The host plays another game from now on, such as a new build of its own, from the state it held, as the new game read it. */
+  | ({ readonly _tag: 'Reloaded'; readonly state: State.State } & Setup<unknown>)
   | {
       readonly _tag: 'Stepped';
-      /** The world the step took it to. */
-      readonly world: World.World;
+      /** The state the step took it to. */
+      readonly state: State.State;
       readonly inputs: ReadonlyArray<Input.Input>;
       readonly actions: ReadonlyArray<Event.Tagged>;
     };
 
-/** A host's world as it was when watching began, and everything that has happened to it since, in order. */
+/** A host's state as it was when watching began, and everything that has replaced it since, in order. */
 export interface Watching {
-  readonly world: World.World;
+  readonly state: State.State;
   readonly happenings: Stream.Stream<Happening>;
 }
 
 /** A control a client sent, with the entity it controls. */
 export interface Control {
-  readonly entity: World.Entity;
+  readonly entity: State.Entity;
   readonly payload: unknown;
 }
 
-/** A game a host was given in place of its own that it cannot play: one that cannot read the world it holds, or steps at another rate. */
+/** A game a host was given in place of its own that it cannot play: one that cannot read the state it holds, or steps at another rate. */
 export class Unreadable extends Data.TaggedError('Unreadable')<{ readonly reason: string }> {}
 
 export interface Host<Services = never> {
   /** Joins a client through `connection`, until the scope closes; returns the entity it controls. */
   readonly connect: (
     connection: Transport.Connection,
-  ) => Effect.Effect<World.Entity, never, Scope.Scope>;
-  readonly world: Effect.Effect<World.World>;
+  ) => Effect.Effect<State.Entity, never, Scope.Scope>;
+  readonly state: Effect.Effect<State.State>;
   /** The controls clients send, such as a development tool's, from now on, as they come; a host that lets no client hold time passes on none. */
   readonly controls: Stream.Stream<Control>;
   /** Answers the questions clients ask, such as a debugger's, by `answer`, until the scope closes, as from the player of the entity that asked; what it fails with is the reason a question goes unanswered. A host that lets no client hold time answers none. */
   readonly answering: (
-    answer: (question: unknown, entity: World.Entity) => Effect.Effect<unknown, string>,
+    answer: (question: unknown, entity: State.Entity) => Effect.Effect<unknown, string>,
   ) => Effect.Effect<void, never, Scope.Scope>;
   /** Joins a player with no client, from beside the host, such as one an agent plays: the game's own `join` makes its entity, as it does for a client. */
-  readonly join: Effect.Effect<World.Entity>;
+  readonly join: Effect.Effect<State.Entity>;
   /** Lets go of the player of `entity`, by the game's own `leave`, whoever joined it. */
-  readonly leave: (entity: World.Entity) => Effect.Effect<void>;
+  readonly leave: (entity: State.Entity) => Effect.Effect<void>;
   /** Takes input for `entity` from beside the host, such as from an agent playing it, each value read by its component's schema as it travels: it reaches the next step after what the entity's client sent, so it is what the step takes. */
   readonly input: (
-    entity: World.Entity,
+    entity: State.Entity,
     values: ReadonlyArray<{ readonly component: string; readonly value: unknown }>,
   ) => Effect.Effect<void, Unreadable>;
   /** Takes an action as from the player of `entity`, from beside the host, read by the game's actions as one from a client is. */
-  readonly act: (entity: World.Entity, action: unknown) => Effect.Effect<void, Unreadable>;
+  readonly act: (entity: State.Entity, action: unknown) => Effect.Effect<void, Unreadable>;
   /** Holds time for whatever runs beside the host, such as a development tool, as a client may hold it for itself. */
   readonly hold: Effect.Effect<void>;
   /** Lets go of time held beside the host; it runs on once no client holds it either. */
   readonly release: Effect.Effect<void>;
   /** Takes `steps` steps at once, beside those real time owes, and shows them to every client: how time held is stepped through. */
   readonly advance: (steps: number) => Effect.Effect<void>;
-  /** Shows every client `world` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
-  readonly show: (world: World.World) => Effect.Effect<void>;
-  /** Plays `setup` from now on, such as a new build of the game, from the world the host holds, read by the new game; refuses one that cannot read it, and plays on as it was. */
+  /** Shows every client `state` in place of the one the host holds, such as a past one while time is held, and holds its own: a step taken after shows them its own again. */
+  readonly show: (state: State.State) => Effect.Effect<void>;
+  /** Plays `setup` from now on, such as a new build of the game, from the state the host holds, read by the new game; refuses one that cannot read it, and plays on as it was. */
   reload(setup: Setup<Services>): Effect.Effect<void, Unreadable>;
-  /** Goes back to `world`, such as a past one, and steps on from it; every client is shown it at once. */
-  readonly restore: (world: World.World) => Effect.Effect<void>;
-  /** Watches the world until the scope closes: where it is now, and everything that happens to it from now on, with nothing missed between the two. */
+  /** Goes back to `state`, such as a past one, and steps on from it; every client is shown it at once. */
+  readonly restore: (state: State.State) => Effect.Effect<void>;
+  /** Watches the host's state until the scope closes: the state it holds now, and everything that replaces it from now on, with nothing missed between the two. */
   readonly watch: Effect.Effect<Watching, never, Scope.Scope>;
 }
 
@@ -128,17 +128,17 @@ export const make = <Services = never>(
           .filter((component): component is Input.InputComponent => component.owner === 'input')
           .map((component) => [component.name, component]),
       );
-    const state = {
+    const hosted = {
       setup: { game: options.game, join: options.join, leave: options.leave },
       inputComponents: inputsOf(options.game),
-      world: options.world,
+      state: options.state,
       /** Every client's connection, with the entity it controls. */
-      connections: new Map<Transport.Connection, World.Entity>(),
+      connections: new Map<Transport.Connection, State.Entity>(),
       /** The newest input of each client, waiting for the next step. */
-      pending: new Map<World.Entity, ReadonlyArray<Input.Input>>(),
+      pending: new Map<State.Entity, ReadonlyArray<Input.Input>>(),
       /** The newest input given from beside the host for each entity, which goes in after its client's. */
-      pendingBeside: new Map<World.Entity, ReadonlyArray<Input.Input>>(),
-      lastSeq: new Map<World.Entity, number>(),
+      pendingBeside: new Map<State.Entity, ReadonlyArray<Input.Input>>(),
+      lastSeq: new Map<State.Entity, number>(),
       pace: Pace.start({
         now: yield* Clock.currentTimeMillis,
         stepRate: options.game.stepRate,
@@ -146,13 +146,13 @@ export const make = <Services = never>(
       }),
       done: 0,
       /** The clients holding time now; time stands while there is any. */
-      holders: new Set<World.Entity>(),
+      holders: new Set<State.Entity>(),
       /** Whether whatever runs beside the host, such as a development tool, holds time. */
       heldBeside: false,
       /** The players' actions waiting for the next step, in the order they came. */
       acted: new Array<Event.Tagged>(),
       heldSince: Option.none<number>(),
-      /** Counts every time the host showed its clients another world than the one it stepped to, so they take it even if it is older. */
+      /** Counts every time the host showed its clients another state than the one it stepped to, so they take it even if it is older. */
       era: 0,
     };
     // What the host was made with, so steps taken at a tool's word run their commands as the host's own do.
@@ -162,10 +162,10 @@ export const make = <Services = never>(
     // What answers the questions clients ask, while something does.
     const answers = {
       answer:
-        Option.none<(question: unknown, entity: World.Entity) => Effect.Effect<unknown, string>>(),
+        Option.none<(question: unknown, entity: State.Entity) => Effect.Effect<unknown, string>>(),
     };
     /** The answer to `question`, asked by the player of `entity`, or why there is none. */
-    const answerOf = (question: unknown, entity: World.Entity) =>
+    const answerOf = (question: unknown, entity: State.Entity) =>
       !options.mayHold
         ? Effect.fail('This host answers no client’s questions.')
         : Option.match(answers.answer, {
@@ -178,13 +178,13 @@ export const make = <Services = never>(
     /** Stops or lets go of time to match whether anyone holds it; on letting go, the time held is never owed. */
     const settleHold = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const held = state.heldBeside || state.holders.size > 0;
-      if (held && Option.isNone(state.heldSince)) {
-        state.heldSince = Option.some(now);
+      const held = hosted.heldBeside || hosted.holders.size > 0;
+      if (held && Option.isNone(hosted.heldSince)) {
+        hosted.heldSince = Option.some(now);
         yield* Latch.close(running);
-      } else if (!held && Option.isSome(state.heldSince)) {
-        state.pace = Pace.resume(state.pace, now - state.heldSince.value);
-        state.heldSince = Option.none();
+      } else if (!held && Option.isSome(hosted.heldSince)) {
+        hosted.pace = Pace.resume(hosted.pace, now - hosted.heldSince.value);
+        hosted.heldSince = Option.none();
         yield* Latch.open(running);
       }
     });
@@ -194,7 +194,7 @@ export const make = <Services = never>(
       issued.execute.pipe(
         Effect.flatMap((result) =>
           Effect.sync(() => {
-            state.acted.push(result);
+            hosted.acted.push(result);
           }),
         ),
         Effect.catchCause((cause) =>
@@ -203,12 +203,12 @@ export const make = <Services = never>(
         Effect.forkScoped,
       );
 
-    /** Sends every client `world`, in the era it is now, and the number of its newest input the world took in. */
-    const broadcast = (world: World.World) =>
+    /** Sends every client `state`, in the era it is now, and the number of its newest input the state took in. */
+    const broadcast = (state: State.State) =>
       Effect.suspend(() => {
-        const payload = Snapshot.encode(world, state.setup.game, state.era);
+        const payload = Snapshot.encode(state, hosted.setup.game, hosted.era);
         return Effect.forEach(
-          state.connections,
+          hosted.connections,
           ([connection, entity]) =>
             Effect.andThen(
               connection.send({ channel: 'unreliable', payload }),
@@ -216,8 +216,8 @@ export const make = <Services = never>(
                 channel: 'unreliable',
                 payload: Protocol.encodeAcked({
                   _tag: 'Acked',
-                  tick: world.tick,
-                  seq: state.lastSeq.get(entity) ?? 0,
+                  tick: state.tick,
+                  seq: hosted.lastSeq.get(entity) ?? 0,
                 }),
               }),
             ),
@@ -228,44 +228,44 @@ export const make = <Services = never>(
     /** Takes `count` steps: the waiting input and actions go into the first, the rest only move time on. */
     const takeSteps = (count: number) =>
       Effect.gen(function* () {
-        const inputs = [...state.pending.values(), ...state.pendingBeside.values()].flat();
-        state.pending.clear();
-        state.pendingBeside.clear();
-        const actions = state.acted.splice(0);
+        const inputs = [...hosted.pending.values(), ...hosted.pendingBeside.values()].flat();
+        hosted.pending.clear();
+        hosted.pendingBeside.clear();
+        const actions = hosted.acted.splice(0);
         const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
         for (let step = 0; step < count; step += 1) {
           const taken = step === 0 ? { inputs, actions } : { inputs: [], actions: [] };
           const next = Game.step(
-            state.setup.game,
-            state.world,
+            hosted.setup.game,
+            hosted.state,
             taken.inputs,
             taken.actions,
             stepping,
           );
-          state.world = next.world;
-          PubSub.publishUnsafe(happened, { _tag: 'Stepped', world: next.world, ...taken });
+          hosted.state = next.state;
+          PubSub.publishUnsafe(happened, { _tag: 'Stepped', state: next.state, ...taken });
           yield* Effect.forEach(next.commands, run, { discard: true });
         }
       });
 
     // Every step real time owes: the waiting input goes into the first, the rest only move time on.
     const takeDueSteps = Effect.gen(function* () {
-      if (Option.isSome(state.heldSince)) {
+      if (Option.isSome(hosted.heldSince)) {
         return;
       }
-      const { steps, pace } = Pace.due(state.pace, state.done, yield* Clock.currentTimeMillis);
-      state.pace = pace;
+      const { steps, pace } = Pace.due(hosted.pace, hosted.done, yield* Clock.currentTimeMillis);
+      hosted.pace = pace;
       if (steps === 0) {
         return;
       }
-      state.done += steps;
+      hosted.done += steps;
       yield* takeSteps(steps);
-      yield* broadcast(state.world);
+      yield* broadcast(hosted.state);
     });
 
     yield* Effect.gen(function* () {
       yield* Latch.await(running);
-      const wait = Pace.nextAt(state.pace, state.done) - (yield* Clock.currentTimeMillis);
+      const wait = Pace.nextAt(hosted.pace, hosted.done) - (yield* Clock.currentTimeMillis);
       if (wait > 0) {
         yield* Effect.sleep(`${wait} millis`);
       }
@@ -274,7 +274,7 @@ export const make = <Services = never>(
 
     /** Holds or lets go of time for a client, if the host allows holding at all, and answers its questions in `scope`, apart from its frames, so a slow answer holds nothing up. */
     const receiveReliable = (
-      entity: World.Entity,
+      entity: State.Entity,
       frame: Transport.Frame,
       connection: Transport.Connection,
       scope: Scope.Scope,
@@ -285,9 +285,9 @@ export const make = <Services = never>(
           Effect.suspend(() => {
             if (message._tag === 'Act') {
               // An action is taken as from the player whose connection it came on; one the game does not know is dropped.
-              for (const action of state.setup.game.actions) {
+              for (const action of hosted.setup.game.actions) {
                 Option.map(action.accept(message.action, entity), (accepted) =>
-                  state.acted.push(accepted),
+                  hosted.acted.push(accepted),
                 );
               }
               return Effect.void;
@@ -318,18 +318,18 @@ export const make = <Services = never>(
               return PubSub.publish(controlled, { entity, payload: message.payload });
             }
             if (message._tag === 'Hold') {
-              state.holders.add(entity);
+              hosted.holders.add(entity);
             } else {
-              state.holders.delete(entity);
+              hosted.holders.delete(entity);
             }
             return settleHold;
           }),
       });
 
     /** Keeps a client's newest input, decoded by the schemas of input components only. */
-    const receive = (entity: World.Entity, frame: Transport.Frame) => {
+    const receive = (entity: State.Entity, frame: Transport.Frame) => {
       Option.map(Protocol.decodeInputs(frame.payload), ({ inputs }) => {
-        const last = state.lastSeq.get(entity) ?? 0;
+        const last = hosted.lastSeq.get(entity) ?? 0;
         const newest = inputs.reduce<Protocol.Inputs['inputs'][number] | undefined>(
           (found, input) =>
             input.seq > last && (found === undefined || input.seq > found.seq) ? input : found,
@@ -338,11 +338,11 @@ export const make = <Services = never>(
         if (newest === undefined) {
           return;
         }
-        state.lastSeq.set(entity, newest.seq);
-        state.pending.set(
+        hosted.lastSeq.set(entity, newest.seq);
+        hosted.pending.set(
           entity,
           Object.entries(newest.values).flatMap(([name, encoded]) => {
-            const component = state.inputComponents.get(name);
+            const component = hosted.inputComponents.get(name);
             return component === undefined
               ? []
               : Option.match(Schema.decodeUnknownOption(component.schema)(encoded), {
@@ -356,17 +356,17 @@ export const make = <Services = never>(
 
     const connect = (connection: Transport.Connection) =>
       Effect.gen(function* () {
-        const [world, entity] = state.setup.join(state.world);
-        state.world = world;
+        const [state, entity] = hosted.setup.join(hosted.state);
+        hosted.state = state;
         PubSub.publishUnsafe(happened, { _tag: 'Joined', entity, client: true });
-        state.connections.set(connection, entity);
+        hosted.connections.set(connection, entity);
         yield* Effect.addFinalizer(() =>
           Effect.suspend(() => {
-            state.connections.delete(connection);
-            state.pending.delete(entity);
-            state.lastSeq.delete(entity);
-            state.holders.delete(entity);
-            state.world = state.setup.leave(state.world, entity);
+            hosted.connections.delete(connection);
+            hosted.pending.delete(entity);
+            hosted.lastSeq.delete(entity);
+            hosted.holders.delete(entity);
+            hosted.state = hosted.setup.leave(hosted.state, entity);
             PubSub.publishUnsafe(happened, { _tag: 'Left', entity });
             // A client that leaves lets go of time it was holding.
             return settleHold;
@@ -374,7 +374,7 @@ export const make = <Services = never>(
         );
         yield* connection.send({
           channel: 'reliable',
-          payload: Protocol.encodeWelcome({ entity, stepRate: state.setup.game.stepRate }),
+          payload: Protocol.encodeWelcome({ entity, stepRate: hosted.setup.game.stepRate }),
         });
         const scope = yield* Effect.scope;
         yield* connection.frames.pipe(
@@ -390,7 +390,7 @@ export const make = <Services = never>(
 
     return {
       connect,
-      world: Effect.sync(() => state.world),
+      state: Effect.sync(() => hosted.state),
       controls: Stream.fromPubSub(controlled),
       answering: (answer) =>
         Effect.acquireRelease(
@@ -403,22 +403,22 @@ export const make = <Services = never>(
             }),
         ),
       join: Effect.sync(() => {
-        const [world, entity] = state.setup.join(state.world);
-        state.world = world;
+        const [state, entity] = hosted.setup.join(hosted.state);
+        hosted.state = state;
         PubSub.publishUnsafe(happened, { _tag: 'Joined', entity, client: false });
         return entity;
       }),
       leave: (entity) =>
         Effect.sync(() => {
-          state.pendingBeside.delete(entity);
-          state.world = state.setup.leave(state.world, entity);
+          hosted.pendingBeside.delete(entity);
+          hosted.state = hosted.setup.leave(hosted.state, entity);
           PubSub.publishUnsafe(happened, { _tag: 'Left', entity });
         }),
       input: (entity, values) =>
         Effect.gen(function* () {
           const inputs = yield* Effect.forEach(values, ({ component: name, value }) =>
             Effect.gen(function* () {
-              const component = state.inputComponents.get(name);
+              const component = hosted.inputComponents.get(name);
               if (component === undefined) {
                 return yield* new Unreadable({ reason: `${name} is no input of the game` });
               }
@@ -430,14 +430,14 @@ export const make = <Services = never>(
               return Input.of(entity, component, decoded);
             }),
           );
-          state.pendingBeside.set(entity, inputs);
+          hosted.pendingBeside.set(entity, inputs);
         }),
       act: (entity, action) =>
         Effect.suspend(() => {
-          for (const known of state.setup.game.actions) {
+          for (const known of hosted.setup.game.actions) {
             const accepted = known.accept(action, entity);
             if (Option.isSome(accepted)) {
-              state.acted.push(accepted.value);
+              hosted.acted.push(accepted.value);
               return Effect.void;
             }
           }
@@ -450,52 +450,52 @@ export const make = <Services = never>(
           );
         }),
       hold: Effect.suspend(() => {
-        state.heldBeside = true;
+        hosted.heldBeside = true;
         return settleHold;
       }),
       release: Effect.suspend(() => {
-        state.heldBeside = false;
+        hosted.heldBeside = false;
         return settleHold;
       }),
       advance: (steps) =>
         Effect.andThen(
           Effect.provideContext(takeSteps(steps), made),
-          Effect.suspend(() => broadcast(state.world)),
+          Effect.suspend(() => broadcast(hosted.state)),
         ),
-      show: (world) =>
+      show: (state) =>
         Effect.suspend(() => {
-          state.era += 1;
-          return broadcast(world);
+          hosted.era += 1;
+          return broadcast(state);
         }),
       reload: (setup) =>
         Effect.gen(function* () {
-          if (setup.game.stepRate !== state.setup.game.stepRate) {
+          if (setup.game.stepRate !== hosted.setup.game.stepRate) {
             return yield* new Unreadable({
-              reason: `it steps ${setup.game.stepRate} times a second, not ${state.setup.game.stepRate}`,
+              reason: `it steps ${setup.game.stepRate} times a second, not ${hosted.setup.game.stepRate}`,
             });
           }
-          // A world its own game cannot encode is a bug in the engine; one the new game cannot read is the new game's to answer for.
-          const encoded = yield* Schema.encodeEffect(Game.schema(state.setup.game))(
-            state.world,
+          // A state its own game cannot encode is a bug in the engine; one the new game cannot read is the new game's to answer for.
+          const encoded = yield* Schema.encodeEffect(Game.schema(hosted.setup.game))(
+            hosted.state,
           ).pipe(Effect.orDie);
-          const world = yield* Schema.decodeEffect(Game.schema(setup.game))(encoded).pipe(
+          const state = yield* Schema.decodeEffect(Game.schema(setup.game))(encoded).pipe(
             Effect.mapError((issue) => new Unreadable({ reason: issue.message })),
           );
-          state.setup = { game: setup.game, join: setup.join, leave: setup.leave };
-          state.inputComponents = inputsOf(setup.game);
-          state.world = world;
-          PubSub.publishUnsafe(happened, { _tag: 'Reloaded', world, ...state.setup });
+          hosted.setup = { game: setup.game, join: setup.join, leave: setup.leave };
+          hosted.inputComponents = inputsOf(setup.game);
+          hosted.state = state;
+          PubSub.publishUnsafe(happened, { _tag: 'Reloaded', state, ...hosted.setup });
         }),
-      restore: (world) =>
+      restore: (state) =>
         Effect.suspend(() => {
-          state.world = world;
-          state.era += 1;
-          PubSub.publishUnsafe(happened, { _tag: 'Restored', world });
-          return broadcast(world);
+          hosted.state = state;
+          hosted.era += 1;
+          PubSub.publishUnsafe(happened, { _tag: 'Restored', state });
+          return broadcast(state);
         }),
-      // Subscribing and reading the world happen with nothing in between, so the first happening told is the first after the world given.
+      // Subscribing and reading the state happen with nothing in between, so the first happening told is the first after the state given.
       watch: Effect.map(PubSub.subscribe(happened), (subscription) => ({
-        world: state.world,
+        state: hosted.state,
         happenings: Stream.fromSubscription(subscription),
       })),
     };

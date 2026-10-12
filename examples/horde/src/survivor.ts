@@ -1,4 +1,4 @@
-import { Action, Component, Domain, Event, Rule, System, World } from '@lightocean/core';
+import { Action, Component, Domain, Event, Rule, System, State } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 
@@ -148,11 +148,11 @@ export const domain = Domain.make({
   rules: [takeBite, count, restart],
 });
 
-/** A survivor joining `world`: alive at its middle, with nothing in hand and nothing killed. */
-export const join = (world: World.World) =>
-  World.spawn(world, [
+/** A survivor joining `state`: alive at its middle, with nothing in hand and nothing killed. */
+export const join = (state: State.State) =>
+  State.spawn(state, [
     Body.Position.of({ x: 0, z: 0 }),
-    Life.of(alive(world.tick)),
+    Life.of(alive(state.tick)),
     Tally.of({ kills: 0 }),
     Stick.of({ x: 0, z: 0, aim: 0 }),
   ]);

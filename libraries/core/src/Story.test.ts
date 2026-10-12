@@ -5,7 +5,7 @@ import * as Game from '#src/Game.ts';
 import * as Rule from '#src/Rule.ts';
 import * as Story from '#src/Story.ts';
 import * as System from '#src/System.ts';
-import * as World from '#src/World.ts';
+import * as State from '#src/State.ts';
 
 /** Moves every controlled entity by its stick, at 10 a second. */
 const steer = System.make({
@@ -75,7 +75,7 @@ describe('Story', () => {
     );
   });
 
-  it('keeps an input in the world after the step it reached', () => {
+  it('keeps an input in the state after the step it reached', () => {
     Story.story(
       game,
       Story.spawn('her', her),
@@ -116,24 +116,24 @@ describe('Story', () => {
     );
   });
 
-  it('starts from a world it is given, and reads it as a whole', () => {
-    const [world, runner] = World.spawn(World.empty({ seed: 3 }), [Position.of({ x: 7 })]);
+  it('starts from a state it is given, and reads it as a whole', () => {
+    const [state, runner] = State.spawn(State.empty({ seed: 3 }), [Position.of({ x: 7 })]);
 
     Story.story(
       game,
-      Story.given(world),
-      Story.world((current) =>
-        expect(World.get(current, runner, Position)).toEqual(Option.some({ x: 7 })),
+      Story.given(state),
+      Story.state((current) =>
+        expect(State.get(current, runner, Position)).toEqual(Option.some({ x: 7 })),
       ),
     );
   });
 
-  it('names the entities of a world it is given', () => {
-    const [world, runner] = World.spawn(World.empty({ seed: 3 }), [Position.of({ x: 7 })]);
+  it('names the entities of a state it is given', () => {
+    const [state, runner] = State.spawn(State.empty({ seed: 3 }), [Position.of({ x: 7 })]);
 
     Story.story(
       game,
-      Story.given(world, { runner }),
+      Story.given(state, { runner }),
       Story.expect('runner', Position, (position) => expect(position.x).toBe(7)),
     );
   });
@@ -170,12 +170,12 @@ describe('Story', () => {
       game,
       Story.spawn('her', her),
       Story.input('her', Controls, { move: 1, fire: false }),
-      Story.until((world, named) =>
-        Option.exists(World.get(world, named('her'), Position), ({ x }) => x >= 4),
+      Story.until((state, named) =>
+        Option.exists(State.get(state, named('her'), Position), ({ x }) => x >= 4),
       ),
     );
 
-    expect(walked.world.tick).toBe(4);
+    expect(walked.state.tick).toBe(4);
     expect(() =>
       Story.story(
         game,
@@ -233,12 +233,12 @@ describe('Story', () => {
 });
 
 describe('Story, told by name', () => {
-  /** A world with her in it, as the game's schema encodes it. */
+  /** A state with her in it, as the game's schema encodes it. */
   const encoded = Schema.encodeSync(Game.schema(game))(
-    World.spawn(World.empty({ seed: 3 }), her)[0],
+    State.spawn(State.empty({ seed: 3 }), her)[0],
   );
 
-  it('starts from a world as it travels, and plays it by names and values as they travel', () => {
+  it('starts from a state as it travels, and plays it by names and values as they travel', () => {
     Story.story(
       game,
       Story.givenAs(encoded, { her: 0 }),
@@ -277,7 +277,7 @@ describe('Story, told by name', () => {
     );
     expect(told(Story.expectAs('her', 'Wings', {}))).toThrow('Wings is no component of the game');
     expect(() => Story.story(game, Story.givenAs({ tick: 'soon' }))).toThrow(
-      'not a world of the game',
+      'not a state of the game',
     );
   });
 });

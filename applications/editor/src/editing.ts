@@ -1,9 +1,9 @@
-import { Action, Component, Domain, Game, Pointing, Rule, World } from '@lightocean/core';
+import { Action, Component, Domain, Game, Pointing, Rule, State } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 import * as Objects from '#src/objects.ts';
 
 /**
- * Editing a document, as a world: whoever edits it is a player, and every edit is their action, which the rules here answer by the events of the `Objects` domain, so an edit is checked against the components' schemas wherever it comes from, a panel, a click, or an agent. What each editor has selected is theirs, on their own entity. A document playing is another game, without this domain, so nothing is edited while it plays.
+ * Editing a document, as a state: whoever edits it is a player, and every edit is their action, which the rules here answer by the events of the `Objects` domain, so an edit is checked against the components' schemas wherever it comes from, a panel, a click, or an agent. What each editor has selected is theirs, on their own entity. A document playing is another game, without this domain, so nothing is edited while it plays.
  */
 
 // COMPONENTS
@@ -232,24 +232,24 @@ export const domain = Domain.make({
   ],
 });
 
-/** A document being edited: a world of objects, and the editors at it. */
+/** A document being edited: a state of objects, and the editors at it. */
 export const game = Game.make({
   stepRate: 30,
   domains: [Pointing.domain, Objects.domain, domain],
 });
 
 /** An editor joining: an entity with nothing selected. */
-export const join = (world: World.World): readonly [World.World, World.Entity] =>
-  World.spawn(world, [Selection.of({ selected: Option.none() })]);
+export const join = (state: State.State): readonly [State.State, State.Entity] =>
+  State.spawn(state, [Selection.of({ selected: Option.none() })]);
 
-const [numbered] = World.spawn(World.empty({ seed: 1 }), [Numbering.of({ next: 3 })]);
-const [withBox, box] = World.spawn(numbered, Objects.objectOf('Box', 0, 'Box 1'));
-const [withSphere, sphere] = World.spawn(withBox, Objects.objectOf('Sphere', 1, 'Sphere 2'));
+const [numbered] = State.spawn(State.empty({ seed: 1 }), [Numbering.of({ next: 3 })]);
+const [withBox, box] = State.spawn(numbered, Objects.objectOf('Box', 0, 'Box 1'));
+const [withSphere, sphere] = State.spawn(withBox, Objects.objectOf('Sphere', 1, 'Sphere 2'));
 
 /** A new document: a box and a sphere. */
 export const document = withSphere;
 export { box, sphere };
 
-const [joinedWorld, editor] = join(document);
+const [joinedState, editor] = join(document);
 /** The new document with one editor at it. */
-export const joined = { world: joinedWorld, editor };
+export const joined = { state: joinedState, editor };

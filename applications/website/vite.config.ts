@@ -3,6 +3,7 @@ import { foldkit } from '@foldkit/vite-plugin';
 import { Devtools } from '@lightocean/vite-plugin';
 import stylex from '@stylexjs/unplugin';
 import type { Plugin } from 'vite';
+import { islandAttributes } from './src/islands.ts';
 import { defineConfig } from 'vite-plus';
 
 // Under `alchemy dev`, Alchemy's inline `server: { port: 0 }` resolves to Vite's 5173 default and outranks this file's `server.port`; a plugin `config` hook merges after it, so the port is pinned there instead.
@@ -15,13 +16,13 @@ const pinAlchemyDevPort = (port: number): Plugin => ({
 });
 
 export default defineConfig({
-  // In development, the server is also the way to the host of the world the page shows for the tools on this machine, such as an MCP server.
+  // In development, the server is also the way to the host of the game the page shows for the tools on this machine, such as an MCP server.
   plugins: [
     // StyleX compiles the website's styles; tests take its Rolldown entry, which compiles them the same without the development server's timer that would keep a test run from ending.
     process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),
     ...foldkit(),
-    // Every `.md` file imported, read into a typed document at build time; the browser is sent data, never a parser.
-    markdown(),
+    // Every `.md` file imported, read into a typed document at build time, with the live views it places checked; the browser is sent data, never a parser.
+    markdown({ islands: islandAttributes }),
     Devtools.plugin(),
     pinAlchemyDevPort(5294),
   ],

@@ -2,15 +2,15 @@ import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
 import * as Server from '#src/Server.ts';
 
-/** A JSON-RPC request to the server's endpoint, as an MCP client over HTTP posts it. */
-const post = (body: object, session?: string) =>
+/** A JSON-RPC request to the server's endpoint, as an MCP client over HTTP posts it, with the id the server gave the client, once it has one. */
+const post = (body: object, clientId?: string) =>
   new Request(`http://127.0.0.1${Server.PATH}`, {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',
       'content-type': 'application/json',
       'mcp-protocol-version': '2025-06-18',
-      ...(session === undefined ? {} : { 'mcp-session-id': session }),
+      ...(clientId === undefined ? {} : { 'mcp-session-id': clientId }),
     },
     body: JSON.stringify({ jsonrpc: '2.0', ...body }),
   });
@@ -34,10 +34,10 @@ describe('the MCP server over HTTP', () => {
           }),
         ),
       );
-      const session = initialized.headers.get('mcp-session-id') ?? undefined;
+      const clientId = initialized.headers.get('mcp-session-id') ?? undefined;
       const greeting = yield* Effect.promise(() => initialized.text());
       const listed = yield* Effect.promise(() =>
-        handler(post({ id: 2, method: 'tools/list', params: {} }, session)).then((response) =>
+        handler(post({ id: 2, method: 'tools/list', params: {} }, clientId)).then((response) =>
           response.text(),
         ),
       );

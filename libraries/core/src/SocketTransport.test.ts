@@ -46,12 +46,12 @@ describe('a connection over a socket', () => {
       const receiving = yield* SocketTransport.fromSocket(second);
 
       yield* sending.send({ channel: 'reliable', payload: 'hello' });
-      yield* sending.send({ channel: 'unreliable', payload: 'a world' });
+      yield* sending.send({ channel: 'unreliable', payload: 'a state' });
       const received = yield* receiving.frames.pipe(Stream.take(2), Stream.runCollect);
 
       expect(received).toEqual([
         { channel: 'reliable', payload: 'hello' },
-        { channel: 'unreliable', payload: 'a world' },
+        { channel: 'unreliable', payload: 'a state' },
       ]);
     }).pipe(Effect.scoped),
   );

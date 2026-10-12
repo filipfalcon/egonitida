@@ -1,15 +1,15 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, World } from '@lightocean/core';
+import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect } from 'effect';
 import * as Colour from '#src/colour.ts';
 
-// The local server: the cubes' world, stepped off the main thread. A page that joins is whoever clicks: an entity that holds nothing, whom its clicks are from. In development it goes on from the world kept for the tab whatever code changed, as the horde's does, with the devtools beside it, by the id the page named this worker with.
+// The local server: the cubes' game, stepped off the main thread. A page that joins is whoever clicks: an entity that holds nothing, whom its clicks are from. In development it goes on from the state kept for the tab whatever code changed, as the horde's does, with the devtools beside it, by the id the page named this worker with.
 const options = {
   game: Colour.game,
-  join: (world: World.World) => World.spawn(world, []),
-  leave: World.despawn,
-  world: Colour.world,
+  join: (state: State.State) => State.spawn(state, []),
+  leave: State.despawn,
+  state: Colour.state,
   mayHold: true,
 };
 
@@ -25,7 +25,7 @@ Effect.runFork(
     Effect.catchTag('Unreadable', ({ reason }) =>
       Effect.andThen(
         Effect.logWarning(
-          `The new build cannot take up the cubes' world, so it starts over: ${reason}`,
+          `The new build cannot take up the cubes' state, so it starts over: ${reason}`,
         ),
         Effect.sync(() => import.meta.hot?.invalidate(reason)),
       ),

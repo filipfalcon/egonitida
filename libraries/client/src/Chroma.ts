@@ -3,7 +3,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/http';
 import type * as Lighting from '#src/Lighting.ts';
 
 /**
- * Razer's devices lit through Chroma, the software of Razer's that holds them: a page asks it for a session over its REST API on the player's own machine, lights every kind of device it knows through that session, keeps the session alive while it is used, and ends it once its scope closes, when Chroma gives the devices back their own lights. Where no Razer software answers, a page asks in vain and plays on unlit.
+ * Razer's devices lit through Chroma, the software of Razer's that holds them: a page asks it for a connection over its REST API on the player's own machine, lights every kind of device it knows through that connection, keeps the connection alive while it is used, and ends it once its scope closes, when Chroma gives the devices back their own lights. Where no Razer software answers, a page asks in vain and plays on unlit.
  */
 
 /** The kinds of device Chroma lights. */
@@ -18,7 +18,7 @@ export const DEVICES: ReadonlyArray<Device> = [
   'chromalink',
 ];
 
-/** What Chroma is told of the app that asks for a session, and shows the player. */
+/** What Chroma is told of the app that asks for a connection, and shows the player. */
 export interface App {
   readonly title: string;
   readonly description: string;
@@ -31,11 +31,11 @@ export class Refused extends Data.TaggedError('Refused')<{ readonly reason: stri
 /** Where Chroma's REST API is served on the player's machine. */
 export const URL = 'http://localhost:54235/razer/chromasdk';
 
-/** How long Chroma keeps a session it has heard nothing from, less a margin. */
+/** How long Chroma keeps a connection it has heard nothing from, less a margin. */
 const HEARTBEAT = '10 seconds';
 
-/** A session Chroma started, where it is reached. */
-const Session = Schema.Struct({ uri: Schema.String });
+/** A connection Chroma made, where it is reached. */
+const Connection = Schema.Struct({ uri: Schema.String });
 
 /** A colour as Chroma takes it: blue, green, and red, a byte each, from the highest down. */
 const colourOf = ({ red, green, blue }: Lighting.Colour) => {
@@ -43,7 +43,7 @@ const colourOf = ({ red, green, blue }: Lighting.Colour) => {
   return (byte(blue) << 16) | (byte(green) << 8) | byte(red);
 };
 
-/** Razer's devices, lit through a session Chroma starts for `app`, until the scope closes. */
+/** Razer's devices, lit through a connection Chroma makes for `app`, until the scope closes. */
 export const connect = (
   app: App,
 ): Effect.Effect<Lighting.Lit, Refused, HttpClient.HttpClient | Scope.Scope> =>
@@ -58,9 +58,9 @@ export const connect = (
           }),
         )
         .pipe(
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(Session)),
+          Effect.flatMap(HttpClientResponse.schemaBodyJson(Connection)),
           Effect.mapError(
-            (cause) => new Refused({ reason: `Chroma did not start a session: ${cause.message}` }),
+            (cause) => new Refused({ reason: `Chroma made no connection: ${cause.message}` }),
           ),
         ),
       ({ uri }) => Effect.ignore(client.execute(HttpClientRequest.delete(uri))),

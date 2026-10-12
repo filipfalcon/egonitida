@@ -1,20 +1,20 @@
 import { Tab, type Viewport } from '@lightocean/client';
-import { World as Worlds } from '@lightocean/core';
+import { State } from '@lightocean/core';
 import { Bridge, Page } from '@lightocean/devtools';
-import { Projection, Stage, World } from '@lightocean/foldkit';
+import { Projection, Session, Stage } from '@lightocean/foldkit';
 import { Effect, Option, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
 import * as Cubes from '#src/cubes.ts';
 import * as CubesView from '#src/cubes.view.ts';
-import { CubesWorld, Message, type Model, type Services } from '#src/main.ts';
+import { CubesSession, Message, type Model, type Services } from '#src/main.ts';
 
-// Where the world meets the page: joined in a worker while the playground is open, shown on the canvas once Foldkit has it in the page, and counted for the page to show.
+// Where the game meets the page: joined in a worker while the playground is open, shown on the canvas once Foldkit has it in the page, and counted for the page to show.
 
-/** The id the devtools know the playground's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the world kept for the tab. */
+/** The id the devtools know the playground's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the state kept for the tab. */
 const host = Tab.id('playground');
 
-/** The id of the canvas the world is shown on. */
+/** The id of the canvas the game is shown on. */
 export const CANVAS_ID = 'viewport';
 
 /** In development, the canvas `viewport` draws on, captured for an agent asking through the development server as the page drawing `host`, so it sees what a person would. */
@@ -31,12 +31,12 @@ const capturedAs = (host: string) => (viewport: Viewport.Viewport) =>
       })
     : Effect.void;
 
-/** The cubes' world, joined while the playground is open. */
+/** The cubes' session, joined while the playground is open. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
-  world: entry(
-    World.Requirements,
-    World.managed<Model, Message, Services>({
-      resource: CubesWorld,
+  session: entry(
+    Session.Requirements,
+    Session.managed<Model, Message, Services>({
+      resource: CubesSession,
       game: Cubes.game,
       worker: () =>
         new Worker(new URL('./simulation.worker.ts', import.meta.url), {
@@ -44,14 +44,14 @@ export const managedResources = ManagedResource.make<Model, Message>()((entry) =
           name: host,
         }),
       joins: () => true,
-      onJoined: () => Message.JoinedWorld(),
-      onLeft: () => Message.LeftWorld(),
-      onFailed: (reason) => Message.FailedJoinWorld({ reason }),
+      onJoined: () => Message.JoinedGame(),
+      onLeft: () => Message.LeftGame(),
+      onFailed: (reason) => Message.FailedJoinGame({ reason }),
     }),
   ),
 }));
 
-/** Says when the canvas is in the page, so the world can be shown on it. */
+/** Says when the canvas is in the page, so the game can be shown on it. */
 export const MountCanvas = Mount.define('MountCanvas', {
   messages: [Message.MountedCanvas],
   execute: () => Effect.succeed(Message.MountedCanvas()),
@@ -72,54 +72,54 @@ const setUp = ({
   camera.rotation.set(-0.25, 0, 0);
 };
 
-/** The canvas showing the world, and the count of cubes it holds. */
+/** The canvas showing the game, and the count of cubes its state holds. */
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
   stage: entry(
     { isShown: Schema.Boolean },
     {
       modelToDependencies: (model) => ({
-        isShown: model.world._tag === 'Joined' && model.world.canvas === 'Mounted',
+        isShown: model.session._tag === 'Joined' && model.session.canvas === 'Mounted',
       }),
       dependenciesToStream: ({ isShown }) =>
         isShown
           ? Stage.stream({
-              resource: CubesWorld,
+              resource: CubesSession,
               canvasId: CANVAS_ID,
               views: CubesView.views,
               setup: setUp,
               alongside: capturedAs(host),
-              onNotJoined: (): Message => Message.LeftWorld(),
-              onFailed: (reason) => Message.FailedShowWorld({ reason }),
+              onNotJoined: (): Message => Message.LeftGame(),
+              onFailed: (reason) => Message.FailedShowGame({ reason }),
             })
           : Stream.empty,
     },
   ),
   cubes: entry(
-    { isWorldJoined: Schema.Boolean },
+    { isJoined: Schema.Boolean },
     {
-      modelToDependencies: ({ world }) => ({ isWorldJoined: world._tag === 'Joined' }),
-      dependenciesToStream: ({ isWorldJoined }) =>
-        isWorldJoined
+      modelToDependencies: ({ session }) => ({ isJoined: session._tag === 'Joined' }),
+      dependenciesToStream: ({ isJoined }) =>
+        isJoined
           ? Projection.stream({
-              resource: CubesWorld,
+              resource: CubesSession,
               schema: Schema.Int,
-              project: (world) => Worlds.holding(world, [Cubes.Cube]).length,
+              project: (state) => State.holding(state, [Cubes.Cube]).length,
               onProjected: (count) => Message.CountedCubes({ count }),
-              onNotJoined: (): Message => Message.LeftWorld(),
+              onNotJoined: (): Message => Message.LeftGame(),
             })
           : Stream.empty,
     },
   ),
-  // While the Model says the world is not joined, it may already be: joined a moment before the stage found it was not.
+  // While the Model says the session is not joined, it may already be: joined a moment before the stage found it was not.
   joining: entry(
     { isJoining: Schema.Boolean },
     {
-      modelToDependencies: ({ world }) => ({ isJoining: world._tag === 'Joining' }),
+      modelToDependencies: ({ session }) => ({ isJoining: session._tag === 'Joining' }),
       dependenciesToStream: ({ isJoining }) =>
         isJoining
-          ? World.whenJoined({
-              resource: CubesWorld,
-              onJoined: (): Message => Message.FoundWorldJoined(),
+          ? Session.whenJoined({
+              resource: CubesSession,
+              onJoined: (): Message => Message.FoundGameJoined(),
             })
           : Stream.empty,
     },

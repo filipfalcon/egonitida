@@ -1,10 +1,10 @@
 import { Clicking, Mirror, View, Viewport } from '@lightocean/client';
 import { Data, Effect, Option, type Scope, Stream } from 'effect';
 import type { ManagedResource } from 'foldkit';
-import type * as World from '#src/World.ts';
+import type * as Session from '#src/Session.ts';
 
 /**
- * A world shown on a canvas in an application built on Foldkit: drawn through the game's views at every frame the display shows, played by a click on what is drawn, and mirrored as buttons for the keyboard and a screen reader. Foldkit keeps the canvas in its DOM, and says through a Mount when it is there; a Subscription shows the world on it while the application's Model has both the canvas and the world.
+ * A game shown on a canvas in an application built on Foldkit: drawn through the game's views at every frame the display shows, played by a click on what is drawn, and mirrored as buttons for the keyboard and a screen reader. Foldkit keeps the canvas in its DOM, and says through a Mount when it is there; a Subscription shows the game on it while the application's Model has both the canvas and the session.
  */
 
 /** How a stage is set: the game's views, and what else the scene holds, such as its camera and its lights. */
@@ -21,7 +21,7 @@ export interface Options<R> {
 /** Shows `joined` on `viewport` through `options.views` until the scope closes, their rigs drawing its camera for the player who joined: every click on the canvas acts on what is under it, and every labelled entity stands as a button in `mirror`. */
 export const show = <R>(
   viewport: Viewport.Viewport,
-  joined: World.Joined,
+  joined: Session.Joined,
   options: Options<R> & { readonly mirror: HTMLElement },
 ): Effect.Effect<void, never, R | Scope.Scope> =>
   Effect.gen(function* () {
@@ -67,12 +67,15 @@ const elementOf = (id: string) =>
   });
 
 /**
- * A world drawn by the page itself, as a Foldkit Subscription's Stream: `show` is given the world `resource` holds and the element whose id is `elementId`, and draws it however the page draws, such as with a renderer of its own, for as long as the Stream runs; what it says goes on as Messages of the application's. If the world is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so, which puts the Model right so it is drawn again once the world is joined; if it cannot be drawn, `onFailed` says why.
+ * A game drawn by the page itself, as a Foldkit Subscription's Stream: `show` is given the session `resource` holds and the element whose id is `elementId`, and draws its game however the page draws, such as with a renderer of its own, for as long as the Stream runs; what it says goes on as Messages of the application's. If the session is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so, which puts the Model right so the game is drawn again once the session is joined; if it cannot be drawn, `onFailed` says why.
  */
 export const run = <Message, Service, R>(options: {
-  readonly resource: ManagedResource.ManagedResource<World.Joined, Service>;
+  readonly resource: ManagedResource.ManagedResource<Session.Joined, Service>;
   readonly elementId: string;
-  readonly show: (joined: World.Joined, element: HTMLElement) => Stream.Stream<Message, Unshown, R>;
+  readonly show: (
+    joined: Session.Joined,
+    element: HTMLElement,
+  ) => Stream.Stream<Message, Unshown, R>;
   readonly onNotJoined: () => Message;
   readonly onFailed: (reason: string) => Message;
 }): Stream.Stream<Message, never, Service | R> =>
@@ -91,11 +94,11 @@ export const run = <Message, Service, R>(options: {
   );
 
 /**
- * A stage as a Foldkit Subscription's Stream: the world `resource` holds, shown on the canvas whose id is `canvasId`, its mirror beside the canvas, for as long as the Stream runs. If the world is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so in a Message of the application's, which puts the Model right so the stage is shown again once the world is joined; if it cannot be shown otherwise, `onFailed` says why.
+ * A stage as a Foldkit Subscription's Stream: the game of the session `resource` holds, shown on the canvas whose id is `canvasId`, its mirror beside the canvas, for as long as the Stream runs. If the session is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so in a Message of the application's, which puts the Model right so the stage is shown again once the session is joined; if it cannot be shown otherwise, `onFailed` says why.
  */
 export const stream = <Message, Service, R>(
   options: Options<R> & {
-    readonly resource: ManagedResource.ManagedResource<World.Joined, Service>;
+    readonly resource: ManagedResource.ManagedResource<Session.Joined, Service>;
     readonly canvasId: string;
     readonly onNotJoined: () => Message;
     readonly onFailed: (reason: string) => Message;

@@ -52,32 +52,32 @@ describe('inspecting a hosted game', () => {
     }),
   );
 
-  it.effect('tells the world at a tick, entity by entity, or one entity or component of it', () =>
+  it.effect('tells the state at a tick, entity by entity, or one entity or component of it', () =>
     Effect.gen(function* () {
       const { inspector, entity } = yield* inspected;
 
-      const whole = yield* inspector.answer({ _tag: 'World', tick: 5 });
-      const one = yield* inspector.answer({ _tag: 'World', tick: 5, entity, component: 'Health' });
+      const whole = yield* inspector.answer({ _tag: 'State', tick: 5 });
+      const one = yield* inspector.answer({ _tag: 'State', tick: 5, entity, component: 'Health' });
 
       expect(whole).toEqual({
         tick: 5,
         entities: { [entity]: { Position: { x: 2 }, Health: { current: 50 }, Stick: { move: 1 } } },
       });
       expect(one).toEqual({ tick: 5, entities: { [entity]: { Health: { current: 50 } } } });
-      expect(yield* inspector.answer({ _tag: 'World', tick: 5, component: 'Splat' })).toEqual({
+      expect(yield* inspector.answer({ _tag: 'State', tick: 5, component: 'Splat' })).toEqual({
         tick: 5,
         entities: {},
       });
     }),
   );
 
-  it.effect('tells the world as it is now when given no tick', () =>
+  it.effect('tells the state as it is now when given no tick', () =>
     Effect.gen(function* () {
       const { hosted, inspector } = yield* inspected;
 
-      const now = yield* inspector.answer({ _tag: 'World' });
+      const now = yield* inspector.answer({ _tag: 'State' });
 
-      expect(now).toEqual({ tick: (yield* hosted.world).tick, entities: {} });
+      expect(now).toEqual({ tick: (yield* hosted.state).tick, entities: {} });
     }),
   );
 
@@ -107,7 +107,7 @@ describe('inspecting a hosted game', () => {
     }),
   );
 
-  it.effect('tells the log of what happened after the world at one tick, up to another', () =>
+  it.effect('tells the log of what happened after the state at one tick, up to another', () =>
     Effect.gen(function* () {
       const { inspector } = yield* inspected;
 
@@ -184,7 +184,7 @@ describe('inspecting a hosted game', () => {
     Effect.gen(function* () {
       const { inspector } = yield* inspected;
 
-      const refused = yield* refusal(inspector.answer({ _tag: 'World', tick: 99 }));
+      const refused = yield* refusal(inspector.answer({ _tag: 'State', tick: 99 }));
 
       expect(refused).toEqual(Option.some('tick 99 is not kept: ticks 0 to 6 are'));
     }),
@@ -195,15 +195,15 @@ describe('inspecting a hosted game', () => {
       const { hosted, inspector } = yield* inspected;
 
       yield* inspector.answer({ _tag: 'Hold' });
-      const held = (yield* hosted.world).tick;
+      const held = (yield* hosted.state).tick;
       yield* Fixtures.advance(300);
       yield* inspector.answer({ _tag: 'Advance', steps: 2 });
-      const stepped = (yield* hosted.world).tick;
+      const stepped = (yield* hosted.state).tick;
       yield* inspector.answer({ _tag: 'Release' });
       yield* Fixtures.advance(100);
 
       expect(stepped).toBe(held + 2);
-      expect((yield* hosted.world).tick).toBe(held + 5);
+      expect((yield* hosted.state).tick).toBe(held + 5);
     }),
   );
 
@@ -213,7 +213,7 @@ describe('inspecting a hosted game', () => {
 
       yield* inspector.answer({ _tag: 'PlayFrom', tick: 4 });
 
-      expect((yield* hosted.world).tick).toBe(4);
+      expect((yield* hosted.state).tick).toBe(4);
       expect(yield* inspector.answer({ _tag: 'Span' })).toEqual({ oldest: 0, newest: 4 });
     }),
   );
@@ -241,14 +241,14 @@ describe('inspecting a hosted game', () => {
       yield* inspector.answer({ _tag: 'Input', entity, values: { Stick: { move: 3 } } });
       yield* inspector.answer({ _tag: 'Act', entity, action: { _tag: 'AskedToHeal', amount: 7 } });
       yield* inspector.answer({ _tag: 'Advance', steps: 1 });
-      const played = yield* inspector.answer({ _tag: 'World', entity });
+      const played = yield* inspector.answer({ _tag: 'State', entity });
       yield* inspector.answer({ _tag: 'Leave', entity });
       const refused = yield* refusal(
         inspector.answer({ _tag: 'Input', entity, values: { Health: { current: 1 } } }),
       );
 
       expect(played).toEqual({
-        tick: (yield* hosted.world).tick,
+        tick: (yield* hosted.state).tick,
         entities: { [entity]: { Position: { x: 3 }, Health: { current: 7 }, Stick: { move: 3 } } },
       });
       expect(refused).toEqual(Option.some('Health is no input of the game'));

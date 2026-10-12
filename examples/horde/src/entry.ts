@@ -62,7 +62,7 @@ const listen = <K extends keyof WindowEventMap>(
     () => Effect.sync(() => window.removeEventListener(type, handler)),
   );
 
-/** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the world kept for the tab. */
+/** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the state kept for the tab. */
 const host = Tab.id('horde');
 
 const main = Effect.gen(function* () {
@@ -204,7 +204,7 @@ const main = Effect.gen(function* () {
       onSome: (frame) =>
         Effect.gen(function* () {
           // A pad read through WebHID is left out of the Gamepad API's, so it does not count twice.
-          const devices: Devices.State = {
+          const devices: Devices.Reading = {
             pads: [
               ...hid.connections().flatMap((connection) => Option.toArray(connection.pad())),
               ...Gamepads.poll(

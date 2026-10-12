@@ -2,21 +2,13 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
 import { View, type Viewport } from '@lightocean/client';
-import {
-  Component,
-  Domain,
-  Game,
-  Pointing,
-  Rule,
-  WorkerTransport,
-  World as Worlds,
-} from '@lightocean/core';
+import { Component, Domain, Game, Pointing, Rule, WorkerTransport, State } from '@lightocean/core';
 import { Effect, Option, Queue, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Three from 'three/webgpu';
 import * as Held from '#src/Held.ts';
 import * as Stage from '#src/Stage.ts';
-import * as World from '#src/World.ts';
+import * as Session from '#src/Session.ts';
 
 /** A lamp a click turns on, and off again. */
 const Lamp = Component.make('Lamp', Schema.Struct({ on: Schema.Boolean }), {
@@ -46,27 +38,27 @@ const game = Game.make({
   ],
 });
 
-/** Every lamp, as a unit box at the middle of the world. */
+/** Every lamp, as a unit box at the middle of the scene. */
 const lamps = View.each([Lamp], {
   acquire: () => Effect.succeed(new Three.Mesh(new Three.BoxGeometry(1, 1, 1))),
   draw: () => {},
 });
 
-/** A world with one lamp, off, read out as "Lamp", hosted at the far end of a message channel as a worker would, and joined from the near end. */
+/** A game with one lamp, off, read out as "Lamp", hosted at the far end of a message channel as a worker would, and joined from the near end. */
 const joinedLamp = Effect.gen(function* () {
   const channel = new MessageChannel();
-  const [world, lamp] = Worlds.spawn(Worlds.empty({ seed: 1 }), [
+  const [state, lamp] = State.spawn(State.empty({ seed: 1 }), [
     Lamp.of({ on: false }),
     Pointing.Label.of({ text: 'Lamp' }),
   ]);
   yield* WorkerTransport.serve({
     game,
-    world,
-    join: (joining: Worlds.World) => Worlds.spawn(joining, []),
-    leave: Worlds.despawn,
+    state,
+    join: (joining: State.State) => State.spawn(joining, []),
+    leave: State.despawn,
     mayHold: false,
   }).pipe(Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)), Effect.forkScoped);
-  return { lamp, joined: yield* World.join(game, () => channel.port1) };
+  return { lamp, joined: yield* Session.join(game, () => channel.port1) };
 });
 
 /** A viewport as a canvas on a display gives one, which plays a frame every twentieth of a second and the clicks a test hands it, and draws by bringing where everything is up to date, as a renderer does before it draws. */
@@ -103,7 +95,7 @@ const played = Effect.gen(function* () {
 describe('a stage', () => {
   // Real time: frames between the two ports travel on the event loop, as they do between a page and its worker.
   it.live(
-    'shows a world on a viewport, set up as the application asks, where a click or the mirror plays it',
+    'shows a game on a viewport, set up as the application asks, where a click or the mirror plays it',
     () =>
       Effect.gen(function* () {
         const { lamp, joined } = yield* joinedLamp;
@@ -122,10 +114,10 @@ describe('a stage', () => {
         yield* Effect.sleep('300 millis');
         yield* click({ x: 0, y: 0 });
         yield* Effect.sleep('300 millis');
-        const clickedOn = Worlds.get(yield* joined.client.world, lamp, Lamp);
+        const clickedOn = State.get(yield* joined.client.state, lamp, Lamp);
         mirror.querySelector('button')?.click();
         yield* Effect.sleep('300 millis');
-        const pressedOff = Worlds.get(yield* joined.client.world, lamp, Lamp);
+        const pressedOff = State.get(yield* joined.client.state, lamp, Lamp);
 
         expect(mirror.querySelector('button')?.textContent).toBe('Lamp');
         expect(clickedOn).toEqual(Option.some({ on: true }));
@@ -179,10 +171,10 @@ describe('a stage', () => {
   );
 
   it.effect(
-    'says the world is not joined, rather than failing, when the Model believes it is but it is not',
+    'says the session is not joined, rather than failing, when the Model believes it is but it is not',
     () =>
       Effect.gen(function* () {
-        const resource = ManagedResource.tag<World.Joined>()('Lamps');
+        const resource = ManagedResource.tag<Session.Joined>()('Lamps');
         const told = yield* Stage.stream({
           resource,
           canvasId: 'nowhere',
@@ -192,7 +184,7 @@ describe('a stage', () => {
         }).pipe(
           Stream.runCollect,
           // As Foldkit holds a resource it has not acquired, such as one a Model restored after a reload says is.
-          Held.holding(resource, yield* Ref.make(Option.none<World.Joined>())),
+          Held.holding(resource, yield* Ref.make(Option.none<Session.Joined>())),
         );
 
         expect(told).toEqual(['not joined']);
@@ -200,10 +192,10 @@ describe('a stage', () => {
   );
 
   describe('run by a page that draws it itself', () => {
-    it.live('gives the page the world and its element, and passes on what the page says', () =>
+    it.live('gives the page the session and its element, and passes on what the page says', () =>
       Effect.gen(function* () {
         const { joined } = yield* joinedLamp;
-        const resource = ManagedResource.tag<World.Joined>()('Drawn');
+        const resource = ManagedResource.tag<Session.Joined>()('Drawn');
         const element = document.createElement('div');
         element.id = 'scene';
         document.body.append(element);
@@ -213,21 +205,21 @@ describe('a stage', () => {
           elementId: 'scene',
           show: (given, at) =>
             Stream.make(
-              `${at.id} shows the world of ${given.client.entity === joined.client.entity ? 'this' : 'another'} player`,
+              `${at.id} shows the game of ${given.client.entity === joined.client.entity ? 'this' : 'another'} player`,
             ),
           onNotJoined: () => 'not joined',
           onFailed: (reason) => `failed: ${reason}`,
         }).pipe(Stream.runCollect, Held.holding(resource, yield* Ref.make(Option.some(joined))));
 
         element.remove();
-        expect(told).toEqual(['scene shows the world of this player']);
+        expect(told).toEqual(['scene shows the game of this player']);
       }).pipe(Effect.scoped),
     );
 
     it.live('says why when there is no element to draw on, or the drawing fails', () =>
       Effect.gen(function* () {
         const { joined } = yield* joinedLamp;
-        const resource = ManagedResource.tag<World.Joined>()('Drawn');
+        const resource = ManagedResource.tag<Session.Joined>()('Drawn');
         const element = document.createElement('div');
         element.id = 'failing';
         document.body.append(element);
@@ -252,9 +244,9 @@ describe('a stage', () => {
       }).pipe(Effect.scoped),
     );
 
-    it.effect('says the world is not joined, as a stage does', () =>
+    it.effect('says the session is not joined, as a stage does', () =>
       Effect.gen(function* () {
-        const resource = ManagedResource.tag<World.Joined>()('Drawn');
+        const resource = ManagedResource.tag<Session.Joined>()('Drawn');
         const told = yield* Stage.run({
           resource,
           elementId: 'scene',
@@ -263,7 +255,7 @@ describe('a stage', () => {
           onFailed: (reason) => `failed: ${reason}`,
         }).pipe(
           Stream.runCollect,
-          Held.holding(resource, yield* Ref.make(Option.none<World.Joined>())),
+          Held.holding(resource, yield* Ref.make(Option.none<Session.Joined>())),
         );
 
         expect(told).toEqual(['not joined']);

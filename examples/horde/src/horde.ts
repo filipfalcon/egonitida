@@ -55,7 +55,7 @@ export const Jaws = Component.make('Jaws', Schema.Struct({ readyAt: Schema.Int }
   network: 'server',
 });
 
-/** When the next zombie rises: the horde's one piece of state that belongs to no zombie. */
+/** When the next zombie rises: the horde's one value that belongs to no zombie. */
 export const Tide = Component.make('Tide', Schema.Struct({ nextAt: Schema.Int }), {
   owner: 'simulation',
   network: 'private',
@@ -101,12 +101,12 @@ const shoot = Rule.on(Survivor.PulledTrigger, {
         .query(Zombie, Body.Position)
         .reduce<
           Option.Option<{ readonly zombie: number; readonly health: number; readonly t: number }>
-        >((nearest, [zombie, state, { x, z }]) => {
+        >((nearest, [zombie, mode, { x, z }]) => {
           const t = (x - from.x) * along.x + (z - from.z) * along.z;
           const aside = Math.abs((x - from.x) * along.z - (z - from.z) * along.x);
-          const inLine = state._tag === 'Shambling' && t > 0 && t <= RANGE && aside <= HIT_WIDTH;
+          const inLine = mode._tag === 'Shambling' && t > 0 && t <= RANGE && aside <= HIT_WIDTH;
           return inLine && Option.match(nearest, { onNone: () => true, onSome: (n) => t < n.t })
-            ? Option.some({ zombie, health: state.health, t })
+            ? Option.some({ zombie, health: mode.health, t })
             : nearest;
         }, Option.none());
       const t = Option.match(hit, { onNone: () => RANGE, onSome: (found) => found.t });
@@ -187,7 +187,7 @@ const shamble = System.make({
       .flatMap(([, life, position]) => (life._tag === 'Alive' ? [position] : []));
     const walkers = context
       .query(Zombie, Gait, Body.Position)
-      .filter(([, state]) => state._tag === 'Shambling');
+      .filter(([, mode]) => mode._tag === 'Shambling');
     for (const [zombie, , { speed }, { x, z }] of walkers) {
       const target = survivors.reduce<Option.Option<{ readonly x: number; readonly z: number }>>(
         (nearest, one) =>
@@ -239,13 +239,13 @@ const bite = System.make({
     const survivors = context
       .query(Survivor.Life, Body.Position)
       .filter(([, life]) => life._tag === 'Alive');
-    for (const [zombie, state, { readyAt }, { x, z }] of context.query(
+    for (const [zombie, mode, { readyAt }, { x, z }] of context.query(
       Zombie,
       Jaws,
       Body.Position,
     )) {
       const reached = survivors.find(([, , at]) => Math.hypot(at.x - x, at.z - z) <= REACH);
-      if (state._tag === 'Shambling' && tick >= readyAt && reached !== undefined) {
+      if (mode._tag === 'Shambling' && tick >= readyAt && reached !== undefined) {
         context.emit({ _tag: 'Bitten', survivor: reached[0], damage: BITE_DAMAGE });
         context.set(zombie, Jaws, { readyAt: tick + Math.round(BITE_SECONDS / stepSeconds) });
       }
@@ -262,8 +262,8 @@ const rot = System.make({
   despawns: true,
   run: (context) => {
     const { tick, stepSeconds } = context.time;
-    for (const [zombie, state] of context.query(Zombie)) {
-      if (state._tag === 'Fallen' && (tick - state.at) * stepSeconds >= FALLEN_SECONDS) {
+    for (const [zombie, mode] of context.query(Zombie)) {
+      if (mode._tag === 'Fallen' && (tick - mode.at) * stepSeconds >= FALLEN_SECONDS) {
         context.despawn(zombie);
       }
     }

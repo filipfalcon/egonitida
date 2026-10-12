@@ -1,7 +1,7 @@
 import { type CallExpression, type Node, type Rule, calleeName } from '#src/ast.ts';
 
 /**
- * A component's state says absence with `Option`, and states with tagged unions, never with a field that may be null or missing.
+ * A component's values say absence with `Option`, and modes with tagged unions, never with a field that may be null or missing.
  */
 
 const NULLABLE = new Set([
@@ -32,7 +32,7 @@ export const noNullableComponents: Rule = {
     type: 'problem',
     messages: {
       nullable:
-        '{{call}} in a component’s schema: a component’s state says absence with `Schema.Option`, and states with a tagged union, so no value of it can be half there.',
+        '{{call}} in a component’s schema: a component’s values say absence with `Schema.Option`, and modes with a tagged union, so no value of it can be half there.',
     },
   },
   create: (context) => ({

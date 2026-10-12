@@ -11,7 +11,7 @@ import * as ObjectsView from '#src/objects.view.ts';
 const edited = () =>
   Story.story(
     Editing.game,
-    Story.given(Editing.joined.world, {
+    Story.given(Editing.joined.state, {
       editor: Editing.joined.editor,
       box: Editing.box,
       sphere: Editing.sphere,
@@ -44,7 +44,7 @@ it.effect(
       const told = edited();
       const scene = yield* Scene.make(ObjectsView.views);
 
-      yield* scene.show(told.world);
+      yield* scene.show(told.state);
 
       const box = scene.find(ObjectsView.objects, Editing.box);
       const { position } = Story.valueOf(told, 'box', Objects.Transform);
@@ -75,9 +75,9 @@ it.effect('turns every object about its upright as far as it has turned', () =>
         (mesh) => mesh.rotation.y - angle,
       );
 
-    yield* scene.show(told.world);
+    yield* scene.show(told.state);
     const before = turned(Story.valueOf(told, 'sphere', Objects.Turn).angle);
-    yield* scene.show(later.world);
+    yield* scene.show(later.state);
     const after = turned(Story.valueOf(later, 'sphere', Objects.Turn).angle);
 
     expect(before).toEqual(Option.some(0));

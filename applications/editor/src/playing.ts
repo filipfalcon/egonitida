@@ -1,4 +1,4 @@
-import { Domain, Game, Pointing, Rule, World } from '@lightocean/core';
+import { Domain, Game, Pointing, Rule, State } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 import * as Objects from '#src/objects.ts';
 
@@ -50,14 +50,14 @@ export const game = Game.make({
   domains: [Pointing.domain, Objects.domain, domain],
 });
 
-/** A world of this game as text, without what only a client keeps: what a worker playing a document is opened with. */
+/** A state of this game as text, without what only a client keeps: what a worker playing a document is opened with. */
 const Opened = Schema.fromJsonString(
-  World.schema(game.components.filter(({ network }) => network !== 'local')),
+  State.schema(game.components.filter(({ network }) => network !== 'local')),
 );
 
 /** The document `edited` as a worker playing it is opened with: its objects as they are, each by its own id, so reactions still find their targets, and nothing of what only editing keeps, which this game does not hold. */
-export const opening = (edited: World.World): string => Schema.encodeSync(Opened)(edited);
+export const opening = (edited: State.State): string => Schema.encodeSync(Opened)(edited);
 
-/** The world a worker plays, from what it was opened with; none if that is not a document. */
-export const fromOpening = (opening: string): Option.Option<World.World> =>
+/** The state a worker plays, from what it was opened with; none if that is not a document. */
+export const fromOpening = (opening: string): Option.Option<State.State> =>
   Schema.decodeOption(Opened)(opening);

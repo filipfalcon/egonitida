@@ -1,9 +1,9 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Pointing, Story, World } from '@lightocean/core';
+import { Pointing, Story, State } from '@lightocean/core';
 import { Option } from 'effect';
 import * as Score from '#src/score.ts';
 
-const given = Story.given(Score.world, {
+const given = Story.given(Score.state, {
   round: Score.round,
   target: Score.firstTarget,
   player: Score.player,
@@ -13,7 +13,7 @@ const hit = [Story.act('player', Pointing.Clicked, { entity: Score.firstTarget }
 
 describe('a round', () => {
   it('counts a hit on a target, which moves somewhere else to be hit again', () => {
-    const before = World.get(Score.world, Score.firstTarget, Score.Target);
+    const before = State.get(Score.state, Score.firstTarget, Score.Target);
 
     Story.story(
       Score.game,

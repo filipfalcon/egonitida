@@ -18,9 +18,9 @@ describe('asking a relay', () => {
       const listening = yield* served(['first', 'counting']);
 
       yield* Ask.request([listening], { _tag: 'Advance', steps: 3 });
-      const world = yield* Ask.request([listening], { _tag: 'World' });
+      const state = yield* Ask.request([listening], { _tag: 'State' });
 
-      expect(world).toEqual({ tick: 3, entities: { 0: { Count: { value: 3 } } } });
+      expect(state).toEqual({ tick: 3, entities: { 0: { Count: { value: 3 } } } });
     }),
   );
 
@@ -31,11 +31,11 @@ describe('asking a relay', () => {
       const [first] = hosts;
 
       yield* Ask.request([listening], { _tag: 'Advance', steps: 2 }, first?.host);
-      const world = yield* Ask.request([listening], { _tag: 'World' }, first?.host);
-      const other = yield* Ask.request([listening], { _tag: 'World' });
+      const state = yield* Ask.request([listening], { _tag: 'State' }, first?.host);
+      const other = yield* Ask.request([listening], { _tag: 'State' });
 
       expect(hosts.map(({ name }) => name)).toEqual(['first', 'second']);
-      expect(world).toMatchObject({ tick: 2 });
+      expect(state).toMatchObject({ tick: 2 });
       expect(other).toMatchObject({ tick: 0 });
     }),
   );
@@ -44,7 +44,7 @@ describe('asking a relay', () => {
     Effect.gen(function* () {
       const listening = yield* served(['counting']);
 
-      const refused = yield* refusal(Ask.request([listening], { _tag: 'World', tick: 99 }));
+      const refused = yield* refusal(Ask.request([listening], { _tag: 'State', tick: 99 }));
 
       expect(refused).toEqual(Option.some('tick 99 is not kept: ticks 0 to 0 are'));
     }),

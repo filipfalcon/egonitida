@@ -152,14 +152,14 @@ describe('the editor', () => {
         expect(model.play).toEqual({
           _tag: 'Playing',
           opening: 'the document',
-          world: 'Opening',
+          session: 'Opening',
           steps: [],
           maybePast: Option.none(),
         });
       }),
       Story.message(Message.JoinedPlay()),
       Story.model((model) => {
-        expect(model.play).toMatchObject({ _tag: 'Playing', world: 'Joined' });
+        expect(model.play).toMatchObject({ _tag: 'Playing', session: 'Joined' });
       }),
       Story.message(Message.ClickedStop()),
       Story.model((model) => {
@@ -172,20 +172,20 @@ describe('the editor', () => {
     );
   });
 
-  /** The page with the document playing, its world joined, with `steps` told and `maybePast` shown. */
+  /** The page with the document playing, its session joined, with `steps` told and `maybePast` shown. */
   const playingWith = (
     steps: PlayingState['steps'] = [],
     maybePast: Option.Option<typeof Past.Type> = Option.none(),
   ): Model => ({
     ...selecting,
-    play: { _tag: 'Playing', opening: 'the document', world: 'Joined', steps, maybePast },
+    play: { _tag: 'Playing', opening: 'the document', session: 'Joined', steps, maybePast },
   });
 
-  it('plays again after a reload, whichever comes first of the world playing joined and the stage finding it is not', () => {
-    // A Model restored after a reload says the world playing is joined, before it is joined again.
+  it('plays again after a reload, whichever comes first of the game playing joined and the stage finding it is not', () => {
+    // A Model restored after a reload says the game playing is joined, before it is joined again.
     const restored: Model = {
       ...playingWith(),
-      maybeError: Option.some('The world Played is not joined.'),
+      maybeError: Option.some('The session Played is not joined.'),
     };
 
     for (const messages of [[Message.JoinedPlay()], [Message.LeftPlay(), Message.JoinedPlay()]]) {
@@ -194,7 +194,7 @@ describe('the editor', () => {
         Story.given(restored),
         ...messages.map((message) => Story.message(message)),
         Story.model((model) => {
-          expect(model.play).toMatchObject({ _tag: 'Playing', world: 'Joined' });
+          expect(model.play).toMatchObject({ _tag: 'Playing', session: 'Joined' });
           // What went wrong while it was not joined is past.
           expect(model.maybeError).toEqual(Option.none());
         }),
@@ -229,16 +229,16 @@ describe('the editor', () => {
       expect(told.play).toMatchObject({ steps: [clicked] });
     });
 
-    it('shows the world as it was after a step, the canvas too, and the live world again', () => {
+    it('shows the state after a step, the canvas too, and the live game again', () => {
       Story.story(
         update,
         Story.given(playingWith([clicked])),
         Story.message(Message.InspectedStep({ tick: 40 })),
         Story.Command.expectExact(ShowPast({ tick: 40 })),
-        Story.Command.resolve(ShowPast, Message.ShowedPast({ tick: 40, world: '{"1":{}}' })),
+        Story.Command.resolve(ShowPast, Message.ShowedPast({ tick: 40, state: '{"1":{}}' })),
         Story.model((model) => {
           expect(model.play).toMatchObject({
-            maybePast: Option.some({ tick: 40, world: '{"1":{}}' }),
+            maybePast: Option.some({ tick: 40, state: '{"1":{}}' }),
           });
         }),
         Story.message(Message.ClickedLive()),
@@ -252,7 +252,7 @@ describe('the editor', () => {
 
     it('forgets what it was told once playing stops', () => {
       const stopped = update(
-        playingWith([clicked], Option.some({ tick: 40, world: '{}' })),
+        playingWith([clicked], Option.some({ tick: 40, state: '{}' })),
         Message.ClickedStop(),
       ).model;
 
@@ -260,12 +260,12 @@ describe('the editor', () => {
     });
   });
 
-  it('shows it again after a reload, whichever comes first of the world joined and the stage finding it is not', () => {
+  it('shows it again after a reload, whichever comes first of the session joined and the stage finding it is not', () => {
     // A Model restored after a reload says the document is joined and its canvas in the page, before it is joined again.
     const restored = {
       ...initialModel,
       document: { _tag: 'Joined', canvas: 'Mounted' },
-      maybeError: Option.some('The world is not joined.'),
+      maybeError: Option.some('The session is not joined.'),
     } as const;
 
     Story.story(
@@ -290,7 +290,7 @@ describe('the editor', () => {
     );
   });
 
-  it('takes the document or the world playing found joined as joined only while it waits for one', () => {
+  it('takes the document or the game playing found joined as joined only while it waits for one', () => {
     Story.story(
       update,
       Story.given({ ...initialModel, maybeError: Option.some('Not joined.') }),
@@ -305,7 +305,7 @@ describe('the editor', () => {
       play: {
         _tag: 'Playing',
         opening: 'the document',
-        world: 'Opening',
+        session: 'Opening',
         steps: [],
         maybePast: Option.none(),
       },
@@ -315,7 +315,7 @@ describe('the editor', () => {
       Story.given(opening),
       Story.message(Message.FoundPlayJoined()),
       Story.model((model) => {
-        expect(model.play).toMatchObject({ world: 'Joined' });
+        expect(model.play).toMatchObject({ session: 'Joined' });
       }),
     );
     // Found joined just after it said so, and after the stage said why it could not show it.

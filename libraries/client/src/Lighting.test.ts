@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { World } from '@lightocean/core';
+import { State } from '@lightocean/core';
 import { Effect } from 'effect';
 import * as Lighting from '#src/Lighting.ts';
 
@@ -23,8 +23,8 @@ const recorded = () => {
 describe('lighting', () => {
   it.effect("lights every device of the page's own player, and none for anyone else's", () =>
     Effect.gen(function* () {
-      const [one, own] = World.spawn(World.empty({ seed: 1 }), []);
-      const [, other] = World.spawn(one, []);
+      const [one, own] = State.spawn(State.empty({ seed: 1 }), []);
+      const [, other] = State.spawn(one, []);
       const pad = recorded();
       const keyboard = recorded();
       const lighting = Lighting.make({ player: own, lit: () => [pad.device, keyboard.device] });
@@ -40,7 +40,7 @@ describe('lighting', () => {
 
   it.effect('lights a device connected since as the rest were last lit, once asked to again', () =>
     Effect.gen(function* () {
-      const [, own] = World.spawn(World.empty({ seed: 1 }), []);
+      const [, own] = State.spawn(State.empty({ seed: 1 }), []);
       const pad = recorded();
       const devices = { lit: new Array<Lighting.Lit>() };
       const lighting = Lighting.make({ player: own, lit: () => devices.lit });
@@ -59,8 +59,8 @@ describe('lighting', () => {
     "lights as many of the player lights of the page's own player's devices as asked, again too",
     () =>
       Effect.gen(function* () {
-        const [one, own] = World.spawn(World.empty({ seed: 1 }), []);
-        const [, other] = World.spawn(one, []);
+        const [one, own] = State.spawn(State.empty({ seed: 1 }), []);
+        const [, other] = State.spawn(one, []);
         const pad = recorded();
         const devices = { lit: [pad.device] };
         const lighting = Lighting.make({ player: own, lit: () => devices.lit });

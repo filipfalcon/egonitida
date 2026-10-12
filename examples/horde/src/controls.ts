@@ -38,7 +38,7 @@ export const start: Played = {
  * What `devices` come to after `before`: walking on the floor as the camera looks at it, up the screen as away from it; aiming by the right stick on a pad, kept where it was once the stick is let go, and by the mouse, at `mouseAim`, otherwise.
  */
 export const play = (
-  devices: Devices.State,
+  devices: Devices.Reading,
   before: Played,
   mouseAim: Option.Option<number>,
 ): Played => {

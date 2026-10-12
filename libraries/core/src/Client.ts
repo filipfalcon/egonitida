@@ -6,10 +6,10 @@ import * as Game from '#src/Game.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import type * as Transport from '#src/Transport.ts';
-import * as World from '#src/World.ts';
+import * as State from '#src/State.ts';
 
 /**
- * A player's side of a session: joins a host, sends it the player's input, and keeps the newest world the host sent, with what the client keeps for itself stepped by the game's local systems through every tick the world reached. It draws nothing and predicts nothing yet; it is what both are built on.
+ * A player's side of a session: joins a host, sends it the player's input, and keeps the newest state the host sent, with what the client keeps for itself stepped by the game's local systems through every tick the state reached. It draws nothing and predicts nothing yet; it is what both are built on.
  */
 
 export interface Options {
@@ -19,16 +19,16 @@ export interface Options {
 
 export interface Client {
   /** The entity this client controls. */
-  readonly entity: World.Entity;
-  /** The rate the host steps its world at, as it said on welcoming the client. */
+  readonly entity: State.Entity;
+  /** The rate the host steps its game at, as it said on welcoming the client. */
   readonly stepRate: number;
-  /** The newest world the host sent. */
-  readonly world: Effect.Effect<World.World>;
-  /** Every world the client receives from now on that is newer than the one before, in order. */
-  readonly worlds: Stream.Stream<World.World>;
+  /** The newest state the host sent. */
+  readonly state: Effect.Effect<State.State>;
+  /** Every state the client receives from now on that is newer than the one before, in order. */
+  readonly states: Stream.Stream<State.State>;
   /** Sends the player's input, as values of input components, and gives the number it was sent as. */
   readonly send: (values: ReadonlyArray<Component.Instance>) => Effect.Effect<number>;
-  /** The number of the newest input of this client's that the world at `tick` took in, if the host said so: 0 for none yet. Inputs numbered above it are yet to be, which a client predicting its own player plays ahead. */
+  /** The number of the newest input of this client's that the state at `tick` took in, if the host said so: 0 for none yet. Inputs numbered above it are yet to be, which a client predicting its own player plays ahead. */
   readonly ackedAt: (tick: number) => Option.Option<number>;
   /** Asks the host to hold time; a host that does not allow it goes on. */
   readonly hold: Effect.Effect<void>;
@@ -60,8 +60,8 @@ const encodeValues = (values: ReadonlyArray<Component.Instance>): SentInput['val
 /** The most ticks a client steps what it keeps for itself through at once. */
 const MAX_LOCAL_STEPS = 5;
 
-/** How many worlds a client keeps, with what it kept for itself at each, so a host going back in time finds them: ten seconds at 60 steps a second. */
-const KEPT_WORLDS = 600;
+/** How many states a client keeps, with what it kept for itself at each, so a host going back in time finds them: ten seconds at 60 steps a second. */
+const KEPT_STATES = 600;
 
 /** Joins the host at the other end of `connection`, until the scope closes. */
 export const connect = (
@@ -71,18 +71,18 @@ export const connect = (
   Effect.gen(function* () {
     const welcome = yield* Deferred.make<Protocol.Welcome>();
     // Each listener gets its own subscription, from the moment it starts listening.
-    const received = yield* PubSub.unbounded<World.World>();
-    const state: {
-      world: World.World;
+    const received = yield* PubSub.unbounded<State.State>();
+    const receiving: {
+      state: State.State;
       era: number;
-      /** The worlds lately received, oldest first, with what the client kept for itself at each. */
-      kept: ReadonlyArray<World.World>;
+      /** The states lately received, oldest first, with what the client kept for itself at each. */
+      kept: ReadonlyArray<State.State>;
       seq: number;
       history: ReadonlyArray<SentInput>;
-      /** The number of the newest input each lately received world took in, by its tick. */
+      /** The number of the newest input each lately received state took in, by its tick. */
       acked: Map<number, number>;
     } = {
-      world: World.empty({ seed: 0 }),
+      state: State.empty({ seed: 0 }),
       era: 0,
       kept: [],
       seq: 0,
@@ -91,26 +91,26 @@ export const connect = (
     };
 
     /**
-     * `world` with what the client keeps for itself stepped through every tick since `since` to the world's own: a snapshot lost on the way is still stepped through. After a long gap, such as on joining, only the last few are, as a host catches up only so far.
+     * `state` with what the client keeps for itself stepped through every tick since `since` to the state's own: a snapshot lost on the way is still stepped through. After a long gap, such as on joining, only the last few are, as a host catches up only so far.
      */
-    const keepUp = (world: World.World, since: number) =>
-      Array.from({ length: Math.min(world.tick - since, MAX_LOCAL_STEPS) }, (_, back) => back)
+    const keepUp = (state: State.State, since: number) =>
+      Array.from({ length: Math.min(state.tick - since, MAX_LOCAL_STEPS) }, (_, back) => back)
         .reverse()
         .reduce(
-          (current, back) => Game.stepLocal(options.game, current, { tick: world.tick - back }),
-          world,
+          (current, back) => Game.stepLocal(options.game, current, { tick: state.tick - back }),
+          state,
         );
 
     /**
-     * A world the host went back to, or shows: with what the client kept for itself at its tick, if the client still has that tick, and with nothing of its own otherwise, since what it keeps now belongs to another time.
+     * A state the host went back to, or shows: with what the client kept for itself at its tick, if the client still has that tick, and with nothing of its own otherwise, since what it keeps now belongs to another time.
      */
     const backTo = (text: string, tick: number) => {
-      const then = state.kept.find((kept) => kept.tick === tick);
-      const base = then ?? { ...state.world, stores: new Map() };
-      return Option.map(Snapshot.apply(base, text, options.game), ({ world }) => world);
+      const then = receiving.kept.find((kept) => kept.tick === tick);
+      const base = then ?? { ...receiving.state, stores: new Map() };
+      return Option.map(Snapshot.apply(base, text, options.game), ({ state }) => state);
     };
 
-    // A snapshot of an earlier era, or older than the world already held in this one, arrived out of order, and is of no use.
+    // A snapshot of an earlier era, or older than the state already held in this one, arrived out of order, and is of no use.
     // The questions asked and not yet answered, by their ids.
     const asked = { next: 0, waiting: new Map<number, Deferred.Deferred<unknown, Unanswered>>() };
     const answered = ({ id, outcome }: Protocol.Answer) =>
@@ -137,33 +137,36 @@ export const connect = (
         : Option.match(Protocol.decodeAcked(frame.payload), {
             onSome: ({ tick, seq }) =>
               Effect.sync(() => {
-                state.acked.set(tick, seq);
-                // As many as the worlds kept, the oldest let go first.
-                for (const old of state.acked.keys()) {
-                  if (state.acked.size <= KEPT_WORLDS) {
+                receiving.acked.set(tick, seq);
+                // As many as the states kept, the oldest let go first.
+                for (const old of receiving.acked.keys()) {
+                  if (receiving.acked.size <= KEPT_STATES) {
                     break;
                   }
-                  state.acked.delete(old);
+                  receiving.acked.delete(old);
                 }
               }),
             onNone: () =>
-              Option.match(Snapshot.apply(state.world, frame.payload, options.game), {
+              Option.match(Snapshot.apply(receiving.state, frame.payload, options.game), {
                 onNone: () => Effect.void,
-                onSome: ({ era, world }) =>
+                onSome: ({ era, state }) =>
                   Effect.suspend(() => {
-                    if (era < state.era || (era === state.era && world.tick <= state.world.tick)) {
+                    if (
+                      era < receiving.era ||
+                      (era === receiving.era && state.tick <= receiving.state.tick)
+                    ) {
                       return Effect.void;
                     }
                     const next =
-                      era > state.era
-                        ? backTo(frame.payload, world.tick)
-                        : Option.some(keepUp(world, state.world.tick));
+                      era > receiving.era
+                        ? backTo(frame.payload, state.tick)
+                        : Option.some(keepUp(state, receiving.state.tick));
                     return Option.match(next, {
                       onNone: () => Effect.void,
                       onSome: (arrived) => {
-                        state.era = era;
-                        state.world = arrived;
-                        state.kept = [...state.kept, arrived].slice(-KEPT_WORLDS);
+                        receiving.era = era;
+                        receiving.state = arrived;
+                        receiving.kept = [...receiving.kept, arrived].slice(-KEPT_STATES);
                         return PubSub.publish(received, arrived).pipe(Effect.asVoid);
                       },
                     });
@@ -176,17 +179,17 @@ export const connect = (
 
     const send = (values: ReadonlyArray<Component.Instance>) =>
       Effect.suspend(() => {
-        state.seq += 1;
-        state.history = [{ seq: state.seq, values: encodeValues(values) }, ...state.history].slice(
-          0,
-          Protocol.MAX_REPEATED_INPUTS,
-        );
+        receiving.seq += 1;
+        receiving.history = [
+          { seq: receiving.seq, values: encodeValues(values) },
+          ...receiving.history,
+        ].slice(0, Protocol.MAX_REPEATED_INPUTS);
         return connection
           .send({
             channel: 'unreliable',
-            payload: Protocol.encodeInputs({ inputs: state.history }),
+            payload: Protocol.encodeInputs({ inputs: receiving.history }),
           })
-          .pipe(Effect.as(state.seq));
+          .pipe(Effect.as(receiving.seq));
       });
 
     const tell = (message: Protocol.ClientReliable) =>
@@ -205,10 +208,10 @@ export const connect = (
     return {
       entity,
       stepRate,
-      world: Effect.sync(() => state.world),
-      worlds: Stream.fromPubSub(received),
+      state: Effect.sync(() => receiving.state),
+      states: Stream.fromPubSub(received),
       send,
-      ackedAt: (tick) => Option.fromNullishOr(state.acked.get(tick)),
+      ackedAt: (tick) => Option.fromNullishOr(receiving.acked.get(tick)),
       hold: tell({ _tag: 'Hold' }),
       release: tell({ _tag: 'Release' }),
       act: (action, value) => tell({ _tag: 'Act', action: action.encode(value) }),

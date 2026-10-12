@@ -1,8 +1,8 @@
-import { Action, Component, Domain, Game, Pointing, Rule, World } from '@lightocean/core';
+import { Action, Component, Domain, Game, Pointing, Rule, State } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 
 /**
- * The playground's world: cubes a player asks for, one at a time, each in a place of its own in a grid, and painted the next colour of a palette at every click. Its UI, the button that asks for a cube and the count of them, is Foldkit's, in `main.ts`; its view is in `cubes.view.ts`.
+ * The playground's game: cubes a player asks for, one at a time, each in a place of its own in a grid, and painted the next colour of a palette at every click. Its UI, the button that asks for a cube and the count of them, is Foldkit's, in `main.ts`; its view is in `cubes.view.ts`.
  */
 
 /** The colours a cube steps through, one per click, as hex. */
@@ -83,8 +83,8 @@ export const domain = Domain.make({
 export const game = Game.make({ stepRate: 30, domains: [Pointing.domain, domain] });
 
 /** Whoever asks for cubes and clicks them: an entity that holds nothing, whom an ask or a click is from. */
-const [withViewer, viewer] = World.spawn(World.empty({ seed: 1 }), []);
+const [withViewer, viewer] = State.spawn(State.empty({ seed: 1 }), []);
 
 /** No cubes yet, and a viewer. */
-export const world = withViewer;
+export const state = withViewer;
 export { viewer };

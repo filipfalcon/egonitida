@@ -2,7 +2,7 @@ import { expect, it } from '@effect/vitest';
 import { Pointing, Story } from '@lightocean/core';
 import * as Colour from '#src/colour.ts';
 
-const given = Story.given(Colour.world, {
+const given = Story.given(Colour.state, {
   left: Colour.left,
   middle: Colour.middle,
   viewer: Colour.viewer,

@@ -9,7 +9,7 @@ import { viewDetails } from '#src/details.ts';
 import { Message, type Model, type Selected } from '#src/main.ts';
 import * as Objects from '#src/objects.ts';
 import { ui } from '#src/ui.ts';
-import { CANVAS_ID, MountCanvas } from '#src/world.ts';
+import { CANVAS_ID, MountCanvas } from '#src/session.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from './tokens.stylex.ts';
 

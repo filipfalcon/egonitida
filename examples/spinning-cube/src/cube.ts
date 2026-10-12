@@ -1,4 +1,4 @@
-import { Component, Domain, Game, System, World } from '@lightocean/core';
+import { Component, Domain, Game, System, State } from '@lightocean/core';
 import { Schema } from 'effect';
 
 /**
@@ -48,6 +48,6 @@ export const domain = Domain.make({
 export const game = Game.make({ stepRate: 60, domains: [domain] });
 
 /** One cube, turning once every four seconds. */
-export const [world, cube] = World.spawn(World.empty({ seed: 1 }), [
+export const [state, cube] = State.spawn(State.empty({ seed: 1 }), [
   Spin.of({ angle: 0, speed: 0.25 }),
 ]);

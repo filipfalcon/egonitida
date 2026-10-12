@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { World } from '@lightocean/core';
+import { State } from '@lightocean/core';
 import { Effect } from 'effect';
 import * as Haptics from '#src/Haptics.ts';
 
@@ -21,8 +21,8 @@ const recorded = () => {
 
 /** Two players' entities: the page's own, and someone else's. */
 const players = () => {
-  const [one, own] = World.spawn(World.empty({ seed: 1 }), []);
-  const [, other] = World.spawn(one, []);
+  const [one, own] = State.spawn(State.empty({ seed: 1 }), []);
+  const [, other] = State.spawn(one, []);
   return { own, other };
 };
 

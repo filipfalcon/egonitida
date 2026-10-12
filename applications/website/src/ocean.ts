@@ -1,8 +1,8 @@
-import { Component, Domain, Game, Pointing, Rule, System, World } from '@lightocean/core';
+import { Component, Domain, Game, Pointing, Rule, System, State } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 
 /**
- * The website's world, shown at the top of its page: an ocean of lights in a square, swelling with the sea, where a click on a light sends a ripple out from it. It is a game like any other, so the page shows the engine by running it. Its view is in `ocean.view.ts`.
+ * The website's game, shown at the top of its page: an ocean of lights in a square, swelling with the sea, where a click on a light sends a ripple out from it. It is a game like any other, so the page shows the engine by running it. Its view is in `ocean.view.ts`.
  */
 
 /** How many lights stand across the ocean, and as many back. */
@@ -42,12 +42,12 @@ export const Ripple = Component.make(
   { owner: 'rules', network: 'server' },
 );
 
-/** How high the sea alone lifts the light at its place, `seconds` into the world: two waves crossing, so no two places swell alike. */
+/** How high the sea alone lifts the light at its place, `seconds` into the game: two waves crossing, so no two places swell alike. */
 const seaAt = (across: number, back: number, seconds: number) =>
   0.18 * Math.sin(0.7 * across + 1.3 * seconds) +
   0.14 * Math.sin(0.55 * back - 0.9 * seconds + 1.1);
 
-/** How high `ripple` lifts the light at its place, `seconds` into the world, `stepSeconds` a step: most where its crest is, less the longer it has run. */
+/** How high `ripple` lifts the light at its place, `seconds` into the game, `stepSeconds` a step: most where its crest is, less the longer it has run. */
 const rippleAt = (
   ripple: Component.ValueOf<typeof Ripple>,
   across: number,
@@ -139,21 +139,21 @@ const lightOf = (across: number, back: number) => [
 ];
 
 /** Whoever clicks the lights: an entity that holds nothing, whom a click is from. */
-const [withViewer, viewer] = World.spawn(World.empty({ seed: 1 }), []);
+const [withViewer, viewer] = State.spawn(State.empty({ seed: 1 }), []);
 
 /** Every light of the square, row by row from the back, and a viewer. */
-export const world = Array.from({ length: SIZE * SIZE }, (_, place) => place).reduce(
-  (built, place) => World.spawn(built, lightOf(place % SIZE, Math.floor(place / SIZE)))[0],
+export const state = Array.from({ length: SIZE * SIZE }, (_, place) => place).reduce(
+  (built, place) => State.spawn(built, lightOf(place % SIZE, Math.floor(place / SIZE)))[0],
   withViewer,
 );
 export { viewer };
 
 /** The light at its place in the square, if one stands there. */
-export const lightAt = (across: number, back: number): Option.Option<World.Entity> =>
+export const lightAt = (across: number, back: number): Option.Option<State.Entity> =>
   Option.fromNullishOr(
-    World.holding(world, [Light]).find((light) =>
+    State.holding(state, [Light]).find((light) =>
       Option.exists(
-        World.get(world, light, Light),
+        State.get(state, light, Light),
         (place) => place.across === across && place.back === back,
       ),
     ),

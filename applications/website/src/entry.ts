@@ -1,7 +1,8 @@
 import { Runtime } from 'foldkit';
 import { Message, Model, init, update } from '#src/main.ts';
 import { view } from '#src/view.ts';
-import { managedResources, subscriptions } from '#src/world.ts';
+import { subscriptions } from '#src/subscriptions.ts';
+import { managedResources } from '#src/session.ts';
 
 const application = Runtime.makeApplication({
   Model,

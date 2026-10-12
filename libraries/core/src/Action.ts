@@ -1,9 +1,9 @@
 import { Option, Schema } from 'effect';
 import type * as Event from '#src/Event.ts';
-import type { Entity } from '#src/World.ts';
+import type { Entity } from '#src/State.ts';
 
 /**
- * Something a player did once, such as choosing to restart a level, pulling the trigger, or picking something up, as opposed to what they hold, which is input. It is named as a fact in the past tense, for what the player did, not what the world should make of it (`PulledTrigger`, not `Fire`): the rules decide that, and may emit what came of it as an event (`Shot`). An action is never lost: it travels reliably, and the host hands it to the world at the start of the next step, in the order it came, as an event the rules handle. The rules may refuse it, since the server is the authority.
+ * Something a player did once, such as choosing to restart a level, pulling the trigger, or picking something up, as opposed to what they hold, which is input. It is named as a fact in the past tense, for what the player did, not what the game should make of it (`PulledTrigger`, not `Fire`): the rules decide that, and may emit what came of it as an event (`Shot`). An action is never lost: it travels reliably, and the host hands it to the state at the start of the next step, in the order it came, as an event the rules handle. The rules may refuse it, since the server is the authority.
  *
  * A client sends an action without saying who it is from; the host adds the `player` that sent it, so no client can act for another.
  */

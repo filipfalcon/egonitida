@@ -53,7 +53,7 @@ describe('a bridge from a host', () => {
         _tag: 'Ask',
         id: 8,
         host,
-        request: { _tag: 'World', tick: 99 },
+        request: { _tag: 'State', tick: 99 },
       });
 
       expect(yield* Queue.take(sent)).toEqual({

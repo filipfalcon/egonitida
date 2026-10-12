@@ -1,5 +1,11 @@
 import { Array, Option, pipe } from 'effect';
-import { architectureRouter, principlesRouter } from '#src/route.ts';
+import {
+  architectureRouter,
+  installationRouter,
+  keyTermsRouter,
+  principlesRouter,
+  welcomeRouter,
+} from '#src/route.ts';
 
 /**
  * The documentation's navigation: its sections in the order they are read, each with its pages. The sidebar lists them, and every page leads to the one before it and the one after it. A page is added here, with its route in `route.ts`.
@@ -20,8 +26,16 @@ export interface DocsSection {
 /** The documentation's sections, in the order they are read. */
 export const docsSections: ReadonlyArray<DocsSection> = [
   {
+    label: 'Prologue',
+    pages: [
+      { label: 'Welcome', href: welcomeRouter() },
+      { label: 'Installation', href: installationRouter() },
+    ],
+  },
+  {
     label: 'Introduction',
     pages: [
+      { label: 'Key Terms', href: keyTermsRouter() },
       { label: 'Principles', href: principlesRouter() },
       { label: 'Architecture', href: architectureRouter() },
     ],
@@ -51,6 +65,14 @@ export const neighboursOf = (
     },
   );
 };
+
+/** The sections of `sections` that have a page, in their order: what the sidebar lists, so a section waiting for its pages stays out of sight. */
+export const listedSections = (sections: ReadonlyArray<DocsSection>): ReadonlyArray<DocsSection> =>
+  sections.filter(({ pages }) => pages.length > 0);
+
+/** The page `sections` start at: the first of the first section, if there is one. */
+export const firstPageOf = (sections: ReadonlyArray<DocsSection>): Option.Option<NavPage> =>
+  Array.head(Array.flatMap(sections, ({ pages }) => pages));
 
 /** The section of `sections` the page at `pathname` is in, if it lists it. */
 export const sectionOf = (

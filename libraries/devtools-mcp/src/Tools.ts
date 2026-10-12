@@ -5,15 +5,15 @@ import * as Ask from '#src/Ask.ts';
 import * as Discovery from '#src/Discovery.ts';
 
 /**
- * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the world at any tick kept, compare two ticks, read the log between them; hold, step, show, and play on from time; play the game, as one player or many; and write what happened as a story test. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
+ * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the state at any tick kept, compare two ticks, read the log between them; hold, step, show, and play on from time; play the game, as one player or many; and write what happened as a story test. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
  */
 
 const host = Schema.optionalKey(Schema.String).annotate({
   description: 'The host to ask, as lightocean_hosts lists it; the newest if left out.',
 });
-const tick = Schema.Int.annotate({ description: 'A tick of the world, within the span kept.' });
+const tick = Schema.Int.annotate({ description: 'A tick of the state, within the span kept.' });
 const entity = Schema.Int.annotate({
-  description: 'An entity of the world, as lightocean_world lists it.',
+  description: 'An entity of the state, as lightocean_state lists it.',
 });
 
 /** Why a tool could not do what it was asked. */
@@ -60,7 +60,7 @@ const steering = <Name extends string, C extends Config, R>(
     .annotate(Tool.Idempotent, idempotent)
     .annotate(Tool.OpenWorld, false);
 
-/** A tool that plays the game: it changes the world, as a player would. */
+/** A tool that plays the game: it acts on the game, as a player would. */
 const playing = <Name extends string, C extends Config, R>(tool: Tool.Tool<Name, C, R>) =>
   tool
     .annotate(Tool.Readonly, false)
@@ -88,14 +88,14 @@ export const toolkit = Toolkit.make(
   reading(
     asking(
       'lightocean_span',
-      'Tells the ticks of the world that are kept: the oldest and the newest.',
+      'Tells the ticks of the state that are kept: the oldest and the newest.',
       {},
     ),
   ),
   reading(
     asking(
-      'lightocean_world',
-      'Reads the world at a tick, entity by entity, each with the values of its components; the world as it is now if no tick is given. Narrows to one entity or one component if asked.',
+      'lightocean_state',
+      'Reads the state at a tick, entity by entity, each with the values of its components; the state as it is now if no tick is given. Narrows to one entity or one component if asked.',
       {
         tick: Schema.optionalKey(tick),
         entity: Schema.optionalKey(Schema.Int),
@@ -106,21 +106,21 @@ export const toolkit = Toolkit.make(
   reading(
     asking(
       'lightocean_compare',
-      'Compares the world at two ticks, component by component: the entities that gained it, lost it, or hold another value of it, with both values.',
+      'Compares the state at two ticks, component by component: the entities that gained it, lost it, or hold another value of it, with both values.',
       { from: tick, to: tick },
     ),
   ),
   reading(
     asking(
       'lightocean_log',
-      'Reads the log of what happened after the world at one tick, up to the world at another: joins and leaves, the actions each step took, and what each system and rule did, and for what. Input is left out unless asked for.',
+      'Reads the log of what happened after the state at one tick, up to the state at another: joins and leaves, the actions each step took, and what each system and rule did, and for what. Input is left out unless asked for.',
       { from: tick, to: tick, inputs: Schema.optionalKey(Schema.Boolean) },
     ),
   ),
   reading(
     asking(
       'lightocean_story',
-      "Writes what happened after the world at one tick, up to the world at another, as the source of a story test: the world at the first tick, the input and actions of every step, and every value that came of them, by name. Save it as a *.story.test.ts file in the game's package. A stretch in which a player joined or left cannot be told; start after it, or end before.",
+      "Writes what happened after the state at one tick, up to the state at another, as the source of a story test: the state at the first tick, the input and actions of every step, and every value that came of them, by name. Save it as a *.story.test.ts file in the game's package. A stretch in which a player joined or left cannot be told; start after it, or end before.",
       {
         from: tick,
         to: tick,
@@ -135,7 +135,7 @@ export const toolkit = Toolkit.make(
     ),
   ),
   steering(
-    asking('lightocean_hold', 'Holds time: the world stands until it is released.', {}),
+    asking('lightocean_hold', 'Holds time: the game stands still until it is released.', {}),
     true,
   ),
   steering(asking('lightocean_release', 'Lets time run again.', {}), true),
@@ -148,26 +148,26 @@ export const toolkit = Toolkit.make(
   steering(
     asking(
       'lightocean_seek',
-      "Shows the page the world at a past tick, while time is held, without changing the host's world.",
+      "Shows the page the state at a past tick, while time is held, without changing the host's state.",
       { tick },
     ),
     true,
   ),
   asking(
     'lightocean_play_from',
-    'Goes back to the world at a past tick and plays on from it; what came after it is gone.',
+    'Goes back to the state at a past tick and plays on from it; what came after it is gone.',
     { tick },
   )
     .annotate(Tool.Destructive, true)
     .annotate(Tool.OpenWorld, false),
   steering(
-    asking('lightocean_live', 'Shows the page the world as it is now again, after seeking.', {}),
+    asking('lightocean_live', 'Shows the page the state as it is now again, after seeking.', {}),
     true,
   ),
   playing(
     asking(
       'lightocean_join',
-      "Joins a player with no page, as the game's own join makes one, and tells its entity: several may join, to play the same world as many players.",
+      "Joins a player with no page, as the game's own join makes one, and tells its entity: several may join, to play the same state as many players.",
       {},
     ),
   ),
@@ -204,7 +204,7 @@ export const handlers = (from: string) => {
       ),
     lightocean_describe: ({ host }) => ask({ _tag: 'Describe' }, host),
     lightocean_span: ({ host }) => ask({ _tag: 'Span' }, host),
-    lightocean_world: ({ host, ...asked }) => ask({ _tag: 'World', ...asked }, host),
+    lightocean_state: ({ host, ...asked }) => ask({ _tag: 'State', ...asked }, host),
     lightocean_compare: ({ host, ...asked }) => ask({ _tag: 'Compare', ...asked }, host),
     lightocean_log: ({ host, ...asked }) => ask({ _tag: 'Log', ...asked }, host),
     lightocean_story: ({ host, gameFrom, gameName, ...asked }) =>

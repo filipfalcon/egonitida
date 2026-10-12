@@ -1,23 +1,23 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Pointing, Story, World } from '@lightocean/core';
+import { Pointing, Story, State } from '@lightocean/core';
 import { Option } from 'effect';
 import * as Editing from '#src/editing.ts';
 import * as Objects from '#src/objects.ts';
 
 /** The starting document, with an editor in it, and its two objects named. */
-const given = Story.given(Editing.joined.world, {
+const given = Story.given(Editing.joined.state, {
   editor: Editing.joined.editor,
   box: Editing.box,
   sphere: Editing.sphere,
 });
 
-/** Every object in `world`, by its label, in the order they were made. */
-const labels = (world: World.World) =>
-  World.holding(world, [Objects.Shape]).map((object) =>
-    Option.map(World.get(world, object, Pointing.Label), ({ text }) => text),
+/** Every object in `state`, by its label, in the order they were made. */
+const labels = (state: State.State) =>
+  State.holding(state, [Objects.Shape]).map((object) =>
+    Option.map(State.get(state, object, Pointing.Label), ({ text }) => text),
   );
 
-const edit = (entity: World.Entity, component: string, field: string, value: unknown) =>
+const edit = (entity: State.Entity, component: string, field: string, value: unknown) =>
   Story.act('editor', Editing.EditedProperty, { entity, component, field, value });
 
 describe('editing a document', () => {
@@ -29,14 +29,14 @@ describe('editing a document', () => {
       Story.step(),
     );
 
-    expect(labels(told.world)).toEqual(['Box 1', 'Sphere 2', 'Sphere 3'].map(Option.some));
-    const added = World.holding(told.world, [Objects.Shape]).at(-1);
+    expect(labels(told.state)).toEqual(['Box 1', 'Sphere 2', 'Sphere 3'].map(Option.some));
+    const added = State.holding(told.state, [Objects.Shape]).at(-1);
     expect(Story.valueOf(told, 'editor', Editing.Selection)).toEqual({
       selected: Option.fromNullishOr(added),
     });
     expect(
       Option.flatMap(Option.fromNullishOr(added), (object) =>
-        World.get(told.world, object, Objects.Transform),
+        State.get(told.state, object, Objects.Transform),
       ),
     ).toEqual(Option.some({ position: Objects.placeOf(2), rotation: [0, 0, 0], scale: [1, 1, 1] }));
   });
@@ -96,7 +96,7 @@ describe('editing a document', () => {
       Story.expectEqual('editor', Editing.Selection, { selected: Option.none() }),
     );
 
-    expect(labels(told.world)).toEqual([Option.some('Sphere 2')]);
+    expect(labels(told.state)).toEqual([Option.some('Sphere 2')]);
   });
 });
 
@@ -113,7 +113,7 @@ describe('editing what an object does when clicked', () => {
     );
     const removed = Story.story(
       Editing.game,
-      Story.given(added.world, { editor: Editing.joined.editor, box: Editing.box }),
+      Story.given(added.state, { editor: Editing.joined.editor, box: Editing.box }),
       Story.act('editor', Editing.RemovedReaction, { entity: Editing.box, index: 0 }),
       Story.step(),
     );

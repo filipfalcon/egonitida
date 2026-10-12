@@ -6,7 +6,7 @@ import * as Event from '#src/Event.ts';
 import * as Rule from '#src/Rule.ts';
 
 /**
- * Pointing at things in a world, as the engine gives it: an entity with a `Label` can be clicked, and a click on one is the action `Clicked`, whatever the player clicked with, a pointer, a touch, or a key on the accessible mirror of the scene. A game that requires this domain answers `Clicked` with its own rules, which decide what a click on each kind of entity does.
+ * Pointing at things in a game, as the engine gives it: an entity with a `Label` can be clicked, and a click on one is the action `Clicked`, whatever the player clicked with, a pointer, a touch, or a key on the accessible mirror of the scene. A game that requires this domain answers `Clicked` with its own rules, which decide what a click on each kind of entity does.
  *
  * The label is also what the entity is read out as, so whatever can be clicked can be reached without a pointer. Another domain changes a label only by `Relabelled`, such as an editor renaming what it edits.
  */

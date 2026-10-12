@@ -1,5 +1,5 @@
 /**
- * The tab a page is in, as development tools know it: an id that stays the same for as long as the tab, across every reload of its page, so what is kept for the tab, such as its world, comes back with the page.
+ * The tab a page is in, as development tools know it: an id that stays the same for as long as the tab, across every reload of its page, so what is kept for the tab, such as its state, comes back with the page.
  */
 
 /** Where a tab keeps what outlives its page: the tab's session storage, in a browser. */

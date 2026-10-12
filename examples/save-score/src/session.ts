@@ -1,16 +1,16 @@
 import { Tab, type Viewport } from '@lightocean/client';
 import { Bridge, Page } from '@lightocean/devtools';
-import { Projection, Stage, World } from '@lightocean/foldkit';
+import { Projection, Session, Stage } from '@lightocean/foldkit';
 import { Effect, Option, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
-import { Message, type Model, RoundWorld, type Services, Told, told } from '#src/main.ts';
+import { Message, type Model, RoundSession, type Services, Told, told } from '#src/main.ts';
 import * as Score from '#src/score.ts';
 import * as ScoreView from '#src/score.view.ts';
 
 // Where the round meets the page: joined in a worker while the page is open, shown on the canvas once Foldkit has it in the page, and told for the page to say.
 
-/** The id the devtools know the page's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the world kept for the tab. */
+/** The id the devtools know the page's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the state kept for the tab. */
 const host = Tab.id('save-score');
 
 /** The id of the canvas the round is shown on. */
@@ -30,12 +30,12 @@ const capturedAs = (host: string) => (viewport: Viewport.Viewport) =>
       })
     : Effect.void;
 
-/** The round's world, joined while the page is open. */
+/** The round's session, joined while the page is open. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
-  world: entry(
-    World.Requirements,
-    World.managed<Model, Message, Services>({
-      resource: RoundWorld,
+  session: entry(
+    Session.Requirements,
+    Session.managed<Model, Message, Services>({
+      resource: RoundSession,
       game: Score.game,
       worker: () =>
         new Worker(new URL('./simulation.worker.ts', import.meta.url), {
@@ -43,9 +43,9 @@ export const managedResources = ManagedResource.make<Model, Message>()((entry) =
           name: host,
         }),
       joins: () => true,
-      onJoined: () => Message.JoinedWorld(),
-      onLeft: () => Message.LeftWorld(),
-      onFailed: (reason) => Message.FailedJoinWorld({ reason }),
+      onJoined: () => Message.JoinedGame(),
+      onLeft: () => Message.LeftGame(),
+      onFailed: (reason) => Message.FailedJoinGame({ reason }),
     }),
   ),
 }));
@@ -77,48 +77,48 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
     { isShown: Schema.Boolean },
     {
       modelToDependencies: (model) => ({
-        isShown: model.world._tag === 'Joined' && model.world.canvas === 'Mounted',
+        isShown: model.session._tag === 'Joined' && model.session.canvas === 'Mounted',
       }),
       dependenciesToStream: ({ isShown }) =>
         isShown
           ? Stage.stream({
-              resource: RoundWorld,
+              resource: RoundSession,
               canvasId: CANVAS_ID,
               views: ScoreView.views,
               setup: setUp,
               alongside: capturedAs(host),
-              onNotJoined: (): Message => Message.LeftWorld(),
-              onFailed: (reason) => Message.FailedShowWorld({ reason }),
+              onNotJoined: (): Message => Message.LeftGame(),
+              onFailed: (reason) => Message.FailedShowGame({ reason }),
             })
           : Stream.empty,
     },
   ),
   round: entry(
-    { isWorldJoined: Schema.Boolean },
+    { isJoined: Schema.Boolean },
     {
-      modelToDependencies: ({ world }) => ({ isWorldJoined: world._tag === 'Joined' }),
-      dependenciesToStream: ({ isWorldJoined }) =>
-        isWorldJoined
+      modelToDependencies: ({ session }) => ({ isJoined: session._tag === 'Joined' }),
+      dependenciesToStream: ({ isJoined }) =>
+        isJoined
           ? Projection.stream({
-              resource: RoundWorld,
+              resource: RoundSession,
               schema: Schema.Option(Told),
               project: told,
               onProjected: (maybeRound) => Message.ToldRound({ maybeRound }),
-              onNotJoined: (): Message => Message.LeftWorld(),
+              onNotJoined: (): Message => Message.LeftGame(),
             })
           : Stream.empty,
     },
   ),
-  // While the Model says the world is not joined, it may already be: joined a moment before the stage found it was not.
+  // While the Model says the session is not joined, it may already be: joined a moment before the stage found it was not.
   joining: entry(
     { isJoining: Schema.Boolean },
     {
-      modelToDependencies: ({ world }) => ({ isJoining: world._tag === 'Joining' }),
+      modelToDependencies: ({ session }) => ({ isJoining: session._tag === 'Joining' }),
       dependenciesToStream: ({ isJoining }) =>
         isJoining
-          ? World.whenJoined({
-              resource: RoundWorld,
-              onJoined: (): Message => Message.FoundWorldJoined(),
+          ? Session.whenJoined({
+              resource: RoundSession,
+              onJoined: (): Message => Message.FoundGameJoined(),
             })
           : Stream.empty,
     },

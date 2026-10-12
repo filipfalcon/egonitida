@@ -117,7 +117,7 @@ const zoneOf = (point: number) => Math.round(fraction(point) * 9);
 /** A strength, from 0 to 1, as one of the eight the pad knows. */
 const forceOf = (strength: number) => Math.round(fraction(strength) * 7);
 
-/** A trigger's effect, its mode and then what it takes, as the pad reads it: resisting from a zone on, each zone with its force, or a gun's, giving way past the zone it ends at. */
+/** A trigger effect as the pad reads it, the byte that names the effect and then what it takes: resisting from a zone on, each zone with its force, or a gun's, giving way past the zone it ends at. */
 const triggerOf = (trigger: Haptics.Trigger): ReadonlyArray<number> => {
   switch (trigger._tag) {
     case 'Free':

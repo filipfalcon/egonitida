@@ -14,6 +14,8 @@ import {
   update,
 } from '#src/main.ts';
 import { AppRoute } from '#src/route.ts';
+import * as GlanceStage from '#src/glanceStage.ts';
+import * as StatePress from '#src/statePress.ts';
 
 /** `path` of the website, as a URL. */
 const urlOf = (path: string) => Option.getOrThrow(Url.fromString(`https://lightocean.dev${path}`));
@@ -28,6 +30,8 @@ describe('the website', () => {
       url: urlOf('/'),
       ocean: { _tag: 'Joining' },
       maybeError: Option.none(),
+      glance: GlanceStage.initialModel,
+      statePress: StatePress.initialModel,
     });
     expect(initialModelAt(urlOf('/nowhere')).route).toEqual(
       AppRoute.NotFound({ path: '/nowhere' }),
@@ -80,6 +84,24 @@ describe('the website', () => {
       Story.message(Message.LeftOcean()),
       Story.model((model) => {
         expect(model.ocean).toEqual({ _tag: 'Joining' });
+      }),
+    );
+  });
+
+  it('hands the state press on the page of key terms what happens to it, and runs the steps it asks its game for', () => {
+    const toPress = (message: StatePress.Message) => Message.GotStatePressMessage({ message });
+    Story.story(
+      update,
+      Story.given(initialModel),
+      Story.message(toPress(StatePress.Message.JoinedGame())),
+      Story.Command.expectExact(StatePress.ShowState),
+      Story.Command.resolve(StatePress.ShowState, StatePress.Message.ShowedState()),
+      Story.message(toPress(StatePress.Message.RequestedStep())),
+      Story.Command.expectExact(StatePress.StepGame),
+      Story.Command.resolve(StatePress.StepGame, StatePress.Message.SteppedGame()),
+      Story.model((model) => {
+        expect(model.statePress.session).toEqual({ _tag: 'Joined' });
+        expect(model.statePress.asked).toBe(1);
       }),
     );
   });

@@ -1,12 +1,12 @@
 import { describe, expect, it } from '@effect/vitest';
-import { World } from '@lightocean/core';
+import { State } from '@lightocean/core';
 import { Effect, Fiber, Option } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Recording from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';
 
 describe('replaying a recording', () => {
-  it.effect('comes to the worlds the host stepped through', () =>
+  it.effect('comes to the states the host stepped through', () =>
     Effect.gen(function* () {
       const { recording } = yield* Fixtures.recorded();
 
@@ -36,7 +36,7 @@ describe('replaying a recording', () => {
       const { recording, entity } = yield* Fixtures.recorded();
       const crowded = {
         ...Fixtures.setup(),
-        join: (world: World.World) => Fixtures.join(World.spawn(world, [])[0]),
+        join: (state: State.State) => Fixtures.join(State.spawn(state, [])[0]),
       };
 
       const divergence = yield* Replay.check(crowded, recording);
@@ -49,12 +49,12 @@ describe('replaying a recording', () => {
 });
 
 describe('replaying a recording in which the host went back in time', () => {
-  it.effect('goes back with it, and comes to the worlds the host stepped through after', () =>
+  it.effect('goes back with it, and comes to the states the host stepped through after', () =>
     Effect.gen(function* () {
       const hosted = yield* Fixtures.host();
       const recorder = yield* Recording.record(hosted, Fixtures.game);
       yield* Fixtures.advance(100);
-      const past = yield* hosted.world;
+      const past = yield* hosted.state;
       yield* Fixtures.visit(hosted);
 
       yield* hosted.restore(past);
@@ -67,7 +67,7 @@ describe('replaying a recording in which the host went back in time', () => {
   );
 });
 
-describe('replaying a join that gives back a player the world holds', () => {
+describe('replaying a join that gives back a player the state holds', () => {
   it.effect(
     'takes it as changing nothing, as when a page that came again is given its player',
     () =>

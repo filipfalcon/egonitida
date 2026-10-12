@@ -25,7 +25,7 @@ export interface Steered {
 export const start: Steered = { controls: Controls.start(bindings), steering: { x: 0, z: 0 } };
 
 /** What `devices` come to after `before`: steering on the floor as the camera looks at it, up the screen as away from it. */
-export const steer = (devices: Devices.State, before: Steered): Steered => {
+export const steer = (devices: Devices.Reading, before: Steered): Steered => {
   const controls = Controls.read(bindings, devices, before.controls);
   const move = controls.values.stick('move');
   return { controls, steering: { x: move.x, z: move.y === 0 ? 0 : -move.y } };

@@ -12,7 +12,7 @@ import {
   Rule,
   System,
   WorkerTransport,
-  World,
+  State,
 } from '@lightocean/core';
 import { Context, Effect, Fiber, Option, Schema, Stream } from 'effect';
 
@@ -54,10 +54,10 @@ const game = Game.make({
 
 const hostOptions = {
   game,
-  world: World.empty({ seed: 1 }),
-  join: (world: World.World) =>
-    World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
-  leave: World.despawn,
+  state: State.empty({ seed: 1 }),
+  join: (state: State.State) =>
+    State.spawn(state, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
+  leave: State.despawn,
   // A local server for one player lets that player hold time.
   mayHold: true,
 };
@@ -82,9 +82,9 @@ describe('a local server', () => {
       yield* client.send([Controls.of({ move: 1 })]);
       yield* Effect.sleep('300 millis');
 
-      const world = yield* client.world;
-      const moved = Option.map(World.get(world, client.entity, Position), (position) => position.x);
-      expect(world.tick).toBeGreaterThan(0);
+      const state = yield* client.state;
+      const moved = Option.map(State.get(state, client.entity, Position), (position) => position.x);
+      expect(state.tick).toBeGreaterThan(0);
       expect(Option.getOrElse(moved, () => 0)).toBeGreaterThan(0);
     }),
   );
@@ -92,7 +92,7 @@ describe('a local server', () => {
   it.live('runs the commands its rules issue with the services it is given', () =>
     Effect.gen(function* () {
       const said: Array<string> = [];
-      /** Where a greeting goes outside the world; this one keeps what it was told. */
+      /** Where a greeting goes outside the state; this one keeps what it was told. */
       const Mouth = Context.Service<{ readonly say: (words: string) => Effect.Effect<void> }>(
         'Mouth',
       );
@@ -185,12 +185,12 @@ describe('a local server', () => {
     () =>
       Effect.gen(function* () {
         const channel = new MessageChannel();
-        /** A world whose one player stands where the page said, opening with a number. */
+        /** A state whose one player stands where the page said, opening with a number. */
         const startingAt = (opening: string) =>
           Host.make({
             ...hostOptions,
-            join: (world: World.World) =>
-              World.spawn(world, [Position.of({ x: Number(opening) }), Controls.of({ move: 0 })]),
+            join: (state: State.State) =>
+              State.spawn(state, [Position.of({ x: Number(opening) }), Controls.of({ move: 0 })]),
           });
 
         yield* WorkerTransport.serveOpened(startingAt).pipe(
@@ -203,7 +203,7 @@ describe('a local server', () => {
         const client = yield* Client.connect(connection, { game });
         yield* Effect.sleep('200 millis');
 
-        expect(World.get(yield* client.world, client.entity, Position)).toEqual(
+        expect(State.get(yield* client.state, client.entity, Position)).toEqual(
           Option.some({ x: 7 }),
         );
       }),

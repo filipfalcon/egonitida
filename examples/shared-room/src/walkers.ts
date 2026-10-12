@@ -1,8 +1,8 @@
-import { Component, Domain, Game, System, World } from '@lightocean/core';
+import { Component, Domain, Game, System, State } from '@lightocean/core';
 import { Schema } from 'effect';
 
 /**
- * The example over the network: a room many players share, hosted in a Durable Object, each player a walker of a colour of their own, steered by the keys. It adds one idea to those before: the world is not on the player's machine but across a network, and every page that opens the room sees the same walkers. A player's own walker is predicted, so it answers their keys at once, and goes over to where the room says it is if the two disagree.
+ * The example over the network: a room many players share, hosted in a Durable Object, each player a walker of a colour of their own, steered by the keys. It adds one idea to those before: the game is not on the player's machine but across a network, and every page that opens the room sees the same walkers. A player's own walker is predicted, so it answers their keys at once, and goes over to where the room says it is if the two disagree.
  */
 
 /** How fast a walker walks, in metres a second. */
@@ -74,12 +74,12 @@ export const domain = Domain.make({
 export const game = Game.make({ stepRate: STEP_RATE, domains: [domain] });
 
 /** The room before anyone comes in: empty. */
-export const world = World.empty({ seed: 1 });
+export const state = State.empty({ seed: 1 });
 
-/** A walker coming into `world`: in the middle, standing still, of a hue apart from those before it, as far round the colour wheel as the golden angle. */
-export const join = (world: World.World) =>
-  World.spawn(world, [
-    Walker.of({ hue: (world.nextEntity * 137.5) % 360 }),
+/** A walker coming into `state`: in the middle, standing still, of a hue apart from those before it, as far round the colour wheel as the golden angle. */
+export const join = (state: State.State) =>
+  State.spawn(state, [
+    Walker.of({ hue: (state.nextEntity * 137.5) % 360 }),
     Position.of({ x: 0, z: 0 }),
     Steering.of({ x: 0, z: 0 }),
   ]);

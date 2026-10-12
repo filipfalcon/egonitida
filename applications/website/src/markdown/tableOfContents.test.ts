@@ -28,8 +28,8 @@ describe('the headings of a page', () => {
   });
 
   it('takes an id written after a heading over one made of its text', () => {
-    expect(tableOfContentsOf('## The World {#world}')).toEqual([
-      { id: 'world', text: 'The World', level: 'h2' },
+    expect(tableOfContentsOf('## The State {#state}')).toEqual([
+      { id: 'state', text: 'The State', level: 'h2' },
     ]);
   });
 });

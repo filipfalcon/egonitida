@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from '@effect/vitest';
-import { type Client, Component, Pointing, World } from '@lightocean/core';
+import { type Client, Component, Pointing, State } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Drawing from '#src/Drawing.ts';
@@ -25,9 +25,9 @@ const labelled = (x: number, text: string) => [Spot.of({ x }), Pointing.Label.of
 
 /** Two labelled boxes and one without a label, mirrored into a page, and the actions a client took. */
 const mirrored = Effect.gen(function* () {
-  const [one, lamp] = World.spawn(World.empty({ seed: 1 }), labelled(0, 'Lamp'));
-  const [two] = World.spawn(one, [Spot.of({ x: 1 })]);
-  const [world, chair] = World.spawn(two, labelled(3, 'Chair'));
+  const [one, lamp] = State.spawn(State.empty({ seed: 1 }), labelled(0, 'Lamp'));
+  const [two] = State.spawn(one, [Spot.of({ x: 1 })]);
+  const [state, chair] = State.spawn(two, labelled(3, 'Chair'));
   const views = yield* View.make([boxes]);
   const scene = new Three.Scene();
   const container = document.createElement('div');
@@ -40,15 +40,15 @@ const mirrored = Effect.gen(function* () {
       }),
   };
   const mirror = yield* Mirror.make({ container, views, scene, client });
-  const show = (shown: World.World, previous: Option.Option<Timeline.View>) =>
+  const show = (shown: State.State, previous: Option.Option<Timeline.View>) =>
     Effect.gen(function* () {
       const frame = Drawing.frameOf(Timeline.still(shown), previous);
       yield* views.frame(frame);
       yield* mirror.frame(frame);
     });
-  yield* show(world, Option.none());
+  yield* show(state, Option.none());
   const buttons = () => [...container.querySelectorAll('button')];
-  return { world, lamp, chair, scene, container, acted, show, buttons };
+  return { state, lamp, chair, scene, container, acted, show, buttons };
 });
 
 describe('the mirror of a scene', () => {
@@ -61,15 +61,15 @@ describe('the mirror of a scene', () => {
     }),
   );
 
-  it.effect('follows the world: a label that changes, and an entity that goes', () =>
+  it.effect('follows the state: a label that changes, and an entity that goes', () =>
     Effect.gen(function* () {
-      const { world, lamp, chair, show, buttons } = yield* mirrored;
-      const changing = World.draft(world);
-      World.write(changing, chair, Pointing.Label, { text: 'Armchair' });
-      World.despawnFrom(changing, lamp);
-      const changed = World.finish(changing);
+      const { state, lamp, chair, show, buttons } = yield* mirrored;
+      const changing = State.draft(state);
+      State.write(changing, chair, Pointing.Label, { text: 'Armchair' });
+      State.despawnFrom(changing, lamp);
+      const changed = State.finish(changing);
 
-      yield* show(changed, Option.some(Timeline.still(world)));
+      yield* show(changed, Option.some(Timeline.still(state)));
 
       expect(buttons().map((button) => button.textContent)).toEqual(['Armchair']);
     }),
@@ -90,11 +90,11 @@ describe('the mirror of a scene', () => {
 
   it.effect('outlines the entity a button stands for while it has focus', () =>
     Effect.gen(function* () {
-      const { world, scene, show, buttons } = yield* mirrored;
+      const { state, scene, show, buttons } = yield* mirrored;
       const outline = () => scene.children.find((child) => child.name === 'lightocean:mirror');
 
       buttons()[1]?.focus();
-      yield* show(world, Option.some(Timeline.still(world)));
+      yield* show(state, Option.some(Timeline.still(state)));
       const focused = outline();
       const shownWhileFocused = focused?.visible;
       const around =
@@ -102,7 +102,7 @@ describe('the mirror of a scene', () => {
           ? Option.some(Math.round(focused.box.getCenter(new Three.Vector3()).x))
           : Option.none();
       buttons()[1]?.blur();
-      yield* show(world, Option.some(Timeline.still(world)));
+      yield* show(state, Option.some(Timeline.still(state)));
 
       expect(shownWhileFocused).toBe(true);
       expect(around).toEqual(Option.some(3));

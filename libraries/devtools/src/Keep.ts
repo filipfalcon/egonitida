@@ -1,13 +1,13 @@
-import { Game, type Host, World } from '@lightocean/core';
+import { Game, type Host, State } from '@lightocean/core';
 import { Duration, Effect, Option, Schema, type Scope, Stream } from 'effect';
 
 /**
- * A hosted world kept across reloads of the page, in development: the host's world, as its game encodes it, kept every so often under a key, such as the id a tab gives its host, and read back by the game when the page comes again, so a change to any code, the page's as much as the game's, goes on from the world it was at. A world the game cannot read is not taken up, and the game starts afresh, saying why.
+ * A hosted game's state kept across reloads of the page, in development: the host's state, as its game encodes it, kept every so often under a key, such as the id a tab gives its host, and read back by the game when the page comes again, so a change to any code, the page's as much as the game's, goes on from the state it was at. A state the game cannot read is not taken up, and the game starts afresh, saying why.
  *
- * The players that joined through a client are kept with it, so a page that comes again can be given its own player back. What was played after the world was last kept, up to a second, is lost.
+ * The players that joined through a client are kept with it, so a page that comes again can be given its own player back. What was played after the state was last kept, up to a second, is lost.
  */
 
-/** Where kept worlds are: by key, each as its game encodes it. */
+/** Where kept states are: by key, each as its game encodes it. */
 export interface Store {
   readonly get: (key: string) => Effect.Effect<Option.Option<unknown>>;
   readonly set: (key: string, value: unknown) => Effect.Effect<void>;
@@ -26,24 +26,35 @@ export const memory = (): Store => {
 };
 
 const DATABASE = 'lightocean-devtools';
-const WORLDS = 'worlds';
+const VERSION = 2;
+const STATES = 'states';
 
-/** Opens the database of kept worlds, made the first time. */
+/** Opens the database of kept states, made the first time and made over when it is of an earlier version: any store but the kept states is dropped. */
 const open = () =>
   new Promise<IDBDatabase>((resolve, reject) => {
-    const opening = indexedDB.open(DATABASE, 1);
-    opening.onupgradeneeded = () => opening.result.createObjectStore(WORLDS);
+    const opening = indexedDB.open(DATABASE, VERSION);
+    opening.onupgradeneeded = () => {
+      const database = opening.result;
+      // Its list of stores changes as one is dropped, so the stores to drop are listed first.
+      const dropped = Array.from(database.objectStoreNames).filter((name) => name !== STATES);
+      for (const name of dropped) {
+        database.deleteObjectStore(name);
+      }
+      if (!database.objectStoreNames.contains(STATES)) {
+        database.createObjectStore(STATES);
+      }
+    };
     opening.onsuccess = () => resolve(opening.result);
     opening.onerror = () => reject(opening.error);
   });
 
-/** Does `work` in a transaction on the kept worlds, and comes to what it read. */
-const transact = <A>(mode: IDBTransactionMode, work: (worlds: IDBObjectStore) => IDBRequest<A>) =>
+/** Does `work` in a transaction on the kept states, and comes to what it read. */
+const transact = <A>(mode: IDBTransactionMode, work: (states: IDBObjectStore) => IDBRequest<A>) =>
   Effect.promise(async () => {
     const database = await open();
     try {
       return await new Promise<A>((resolve, reject) => {
-        const request = work(database.transaction(WORLDS, mode).objectStore(WORLDS));
+        const request = work(database.transaction(STATES, mode).objectStore(STATES));
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -59,23 +70,23 @@ export const indexedDb: Option.Option<Store> =
     : Option.some({
         get: (key) =>
           Effect.map(
-            transact<unknown>('readonly', (worlds) => worlds.get(key)),
+            transact<unknown>('readonly', (states) => states.get(key)),
             Option.fromNullishOr,
           ),
         set: (key, value) =>
-          Effect.asVoid(transact('readwrite', (worlds) => worlds.put(value, key))),
+          Effect.asVoid(transact('readwrite', (states) => states.put(value, key))),
       });
 
-/** A world as it is kept: as its game encodes it, with the players that joined through a client. */
-const Kept = Schema.Struct({ world: Schema.Unknown, players: Schema.Array(Schema.Int) });
+/** A state as it is kept: as its game encodes it, with the players that joined through a client. */
+const Kept = Schema.Struct({ state: Schema.Unknown, players: Schema.Array(Schema.Int) });
 
-/** A kept world read back: the world, and the players of it that joined through a client and are still in it. */
+/** A kept state read back: the state, and the players of it that joined through a client and are still in it. */
 export interface Taken {
-  readonly world: World.World;
-  readonly players: ReadonlyArray<World.Entity>;
+  readonly state: State.State;
+  readonly players: ReadonlyArray<State.Entity>;
 }
 
-/** The world kept under `key`, as `game` reads it, with its players, if one is kept and the game can read it. */
+/** The state kept under `key`, as `game` reads it, with its players, if one is kept and the game can read it. */
 export const load = (
   store: Store,
   game: Game.Game,
@@ -86,16 +97,16 @@ export const load = (
       onNone: () => Effect.succeedNone,
       onSome: (value) =>
         Effect.gen(function* () {
-          const { world: encoded, players } = yield* Schema.decodeUnknownEffect(Kept)(value);
-          const world = yield* Schema.decodeUnknownEffect(Game.schema(game))(encoded);
-          const present = new Set(World.entities(world));
-          return { world, players: players.filter((player) => present.has(player)) };
+          const { state: encoded, players } = yield* Schema.decodeUnknownEffect(Kept)(value);
+          const state = yield* Schema.decodeUnknownEffect(Game.schema(game))(encoded);
+          const present = new Set(State.entities(state));
+          return { state, players: players.filter((player) => present.has(player)) };
         }).pipe(
           Effect.asSome,
           Effect.catch((issue) =>
             Effect.as(
               Effect.logWarning(
-                `The world kept from before cannot be taken up, so the game starts afresh: ${issue.message}`,
+                `The state kept from before cannot be taken up, so the game starts afresh: ${issue.message}`,
               ),
               Option.none<Taken>(),
             ),
@@ -104,7 +115,7 @@ export const load = (
     }),
   );
 
-/** Keeps the world `host` is at under `key`, every `everyMillis`, as the build it plays encodes it, from `game` on, with the players that joined through a client since, until the scope closes. */
+/** Keeps the state `host` is at under `key`, every `everyMillis`, as the build it plays encodes it, from `game` on, with the players that joined through a client since, until the scope closes. */
 export const serve = (
   store: Store,
   host: Host.Host,
@@ -112,22 +123,22 @@ export const serve = (
   options: {
     readonly key: string;
     readonly everyMillis: number;
-    /** Players that joined before keeping began, such as those taken up from a kept world. */
-    readonly players?: ReadonlyArray<World.Entity>;
+    /** Players that joined before keeping began, such as those taken up from a kept state. */
+    readonly players?: ReadonlyArray<State.Entity>;
   },
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const state = { game, players: new Set<World.Entity>(options.players ?? []) };
+    const saving = { game, players: new Set<State.Entity>(options.players ?? []) };
     const watching = yield* host.watch;
     yield* watching.happenings.pipe(
       Stream.runForEach((happening) =>
         Effect.sync(() => {
           if (happening._tag === 'Reloaded') {
-            state.game = happening.game;
+            saving.game = happening.game;
           } else if (happening._tag === 'Joined' && happening.client) {
-            state.players.add(happening.entity);
+            saving.players.add(happening.entity);
           } else if (happening._tag === 'Left') {
-            state.players.delete(happening.entity);
+            saving.players.delete(happening.entity);
           }
         }),
       ),
@@ -135,11 +146,11 @@ export const serve = (
     );
     yield* Effect.gen(function* () {
       yield* Effect.sleep(Duration.millis(options.everyMillis));
-      const world = yield* host.world;
-      // A world its own game cannot encode is a bug in the engine; keeping goes on with the next.
-      yield* Schema.encodeEffect(Game.schema(state.game))(world).pipe(
+      const state = yield* host.state;
+      // A state its own game cannot encode is a bug in the engine; keeping goes on with the next.
+      yield* Schema.encodeEffect(Game.schema(saving.game))(state).pipe(
         Effect.flatMap((encoded) =>
-          store.set(options.key, { world: encoded, players: [...state.players] }),
+          store.set(options.key, { state: encoded, players: [...saving.players] }),
         ),
         Effect.ignore,
       );

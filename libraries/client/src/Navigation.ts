@@ -18,7 +18,7 @@ export const bindings = {
 
 export interface Navigation {
   /** Moves focus, presses, or goes back, as the pad does this frame, `seconds` after the frame before. */
-  readonly frame: (devices: Devices.State, seconds: number) => void;
+  readonly frame: (devices: Devices.Reading, seconds: number) => void;
 }
 
 /** How far the stick leans before it moves focus. */
@@ -35,7 +35,7 @@ export interface Steps {
 /** Steps through a menu a game keeps itself, rather than through focus. */
 export interface Stepper {
   /** The steps the pad takes this frame, `seconds` after the frame before. */
-  readonly step: (devices: Devices.State, seconds: number) => Steps;
+  readonly step: (devices: Devices.Reading, seconds: number) => Steps;
 }
 
 /** One way of stepping, along one axis: the way held, how long, and how many steps it took since. */
@@ -66,7 +66,7 @@ export const stepper = (
   const repeat = options.repeat ?? REPEAT;
   const lean = options.lean ?? LEANING;
   const rearm = options.rearm ?? lean;
-  const state = {
+  const reading = {
     read: Controls.start(stepping),
     vertical: notHeld,
     horizontal: notHeld,
@@ -106,21 +106,22 @@ export const stepper = (
   };
   return {
     step: (devices, seconds) => {
-      state.read = Controls.read(stepping, devices, state.read);
-      const held = (name: 'up' | 'down' | 'left' | 'right') => state.read.values.button(name).held;
-      const { x, y } = state.read.values.stick('move');
+      reading.read = Controls.read(stepping, devices, reading.read);
+      const held = (name: 'up' | 'down' | 'left' | 'right') =>
+        reading.read.values.button(name).held;
+      const { x, y } = reading.read.values.stick('move');
       const vertical = along(
-        wayOf((held('down') ? 1 : 0) - (held('up') ? 1 : 0), -y, state.vertical),
-        state.vertical,
+        wayOf((held('down') ? 1 : 0) - (held('up') ? 1 : 0), -y, reading.vertical),
+        reading.vertical,
         seconds,
       );
       const horizontal = along(
-        wayOf((held('right') ? 1 : 0) - (held('left') ? 1 : 0), x, state.horizontal),
-        state.horizontal,
+        wayOf((held('right') ? 1 : 0) - (held('left') ? 1 : 0), x, reading.horizontal),
+        reading.horizontal,
         seconds,
       );
-      state.vertical = vertical.held;
-      state.horizontal = horizontal.held;
+      reading.vertical = vertical.held;
+      reading.horizontal = horizontal.held;
       return {
         vertical: vertical.steps === 0 ? 0 : vertical.held.way * vertical.steps,
         horizontal: horizontal.steps === 0 ? 0 : horizontal.held.way * horizontal.steps,
@@ -134,7 +135,7 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
 /** Navigation within `container`. */
 export const make = (container: HTMLElement): Navigation => {
   const steps = stepper();
-  const state = { read: Controls.start(bindings) };
+  const reading = { read: Controls.start(bindings) };
 
   const focusables = () =>
     [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
@@ -162,17 +163,17 @@ export const make = (container: HTMLElement): Navigation => {
 
   return {
     frame: (devices, seconds) => {
-      state.read = Controls.read(bindings, devices, state.read);
+      reading.read = Controls.read(bindings, devices, reading.read);
       // Focus goes through one order, so up and left go back through it, down and right on.
       const { vertical, horizontal } = steps.step(devices, seconds);
       const way = vertical !== 0 ? vertical : horizontal;
       for (let taken = 0; taken < Math.abs(way); taken += 1) {
         step(Math.sign(way));
       }
-      if (state.read.values.button('press').pressed) {
+      if (reading.read.values.button('press').pressed) {
         focused()?.click();
       }
-      if (state.read.values.button('back').pressed) {
+      if (reading.read.values.button('back').pressed) {
         focused()?.blur();
       }
     },

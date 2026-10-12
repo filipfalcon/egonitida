@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Domain, Game, Host, System, World } from '@lightocean/core';
+import { Client, Component, Domain, Game, Host, System, State } from '@lightocean/core';
 import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import * as Drawing from '#src/Drawing.ts';
@@ -45,9 +45,9 @@ const game = Game.make({
 const faraway = Effect.gen(function* () {
   const host = yield* Host.make({
     game,
-    world: World.empty({ seed: 1 }),
-    join: (world) => World.spawn(world, [Steering.of({ x: 0 }), Position.of({ x: 0 })]),
-    leave: World.despawn,
+    state: State.empty({ seed: 1 }),
+    join: (state) => State.spawn(state, [Steering.of({ x: 0 }), Position.of({ x: 0 })]),
+    leave: State.despawn,
     mayHold: false,
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -63,9 +63,9 @@ const faraway = Effect.gen(function* () {
     Option.flatMap(drawing.frame(seconds), (frame) =>
       Option.map(prediction.frame(frame, seconds).get(client.entity, Position), ({ x }) => x),
     );
-  /** Where the player stands in the newest world the host sent. */
-  const confirmed = Effect.map(client.world, (world) =>
-    Option.map(World.get(world, client.entity, Position), ({ x }) => x),
+  /** Where the player stands in the newest state the host sent. */
+  const confirmed = Effect.map(client.state, (state) =>
+    Option.map(State.get(state, client.entity, Position), ({ x }) => x),
   );
   return { client, prediction, drawn, confirmed };
 });

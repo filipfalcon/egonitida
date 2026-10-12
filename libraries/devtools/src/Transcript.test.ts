@@ -19,23 +19,23 @@ const transcribed = (from: number, to: number) =>
   Effect.gen(function* () {
     const rewind = yield* visited;
     const stretch = yield* rewind.between(from, to);
-    const end = yield* rewind.worldAt(to);
+    const end = yield* rewind.stateAt(to);
     return Option.match(Option.all([stretch, end]), {
       onNone: () => Result.fail('not kept'),
-      onSome: ([{ world, entries }, last]) => Transcript.of(Fixtures.setup(), world, entries, last),
+      onSome: ([{ state, entries }, last]) => Transcript.of(Fixtures.setup(), state, entries, last),
     });
   });
 
 describe('a stretch of a recording, told as a story', () => {
   it.effect(
-    'starts from the world at the first tick, plays what went in, and expects what came of it',
+    'starts from the state at the first tick, plays what went in, and expects what came of it',
     () =>
       Effect.gen(function* () {
         const told = yield* transcribed(3, 5);
 
         expect(told).toEqual(
           Result.succeed([
-            { _tag: 'GivenAs', world: expect.anything(), names: { e0: 0 } },
+            { _tag: 'GivenAs', state: expect.anything(), names: { e0: 0 } },
             { _tag: 'InputAs', name: 'e0', component: 'Stick', value: { move: 1 } },
             { _tag: 'ActAs', name: 'e0', action: { _tag: 'AskedToHeal', amount: 50 } },
             { _tag: 'Steps', count: 2 },

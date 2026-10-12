@@ -1,12 +1,12 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, World } from '@lightocean/core';
+import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import * as Score from '#src/score.ts';
 import * as Scores from '#src/scores.ts';
 
-// The local server: the round, stepped off the main thread, its scores saved by the scores Worker at VITE_SCORES_URL, which the Alchemy stack gives the page. A page that joins is whoever plays: an entity that holds nothing, whom its clicks are from. In development it goes on from the world kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
+// The local server: the round, stepped off the main thread, its scores saved by the scores Worker at VITE_SCORES_URL, which the Alchemy stack gives the page. A page that joins is whoever plays: an entity that holds nothing, whom its clicks are from. In development it goes on from the state kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
 
 /** Where scores are kept, as the Alchemy stack says where the scores Worker is; nowhere, saying so, if it says nothing, as when the page is served without the stack. */
 const configured: unknown = import.meta.env['VITE_SCORES_URL'];
@@ -17,9 +17,9 @@ const scores =
 
 const options: Host.Options<Scores.Scores> = {
   game: Score.game,
-  join: (world: World.World) => World.spawn(world, []),
-  leave: World.despawn,
-  world: Score.world,
+  join: (state: State.State) => State.spawn(state, []),
+  leave: State.despawn,
+  state: Score.state,
   mayHold: true,
 };
 

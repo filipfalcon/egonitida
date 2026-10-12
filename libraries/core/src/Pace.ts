@@ -1,5 +1,5 @@
 /**
- * Keeps a fixed-step simulation at its real rate however irregularly a timer fires. A timer never fires exactly on time, and a stall swallows whole intervals; taking one step per firing would let the world fall behind real time. Instead each firing takes every step real time is owed, up to a maximum, so a slow machine slows briefly rather than falling ever further behind.
+ * Keeps a fixed-step simulation at its real rate however irregularly a timer fires. A timer never fires exactly on time, and a stall swallows whole intervals; taking one step per firing would let the game fall behind real time. Instead each firing takes every step real time is owed, up to a maximum, so a slow machine slows briefly rather than falling ever further behind.
  *
  * Steps are counted in whole steps from the moment the pace started, so the count stays exact: 1000 / 30 milliseconds is not.
  */
@@ -52,7 +52,7 @@ export const nextAt = (pace: Pace, done: number): number =>
   pace.origin + Math.ceil(((done + pace.skipped + 1) * 1000) / pace.stepRate);
 
 /**
- * The pace after time was held for `heldMillis`: everything moves on by that long, so the steps that time would have owed are never owed at all, and the world goes on as if no time had passed.
+ * The pace after time was held for `heldMillis`: everything moves on by that long, so the steps that time would have owed are never owed at all, and the game goes on as if no time had passed.
  */
 export const resume = (pace: Pace, heldMillis: number): Pace => ({
   ...pace,

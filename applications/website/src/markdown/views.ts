@@ -16,10 +16,11 @@ const styles = stylex.create({
     marginBottom: 24,
     fontSize: 40,
     lineHeight: 1.15,
-    letterSpacing: '-0.01em',
+    letterSpacing: '0.01em',
+    textTransform: 'uppercase',
   },
-  // Clear of the bar over the page when a link leads to it.
-  heading: { scrollMarginTop: 88, lineHeight: 1.3 },
+  // Clear of the bar over the page when a link leads to it; every heading in capitals.
+  heading: { scrollMarginTop: 88, lineHeight: 1.3, textTransform: 'uppercase' },
   h2: { marginTop: 48, marginBottom: 16, fontSize: 28 },
   h3: { marginTop: 32, marginBottom: 12, fontSize: 21 },
   h4: { marginTop: 24, marginBottom: 8, fontSize: 18 },

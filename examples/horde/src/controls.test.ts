@@ -5,7 +5,7 @@ import * as HordeControls from '#src/controls.ts';
 
 /** What a survivor does with `devices`, after `before`, with the mouse aiming at `mouseAim`. */
 const played = (
-  devices: Devices.State,
+  devices: Devices.Reading,
   before: HordeControls.Played = HordeControls.start,
   mouseAim: Option.Option<number> = Option.none(),
 ) => HordeControls.play(devices, before, mouseAim);
@@ -13,7 +13,7 @@ const played = (
 const pad = (pad: {
   readonly buttons?: Partial<Devices.Pad['buttons']>;
   readonly axes?: Partial<Devices.Pad['axes']>;
-}): Devices.State => ({
+}): Devices.Reading => ({
   ...Devices.idle,
   pads: [
     {

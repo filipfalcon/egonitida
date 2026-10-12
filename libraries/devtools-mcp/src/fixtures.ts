@@ -1,7 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Component, Domain, Game, Host, System, World } from '@lightocean/core';
+import { Component, Domain, Game, Host, System, State } from '@lightocean/core';
 import { Bridge, Inspect, Page, Relay, Rewind } from '@lightocean/devtools';
 import { Listener } from '@lightocean/vite-plugin';
 import { Effect, Option, Queue, Schema, Stream } from 'effect';
@@ -57,12 +57,12 @@ export const served = (names: ReadonlyArray<string>, directory?: string) =>
     for (const name of names) {
       const setup = {
         game: counting,
-        join: (world: World.World) => World.spawn(world, [Count.of({ value: 0 })]),
-        leave: World.despawn,
+        join: (state: State.State) => State.spawn(state, [Count.of({ value: 0 })]),
+        leave: State.despawn,
       };
       const host = yield* Host.make({
         ...setup,
-        world: World.spawn(World.empty({ seed: 1 }), [Count.of({ value: 0 })])[0],
+        state: State.spawn(State.empty({ seed: 1 }), [Count.of({ value: 0 })])[0],
         mayHold: true,
       });
       yield* host.hold;

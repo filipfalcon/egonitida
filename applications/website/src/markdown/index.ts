@@ -1,1 +1,1 @@
-export { docPage } from '#src/markdown/docPage.ts';
+export { type LivePage, docPage, livePage } from '#src/markdown/docPage.ts';

@@ -14,9 +14,9 @@
 
 ---
 
-LightOcean is an engine for real-time web applications and games. Your world is data: every piece of state has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.
+LightOcean is an engine for real-time web applications and games. Your game is data: every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.
 
-A game is a world of entities and components. Systems and rules step it at a fixed rate on a host, which is a Web Worker for one player or a Cloudflare Durable Object for many. Views draw it on clients with Three.js on WebGPU. The page around it is Foldkit.
+A game's state holds entities and their components. Systems and rules step the game at a fixed rate on a host, which is a Web Worker for one player or a Cloudflare Durable Object for many. Views draw it on clients with Three.js on WebGPU. The page around it is Foldkit.
 
 > [!WARNING]
 > LightOcean is not published yet. It stays private until its architecture is built and Border, the first game on it, runs on it. Names and signatures may still change.
@@ -26,7 +26,7 @@ A game is a world of entities and components. Systems and rules step it at a fix
 The smallest game is a cube that turns: one component, one system, one domain.
 
 ```ts
-import { Component, Domain, Game, System, World } from '@lightocean/core';
+import { Component, Domain, Game, System, State } from '@lightocean/core';
 import { Schema } from 'effect';
 
 export const Spin = Component.make(
@@ -63,7 +63,7 @@ export const domain = Domain.make({
 
 export const game = Game.make({ stepRate: 60, domains: [domain] });
 
-export const [world, cube] = World.spawn(World.empty({ seed: 1 }), [
+export const [state, cube] = State.spawn(State.empty({ seed: 1 }), [
   Spin.of({ angle: 0, speed: 0.25 }),
 ]);
 ```
@@ -98,13 +98,13 @@ export const cubes = View.each([Cube.Spin], {
 });
 ```
 
-A test steps the game itself. Time is the world's step, so there are no mocks and no fake timers:
+A test steps the game itself. Time is the game's step, so there are no mocks and no fake timers:
 
 ```ts
 it('turns a cube once every four seconds', () => {
   Story.story(
     Cube.game,
-    Story.given(Cube.world, { cube: Cube.cube }),
+    Story.given(Cube.state, { cube: Cube.cube }),
     Story.seconds(1),
     Story.expect('cube', Cube.Spin, ({ angle }) => expect(angle).toBeCloseTo(Math.PI / 2)),
     Story.seconds(3),
@@ -118,11 +118,11 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 ## What the structure buys
 
 - **One owner for every field.** A component says whether the rules or the simulation own it, and whether it is sent to clients, kept on the client, or kept on the server. A system that writes what it does not own does not compile.
-- **Domains instead of a pile of code.** A game is a list of domains. A domain writes only its own components and changes another's state by emitting an event that domain declares. Asking who changes a component is one call to `Game.changes`.
-- **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same build and the same inputs give the same world, which is what rewinding, recordings, and the determinism check in development rest on.
+- **Domains instead of a pile of code.** A game is a list of domains. A domain writes only its own components and changes another's components only by emitting an event that domain declares. Asking who changes a component is one call to `Game.changes`.
+- **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same build and the same inputs give the same state, which is what rewinding, recordings, and the determinism check in development rest on.
 - **One shape for one player and many.** A singleplayer game runs its server in a Web Worker. The same game can be hosted for players across a network in a Durable Object; that hosting is experimental, and prediction for it is planned.
-- **Effects at the edges.** Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the world, such as saving a score.
-- **Tools for agents.** In development, the `lightocean-devtools` MCP server lets an agent read the running world, hold and step time, play as one player or several, take screenshots, and turn what it played into a test.
+- **Effects at the edges.** Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the game, such as saving a score.
+- **Tools for agents.** In development, the `lightocean-devtools` MCP server lets an agent read the state of the running game, hold and step time, play as one player or several, take screenshots, and turn what it played into a test.
 
 ## Built on
 
@@ -137,32 +137,32 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 ## When to use something else
 
 - You need React and the React Three Fiber ecosystem.
-- You are building a 3D showcase with no state; plain Three.js does that.
+- You are building a 3D showcase with nothing to simulate; plain Three.js does that.
 - You need a ready physics engine or high-end graphics; Unity, Godot, or Unreal fit better.
 - You need thousands of entities today. Performance has not been measured and optimized yet.
 
 ## Repository
 
-| Path                       | What is in it                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------ |
-| `libraries/core`           | The world, components, systems, rules, the game, hosts, clients, and `Story`   |
-| `libraries/client`         | The timeline, interpolation, views, `Viewport`, and `Scene`                    |
-| `libraries/server`         | `Room`: a world hosted in a Durable Object (experimental)                      |
-| `libraries/foldkit`        | A world inside a Foldkit application: `World`, `Stage`, `Projection`, `Styled` |
-| `libraries/devtools`       | Recording, replay, the step log, rewinding, and reloading with the world kept  |
-| `libraries/devtools-mcp`   | A running game as MCP tools                                                    |
-| `libraries/vite-plugin`    | The development server as the way tools reach a game                           |
-| `libraries/reflection`     | Schema annotations the editor's Details panel is generated from                |
-| `libraries/oxlint-plugin`  | Lint rules for what the types cannot enforce                                   |
-| `applications/editor`      | The editor: a document that is a world, played and debugged in the browser     |
-| `applications/playground`  | Cubes a player asks for and paints, with the page around them in Foldkit       |
-| `applications/website`     | The engine's website, with an ocean of lights on the engine at its top         |
-| `examples/spinning-cube`   | A cube that turns                                                              |
-| `examples/click-to-colour` | Cubes a click paints                                                           |
-| `examples/save-score`      | A round whose score a rule saves through a command, to a Worker over KV        |
-| `examples/horde`           | Survivors against a horde: several domains, input, randomness, spawning        |
-| `examples/shared-room`     | Walkers in a room many share across the network, each player's own predicted   |
-| `skills`                   | Agent skills for starting out, adding a domain, and auditing a game            |
+| Path                       | What is in it                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| `libraries/core`           | The state, components, systems, rules, the game, hosts, clients, and `Story`      |
+| `libraries/client`         | The timeline, interpolation, views, `Viewport`, and `Scene`                       |
+| `libraries/server`         | `Room`: a game hosted in a Durable Object (experimental)                          |
+| `libraries/foldkit`        | A game inside a Foldkit application: `Session`, `Stage`, `Projection`, `Styled`   |
+| `libraries/devtools`       | Recording, replay, the step log, rewinding, and reloading with the state kept     |
+| `libraries/devtools-mcp`   | A running game as MCP tools                                                       |
+| `libraries/vite-plugin`    | The development server as the way tools reach a game                              |
+| `libraries/reflection`     | Schema annotations the editor's Details panel is generated from                   |
+| `libraries/oxlint-plugin`  | Lint rules for what the types cannot enforce                                      |
+| `applications/editor`      | The editor: a document held as a game's state, played and debugged in the browser |
+| `applications/playground`  | Cubes a player asks for and paints, with the page around them in Foldkit          |
+| `applications/website`     | The engine's website, with an ocean of lights on the engine at its top            |
+| `examples/spinning-cube`   | A cube that turns                                                                 |
+| `examples/click-to-colour` | Cubes a click paints                                                              |
+| `examples/save-score`      | A round whose score a rule saves through a command, to a Worker over KV           |
+| `examples/horde`           | Survivors against a horde: several domains, input, randomness, spawning           |
+| `examples/shared-room`     | Walkers in a room many share across the network, each player's own predicted      |
+| `skills`                   | Agent skills for starting out, adding a domain, and auditing a game               |
 
 ## Running it
 

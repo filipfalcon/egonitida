@@ -1,5 +1,5 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, World } from '@lightocean/core';
+import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside, Debugger } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
 import * as Playing from '#src/playing.ts';
@@ -10,13 +10,13 @@ import * as Playing from '#src/playing.ts';
 const hostOf = (opening: string) =>
   Option.match(Playing.fromOpening(opening), {
     onNone: () => Effect.die('The page opened the worker with no document to play.'),
-    onSome: (world) =>
+    onSome: (state) =>
       Effect.gen(function* () {
         const options = {
           game: Playing.game,
-          world,
-          join: (joining: World.World) => World.spawn(joining, []),
-          leave: World.despawn,
+          state,
+          join: (joining: State.State) => State.spawn(joining, []),
+          leave: State.despawn,
           mayHold: true,
         };
         const host = yield* Host.make(options);

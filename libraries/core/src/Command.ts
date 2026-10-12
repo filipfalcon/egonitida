@@ -2,7 +2,7 @@ import { Effect, Option, Schema } from 'effect';
 import type * as Event from '#src/Event.ts';
 
 /**
- * Something a rule decided should be done outside the world, such as saving her progress: a declared value with a name, its arguments, and the events its result may be, failure among them. A rule issues one as a value; it never runs inside a step. The host runs it with the services of its Layers, and its result comes back into the world as one of its events at a later step, which a recording keeps, so a replay or a prediction never runs one again.
+ * Something a rule decided should be done outside the game, such as saving her progress: a declared value with a name, its arguments, and the events its result may be, failure among them. A rule issues one as a value; it never runs inside a step. The host runs it with the services of its Layers, and its result comes back into the game as one of its events at a later step, which a recording keeps, so a replay or a prediction never runs one again.
  *
  * Its `execute` turns every failure it can foresee into one of its result events. A defect it did not foresee is a bug: the host reports it, and the command has no result.
  */

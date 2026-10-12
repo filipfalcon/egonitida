@@ -1,4 +1,7 @@
-/* The document itself, which StyleX cannot reach: no margin round the page, dark controls and scrollbars, and a smooth scroll to a section a link names. Everything the website draws, its ground and type too, is styled with StyleX beside its view, and StyleX adds its rules to this sheet when it builds. */
+/* Unbounded, bold, in Latin only: the display face the figures tell their lines in. */
+@import '@fontsource/unbounded/latin-700.css';
+
+/* The document itself, which StyleX cannot reach: the typefaces it loads, no margin round the page, dark controls and scrollbars, and a smooth scroll to a section a link names. Everything the website draws, its ground and type too, is styled with StyleX beside its view, and StyleX adds its rules to this sheet when it builds. */
 html {
   color-scheme: dark;
   scroll-behavior: smooth;

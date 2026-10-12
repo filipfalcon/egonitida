@@ -15,7 +15,7 @@ const INFO: Parameters<typeof McpServer.layerStdio>[0] = {
   name: 'lightocean-devtools',
   version: '0.0.0',
   description:
-    'A running LightOcean game, as its development server serves it: what it is made of, its world at any tick kept, its log, time, playing it, and what its page shows.',
+    'A running LightOcean game, as its development server serves it: what it is made of, its state at any tick kept, its log, time, playing it, and what its page shows.',
   protocols: [
     McpProtocol.v2025_11_25,
     McpProtocol.v2025_06_18,

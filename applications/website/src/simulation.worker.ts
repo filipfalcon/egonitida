@@ -1,15 +1,15 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, World } from '@lightocean/core';
+import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect } from 'effect';
 import * as Ocean from '#src/ocean.ts';
 
-// The local server: the ocean, stepped off the main thread. A page that joins is whoever clicks the lights: an entity that holds nothing, whom its clicks are from. In development it goes on from the world kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
+// The local server: the ocean, stepped off the main thread. A page that joins is whoever clicks the lights: an entity that holds nothing, whom its clicks are from. In development it goes on from the state kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
 const options = {
   game: Ocean.game,
-  join: (world: World.World) => World.spawn(world, []),
-  leave: World.despawn,
-  world: Ocean.world,
+  join: (state: State.State) => State.spawn(state, []),
+  leave: State.despawn,
+  state: Ocean.state,
   mayHold: true,
 };
 

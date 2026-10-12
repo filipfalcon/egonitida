@@ -1,17 +1,27 @@
 import { Tab, type Viewport } from '@lightocean/client';
 import { Bridge, Page } from '@lightocean/devtools';
-import { Stage, World } from '@lightocean/foldkit';
+import { Session, Stage } from '@lightocean/foldkit';
 import { Effect, Option, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
-import { Message, type Model, OceanWorld, type Services } from '#src/main.ts';
+import { Message, type Model, OceanSession, type Services } from '#src/main.ts';
+import * as Press from '#src/press.ts';
+import * as Glance from '#src/glance.ts';
+import * as GlanceStage from '#src/glanceStage.ts';
+import * as StatePress from '#src/statePress.ts';
 import * as Ocean from '#src/ocean.ts';
 import * as OceanView from '#src/ocean.view.ts';
 
-// Where the ocean meets the page: joined in a worker while the page is open, and shown on the canvas once Foldkit has it in the page.
+// Where the games meet the page: the ocean, joined in a worker while the home page is open and shown on the canvas once Foldkit has it in the page; and the games of the page of key terms, the first game its stage of First Things First draws and the one its press steps, each joined in a worker of its own while that page is open.
 
-/** The id the devtools know the ocean's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the world kept for the tab. */
+/** The id the devtools know the ocean's host by, kept by the tab across reloads, and given to its worker as its name, so the worker finds the state kept for the tab. */
 const host = Tab.id('website');
+
+/** The id the devtools know the press's host by, kept by the tab across reloads. */
+const pressHost = Tab.id('press');
+
+/** The id the devtools know the host of the first game by, kept by the tab across reloads. */
+const glanceHost = Tab.id('glance');
 
 /** The id of the canvas the ocean is shown on. */
 export const CANVAS_ID = 'ocean';
@@ -30,12 +40,12 @@ const capturedAs = (host: string) => (viewport: Viewport.Viewport) =>
       })
     : Effect.void;
 
-/** The ocean's world, joined while the home page is open. */
+/** The ocean's session, joined while the home page is open, and the first game's and the press's, joined while the page of key terms is. */
 export const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
   ocean: entry(
-    World.Requirements,
-    World.managed<Model, Message, Services>({
-      resource: OceanWorld,
+    Session.Requirements,
+    Session.managed<Model, Message, Services>({
+      resource: OceanSession,
       game: Ocean.game,
       worker: () =>
         new Worker(new URL('./simulation.worker.ts', import.meta.url), {
@@ -47,6 +57,40 @@ export const managedResources = ManagedResource.make<Model, Message>()((entry) =
       onJoined: () => Message.JoinedOcean(),
       onLeft: () => Message.LeftOcean(),
       onFailed: (reason) => Message.FailedJoinOcean({ reason }),
+    }),
+  ),
+  glance: entry(
+    Session.Requirements,
+    Session.managed<Model, Message, Services>({
+      resource: GlanceStage.GlanceSession,
+      game: Glance.game,
+      worker: () =>
+        new Worker(new URL('./glance.worker.ts', import.meta.url), {
+          type: 'module',
+          name: glanceHost,
+        }),
+      joins: (model) => model.route._tag === 'KeyTerms',
+      onJoined: () => Message.GotGlanceMessage({ message: GlanceStage.Message.JoinedGame() }),
+      onLeft: () => Message.GotGlanceMessage({ message: GlanceStage.Message.LeftGame() }),
+      onFailed: (reason) =>
+        Message.GotGlanceMessage({ message: GlanceStage.Message.FailedJoinGame({ reason }) }),
+    }),
+  ),
+  press: entry(
+    Session.Requirements,
+    Session.managed<Model, Message, Services>({
+      resource: StatePress.PressSession,
+      game: Press.game,
+      worker: () =>
+        new Worker(new URL('./press.worker.ts', import.meta.url), {
+          type: 'module',
+          name: pressHost,
+        }),
+      joins: (model) => model.route._tag === 'KeyTerms',
+      onJoined: () => Message.GotStatePressMessage({ message: StatePress.Message.JoinedGame() }),
+      onLeft: () => Message.GotStatePressMessage({ message: StatePress.Message.LeftGame() }),
+      onFailed: (reason) =>
+        Message.GotStatePressMessage({ message: StatePress.Message.FailedJoinGame({ reason }) }),
     }),
   ),
 }));
@@ -84,7 +128,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
       dependenciesToStream: ({ isShown }) =>
         isShown
           ? Stage.stream({
-              resource: OceanWorld,
+              resource: OceanSession,
               canvasId: CANVAS_ID,
               views: OceanView.views,
               setup: setUp,
@@ -102,8 +146,8 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
       modelToDependencies: ({ ocean }) => ({ isJoining: ocean._tag === 'Joining' }),
       dependenciesToStream: ({ isJoining }) =>
         isJoining
-          ? World.whenJoined({
-              resource: OceanWorld,
+          ? Session.whenJoined({
+              resource: OceanSession,
               onJoined: (): Message => Message.FoundOceanJoined(),
             })
           : Stream.empty,

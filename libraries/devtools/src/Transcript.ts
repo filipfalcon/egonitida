@@ -1,10 +1,10 @@
-import { Game, Story, type World } from '@lightocean/core';
+import { Game, Story, type State } from '@lightocean/core';
 import { Result, Schema } from 'effect';
 import type * as Recording from '#src/Recording.ts';
 import type * as Replay from '#src/Replay.ts';
 
 /**
- * A stretch of a recording told as a story test: the world at its first tick, the input and actions that went into each step after it, and, at its end, every value that came of them. It is told with components, actions, and events by name, as a tool that knows a game only as data tells it, and it holds when told again with the game itself; so what an agent did while playing becomes a test.
+ * A stretch of a recording told as a story test: the state at its first tick, the input and actions that went into each step after it, and, at its end, every value that came of them. It is told with components, actions, and events by name, as a tool that knows a game only as data tells it, and it holds when told again with the game itself; so what an agent did while playing becomes a test.
  *
  * A stretch in which a player joined or left, or the host went back in time, cannot be told, since a story has no part for them: it must start after them, or end before.
  */
@@ -13,8 +13,8 @@ import type * as Replay from '#src/Replay.ts';
 export type Line =
   | {
       readonly _tag: 'GivenAs';
-      readonly world: unknown;
-      readonly names: Readonly<Record<string, World.Entity>>;
+      readonly state: unknown;
+      readonly names: Readonly<Record<string, State.Entity>>;
     }
   | {
       readonly _tag: 'InputAs';
@@ -33,14 +33,14 @@ export type Line =
     }
   | { readonly _tag: 'ExpectNoneAs'; readonly name: string; readonly component: string };
 
-const nameOf = (entity: World.Entity) => `e${entity}`;
+const nameOf = (entity: State.Entity) => `e${entity}`;
 
-/** The values of `world` by component name, then by entity, as `game` encodes them. */
-const valuesOf = (game: Game.Game, world: World.World) =>
+/** The values of `state` by component name, then by entity, as `game` encodes them. */
+const valuesOf = (game: Game.Game, state: State.State) =>
   new Map(
     game.components.map((component) => [
       component.name,
-      new Map(component.encode(world.stores.get(component.name))),
+      new Map(component.encode(state.stores.get(component.name))),
     ]),
   );
 
@@ -88,19 +88,19 @@ const untellable = (entry: Recording.Entry, tick: number): Result.Result<void, s
   }
 };
 
-/** The story of `entries`, taken with `setup` from `world`, which came to `end`; or why it cannot be told. */
+/** The story of `entries`, taken with `setup` from `state`, which came to `end`; or why it cannot be told. */
 export const of = (
   setup: Replay.Setup,
-  world: World.World,
+  state: State.State,
   entries: ReadonlyArray<Recording.Entry>,
-  end: World.World,
+  end: State.State,
 ): Result.Result<ReadonlyArray<Line>, string> => {
   const ticks = entries.reduce<Array<number>>(
-    (seen, entry) => [...seen, entry._tag === 'Stepped' ? entry.tick : (seen.at(-1) ?? world.tick)],
+    (seen, entry) => [...seen, entry._tag === 'Stepped' ? entry.tick : (seen.at(-1) ?? state.tick)],
     [],
   );
   for (const [index, entry] of entries.entries()) {
-    const refused = untellable(entry, ticks[index] ?? world.tick);
+    const refused = untellable(entry, ticks[index] ?? state.tick);
     if (Result.isFailure(refused)) {
       return Result.fail(refused.failure);
     }
@@ -116,11 +116,11 @@ export const of = (
     return [...lines, ...went, { _tag: 'Steps', count: 1 }];
   }, []);
 
-  const before = valuesOf(setup.game, world);
+  const before = valuesOf(setup.game, state);
   const after = valuesOf(setup.game, end);
   const expected = setup.game.components.flatMap((component): ReadonlyArray<Line> => {
-    const was = before.get(component.name) ?? new Map<World.Entity, unknown>();
-    const is = after.get(component.name) ?? new Map<World.Entity, unknown>();
+    const was = before.get(component.name) ?? new Map<State.Entity, unknown>();
+    const is = after.get(component.name) ?? new Map<State.Entity, unknown>();
     return [
       ...[...is]
         .filter(([entity, value]) => JSON.stringify(was.get(entity)) !== JSON.stringify(value))
@@ -147,7 +147,7 @@ export const of = (
   return Result.succeed([
     {
       _tag: 'GivenAs',
-      world: Schema.encodeSync(Game.schema(setup.game))(world),
+      state: Schema.encodeSync(Game.schema(setup.game))(state),
       names,
     },
     ...played,
@@ -160,7 +160,7 @@ export const steps = (lines: ReadonlyArray<Line>): ReadonlyArray<Story.Step> =>
   lines.map((line) => {
     switch (line._tag) {
       case 'GivenAs':
-        return Story.givenAs(line.world, line.names);
+        return Story.givenAs(line.state, line.names);
       case 'InputAs':
         return Story.inputAs(line.name, line.component, line.value);
       case 'ActAs':
@@ -184,7 +184,7 @@ const sourceOf = (line: Line): string => {
   const json = JSON.stringify;
   switch (line._tag) {
     case 'GivenAs':
-      return `Story.givenAs(${json(line.world)}, ${json(line.names)})`;
+      return `Story.givenAs(${json(line.state)}, ${json(line.names)})`;
     case 'InputAs':
       return `Story.inputAs(${quoted(line.name)}, ${quoted(line.component)}, ${json(line.value)})`;
     case 'ActAs':

@@ -1,7 +1,7 @@
 import { type Rule, calleeName, enclosingPart } from '#src/ast.ts';
 
 /**
- * A system's or rule's `run` and a view's `draw` run every step or every frame, and a step must replay to the same world: they take randomness and time from their context, and do no Effect work, which belongs at the edges.
+ * A system's or rule's `run` and a view's `draw` run every step or every frame, and a step must replay to the same state: they take randomness and time from their context, and do no Effect work, which belongs at the edges.
  */
 
 /** Calls that give another answer every time, wherever they run. */
@@ -14,7 +14,7 @@ export const pureSteps: Rule = {
     type: 'problem',
     messages: {
       impure:
-        '{{call}} in {{part}} gives another answer on every run, so a replay would not reach the same world. Use the context: `context.random()` for randomness, `context.time` for time.',
+        '{{call}} in {{part}} gives another answer on every run, so a replay would not reach the same state. Use the context: `context.random()` for randomness, `context.time` for time.',
       effect:
         '{{call}} in {{part}}, which runs every step or every frame: steps and frames are plain code. Do this work at the edge, in a command or in a view’s `acquire`.',
     },

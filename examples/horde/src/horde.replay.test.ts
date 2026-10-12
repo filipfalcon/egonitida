@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Client, Host, Story, World } from '@lightocean/core';
+import { Client, Host, Story, State } from '@lightocean/core';
 import { Transport } from '@lightocean/core/internal';
 import { Log, Recording, Replay, Transcript } from '@lightocean/devtools';
 import { Effect, Option, Result } from 'effect';
@@ -7,14 +7,14 @@ import { TestClock } from 'effect/testing';
 import * as Game from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 
-const setup = { game: Game.game, join: Survivor.join, leave: World.despawn };
+const setup = { game: Game.game, join: Survivor.join, leave: State.despawn };
 
 /** How long a test that plays twenty seconds of the horde may take, beside every other test running at once. */
 const PLAYING = 30_000;
 
 /** Twenty seconds of a survivor circling the arena, turning and firing as the horde comes, recorded. */
 const played = Effect.gen(function* () {
-  const host = yield* Host.make({ ...setup, world: Game.world, mayHold: false });
+  const host = yield* Host.make({ ...setup, state: Game.state, mayHold: false });
   const recorder = yield* Recording.record(host, Game.game);
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
   yield* host.connect(hostEnd);
@@ -71,9 +71,9 @@ it.effect(
       );
       const lines = Transcript.of(
         setup,
-        start.world,
+        start.state,
         taken.slice(301, 901).map(({ entry }) => entry),
-        end.world,
+        end.state,
       );
 
       expect(Result.isSuccess(lines)).toBe(true);

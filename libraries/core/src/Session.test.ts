@@ -13,7 +13,7 @@ import * as Host from '#src/Host.ts';
 import * as Rule from '#src/Rule.ts';
 import * as System from '#src/System.ts';
 import * as Transport from '#src/Transport.ts';
-import * as World from '#src/World.ts';
+import * as State from '#src/State.ts';
 
 /** Moves every controlled entity by its stick, at 30 a second. */
 const steer = System.make({
@@ -57,14 +57,14 @@ const game = Game.make({
 
 const hostOptions = (mayHold: boolean): Host.Options => ({
   game,
-  world: World.empty({ seed: 1 }),
-  join: (world) =>
-    World.spawn(world, [
+  state: State.empty({ seed: 1 }),
+  join: (state) =>
+    State.spawn(state, [
       Position.of({ x: 0 }),
       Controls.of({ move: 0, fire: false }),
       Health.of({ current: 0 }),
     ]),
-  leave: World.despawn,
+  leave: State.despawn,
   mayHold,
 });
 
@@ -90,27 +90,27 @@ const advance = (millis: number) =>
     }
   });
 
-const positionIn = (world: World.World, entity: World.Entity) =>
-  Option.map(World.get(world, entity, Position), (position) => position.x);
+const positionIn = (state: State.State, entity: State.Entity) =>
+  Option.map(State.get(state, entity, Position), (position) => position.x);
 
 describe('a session between a host and its clients', () => {
-  it.effect('steps the world at its rate as time passes', () =>
+  it.effect('steps the state at its rate as time passes', () =>
     Effect.gen(function* () {
       const host = yield* startHost;
 
       yield* advance(1000);
 
-      const world = yield* host.world;
-      expect(world.tick).toBe(30);
+      const state = yield* host.state;
+      expect(state.tick).toBe(30);
     }),
   );
 
   it.effect('welcomes a client with the entity it controls', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
-      const world = yield* host.world;
+      const state = yield* host.state;
 
-      expect(positionIn(world, client.entity)).toEqual(Option.some(0));
+      expect(positionIn(state, client.entity)).toEqual(Option.some(0));
     }),
   );
 
@@ -122,40 +122,40 @@ describe('a session between a host and its clients', () => {
       yield* advance(100);
 
       // Three steps of a thirtieth of a second, at 30 a second.
-      const world = yield* host.world;
-      expect(positionIn(world, client.entity)).toEqual(Option.some(3));
+      const state = yield* host.state;
+      expect(positionIn(state, client.entity)).toEqual(Option.some(3));
     }),
   );
 
-  it.effect('shows the client the world the host stepped', () =>
+  it.effect('shows the client the state the host stepped', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
 
       yield* client.send([Controls.of({ move: 1, fire: false })]);
       yield* advance(100);
 
-      const seen = yield* client.world;
-      const stepped = yield* host.world;
+      const seen = yield* client.state;
+      const stepped = yield* host.state;
       expect(seen.tick).toBe(stepped.tick);
       expect(positionIn(seen, client.entity)).toEqual(positionIn(stepped, client.entity));
     }),
   );
 
-  it.effect('tells a client which of its inputs each world took in, by their numbers', () =>
+  it.effect('tells a client which of its inputs each state took in, by their numbers', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
 
       const first = yield* client.send([Controls.of({ move: 1, fire: false })]);
       yield* advance(100);
       const second = yield* client.send([Controls.of({ move: 0, fire: false })]);
-      const before = yield* client.world;
+      const before = yield* client.state;
       yield* advance(100);
-      const after = yield* client.world;
+      const after = yield* client.state;
 
       expect([first, second]).toEqual([1, 2]);
       expect(client.ackedAt(before.tick)).toEqual(Option.some(1));
       expect(client.ackedAt(after.tick)).toEqual(Option.some(2));
-      expect((yield* host.world).tick).toBe(after.tick);
+      expect((yield* host.state).tick).toBe(after.tick);
     }),
   );
 
@@ -170,8 +170,8 @@ describe('a session between a host and its clients', () => {
       });
       yield* advance(100);
 
-      const world = yield* host.world;
-      expect(positionIn(world, client.entity)).toEqual(Option.some(0));
+      const state = yield* host.state;
+      expect(positionIn(state, client.entity)).toEqual(Option.some(0));
     }),
   );
 
@@ -184,8 +184,8 @@ describe('a session between a host and its clients', () => {
       const entity = yield* host.connect(hostEnd).pipe(Scope.provide(scope));
       yield* Scope.close(scope, Exit.void);
 
-      const world = yield* host.world;
-      expect(positionIn(world, entity)).toEqual(Option.none());
+      const state = yield* host.state;
+      expect(positionIn(state, entity)).toEqual(Option.none());
     }),
   );
 
@@ -196,8 +196,8 @@ describe('a session between a host and its clients', () => {
       yield* client.send([Controls.of({ move: -1, fire: false })]);
       yield* advance(1000);
 
-      const world = yield* host.world;
-      expect(positionIn(world, client.entity)).toEqual(Option.some(-30));
+      const state = yield* host.state;
+      expect(positionIn(state, client.entity)).toEqual(Option.some(-30));
     }),
   );
 
@@ -209,10 +209,10 @@ describe('a session between a host and its clients', () => {
     }),
   );
 
-  it.effect('hands on every newer world the client receives, in order', () =>
+  it.effect('hands on every newer state the client receives, in order', () =>
     Effect.gen(function* () {
       const { client } = yield* session;
-      const received = yield* client.worlds.pipe(
+      const received = yield* client.states.pipe(
         Stream.take(3),
         Stream.runCollect,
         Effect.forkChild,
@@ -220,8 +220,8 @@ describe('a session between a host and its clients', () => {
 
       yield* advance(200);
 
-      const worlds = yield* Fiber.join(received);
-      expect(worlds.map((world) => world.tick)).toEqual([1, 2, 3]);
+      const states = yield* Fiber.join(received);
+      expect(states.map((state) => state.tick)).toEqual([1, 2, 3]);
     }),
   );
 
@@ -232,13 +232,13 @@ describe('a session between a host and its clients', () => {
 
         yield* client.hold;
         yield* advance(1000);
-        const held = yield* host.world;
+        const held = yield* host.state;
         expect(held.tick).toBe(0);
 
         yield* client.release;
         yield* advance(100);
         // Three steps, not the thirty the held second would have owed.
-        const resumed = yield* host.world;
+        const resumed = yield* host.state;
         expect(resumed.tick).toBe(3);
       }),
     );
@@ -253,8 +253,8 @@ describe('a session between a host and its clients', () => {
         yield* client.hold;
         yield* advance(1000);
 
-        const world = yield* host.world;
-        expect(world.tick).toBe(30);
+        const state = yield* host.state;
+        expect(state.tick).toBe(30);
       }),
     );
 
@@ -271,15 +271,15 @@ describe('a session between a host and its clients', () => {
         yield* Scope.close(scope, Exit.void);
         yield* advance(100);
 
-        const world = yield* host.world;
-        expect(world.tick).toBe(3);
+        const state = yield* host.state;
+        expect(state.tick).toBe(3);
       }),
     );
   });
 
   describe('actions', () => {
-    const healthOf = (world: World.World, entity: World.Entity) =>
-      Option.map(World.get(world, entity, Health), (health) => health.current);
+    const healthOf = (state: State.State, entity: State.Entity) =>
+      Option.map(State.get(state, entity, Health), (health) => health.current);
 
     it.effect('hands a client’s action to the rules, as from the player who sent it', () =>
       Effect.gen(function* () {
@@ -288,8 +288,8 @@ describe('a session between a host and its clients', () => {
         yield* client.act(AskedToHeal, { amount: 50 });
         yield* advance(50);
 
-        const world = yield* host.world;
-        expect(healthOf(world, client.entity)).toEqual(Option.some(50));
+        const state = yield* host.state;
+        expect(healthOf(state, client.entity)).toEqual(Option.some(50));
       }),
     );
 
@@ -301,8 +301,8 @@ describe('a session between a host and its clients', () => {
         yield* client.act(AskedToHeal, { amount: 70 });
         yield* advance(50);
 
-        const world = yield* host.world;
-        expect(healthOf(world, client.entity)).toEqual(Option.some(70));
+        const state = yield* host.state;
+        expect(healthOf(state, client.entity)).toEqual(Option.some(70));
       }),
     );
 
@@ -316,8 +316,8 @@ describe('a session between a host and its clients', () => {
         });
         yield* advance(50);
 
-        const world = yield* host.world;
-        expect(healthOf(world, client.entity)).toEqual(Option.some(0));
+        const state = yield* host.state;
+        expect(healthOf(state, client.entity)).toEqual(Option.some(0));
       }),
     );
 
@@ -328,12 +328,12 @@ describe('a session between a host and its clients', () => {
         yield* client.hold;
         yield* client.act(AskedToHeal, { amount: 50 });
         yield* advance(500);
-        const held = yield* host.world;
+        const held = yield* host.state;
         expect(healthOf(held, client.entity)).toEqual(Option.some(0));
 
         yield* client.release;
         yield* advance(50);
-        const resumed = yield* host.world;
+        const resumed = yield* host.state;
         expect(healthOf(resumed, client.entity)).toEqual(Option.some(50));
       }),
     );
@@ -342,7 +342,7 @@ describe('a session between a host and its clients', () => {
 
 describe('watching a host', () => {
   it.effect(
-    'tells the world as it is, then every client joining and leaving and every step taken with what went into it, in order',
+    'tells the state as it is, then every client joining and leaving and every step taken with what went into it, in order',
     () =>
       Effect.gen(function* () {
         const host = yield* startHost;
@@ -364,12 +364,12 @@ describe('watching a host', () => {
         yield* Scope.close(scope, Exit.void);
         const happenings = yield* Fiber.join(told);
 
-        expect(watching.world.tick).toBe(3);
+        expect(watching.state.tick).toBe(3);
         const [joined, firstStep, ...rest] = happenings;
         expect(joined).toEqual({ _tag: 'Joined', entity, client: true });
         expect(
           firstStep?._tag === 'Stepped' && {
-            tick: firstStep.world.tick,
+            tick: firstStep.state.tick,
             inputs: firstStep.inputs.map((input) => [
               input.entity,
               input.component.name,
@@ -393,41 +393,41 @@ describe('watching a host', () => {
 
 describe('going back in time', () => {
   it.effect(
-    'shows its clients a world it does not hold, such as a past one, and holds its own',
+    'shows its clients a state it does not hold, such as a past one, and holds its own',
     () =>
       Effect.gen(function* () {
         const { host, client } = yield* session;
         yield* client.send([Controls.of({ move: 1, fire: false })]);
         yield* advance(100);
-        const past = yield* host.world;
+        const past = yield* host.state;
         yield* advance(200);
-        const now = yield* host.world;
+        const now = yield* host.state;
 
         yield* host.show(past);
         yield* Effect.yieldNow;
 
-        expect((yield* client.world).tick).toBe(past.tick);
-        expect(positionIn(yield* client.world, client.entity)).toEqual(
+        expect((yield* client.state).tick).toBe(past.tick);
+        expect(positionIn(yield* client.state, client.entity)).toEqual(
           positionIn(past, client.entity),
         );
-        expect(yield* host.world).toBe(now);
+        expect(yield* host.state).toBe(now);
       }),
   );
 
-  it.effect('goes back to a world it is given, and steps on from there', () =>
+  it.effect('goes back to a state it is given, and steps on from there', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
       yield* advance(100);
-      const past = yield* host.world;
+      const past = yield* host.state;
       yield* advance(200);
 
       yield* host.restore(past);
       yield* advance(100);
 
-      const world = yield* host.world;
-      expect(world.tick).toBe(past.tick + 3);
-      expect((yield* client.world).tick).toBe(world.tick);
+      const state = yield* host.state;
+      expect(state.tick).toBe(past.tick + 3);
+      expect((yield* client.state).tick).toBe(state.tick);
     }),
   );
 
@@ -435,7 +435,7 @@ describe('going back in time', () => {
     Effect.gen(function* () {
       const host = yield* startHost;
       yield* advance(100);
-      const past = yield* host.world;
+      const past = yield* host.state;
       yield* advance(100);
       const watching = yield* host.watch;
       const told = yield* watching.happenings.pipe(
@@ -447,7 +447,7 @@ describe('going back in time', () => {
 
       yield* host.restore(past);
 
-      expect(yield* Fiber.join(told)).toEqual(Option.some({ _tag: 'Restored', world: past }));
+      expect(yield* Fiber.join(told)).toEqual(Option.some({ _tag: 'Restored', state: past }));
     }),
   );
 });
@@ -482,7 +482,7 @@ describe('reloading a game', () => {
       }),
     ],
   });
-  /** A game that holds nothing of health, so cannot read a world that does. */
+  /** A game that holds nothing of health, so cannot read a state that does. */
   const unhealthy = Game.make({
     stepRate: 30,
     domains: [
@@ -499,17 +499,17 @@ describe('reloading a game', () => {
   });
   const setupOf = (played: Host.Options['game']) => ({ ...hostOptions(true), game: played });
 
-  it.effect('plays on with the new game from the world it holds', () =>
+  it.effect('plays on with the new game from the state it holds', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
       yield* advance(100);
-      const before = yield* host.world;
+      const before = yield* host.state;
 
       yield* host.reload(setupOf(brisk));
       yield* advance(100);
 
-      const after = yield* host.world;
+      const after = yield* host.state;
       expect(after.tick).toBe(before.tick + 3);
       expect(positionIn(after, client.entity)).toEqual(
         Option.map(positionIn(before, client.entity), (x) => x + 6),
@@ -517,24 +517,24 @@ describe('reloading a game', () => {
     }),
   );
 
-  it.effect('refuses a game that cannot read the world it holds, and plays on as it was', () =>
+  it.effect('refuses a game that cannot read the state it holds, and plays on as it was', () =>
     Effect.gen(function* () {
       const { host, client } = yield* session;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
       yield* advance(100);
-      const before = yield* host.world;
+      const before = yield* host.state;
 
       const refused = yield* host.reload(setupOf(unhealthy)).pipe(Effect.flip);
       yield* advance(100);
 
       expect(refused._tag).toBe('Unreadable');
-      expect(positionIn(yield* host.world, client.entity)).toEqual(
+      expect(positionIn(yield* host.state, client.entity)).toEqual(
         Option.map(positionIn(before, client.entity), (x) => x + 3),
       );
     }),
   );
 
-  it.effect('is told to whoever watches it, with the world the new game read', () =>
+  it.effect('is told to whoever watches it, with the state the new game read', () =>
     Effect.gen(function* () {
       const host = yield* startHost;
       yield* advance(100);
@@ -561,11 +561,11 @@ describe('time held beside the host', () => {
       yield* advance(100);
 
       yield* host.hold;
-      const held = yield* host.world;
+      const held = yield* host.state;
       yield* advance(500);
-      const stood = yield* host.world;
+      const stood = yield* host.state;
       yield* host.advance(4);
-      const stepped = yield* host.world;
+      const stepped = yield* host.state;
       yield* host.release;
       yield* advance(100);
 
@@ -574,8 +574,8 @@ describe('time held beside the host', () => {
       expect(positionIn(stepped, client.entity)).toEqual(
         Option.map(positionIn(held, client.entity), (x) => x + 4),
       );
-      expect((yield* client.world).tick).toBeGreaterThan(stepped.tick);
-      expect((yield* host.world).tick).toBe(stepped.tick + 3);
+      expect((yield* client.state).tick).toBeGreaterThan(stepped.tick);
+      expect((yield* host.state).tick).toBe(stepped.tick + 3);
     }),
   );
 });
@@ -587,14 +587,14 @@ describe('playing from beside the host', () => {
       yield* host.hold;
       yield* client.send([Controls.of({ move: 1, fire: false })]);
       yield* advance(10);
-      const before = yield* host.world;
+      const before = yield* host.state;
 
       yield* host.input(client.entity, [
         { component: 'Controls', value: { move: -2, fire: false } },
       ]);
       yield* host.advance(1);
 
-      expect(positionIn(yield* host.world, client.entity)).toEqual(
+      expect(positionIn(yield* host.state, client.entity)).toEqual(
         Option.map(positionIn(before, client.entity), (x) => x - 2),
       );
     }),
@@ -608,7 +608,7 @@ describe('playing from beside the host', () => {
       yield* host.act(client.entity, { _tag: 'AskedToHeal', amount: 42 });
       yield* host.advance(1);
 
-      expect(World.get(yield* host.world, client.entity, Health)).toEqual(
+      expect(State.get(yield* host.state, client.entity, Health)).toEqual(
         Option.some({ current: 42 }),
       );
     }),
@@ -632,14 +632,14 @@ describe('playing from beside the host', () => {
       yield* host.input(first, [{ component: 'Controls', value: { move: 1, fire: false } }]);
       yield* host.input(second, [{ component: 'Controls', value: { move: -1, fire: false } }]);
       yield* host.advance(1);
-      const played = yield* host.world;
+      const played = yield* host.state;
       yield* host.leave(first);
 
       expect([positionIn(played, first), positionIn(played, second)]).toEqual([
         Option.some(1),
         Option.some(-1),
       ]);
-      expect(positionIn(yield* host.world, first)).toEqual(Option.none());
+      expect(positionIn(yield* host.state, first)).toEqual(Option.none());
       expect(yield* Fiber.join(told)).toEqual([
         { _tag: 'Joined', entity: first, client: false },
         { _tag: 'Joined', entity: second, client: false },
@@ -757,7 +757,7 @@ describe('questions', () => {
 });
 
 describe('commands', () => {
-  /** Where health is kept outside the world: it says whether it kept an amount, or breaks. */
+  /** Where health is kept outside the state: it says whether it kept an amount, or breaks. */
   const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(
     'Vault',
   );
@@ -822,9 +822,9 @@ describe('commands', () => {
     Effect.gen(function* () {
       const host = yield* Host.make({
         game: keepGame,
-        world: World.empty({ seed: 1 }),
-        join: (world) => World.spawn(world, [Health.of({ current: 0 })]),
-        leave: World.despawn,
+        state: State.empty({ seed: 1 }),
+        join: (state) => State.spawn(state, [Health.of({ current: 0 })]),
+        leave: State.despawn,
         mayHold: false,
       });
       const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -832,17 +832,17 @@ describe('commands', () => {
       const client = yield* Client.connect(clientEnd, { game: keepGame });
       return { host, client };
     }).pipe(Effect.provideService(Vault, vault));
-  const keptIn = (world: World.World, entity: World.Entity) =>
-    Option.map(World.get(world, entity, Kept), ({ _tag }) => _tag);
-  const healthIn = (world: World.World, entity: World.Entity) =>
-    Option.map(World.get(world, entity, Health), ({ current }) => current);
+  const keptIn = (state: State.State, entity: State.Entity) =>
+    Option.map(State.get(state, entity, Kept), ({ _tag }) => _tag);
+  const healthIn = (state: State.State, entity: State.Entity) =>
+    Option.map(State.get(state, entity, Health), ({ current }) => current);
 
   it('needs the services the game’s commands need', () => {
     const hosting = Host.make({
       game: keepGame,
-      world: World.empty({ seed: 1 }),
-      join: (world) => World.spawn(world, [Health.of({ current: 0 })]),
-      leave: World.despawn,
+      state: State.empty({ seed: 1 }),
+      join: (state) => State.spawn(state, [Health.of({ current: 0 })]),
+      leave: State.despawn,
       mayHold: false,
     });
     // Both the type checker and Effect's own check refuse it: hosting a game that keeps health needs a vault to keep it in.
@@ -866,7 +866,7 @@ describe('commands', () => {
         yield* advance(100);
 
         expect(kept).toEqual([40]);
-        expect(keptIn(yield* host.world, client.entity)).toEqual(Option.some('Yes'));
+        expect(keptIn(yield* host.state, client.entity)).toEqual(Option.some('Yes'));
       }),
   );
 
@@ -877,7 +877,7 @@ describe('commands', () => {
       yield* client.act(AskedToHeal, { amount: 40 });
       yield* advance(100);
 
-      expect(keptIn(yield* host.world, client.entity)).toEqual(Option.some('No'));
+      expect(keptIn(yield* host.state, client.entity)).toEqual(Option.some('No'));
     }),
   );
 
@@ -887,11 +887,11 @@ describe('commands', () => {
 
       yield* client.act(AskedToHeal, { amount: 40 });
       yield* advance(100);
-      const world = yield* host.world;
+      const state = yield* host.state;
 
-      expect(world.tick).toBeGreaterThan(2);
-      expect(healthIn(world, client.entity)).toEqual(Option.some(40));
-      expect(keptIn(world, client.entity)).toEqual(Option.none());
+      expect(state.tick).toBeGreaterThan(2);
+      expect(healthIn(state, client.entity)).toEqual(Option.some(40));
+      expect(keptIn(state, client.entity)).toEqual(Option.none());
     }),
   );
 });
@@ -932,9 +932,9 @@ describe('what a client keeps for itself', () => {
   const walk = Effect.gen(function* () {
     const host = yield* Host.make({
       game: walking,
-      world: World.empty({ seed: 1 }),
-      join: (world) => World.spawn(world, [Position.of({ x: 0 })]),
-      leave: World.despawn,
+      state: State.empty({ seed: 1 }),
+      join: (state) => State.spawn(state, [Position.of({ x: 0 })]),
+      leave: State.despawn,
       mayHold: false,
     });
     const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -950,12 +950,12 @@ describe('what a client keeps for itself', () => {
         const { host, client } = yield* walk;
 
         yield* advance(200);
-        const mine = yield* client.world;
-        const prints = World.query(mine, Footprint);
+        const mine = yield* client.state;
+        const prints = State.query(mine, Footprint);
 
-        expect(World.query(yield* host.world, Footprint)).toEqual([]);
+        expect(State.query(yield* host.state, Footprint)).toEqual([]);
         expect(prints.length).toBeGreaterThan(3);
-        expect(prints.every(([entity]) => World.isLocal(entity))).toBe(true);
+        expect(prints.every(([entity]) => State.isLocal(entity))).toBe(true);
         // One print a tick, ticks in order, none twice.
         const ticks = prints.map(([, { tick }]) => tick).toSorted((a, b) => a - b);
         expect(new Set(ticks).size).toBe(ticks.length);
@@ -963,18 +963,18 @@ describe('what a client keeps for itself', () => {
       }),
   );
 
-  it.effect('is shown as the client kept it at the tick of a past world it is shown', () =>
+  it.effect('is shown as the client kept it at the tick of a past state it is shown', () =>
     Effect.gen(function* () {
       const { host, client } = yield* walk;
       yield* advance(100);
-      const past = yield* host.world;
-      const keptThen = World.query(yield* client.world, Footprint);
+      const past = yield* host.state;
+      const keptThen = State.query(yield* client.state, Footprint);
       yield* advance(200);
 
       yield* host.show(past);
       yield* Effect.yieldNow;
 
-      expect(World.query(yield* client.world, Footprint)).toEqual(keptThen);
+      expect(State.query(yield* client.state, Footprint)).toEqual(keptThen);
     }),
   );
 });

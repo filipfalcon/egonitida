@@ -4,7 +4,7 @@ import * as Fixtures from '#src/fixtures.ts';
 import * as Recording from '#src/Recording.ts';
 
 describe('a recording', () => {
-  it.effect('starts from the world as it was when recording began, as its game encodes it', () =>
+  it.effect('starts from the state as it was when recording began, as its game encodes it', () =>
     Effect.gen(function* () {
       const { recording } = yield* Fixtures.recorded();
 

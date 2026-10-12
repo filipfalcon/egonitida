@@ -8,7 +8,7 @@ import type * as System from '#src/System.ts';
 /**
  * A part of a game that owns some of its state: the components, actions, and events it brings, the systems and rules that change them, and the domains it requires. A game is the list of its domains.
  *
- * A domain writes only its own components, and those that a domain it requires shares. It reads and spawns its own and those of the domains it requires, and emits and handles its own events and theirs, so it changes another domain's state only through an event that domain declared, which that domain's rules decide on. Sharing is for state many domains change continuously, such as where a body is: a domain that moves a body every step cannot say so by an event. Each system still declares what it writes, so who changes a shared component can be read off the game. All of it is checked by type. Requiring is one way: two domains cannot require each other, since each must exist before the other can name it.
+ * A domain writes only its own components, and those that a domain it requires shares. It reads and spawns its own and those of the domains it requires, and emits and handles its own events and theirs, so it changes another domain's components only through an event that domain declared, which that domain's rules decide on. Sharing is for values many domains change continuously, such as where a body is: a domain that moves a body every step cannot say so by an event. Each system still declares what it writes, so who changes a shared component can be read off the game. All of it is checked by type. Requiring is one way: two domains cannot require each other, since each must exist before the other can name it.
  */
 
 /** What a domain is known by where it is required: its name. */

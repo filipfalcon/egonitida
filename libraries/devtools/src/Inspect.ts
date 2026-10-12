@@ -1,30 +1,30 @@
-import { Client, type Event, Game, type Host, type World } from '@lightocean/core';
+import { Client, type Event, Game, type Host, type State } from '@lightocean/core';
 import { Data, Effect, Option, Result, Schema, type Scope } from 'effect';
 import * as Log from '#src/Log.ts';
 import type * as Rewind from '#src/Rewind.ts';
 import * as Transcript from '#src/Transcript.ts';
 
 /**
- * A hosted game as an agent asks after it: what the game is made of, the world at any tick kept, how two ticks differ, what happened between them, and time itself, held, stepped, or played on from a past tick; and the game played, by players joined with no client, or any player, through input and actions the game reads. Every request and every answer is plain data, so it travels as JSON to whatever asks, such as an MCP server; nothing here knows how.
+ * A hosted game as an agent asks after it: what the game is made of, the state at any tick kept, how two ticks differ, what happened between them, and time itself, held, stepped, or played on from a past tick; and the game played, by players joined with no client, or any player, through input and actions the game reads. Every request and every answer is plain data, so it travels as JSON to whatever asks, such as an MCP server; nothing here knows how.
  */
 
 const OptionalInt = Schema.OptionFromOptionalKey(Schema.Int);
 
-/** What can be asked. A tick left out means the world as it is now. */
+/** What can be asked. A tick left out means the state as it is now. */
 export const Request = Schema.Union([
   /** The game: its domains, components, actions, events, and commands, each with its schema and the parts that change it. */
   Schema.TaggedStruct('Describe', {}),
   /** The ticks kept, oldest and newest. */
   Schema.TaggedStruct('Span', {}),
-  /** The world at a tick, entity by entity: all of it, or one entity, or the entities that hold one component. */
-  Schema.TaggedStruct('World', {
+  /** The state at a tick, entity by entity: all of it, or one entity, or the entities that hold one component. */
+  Schema.TaggedStruct('State', {
     tick: OptionalInt,
     entity: OptionalInt,
     component: Schema.OptionFromOptionalKey(Schema.String),
   }),
-  /** How the world at `to` differs from the world at `from`, component by component. */
+  /** How the state at `to` differs from the state at `from`, component by component. */
   Schema.TaggedStruct('Compare', { from: Schema.Int, to: Schema.Int }),
-  /** What happened after the world at `from`, up to the world at `to`, step by step, as text; with input if asked. */
+  /** What happened after the state at `from`, up to the state at `to`, step by step, as text; with input if asked. */
   Schema.TaggedStruct('Log', {
     from: Schema.Int,
     to: Schema.Int,
@@ -34,13 +34,13 @@ export const Request = Schema.Union([
   Schema.TaggedStruct('Release', {}),
   /** Takes so many steps at once, as time held is stepped through. */
   Schema.TaggedStruct('Advance', { steps: Schema.Int }),
-  /** Shows the host's clients the world at a tick, while time is held. */
+  /** Shows the host's clients the state at a tick, while time is held. */
   Schema.TaggedStruct('Seek', { tick: Schema.Int }),
-  /** Goes back to the world at a tick and plays on from it, the time after it gone. */
+  /** Goes back to the state at a tick and plays on from it, the time after it gone. */
   Schema.TaggedStruct('PlayFrom', { tick: Schema.Int }),
-  /** Shows the host's clients the world as it is now again. */
+  /** Shows the host's clients the state as it is now again. */
   Schema.TaggedStruct('Live', {}),
-  /** Writes what happened after the world at `from`, up to the world at `to`, as the source of a story test called `title`, telling the game `game.name` exports from the module `game.from`. */
+  /** Writes what happened after the state at `from`, up to the state at `to`, as the source of a story test called `title`, telling the game `game.name` exports from the module `game.from`. */
   Schema.TaggedStruct('Story', {
     from: Schema.Int,
     to: Schema.Int,
@@ -58,7 +58,7 @@ export const Request = Schema.Union([
   }),
   /** Takes an action as from the player of an entity, tagged with the action it is. */
   Schema.TaggedStruct('Act', { entity: Schema.Int, action: Schema.Unknown }),
-  /** The steps after the world at `from`, up to the world at `to`, in which something happened, as data: what `Steps` describes. */
+  /** The steps after the state at `from`, up to the state at `to`, in which something happened, as data: what `Steps` describes. */
   Schema.TaggedStruct('Steps', { from: Schema.Int, to: Schema.Int }),
 ]);
 export type Request = typeof Request.Type;
@@ -76,11 +76,11 @@ export interface Inspector {
   readonly answerUnknown: (request: unknown) => Effect.Effect<unknown, Refused>;
 }
 
-/** The values of `world`, as `game` encodes them, by entity, then by component. */
-const byEntity = (game: Game.Game, world: World.World): Record<string, Record<string, unknown>> => {
+/** The values of `state`, as `game` encodes them, by entity, then by component. */
+const byEntity = (game: Game.Game, state: State.State): Record<string, Record<string, unknown>> => {
   const entities: Record<string, Record<string, unknown>> = {};
   for (const component of game.components) {
-    for (const [entity, value] of component.encode(world.stores.get(component.name))) {
+    for (const [entity, value] of component.encode(state.stores.get(component.name))) {
       entities[entity] = { ...entities[entity], [component.name]: value };
     }
   }
@@ -138,9 +138,9 @@ const compare = (
 ) =>
   Object.fromEntries(
     game.components.flatMap((component) => {
-      const holding = (world: Record<string, Record<string, unknown>>) =>
+      const holding = (state: Record<string, Record<string, unknown>>) =>
         new Map(
-          Object.entries(world).flatMap(([entity, values]) =>
+          Object.entries(state).flatMap(([entity, values]) =>
             component.name in values ? [[Number(entity), values[component.name]]] : [],
           ),
         );
@@ -165,15 +165,15 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
   const kept = (tick: number) =>
     Effect.gen(function* () {
       const { oldest, newest } = yield* rewind.span;
-      const world = yield* rewind
-        .worldAt(tick)
+      const state = yield* rewind
+        .stateAt(tick)
         .pipe(Effect.mapError(({ reason }) => refuse(reason)));
-      return yield* Effect.fromOption(world).pipe(
+      return yield* Effect.fromOption(state).pipe(
         Effect.mapError(() => refuse(`tick ${tick} is not kept: ticks ${oldest} to ${newest} are`)),
       );
     });
-  const worldAt = (tick: Option.Option<number>) =>
-    Option.match(tick, { onNone: () => host.world, onSome: kept });
+  const stateAt = (tick: Option.Option<number>) =>
+    Option.match(tick, { onNone: () => host.state, onSome: kept });
 
   const answer = (request: Request) =>
     Effect.gen(function* () {
@@ -183,8 +183,8 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
           return describe(game);
         case 'Span':
           return yield* rewind.span;
-        case 'World': {
-          const world = yield* worldAt(request.tick);
+        case 'State': {
+          const state = yield* stateAt(request.tick);
           const wanted = (entity: string) =>
             Option.match(request.entity, {
               onNone: () => true,
@@ -197,7 +197,7 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
             });
           // Asked for one component, an entity that does not hold it is left out.
           const entities = Object.fromEntries(
-            Object.entries(byEntity(game, world))
+            Object.entries(byEntity(game, state))
               .filter(([entity]) => wanted(entity))
               .map(([entity, values]): readonly [string, Record<string, unknown>] => [
                 entity,
@@ -207,7 +207,7 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
                 ([, values]) => Option.isNone(request.component) || Object.keys(values).length > 0,
               ),
           );
-          return { tick: world.tick, entities };
+          return { tick: state.tick, entities };
         }
         case 'Compare': {
           const before = yield* kept(request.from);
@@ -230,7 +230,7 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
           }
           const lines = yield* Log.from(
             yield* rewind.setup,
-            stretch.value.world,
+            stretch.value.state,
             stretch.value.entries,
           ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
           return yield* Schema.encodeEffect(Steps)(Log.stepsOf(lines)).pipe(
@@ -249,7 +249,7 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
           }
           const lines = yield* Log.from(
             yield* rewind.setup,
-            stretch.value.world,
+            stretch.value.state,
             stretch.value.entries,
             { inputs: Option.getOrElse(request.inputs, () => false) },
           ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
@@ -268,7 +268,7 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
           const end = yield* kept(request.to);
           const lines = Transcript.of(
             yield* rewind.setup,
-            stretch.value.world,
+            stretch.value.state,
             stretch.value.entries,
             end,
           );
@@ -293,7 +293,7 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
             .playFrom(request.tick)
             .pipe(Effect.mapError(({ reason }) => refuse(reason)));
         case 'Live':
-          return yield* host.show(yield* host.world);
+          return yield* host.show(yield* host.state);
         case 'Join':
           return { entity: yield* host.join };
         case 'Leave':
@@ -339,7 +339,7 @@ export const ask = (
   request: typeof Request.Encoded,
 ): Effect.Effect<unknown, Client.Unanswered> => client.ask(request);
 
-/** The steps after the world at `from`, up to the world at `to`, in which something happened, as the host `client` is joined to tells them. */
+/** The steps after the state at `from`, up to the state at `to`, in which something happened, as the host `client` is joined to tells them. */
 export const steps = (
   client: Pick<Client.Client, 'ask'>,
   stretch: { readonly from: number; readonly to: number },

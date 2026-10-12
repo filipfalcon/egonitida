@@ -3,7 +3,7 @@ import * as stylex from '@stylexjs/stylex';
 import { Option } from 'effect';
 import type { Document, HtmlBuilder } from 'foldkit/html';
 import { Message, type Model, type Told } from '#src/main.ts';
-import { CANVAS_ID, MountCanvas } from '#src/world.ts';
+import { CANVAS_ID, MountCanvas } from '#src/session.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from './tokens.stylex.ts';
 
@@ -54,7 +54,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'Save a score',
   body: h.main(Styled.attributes(h, styles.page), [
     // The canvas is in the page while the round is joined, and goes with it.
-    ...(model.world._tag === 'Joined'
+    ...(model.session._tag === 'Joined'
       ? [
           h.canvas(
             [h.Id(CANVAS_ID), ...Styled.attributes(h, styles.viewport), h.OnMount(MountCanvas())],

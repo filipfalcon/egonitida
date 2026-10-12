@@ -1,7 +1,7 @@
 import type { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
-import type * as World from '#src/World.ts';
+import type * as State from '#src/State.ts';
 
 type Of<Value> = Component.Component<string, Value, Component.Owner>;
 
@@ -18,14 +18,14 @@ export interface Time {
   readonly stepSeconds: number;
 }
 
-/** Spawning: an entity made with components declared for it, and its id at once. Being born is no change to anyone's state, so who owns a component does not limit it; the declaration does. */
+/** Spawning: an entity made with components declared for it, and its id at once. Being born is no change to anyone's components, so who owns a component does not limit it; the declaration does. */
 export interface Spawning<Spawns extends Component.Any> {
-  readonly spawn: (instances: ReadonlyArray<Component.Instance<Spawns>>) => World.Entity;
+  readonly spawn: (instances: ReadonlyArray<Component.Instance<Spawns>>) => State.Entity;
 }
 
 /** What `despawn` takes, by whether despawning is declared: nothing at all where it is not, so a call there does not compile. Looked up rather than decided by a conditional type, so a context that may despawn still fits where one that may not is expected. */
 interface Despawnable {
-  readonly true: World.Entity;
+  readonly true: State.Entity;
   readonly false: never;
 }
 
@@ -43,15 +43,15 @@ export interface Context<
 >
   extends Spawning<Spawns>, Despawning<Despawns> {
   readonly time: Time;
-  /** A number in [0, 1) from the world's own generator. Systems take randomness from nowhere else. */
+  /** A number in [0, 1) from the game's own generator, whose counter the state keeps. Systems take randomness from nowhere else. */
   readonly random: () => number;
   /** Only components the system declared; a component's name is what identifies it. */
   readonly get: <Value, Name extends (Reads | Writes)['name']>(
-    entity: World.Entity,
+    entity: State.Entity,
     component: Component.Component<Name, Value, Component.Owner>,
   ) => Option.Option<Value>;
-  readonly query: World.Query<Reads | Writes>;
-  readonly set: <Value>(entity: World.Entity, component: Of<Value> & Writes, value: Value) => void;
+  readonly query: State.Query<Reads | Writes>;
+  readonly set: <Value>(entity: State.Entity, component: Of<Value> & Writes, value: Value) => void;
   readonly emit: (event: Event.ValueOf<Emits>) => void;
 }
 

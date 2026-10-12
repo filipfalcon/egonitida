@@ -2,7 +2,11 @@ import { Effect, Option, Schema, SchemaGetter, SchemaIssue } from 'effect';
 import type * as Component from '#src/Component.ts';
 
 /**
- * Everything a game holds at one tick: its entities and their components, and the state of its randomness. A world is never changed in place; stepping or spawning makes a new one and leaves the old one as it was, so any past world can be kept for a replay or a rewind.
+ * A state is an immutable value that records one tick: the entities that exist, the components they hold, and the counters for the next entity ids and for randomness.
+ *
+ * The host holds a state with every component, private ones included; a client holds the last state it received from the host, plus its own local components and, with prediction, its player's predicted components; a snapshot carries the part of the host's state that travels.
+ *
+ * A state is never changed, only replaced: on the host, by a step, a player joining or leaving, or a restore or reload; on a client, by a newly received state, a local step, or a prediction step. The state replaced is left as it was, so any past one can be kept for a replay or a rewind.
  *
  * Each component keeps its own store, and only it can read the values in it, so nothing here claims what type a value has. Storage is naive for now: correct first, fast once something real measures it.
  */
@@ -11,17 +15,18 @@ export type Entity = Component.Entity;
 
 type Stores = ReadonlyMap<string, Component.Store>;
 
-export interface World {
+/** A state: its tick, its counters, and the store of every component it holds. */
+export interface State {
   readonly tick: number;
   readonly nextEntity: Entity;
   /** The id the next entity a client spawns for itself gets: they count down from -1, so they never meet the server's, which count up from 0. */
   readonly nextLocal: Entity;
-  /** The state of the world's random generator. */
+  /** The counter the next random number is drawn from. */
   readonly random: number;
   readonly stores: Stores;
 }
 
-export const empty = (options: { readonly seed: number }): World => ({
+export const empty = (options: { readonly seed: number }): State => ({
   tick: 0,
   nextEntity: 0,
   nextLocal: -1,
@@ -29,7 +34,7 @@ export const empty = (options: { readonly seed: number }): World => ({
   stores: new Map(),
 });
 
-/** Anything holding stores: a world, or a world being stepped. */
+/** Anything holding stores: a state, or a draft of the next one. */
 export interface Readable {
   readonly stores: Stores;
 }
@@ -37,17 +42,17 @@ export interface Readable {
 type Of<Value> = Component.Component<string, Value, Component.Owner>;
 
 export const get = <Value>(
-  world: Readable,
+  state: Readable,
   entity: Entity,
   component: Of<Value>,
-): Option.Option<Value> => component.read(world.stores.get(component.name), entity);
+): Option.Option<Value> => component.read(state.stores.get(component.name), entity);
 
 /** Every entity holding all of `components`, in the order the entities were spawned. */
 export const holding = (
-  world: Readable,
+  state: Readable,
   components: ReadonlyArray<Component.Any>,
 ): ReadonlyArray<Entity> => {
-  const stores = components.map((component) => world.stores.get(component.name));
+  const stores = components.map((component) => state.stores.get(component.name));
   const [first, ...rest] = stores;
   if (first === undefined || rest.some((store) => store === undefined)) {
     return [];
@@ -58,8 +63,8 @@ export const holding = (
 };
 
 /** Every entity holding anything at all, in the order the entities were spawned. */
-export const entities = (world: Readable): ReadonlyArray<Entity> =>
-  [...new Set([...world.stores.values()].flatMap((store) => [...store.entities()]))].sort(
+export const entities = (state: Readable): ReadonlyArray<Entity> =>
+  [...new Set([...state.stores.values()].flatMap((store) => [...store.entities()]))].sort(
     (a, b) => a - b,
   );
 
@@ -98,7 +103,7 @@ export interface Query<Allowed extends Component.Any> {
 }
 
 /**
- * A query over entities `select` picks, with the values `read` gives them: over a world, or over anything that holds entities the way a world does, such as a world drawn between two others.
+ * A query over entities `select` picks, with the values `read` gives them: over a state, or over anything that holds entities the way a state does, such as a frame drawn between two states.
  */
 export const queryBy = (
   select: (components: ReadonlyArray<Component.Any>) => ReadonlyArray<Entity>,
@@ -140,35 +145,35 @@ export const queryBy = (
   return query;
 };
 
-/** The query over everything in `world`. */
-export const queryIn = (world: Readable): Query<Component.Any> =>
+/** The query over everything in `state`. */
+export const queryIn = (state: Readable): Query<Component.Any> =>
   queryBy(
-    (components) => holding(world, components),
-    (entity, component) => get(world, entity, component),
+    (components) => holding(state, components),
+    (entity, component) => get(state, entity, component),
   );
 
-/** Every entity in `world` holding all of `components`, with their values, in the order the entities were spawned. */
-export function query<A>(world: Readable, a: Of<A>): ReadonlyArray<readonly [Entity, A]>;
+/** Every entity in `state` holding all of `components`, with their values, in the order the entities were spawned. */
+export function query<A>(state: Readable, a: Of<A>): ReadonlyArray<readonly [Entity, A]>;
 export function query<A, B>(
-  world: Readable,
+  state: Readable,
   a: Of<A>,
   b: Of<B>,
 ): ReadonlyArray<readonly [Entity, A, B]>;
 export function query<A, B, C>(
-  world: Readable,
+  state: Readable,
   a: Of<A>,
   b: Of<B>,
   c: Of<C>,
 ): ReadonlyArray<readonly [Entity, A, B, C]>;
 export function query<A, B, C, D>(
-  world: Readable,
+  state: Readable,
   a: Of<A>,
   b: Of<B>,
   c: Of<C>,
   d: Of<D>,
 ): ReadonlyArray<readonly [Entity, A, B, C, D]>;
 export function query<A, B, C, D, E>(
-  world: Readable,
+  state: Readable,
   a: Of<A>,
   b: Of<B>,
   c: Of<C>,
@@ -176,7 +181,7 @@ export function query<A, B, C, D, E>(
   e: Of<E>,
 ): ReadonlyArray<readonly [Entity, A, B, C, D, E]>;
 export function query<A, B, C, D, E, F>(
-  world: Readable,
+  state: Readable,
   a: Of<A>,
   b: Of<B>,
   c: Of<C>,
@@ -185,41 +190,41 @@ export function query<A, B, C, D, E, F>(
   f: Of<F>,
 ): ReadonlyArray<readonly [Entity, A, B, C, D, E, F]>;
 export function query(
-  world: Readable,
+  state: Readable,
   ...components: ReadonlyArray<Component.Any>
 ): ReadonlyArray<ReadonlyArray<unknown>> {
-  return holding(world, components).map((entity) => [
+  return holding(state, components).map((entity) => [
     entity,
-    ...components.map((component) => Option.getOrUndefined(get(world, entity, component))),
+    ...components.map((component) => Option.getOrUndefined(get(state, entity, component))),
   ]);
 }
 
 export const spawn = (
-  world: World,
+  state: State,
   instances: ReadonlyArray<Component.Instance>,
-): readonly [World, Entity] => {
-  const entity = world.nextEntity;
-  const stores = new Map(world.stores);
+): readonly [State, Entity] => {
+  const entity = state.nextEntity;
+  const stores = new Map(state.stores);
   for (const instance of instances) {
     const name = instance.component.name;
     stores.set(name, instance.into(stores.get(name), entity));
   }
-  return [{ ...world, nextEntity: entity + 1, stores }, entity];
+  return [{ ...state, nextEntity: entity + 1, stores }, entity];
 };
 
-export const despawn = (world: World, entity: Entity): World => {
-  const stores = new Map(world.stores);
-  for (const [name, store] of world.stores) {
+export const despawn = (state: State, entity: Entity): State => {
+  const stores = new Map(state.stores);
+  for (const [name, store] of state.stores) {
     if (store.has(entity)) {
       stores.set(name, store.without(entity));
     }
   }
-  return { ...world, stores };
+  return { ...state, stores };
 };
 
 // DRAFTS
 //
-// A step works on a draft: a world it may change in place, which copies a component's store only the first time the step writes to it. Finishing the draft gives the new world, and the world the step began from is never touched.
+// A step works on a draft: a copy of a state that the step may change in place, which copies a component's store only the first time the step writes to it. Finishing the draft gives the next state, and the state the step began from is never touched.
 
 export interface Draft {
   tick: number;
@@ -231,12 +236,12 @@ export interface Draft {
   readonly copies: Map<Component.Any, Component.Store>;
 }
 
-export const draft = (world: World): Draft => ({
-  tick: world.tick,
-  nextEntity: world.nextEntity,
-  nextLocal: world.nextLocal,
-  random: world.random,
-  stores: new Map(world.stores),
+export const draft = (state: State): Draft => ({
+  tick: state.tick,
+  nextEntity: state.nextEntity,
+  nextLocal: state.nextLocal,
+  random: state.random,
+  stores: new Map(state.stores),
   copies: new Map(),
 });
 
@@ -255,7 +260,7 @@ export const write = <Value>(
   component.set(copy, entity, value);
 };
 
-/** Spawns an entity into a world being stepped, with the next id, and gives the id. */
+/** Spawns an entity into a draft, with the next id, and gives the id. */
 export const spawnInto = (draft: Draft, instances: ReadonlyArray<Component.Instance>): Entity => {
   const entity = draft.nextEntity;
   draft.nextEntity += 1;
@@ -265,7 +270,7 @@ export const spawnInto = (draft: Draft, instances: ReadonlyArray<Component.Insta
   return entity;
 };
 
-/** Spawns an entity a client keeps for itself into a world being stepped, with the next local id, and gives the id. */
+/** Spawns an entity a client keeps for itself into a draft, with the next local id, and gives the id. */
 export const spawnLocalInto = (
   draft: Draft,
   instances: ReadonlyArray<Component.Instance>,
@@ -281,7 +286,7 @@ export const spawnLocalInto = (
 /** Whether `entity` is one a client spawned for itself. */
 export const isLocal = (entity: Entity): boolean => entity < 0;
 
-/** Takes an entity out of every store of a world being stepped. Its id is never given out again. */
+/** Takes an entity out of every store of a draft. Its id is never given out again. */
 export const despawnFrom = (draft: Draft, entity: Entity): void => {
   for (const [name, store] of draft.stores) {
     if (!store.has(entity)) continue;
@@ -296,9 +301,9 @@ export const despawnFrom = (draft: Draft, entity: Entity): void => {
 };
 
 /**
- * The finished world; every store the step copied is sealed, so nothing can change it afterwards. Every value of the components in `freeze` is frozen too, so changing one in place throws: a guard for development, which costs a walk over the world.
+ * The state a draft finishes as; every store the step copied is sealed, so nothing can change it afterwards. Every value of the components in `freeze` is frozen too, so changing one in place throws: a guard for development, which costs a walk over the state.
  */
-export const finish = (draft: Draft, freeze: ReadonlyArray<Component.Any> = []): World => {
+export const finish = (draft: Draft, freeze: ReadonlyArray<Component.Any> = []): State => {
   for (const [component, copy] of draft.copies) {
     component.seal(copy);
   }
@@ -319,7 +324,7 @@ export const finish = (draft: Draft, freeze: ReadonlyArray<Component.Any> = []):
 
 // ENCODING
 
-/** A world as its schema encodes it: its tick, randomness, and next entity, and the values of every component it holds, by entity. */
+/** A state as its schema encodes it: its tick, its counters, and the values of every component it holds, by entity. */
 const Encoded = Schema.Struct({
   tick: Schema.Int,
   nextEntity: Schema.Int,
@@ -328,7 +333,7 @@ const Encoded = Schema.Struct({
   stores: Schema.Record(Schema.String, Schema.Array(Schema.Tuple([Schema.Int, Schema.Unknown]))),
 });
 
-const isWorld = (value: unknown): value is World =>
+const isState = (value: unknown): value is State =>
   typeof value === 'object' &&
   value !== null &&
   'tick' in value &&
@@ -343,12 +348,12 @@ const isWorld = (value: unknown): value is World =>
   value.stores instanceof Map;
 
 /**
- * The schema of a world made of `components`: each component's values travel encoded by its own schema. A world that holds a component not among them does not decode, nor does one with a value its component cannot decode, so nothing reaches a world that its game would not have put there.
+ * The schema of a state made of `components`: each component's values travel encoded by its own schema. A state that holds a component not among them does not decode, nor does one with a value its component cannot decode, so nothing reaches a state that its game would not have put there.
  */
 export const schema = (components: ReadonlyArray<Component.Any>) => {
   const byName = new Map(components.map((component) => [component.name, component]));
   return Encoded.pipe(
-    Schema.decodeTo(Schema.declare(isWorld), {
+    Schema.decodeTo(Schema.declare(isState), {
       decode: SchemaGetter.transformEffect((encoded, options) =>
         Option.match(
           Option.all(
@@ -368,7 +373,7 @@ export const schema = (components: ReadonlyArray<Component.Any>) => {
                 ),
               ),
             onSome: (stores) =>
-              Effect.succeed<World>({
+              Effect.succeed<State>({
                 tick: encoded.tick,
                 nextEntity: encoded.nextEntity,
                 nextLocal: encoded.nextLocal,
@@ -378,14 +383,14 @@ export const schema = (components: ReadonlyArray<Component.Any>) => {
           },
         ),
       ),
-      encode: SchemaGetter.transform((world: World) => ({
-        tick: world.tick,
-        nextEntity: world.nextEntity,
-        nextLocal: world.nextLocal,
-        random: world.random,
+      encode: SchemaGetter.transform((state: State) => ({
+        tick: state.tick,
+        nextEntity: state.nextEntity,
+        nextLocal: state.nextLocal,
+        random: state.random,
         stores: Object.fromEntries(
           components.flatMap((component) => {
-            const store = world.stores.get(component.name);
+            const store = state.stores.get(component.name);
             return store === undefined ? [] : [[component.name, component.encode(store)] as const];
           }),
         ),

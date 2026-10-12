@@ -1,4 +1,4 @@
-import type { Game, World } from '@lightocean/core';
+import type { Game, State } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 import type * as Recording from '#src/Recording.ts';
 import { encoderOf } from '#src/Recording.ts';
@@ -13,16 +13,16 @@ export interface PartLine {
   /** The part, by its domain and name: a rule by the event or action it answers. */
   readonly part: string;
   readonly cause: Option.Option<unknown>;
-  readonly set: Readonly<Record<string, ReadonlyArray<World.Entity>>>;
-  readonly spawned: ReadonlyArray<World.Entity>;
-  readonly despawned: ReadonlyArray<World.Entity>;
+  readonly set: Readonly<Record<string, ReadonlyArray<State.Entity>>>;
+  readonly spawned: ReadonlyArray<State.Entity>;
+  readonly despawned: ReadonlyArray<State.Entity>;
   readonly emitted: ReadonlyArray<unknown>;
   readonly issued: ReadonlyArray<{ readonly name: string; readonly args: unknown }>;
 }
 
 export type Line =
-  | { readonly _tag: 'Joined' | 'Left'; readonly tick: number; readonly entity: World.Entity }
-  /** The host went back to the world at `tick`. */
+  | { readonly _tag: 'Joined' | 'Left'; readonly tick: number; readonly entity: State.Entity }
+  /** The host went back to the state at `tick`. */
   | { readonly _tag: 'Restored'; readonly tick: number }
   | {
       readonly _tag: 'Stepped';
@@ -47,23 +47,23 @@ export const nameOf = (part: Game.Part): string => {
   });
 };
 
-/** The log of `entries`, replayed with `setup` from `world`; with the input of every step if `inputs` is asked for. */
+/** The log of `entries`, replayed with `setup` from `state`; with the input of every step if `inputs` is asked for. */
 export const from = (
   setup: Replay.Setup,
-  world: World.World,
+  state: State.State,
   entries: ReadonlyArray<Recording.Entry>,
   options: { readonly inputs?: boolean } = {},
 ): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
   Effect.gen(function* () {
     const encode = encoderOf(setup.game);
-    const { taken, divergence } = yield* Replay.from(setup, world, entries, { trace: true });
-    const lines = taken.map(({ entry, world, trace }): Line => {
-      // Joining, leaving, and going back take no step, so the world after one is at the tick it came to.
+    const { taken, divergence } = yield* Replay.from(setup, state, entries, { trace: true });
+    const lines = taken.map(({ entry, state, trace }): Line => {
+      // Joining, leaving, and going back take no step, so the state after one is at the tick it came to.
       if (entry._tag === 'Restored') {
-        return { _tag: 'Restored', tick: world.tick };
+        return { _tag: 'Restored', tick: state.tick };
       }
       if (entry._tag !== 'Stepped') {
-        return { _tag: entry._tag, tick: world.tick, entity: entry.entity };
+        return { _tag: entry._tag, tick: state.tick, entity: entry.entity };
       }
       return {
         _tag: 'Stepped',
@@ -73,7 +73,7 @@ export const from = (
         parts: trace.map((done) => ({
           part: nameOf(done.part),
           cause: Option.map(done.cause, encode),
-          set: done.set.reduce<Record<string, ReadonlyArray<World.Entity>>>(
+          set: done.set.reduce<Record<string, ReadonlyArray<State.Entity>>>(
             (byComponent, { entity, component }) => ({
               ...byComponent,
               [component]: [...(byComponent[component] ?? []), entity],
@@ -99,8 +99,8 @@ export const of = (
   recording: Recording.Recording,
   options: { readonly inputs?: boolean } = {},
 ): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
-  Effect.flatMap(Replay.first(setup.game, recording.first), (world) =>
-    from(setup, world, recording.entries, options),
+  Effect.flatMap(Replay.first(setup.game, recording.first), (state) =>
+    from(setup, state, recording.entries, options),
   );
 
 /** The tag of an encoded event or action, and its other fields as JSON. */
@@ -120,8 +120,8 @@ const whereText = (where: Replay.Where): string => {
   switch (where._tag) {
     case 'Component':
       return `in ${where.name}`;
-    case 'World':
-      return `in the world's ${where.field}`;
+    case 'State':
+      return `in the state's ${where.field}`;
     case 'Joined':
       return `in the entity a join gave: ${where.replayed}, not ${where.recorded}`;
   }

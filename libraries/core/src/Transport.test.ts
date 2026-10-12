@@ -8,8 +8,8 @@ const unreliable = (payload: string): Transport.Frame => ({ channel: 'unreliable
 
 /** A random source that returns the given values in turn, so loss is decided by the test. */
 const sequence = (values: ReadonlyArray<number>) => {
-  const state = { index: 0 };
-  return () => values[state.index++ % values.length] ?? 0;
+  const cursor = { index: 0 };
+  return () => values[cursor.index++ % values.length] ?? 0;
 };
 
 const receive = (connection: Transport.Connection, count: number) =>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Game, Host, Domain, System, World } from '@lightocean/core';
+import { Client, Component, Game, Host, Domain, System, State } from '@lightocean/core';
 import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
@@ -55,9 +55,9 @@ const frame = (drawing: Drawing.Drawing) =>
 const session = Effect.gen(function* () {
   const host = yield* Host.make({
     game: steered,
-    world: World.empty({ seed: 1 }),
-    join: (world) => World.spawn(world, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
-    leave: World.despawn,
+    state: State.empty({ seed: 1 }),
+    join: (state) => State.spawn(state, [Position.of({ x: 0 }), Controls.of({ move: 0 })]),
+    leave: State.despawn,
     mayHold: true,
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -71,9 +71,9 @@ const session = Effect.gen(function* () {
 const marked = Effect.gen(function* () {
   const host = yield* Host.make({
     game: marking,
-    world: World.empty({ seed: 1 }),
-    join: (world) => World.spawn(world, []),
-    leave: World.despawn,
+    state: State.empty({ seed: 1 }),
+    join: (state) => State.spawn(state, []),
+    leave: State.despawn,
     mayHold: true,
   });
   const [clientEnd, hostEnd] = yield* Transport.memoryPair;
@@ -82,7 +82,7 @@ const marked = Effect.gen(function* () {
   return yield* Drawing.make(client, { keepSeconds: 2 });
 });
 
-/** A marker that lives from tick 5 to tick 10 of the host's world, flagged at tick 8 and flagged anew at tick 9. */
+/** A marker that lives from tick 5 to tick 10 of the host's state, flagged at tick 8 and flagged anew at tick 9. */
 const Marker = Component.make('Marker', Schema.Struct({}), {
   owner: 'simulation',
   network: 'server',
@@ -130,7 +130,7 @@ const marking = Game.make({
   ],
 });
 
-const xOf = (view: Option.Option<Drawing.Frame>, entity: World.Entity) =>
+const xOf = (view: Option.Option<Drawing.Frame>, entity: State.Entity) =>
   Option.getOrElse(
     Option.flatMap(view, (drawn) =>
       Option.map(drawn.get(entity, Position), (position) => position.x),
@@ -139,7 +139,7 @@ const xOf = (view: Option.Option<Drawing.Frame>, entity: World.Entity) =>
   );
 
 describe('Drawing', () => {
-  it.effect('draws nothing before the host sends a world', () =>
+  it.effect('draws nothing before the host sends a state', () =>
     Effect.gen(function* () {
       const { drawing } = yield* session;
 
@@ -157,7 +157,7 @@ describe('Drawing', () => {
         drawn.push(xOf(yield* frame(drawing), client.entity));
       }
 
-      const stepped = yield* host.world;
+      const stepped = yield* host.state;
       const last = drawn.at(-1) ?? Number.NaN;
       // Drawing follows the host a step or so behind, never ahead of it.
       expect(last).toBeLessThanOrEqual(stepped.tick);

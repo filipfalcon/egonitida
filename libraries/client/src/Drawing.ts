@@ -1,41 +1,41 @@
-import { type Client, type Component, World } from '@lightocean/core';
+import { type Client, type Component, State } from '@lightocean/core';
 import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Timeline from '#src/Timeline.ts';
 
 /**
- * What a client draws from, frame by frame: its timeline, fed with every world the client receives. Code that draws, such as a renderer or a game's own imperative code during a migration, reads the world from here and never writes to it.
+ * What a client draws from, frame by frame: its timeline, fed with every state the client receives. Code that draws, such as a renderer or a game's own imperative code during a migration, reads the state from here and never writes to it.
  *
  * Taking a frame is plain synchronous work, called once per displayed frame: no Effect runs per frame.
  */
 
 /**
- * What to draw this frame, and what changed since the frame before: which entities came into the drawing or left it, so whatever stands for them can be made or put away, and which gained a component, held it anew, or lost it, such as a moment like a hit kept as state, so it can be shown as it happens.
+ * What to draw this frame, and what changed since the frame before: which entities came into the drawing or left it, so whatever stands for them can be made or put away, and which gained a component, held it anew, or lost it, such as a moment like a hit kept as a component, so it can be shown as it happens.
  */
 export interface Frame extends Timeline.View {
-  readonly entered: ReadonlyArray<World.Entity>;
-  readonly left: ReadonlyArray<World.Entity>;
+  readonly entered: ReadonlyArray<State.Entity>;
+  readonly left: ReadonlyArray<State.Entity>;
   /** The entities holding `component` now that did not the frame before. */
-  readonly gained: (component: Component.Any) => ReadonlyArray<World.Entity>;
-  /** The entities that held `component` the frame before and hold another value of it now, as the world drawn has it: a moment such as a hit, kept as state and replaced by the next. */
-  readonly changed: (component: Component.Any) => ReadonlyArray<World.Entity>;
+  readonly gained: (component: Component.Any) => ReadonlyArray<State.Entity>;
+  /** The entities that held `component` the frame before and hold another value of it now, as the state drawn has it: a moment such as a hit, kept as a component and replaced by the next. */
+  readonly changed: (component: Component.Any) => ReadonlyArray<State.Entity>;
   /** The entities that held `component` the frame before and do not now, gone or not. */
-  readonly lost: (component: Component.Any) => ReadonlyArray<World.Entity>;
+  readonly lost: (component: Component.Any) => ReadonlyArray<State.Entity>;
 }
 
 export interface Drawing {
   /** Moves drawing on by `seconds` of real time and returns what to draw; called once a frame. */
   readonly frame: (seconds: number) => Option.Option<Frame>;
-  /** Plays the past from `from`, in seconds of the world's time, at `rate` times real time, until `live`. */
+  /** Plays the past from `from`, in seconds of the game's time, at `rate` times real time, until `live`. */
   readonly present: (options: { readonly from: number; readonly rate: number }) => void;
-  /** Returns drawing to the live world. */
+  /** Returns drawing to the live state. */
   readonly live: () => void;
 }
 
 /** The entities of `these` not among `those`. */
 const without = (
-  these: ReadonlyArray<World.Entity>,
-  those: ReadonlyArray<World.Entity>,
-): ReadonlyArray<World.Entity> => {
+  these: ReadonlyArray<State.Entity>,
+  those: ReadonlyArray<State.Entity>,
+): ReadonlyArray<State.Entity> => {
   const excluded = new Set(those);
   return these.filter((entity) => !excluded.has(entity));
 };
@@ -55,15 +55,15 @@ const encoderOf = (component: Component.Any) => {
   return encode;
 };
 
-/** The entities holding `component` in both worlds, with another value of it in `now` than in `before`. */
+/** The entities holding `component` in both states, with another value of it in `now` than in `before`. */
 const changedBetween = (
-  before: World.World,
-  now: World.World,
+  before: State.State,
+  now: State.State,
   component: Component.Any,
-): ReadonlyArray<World.Entity> => {
+): ReadonlyArray<State.Entity> => {
   const encode = encoderOf(component);
-  return World.query(now, component).flatMap(([entity, value]) =>
-    Option.match(World.get(before, entity, component), {
+  return State.query(now, component).flatMap(([entity, value]) =>
+    Option.match(State.get(before, entity, component), {
       onNone: () => [],
       onSome: (was) => (was === value || encode(was) === encode(value) ? [] : [entity]),
     }),
@@ -96,33 +96,33 @@ export const make = (
   options: { readonly keepSeconds: number },
 ): Effect.Effect<Drawing, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const state = {
+    const seen = {
       timeline: Timeline.make({ stepRate: client.stepRate, keepSeconds: options.keepSeconds }),
       /** What the last frame drew. */
       previous: Option.none<Timeline.View>(),
     };
-    yield* client.worlds.pipe(
-      Stream.runForEach((world) =>
+    yield* client.states.pipe(
+      Stream.runForEach((state) =>
         Effect.sync(() => {
-          state.timeline = Timeline.receive(state.timeline, world);
+          seen.timeline = Timeline.receive(seen.timeline, state);
         }),
       ),
       Effect.forkScoped,
     );
     return {
       frame: (seconds) => {
-        state.timeline = Timeline.advance(state.timeline, seconds);
-        return Option.map(Timeline.view(state.timeline), (view) => {
-          const drawn = frameOf(view, state.previous);
-          state.previous = Option.some(view);
+        seen.timeline = Timeline.advance(seen.timeline, seconds);
+        return Option.map(Timeline.view(seen.timeline), (view) => {
+          const drawn = frameOf(view, seen.previous);
+          seen.previous = Option.some(view);
           return drawn;
         });
       },
       present: (presentation) => {
-        state.timeline = Timeline.present(state.timeline, presentation);
+        seen.timeline = Timeline.present(seen.timeline, presentation);
       },
       live: () => {
-        state.timeline = Timeline.live(state.timeline);
+        seen.timeline = Timeline.live(seen.timeline);
       },
     };
   });

@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    // The devtools record and replay where a host steps its world, a worker or a Durable Object, so they lean on a worker's types, never the DOM's nor Node's; what only some have, such as IndexedDB, they look for before use.
+    // The devtools record and replay where a host steps its game, a worker or a Durable Object, so they lean on a worker's types, never the DOM's nor Node's; what only some have, such as IndexedDB, they look for before use.
     "lib": ["esnext", "webworker"],
     // The development server's channel, which a bridge reaches through `import.meta.hot` wherever there is one.
     "types": ["vite/client"]

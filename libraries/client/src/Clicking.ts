@@ -1,4 +1,4 @@
-import { type Client, Pointing, World } from '@lightocean/core';
+import { type Client, Pointing, State } from '@lightocean/core';
 import { Effect, Option, type Scope, Stream } from 'effect';
 import type * as Three from 'three/webgpu';
 import type * as View from '#src/View.ts';
@@ -18,15 +18,15 @@ export const serve = (options: {
   readonly clicks: Stream.Stream<Point>;
   readonly camera: Three.Camera;
   readonly views: Pick<View.Views<never>, 'pick'>;
-  readonly client: Pick<Client.Client, 'world' | 'act'>;
+  readonly client: Pick<Client.Client, 'state' | 'act'>;
 }): Effect.Effect<void, never, Scope.Scope> =>
   options.clicks.pipe(
     Stream.runForEach((point) =>
       Option.match(options.views.pick(options.camera, point), {
         onNone: () => Effect.void,
         onSome: ({ entity }) =>
-          Effect.flatMap(options.client.world, (world) =>
-            Option.isSome(World.get(world, entity, Pointing.Label))
+          Effect.flatMap(options.client.state, (state) =>
+            Option.isSome(State.get(state, entity, Pointing.Label))
               ? options.client.act(Pointing.Clicked, { entity })
               : Effect.void,
           ),

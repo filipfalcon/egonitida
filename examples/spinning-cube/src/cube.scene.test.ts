@@ -9,12 +9,12 @@ it.effect('draws a cube turned as far as it has turned', () =>
   Effect.gen(function* () {
     const turned = Story.story(
       Cube.game,
-      Story.given(Cube.world, { cube: Cube.cube }),
+      Story.given(Cube.state, { cube: Cube.cube }),
       Story.seconds(1),
     );
     const scene = yield* Scene.make(CubeView.views);
 
-    yield* scene.show(turned.world);
+    yield* scene.show(turned.state);
 
     expect(Option.map(scene.find(CubeView.cubes, Cube.cube), (mesh) => mesh.rotation.y)).toEqual(
       Option.some(Story.valueOf(turned, 'cube', Cube.Spin).angle),

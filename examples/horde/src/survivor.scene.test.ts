@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
 import { Haptics, Lighting, Scene } from '@lightocean/client';
-import { Story, World } from '@lightocean/core';
+import { Story, State } from '@lightocean/core';
 import { Effect } from 'effect';
 import * as Body from '#src/body.ts';
 import * as Game from '#src/game.ts';
@@ -9,10 +9,10 @@ import * as SurvivorView from '#src/survivor.view.ts';
 
 /** What a survivor's player was made to feel, for whom, in order. */
 type Felt =
-  | { readonly _tag: 'Rumble'; readonly entity: World.Entity; readonly rumble: Haptics.Rumble }
+  | { readonly _tag: 'Rumble'; readonly entity: State.Entity; readonly rumble: Haptics.Rumble }
   | {
       readonly _tag: 'Triggers';
-      readonly entity: World.Entity;
+      readonly entity: State.Entity;
       readonly triggers: Haptics.Triggers;
     };
 
@@ -31,7 +31,7 @@ const recording = (felt: Array<Felt>): Haptics.Haptics['Service'] => ({
 
 /** Lighting that keeps the colours it is asked to light in `lit`, with whose they are. */
 const lighting = (
-  lit: Array<{ readonly entity: World.Entity; readonly colour: Lighting.Colour }>,
+  lit: Array<{ readonly entity: State.Entity; readonly colour: Lighting.Colour }>,
 ): Lighting.Lighting['Service'] => ({
   colour: (entity, colour) =>
     Effect.sync(() => {
@@ -40,9 +40,9 @@ const lighting = (
   players: () => Effect.void,
 });
 
-/** A survivor with twenty health, standing; then bitten for ten; then bitten for the last ten: the worlds of each. */
+/** A survivor with twenty health, standing; then bitten for ten; then bitten for the last ten: the states of each. */
 const bitten = () => {
-  const [arena, survivor] = World.spawn(World.empty({ seed: 1 }), [
+  const [arena, survivor] = State.spawn(State.empty({ seed: 1 }), [
     Body.Position.of({ x: 0, z: 0 }),
     Survivor.Life.of({ _tag: 'Alive', health: 20, since: 0 }),
     Survivor.Tally.of({ kills: 0 }),
@@ -52,15 +52,15 @@ const bitten = () => {
   const bite = (told: Story.Simulation) =>
     Story.step()(Story.happen(Survivor.Bitten, { survivor, damage: 10 })(told));
   const hurt = bite(standing);
-  return { survivor, worlds: [standing, hurt, bite(hurt)].map(({ world }) => world) };
+  return { survivor, states: [standing, hurt, bite(hurt)].map(({ state }) => state) };
 };
 
-/** Shows each of `worlds` in turn, through the survivors' views. */
-const showAll = (worlds: ReadonlyArray<World.World>) =>
+/** Shows each of `states` in turn, through the survivors' views. */
+const showAll = (states: ReadonlyArray<State.State>) =>
   Effect.gen(function* () {
     const scene = yield* Scene.make(SurvivorView.views);
-    for (const world of worlds) {
-      yield* scene.show(world);
+    for (const state of states) {
+      yield* scene.show(state);
       yield* Effect.yieldNow;
     }
   });
@@ -70,9 +70,9 @@ it.effect(
   () => {
     const felt: Array<Felt> = [];
     return Effect.gen(function* () {
-      const { survivor, worlds } = bitten();
+      const { survivor, states } = bitten();
 
-      yield* showAll(worlds);
+      yield* showAll(states);
 
       expect(felt).toEqual([
         { _tag: 'Triggers', entity: survivor, triggers: SurvivorView.GUN },
@@ -91,11 +91,11 @@ it.effect(
 it.effect(
   "lights a survivor's player green while whole, redder as they bleed, and dim once dead",
   () => {
-    const lit: Array<{ readonly entity: World.Entity; readonly colour: Lighting.Colour }> = [];
+    const lit: Array<{ readonly entity: State.Entity; readonly colour: Lighting.Colour }> = [];
     return Effect.gen(function* () {
-      const { survivor, worlds } = bitten();
+      const { survivor, states } = bitten();
 
-      yield* showAll(worlds);
+      yield* showAll(states);
 
       expect(lit).toEqual([
         { entity: survivor, colour: { red: 0.8, green: 0.2, blue: 0 } },

@@ -14,7 +14,7 @@ const pinAlchemyDevPort = (port: number): Plugin => ({
 });
 
 export default defineConfig({
-  // In development, the server is also the way to the world's host for the tools on this machine, such as an MCP server.
+  // In development, the server is also the way to the game's host for the tools on this machine, such as an MCP server.
   plugins: [
     // StyleX compiles the playground's styles; tests take its Rolldown entry, which compiles them the same without the development server's timer that would keep a test run from ending.
     process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),

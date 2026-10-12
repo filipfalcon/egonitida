@@ -6,19 +6,19 @@ import type { WorkerError } from 'effect/workers/WorkerError';
 import type { ManagedResource } from 'foldkit';
 
 /**
- * A world an application built on Foldkit shows: hosted in a worker the page starts, joined as one player, and held as a Foldkit Managed Resource, for as long as the application's Model wants it. Foldkit keeps the DOM, and reads of the world only what it shows; the world is played through its client, by the Commands the application's `update` returns.
+ * A session: one player's connection to a hosted game, from joining to leaving. An application built on Foldkit opens one by starting a worker that hosts the game, joins it as one player, and holds the session as a Foldkit Managed Resource for as long as the application's Model wants it. Foldkit keeps the DOM and reads off the game's state only what it shows; the game is played through the session's client, by the Commands the application's `update` returns.
  */
 
-/** A world joined: the client that plays it, and the drawing that brings its frames to the display's pace. */
+/** A session joined: the client that plays the game, and the drawing that brings its frames to the display's pace. */
 export interface Joined {
   readonly client: Client.Client;
   readonly drawing: Drawing.Drawing;
 }
 
-/** How long a drawing keeps the worlds it was sent, in seconds, unless told. */
+/** How long a drawing keeps the states it was sent, in seconds, unless told. */
 const KEEP_SECONDS = 1;
 
-/** Joins the world of `game`, hosted in the worker `worker` starts, until the scope closes; opening with `opening`, if the worker makes its host from what a page opens with. */
+/** Joins `game`, hosted in the worker `worker` starts, until the scope closes; opening with `opening`, if the worker makes its host from what a page opens with. */
 export const join = (
   game: Game.Game,
   worker: () => Worker | MessagePort,
@@ -36,11 +36,11 @@ export const join = (
     return { client, drawing };
   }).pipe(Effect.provide(BrowserWorker.layer(worker)));
 
-/** What a world's Managed Resource asks of the Model: nothing but whether it is wanted. */
+/** What a session's Managed Resource asks of the Model: nothing but whether it is wanted. */
 export const Requirements = Schema.Option(Schema.Null);
 
 /**
- * A world as a Foldkit Managed Resource, for `entry(World.Requirements, World.managed(…))`: joined while `joins` says so of the Model, and left once it does not; joining, leaving, and failing to join each said in a Message of the application's.
+ * A session as a Foldkit Managed Resource, for `entry(Session.Requirements, Session.managed(…))`: joined while `joins` says so of the Model, and left once it does not; joining, leaving, and failing to join each said in a Message of the application's.
  */
 export const managed = <Model, Message, Service>(options: {
   readonly resource: ManagedResource.ManagedResource<Joined, Service>;
@@ -56,7 +56,7 @@ export const managed = <Model, Message, Service>(options: {
   modelToMaybeRequirements: (model: Model): Option.Option<null> =>
     options.joins(model) ? Option.some(null) : Option.none(),
   acquire: () => join(options.game, options.worker, { keepSeconds: options.keepSeconds }),
-  // The scope the world was joined in lets go of it.
+  // The scope the session was joined in lets go of it.
   release: () => Effect.void,
   onAcquired: options.onJoined,
   onReleased: options.onLeft,
@@ -64,12 +64,12 @@ export const managed = <Model, Message, Service>(options: {
     options.onFailed(error instanceof Error ? error.message : String(error)),
 });
 
-/** How long a page that believes its world is not joined waits before it looks again whether it is: at first briefly, then twice as long each time, up to the longest. */
+/** How long a page that believes its session is not joined waits before it looks again whether it is: at first briefly, then twice as long each time, up to the longest. */
 const FIRST_WAIT = Duration.millis(50);
 const LONGEST_WAIT = Duration.seconds(1);
 
 /**
- * The moment a world is joined, as a Foldkit Subscription's Stream, for a Model that says it is not: `onJoined` once `resource` holds the world, looked for until it does. Looked for briefly at first, and less often the longer it is not joined. A world may be joined before a page hears that it is not, as when a stage finds it not joined a moment before it is, and the world joined says so only once; this says it again, so the page never waits for a world it has.
+ * The moment a session is joined, as a Foldkit Subscription's Stream, for a Model that says it is not: `onJoined` once `resource` holds the session, looked for until it does. Looked for briefly at first, and less often the longer it is not joined. A session may be joined before a page hears that it is not, as when a stage finds it not joined a moment before it is, and the session joined says so only once; this says it again, so the page never waits for a session it has.
  */
 export const whenJoined = <Message, Service>(options: {
   readonly resource: ManagedResource.ManagedResource<Joined, Service>;
@@ -77,7 +77,7 @@ export const whenJoined = <Message, Service>(options: {
 }): Stream.Stream<Message, never, Service> =>
   Stream.fromEffect(Effect.map(lookedFor(options.resource, FIRST_WAIT), () => options.onJoined()));
 
-/** The world `resource` holds, looked for again after `wait` while it holds none, and each time after waiting longer, as a world that has not joined soon may not join for a while. */
+/** The session `resource` holds, looked for again after `wait` while it holds none, and each time after waiting longer, as a session that has not joined soon may not join for a while. */
 const lookedFor = <Service>(
   resource: ManagedResource.ManagedResource<Joined, Service>,
   wait: Duration.Duration,
@@ -93,11 +93,11 @@ const lookedFor = <Service>(
     ),
   );
 
-/** What a world opened by the Model asks of it: what to open with, while it is wanted. */
+/** What a session opened by the Model asks of it: what to open with, while it is wanted. */
 export const Opening = Schema.Option(Schema.String);
 
 /**
- * A world as a Foldkit Managed Resource opened with what the Model holds, for `entry(World.Opening, World.opened(…))`: joined while `opens` gives what to open the worker with, such as the world its host is to start from; opened anew when that changes, and left once it gives nothing.
+ * A session as a Foldkit Managed Resource opened with what the Model holds, for `entry(Session.Opening, Session.opened(…))`: joined while `opens` gives what to open the worker with, such as the state its host is to start from; opened anew when that changes, and left once it gives nothing.
  */
 export const opened = <Model, Message, Service>(options: {
   readonly resource: ManagedResource.ManagedResource<Joined, Service>;
@@ -113,7 +113,7 @@ export const opened = <Model, Message, Service>(options: {
   modelToMaybeRequirements: options.opens,
   acquire: (opening: string) =>
     join(options.game, options.worker, { keepSeconds: options.keepSeconds, opening }),
-  // The scope the world was joined in lets go of it.
+  // The scope the session was joined in lets go of it.
   release: () => Effect.void,
   onAcquired: options.onJoined,
   onReleased: options.onLeft,

@@ -2,7 +2,13 @@ import { Styled } from '@lightocean/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Array, Option } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';
-import { type DocsSection, type NavPage, docsSections, neighboursOf } from '#src/docsNav.ts';
+import {
+  type DocsSection,
+  type NavPage,
+  docsSections,
+  listedSections,
+  neighboursOf,
+} from '#src/docsNav.ts';
 import { DISCORD, REPOSITORY } from '#src/links.ts';
 import type { Message, Model } from '#src/main.ts';
 import { homeRouter } from '#src/route.ts';
@@ -195,7 +201,7 @@ export const view = (model: Model, page: DocsPage, h: HtmlBuilder<Message>): Htm
     ]);
 
   const navigation = (label: string): Html =>
-    h.nav([h.AriaLabel(label)], docsSections.map(sectionView));
+    h.nav([h.AriaLabel(label)], listedSections(docsSections).map(sectionView));
 
   const neighbour = (
     maybePage: Option.Option<NavPage>,

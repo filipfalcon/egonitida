@@ -18,7 +18,7 @@ import * as Colour from '#src/colour.ts';
 import * as ColourView from '#src/colour.view.ts';
 
 // The page: joins the local server in a worker, draws the cubes through their view at every frame the display shows, and sends every click on a cube as the game's Clicked; the cubes are mirrored as buttons for the keyboard, a screen reader, and a pad. In development, it shows an agent what it draws.
-/** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the world kept for the tab. */
+/** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the state kept for the tab. */
 const host = Tab.id('cubes');
 
 const main = Effect.gen(function* () {

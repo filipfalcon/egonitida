@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Pointing, Story, World } from '@lightocean/core';
+import { Pointing, Story, State } from '@lightocean/core';
 import { Option } from 'effect';
 import * as Ocean from '#src/ocean.ts';
 
@@ -7,17 +7,17 @@ import * as Ocean from '#src/ocean.ts';
 const middle = Option.getOrThrow(Ocean.lightAt(4, 4));
 const further = Option.getOrThrow(Ocean.lightAt(7, 4));
 
-const given = Story.given(Ocean.world, { viewer: Ocean.viewer, middle, further });
+const given = Story.given(Ocean.state, { viewer: Ocean.viewer, middle, further });
 
-/** How high `light` stands in `world`. */
-const heightOf = (world: World.World, light: World.Entity) =>
-  Option.map(World.get(world, light, Ocean.Swell), ({ height }) => height);
+/** How high `light` stands in `state`. */
+const heightOf = (state: State.State, light: State.Entity) =>
+  Option.map(State.get(state, light, Ocean.Swell), ({ height }) => height);
 
 it('swells every light with the sea, each in its own time', () => {
   const told = Story.story(Ocean.game, given, Story.seconds(1));
 
-  const heights = World.holding(told.world, [Ocean.Light]).map((light) =>
-    heightOf(told.world, light),
+  const heights = State.holding(told.state, [Ocean.Light]).map((light) =>
+    heightOf(told.state, light),
   );
 
   expect(heights).toHaveLength(Ocean.SIZE * Ocean.SIZE);
@@ -39,7 +39,7 @@ it('sends a ripple out from a clicked light, which lifts a light further out as 
   );
 
   const lifted = Option.map(
-    Option.all([heightOf(rippled.world, further), heightOf(calm.world, further)]),
+    Option.all([heightOf(rippled.state, further), heightOf(calm.state, further)]),
     ([withRipple, without]) => withRipple - without,
   );
 
@@ -48,7 +48,7 @@ it('sends a ripple out from a clicked light, which lifts a light further out as 
 
 it('lets a ripple go once it has spread across the sea', () => {
   const ripples = (simulation: Story.Simulation) =>
-    World.holding(simulation.world, [Ocean.Ripple]).length;
+    State.holding(simulation.state, [Ocean.Ripple]).length;
   const clicked = Story.story(
     Ocean.game,
     given,
@@ -68,7 +68,7 @@ it('sends no ripple from a click on what is not a light', () => {
     Story.step(),
   );
 
-  expect(World.holding(told.world, [Ocean.Ripple])).toEqual([]);
+  expect(State.holding(told.state, [Ocean.Ripple])).toEqual([]);
 });
 
 it('reads out every light by its place, so the keyboard reaches each one', () => {

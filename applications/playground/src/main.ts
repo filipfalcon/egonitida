@@ -1,4 +1,4 @@
-import { World } from '@lightocean/foldkit';
+import { Session } from '@lightocean/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';
@@ -6,21 +6,21 @@ import { modifyFields } from 'foldkit/struct';
 import * as Cubes from '#src/cubes.ts';
 
 /**
- * The playground: the first proof that a world and Foldkit make one application. The cubes are a world, hosted in a worker and drawn on a canvas; the page around them is Foldkit's, and holds no more of the world than it shows, the count of cubes. A click on Spawn cube asks the world for one, as a player's action; the world decides.
+ * The playground: the first proof that a game and Foldkit make one application. The cubes are a game, hosted in a worker and drawn on a canvas; the page around them is Foldkit's, and holds no more of the game's state than it shows, the count of cubes. A click on Spawn cube asks the game for one, as a player's action; the game decides.
  */
 
 // MODEL
 
-/** The world as far as the page has it: being joined, or joined, with the canvas it is shown on waiting to be in the page or mounted there. */
-export const WorldState = Schema.Union([
+/** The session as far as the page has it: being joined, or joined, with the canvas it is shown on waiting to be in the page or mounted there. */
+export const PageSession = Schema.Union([
   Schema.TaggedStruct('Joining', {}),
   Schema.TaggedStruct('Joined', { canvas: Schema.Literals(['Waiting', 'Mounted']) }),
 ]);
-export type WorldState = typeof WorldState.Type;
+export type PageSession = typeof PageSession.Type;
 
-/** The playground's page: the world as far as it has it, how many cubes it holds, and what last went wrong. */
+/** The playground's page: the session as far as it has it, how many cubes the game holds, and what last went wrong. */
 export const Model = Schema.Struct({
-  world: WorldState,
+  session: PageSession,
   cubeCount: Schema.Int,
   maybeError: Schema.Option(Schema.String),
 });
@@ -28,40 +28,40 @@ export type Model = typeof Model.Type;
 
 // MESSAGE
 
-/** What happens on the page: the world joined and left, what it tells, and what the player does. */
+/** What happens on the page: the game joined and left, what it tells, and what the player does. */
 export const Message = defineMessageUnion({
-  JoinedWorld: {},
-  FoundWorldJoined: {},
-  LeftWorld: {},
-  FailedJoinWorld: { reason: Schema.String },
+  JoinedGame: {},
+  FoundGameJoined: {},
+  LeftGame: {},
+  FailedJoinGame: { reason: Schema.String },
   MountedCanvas: {},
-  FailedShowWorld: { reason: Schema.String },
+  FailedShowGame: { reason: Schema.String },
   CountedCubes: { count: Schema.Int },
   ClickedSpawnCube: {},
-  AskedWorldForCube: {},
-  FailedAskWorldForCube: { reason: Schema.String },
+  AskedGameForCube: {},
+  FailedAskGameForCube: { reason: Schema.String },
 });
 export type Message = typeof Message.Type;
 
 // RESOURCES
 
-/** The cubes' world, joined while the playground is open. */
-export const CubesWorld = ManagedResource.tag<World.Joined>()('CubesWorld');
+/** The cubes' session, joined while the playground is open. */
+export const CubesSession = ManagedResource.tag<Session.Joined>()('CubesSession');
 
-/** What the playground's Commands and Subscriptions reach: the cubes' world. */
-export type Services = ManagedResource.ServiceOf<typeof CubesWorld>;
+/** What the playground's Commands and Subscriptions reach: the cubes' session. */
+export type Services = ManagedResource.ServiceOf<typeof CubesSession>;
 
 // COMMANDS
 
-/** Asks the world for another cube, as the player's action. */
+/** Asks the game for another cube, as the player's action. */
 export const AskForCube = Command.define('AskForCube', {
-  messages: [Message.AskedWorldForCube, Message.FailedAskWorldForCube],
-  execute: CubesWorld.get.pipe(
+  messages: [Message.AskedGameForCube, Message.FailedAskGameForCube],
+  execute: CubesSession.get.pipe(
     Effect.flatMap(({ client }) => client.act(Cubes.AskedForCube, {})),
-    Effect.as(Message.AskedWorldForCube()),
+    Effect.as(Message.AskedGameForCube()),
     Effect.catch(({ resource }) =>
       Effect.succeed(
-        Message.FailedAskWorldForCube({ reason: `The world ${resource} is not joined.` }),
+        Message.FailedAskGameForCube({ reason: `The session ${resource} is not joined.` }),
       ),
     ),
   ),
@@ -72,49 +72,49 @@ export const AskForCube = Command.define('AskForCube', {
 const failed = (model: Model, reason: string) =>
   modifyFields(model, { maybeError: () => Option.some(reason) });
 
-/** The page after `message`, and the Commands it sends: a cube asked of the world. */
+/** The page after `message`, and the Commands it sends: a cube asked of the game. */
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, Services>>(message, {
     // Joined again while the Model already says so, as one restored after a reload does, the canvas in the page stays as it is. What went wrong while it was not joined is past.
-    JoinedWorld: () => ({
+    JoinedGame: () => ({
       model: modifyFields(model, {
-        world: (was) => (was._tag === 'Joined' ? was : { _tag: 'Joined', canvas: 'Waiting' }),
+        session: (was) => (was._tag === 'Joined' ? was : { _tag: 'Joined', canvas: 'Waiting' }),
         maybeError: () => Option.none(),
       }),
     }),
-    // Found joined while waiting for it, the world is joined, as when the stage found it not joined a moment before it was; found joined once the page has it, it changes nothing, and what went wrong since stays told.
-    FoundWorldJoined: () => ({
+    // Found joined while waiting for it, the session is joined, as when the stage found it not joined a moment before it was; found joined once the page has it, it changes nothing, and what went wrong since stays told.
+    FoundGameJoined: () => ({
       model:
-        model.world._tag === 'Joining'
+        model.session._tag === 'Joining'
           ? modifyFields(model, {
-              world: () => ({ _tag: 'Joined', canvas: 'Waiting' }),
+              session: () => ({ _tag: 'Joined', canvas: 'Waiting' }),
               maybeError: () => Option.none(),
             })
           : model,
     }),
-    // The canvas goes with the world, so a world joined again waits for its own canvas.
-    LeftWorld: () => ({
-      model: modifyFields(model, { world: () => ({ _tag: 'Joining' }) }),
+    // The canvas goes with the session, so a session joined again waits for its own canvas.
+    LeftGame: () => ({
+      model: modifyFields(model, { session: () => ({ _tag: 'Joining' }) }),
     }),
-    FailedJoinWorld: ({ reason }) => ({ model: failed(model, reason) }),
+    FailedJoinGame: ({ reason }) => ({ model: failed(model, reason) }),
     MountedCanvas: () => ({
       model:
-        model.world._tag === 'Joined'
-          ? modifyFields(model, { world: () => ({ _tag: 'Joined', canvas: 'Mounted' }) })
+        model.session._tag === 'Joined'
+          ? modifyFields(model, { session: () => ({ _tag: 'Joined', canvas: 'Mounted' }) })
           : model,
     }),
-    FailedShowWorld: ({ reason }) => ({ model: failed(model, reason) }),
+    FailedShowGame: ({ reason }) => ({ model: failed(model, reason) }),
     CountedCubes: ({ count }) => ({ model: modifyFields(model, { cubeCount: () => count }) }),
     ClickedSpawnCube: () => ({ model, commands: [AskForCube()] }),
-    AskedWorldForCube: () => ({ model }),
-    FailedAskWorldForCube: ({ reason }) => ({ model: failed(model, reason) }),
+    AskedGameForCube: () => ({ model }),
+    FailedAskGameForCube: ({ reason }) => ({ model: failed(model, reason) }),
   });
 
 // INIT
 
-/** The page as it opens: joining the world, no cubes counted. */
+/** The page as it opens: joining the game, no cubes counted. */
 export const initialModel: Model = {
-  world: { _tag: 'Joining' },
+  session: { _tag: 'Joining' },
   cubeCount: 0,
   maybeError: Option.none(),
 };

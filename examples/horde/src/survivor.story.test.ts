@@ -1,12 +1,12 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Story, World } from '@lightocean/core';
+import { Story, State } from '@lightocean/core';
 import * as Body from '#src/body.ts';
 import * as Horde from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 
 /** An otherwise empty arena with a survivor of `health` standing at its middle since the start, with nothing in hand, and three kills to its name. */
 const arenaWith = (health: number) =>
-  World.spawn(World.empty({ seed: 1 }), [
+  State.spawn(State.empty({ seed: 1 }), [
     Body.Position.of({ x: 0, z: 0 }),
     Survivor.Life.of({ _tag: 'Alive', health, since: 0 }),
     Survivor.Tally.of({ kills: 3 }),

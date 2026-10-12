@@ -3,7 +3,7 @@ import * as stylex from '@stylexjs/stylex';
 import { Option } from 'effect';
 import type { Document, HtmlBuilder } from 'foldkit/html';
 import { Message, type Model } from '#src/main.ts';
-import { CANVAS_ID, MountCanvas } from '#src/world.ts';
+import { CANVAS_ID, MountCanvas } from '#src/session.ts';
 // Relative, as StyleX finds variables by the path of the module that defines them.
 import { colours } from './tokens.stylex.ts';
 
@@ -45,8 +45,8 @@ const styles = stylex.create({
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Playground',
   body: h.main(Styled.attributes(h, styles.playground), [
-    // The canvas is in the page while the world is joined, and goes with it.
-    ...(model.world._tag === 'Joined'
+    // The canvas is in the page while the session is joined, and goes with it.
+    ...(model.session._tag === 'Joined'
       ? [
           h.canvas(
             [h.Id(CANVAS_ID), ...Styled.attributes(h, styles.viewport), h.OnMount(MountCanvas())],
@@ -59,7 +59,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
         [
           h.Type('button'),
           ...Styled.attributes(h, styles.button),
-          h.Disabled(model.world._tag !== 'Joined'),
+          h.Disabled(model.session._tag !== 'Joined'),
           h.OnClick(Message.ClickedSpawnCube()),
         ],
         ['Spawn cube'],

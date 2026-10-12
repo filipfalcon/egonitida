@@ -1,4 +1,4 @@
-import type { World } from '@lightocean/core';
+import type { State } from '@lightocean/core';
 import { Context, Effect } from 'effect';
 
 /**
@@ -85,56 +85,56 @@ export class Haptics extends Context.Service<
   Haptics,
   {
     /** Rumbles what the player of `entity` holds, beside whatever else rumbles it now. */
-    readonly rumble: (entity: World.Entity, rumble: Rumble) => Effect.Effect<void>;
+    readonly rumble: (entity: State.Entity, rumble: Rumble) => Effect.Effect<void>;
     /** Stops every rumble of what the player of `entity` holds, at once, such as when the game is paused. */
-    readonly silence: (entity: World.Entity) => Effect.Effect<void>;
+    readonly silence: (entity: State.Entity) => Effect.Effect<void>;
     /** Sets how the triggers the player of `entity` holds push back, until they are set again. */
-    readonly triggers: (entity: World.Entity, triggers: Triggers) => Effect.Effect<void>;
+    readonly triggers: (entity: State.Entity, triggers: Triggers) => Effect.Effect<void>;
   }
 >()('@lightocean/client/Haptics') {}
 
 /** Haptics for a page whose player is `player`, felt on the devices `felt` gives at that moment. Its rumbles are mixed and turn the motors as the page's frames go, by `frame`, which the page calls every frame with the seconds since the one before; a device's motors are turned only when they turn otherwise. */
 export const make = (options: {
-  readonly player: World.Entity;
+  readonly player: State.Entity;
   readonly felt: () => ReadonlyArray<Felt>;
 }): Haptics['Service'] & { readonly frame: (seconds: number) => Effect.Effect<void> } => {
-  const state: { pulses: ReadonlyArray<Pulse>; turning: Motors } = {
+  const playing: { pulses: ReadonlyArray<Pulse>; turning: Motors } = {
     pulses: [],
     turning: stillMotors,
   };
   /** Does `feel` to every device, if `entity` is the player's. */
-  const feelFor = (entity: World.Entity, feel: (device: Felt) => Effect.Effect<void>) =>
+  const feelFor = (entity: State.Entity, feel: (device: Felt) => Effect.Effect<void>) =>
     entity === options.player
       ? Effect.suspend(() => Effect.forEach(options.felt(), feel, { discard: true }))
       : Effect.void;
   /** Turns every device's motors `motors`, unless they turn so already. */
   const turn = (motors: Motors) =>
     Effect.suspend(() => {
-      if (motors.strong === state.turning.strong && motors.weak === state.turning.weak) {
+      if (motors.strong === playing.turning.strong && motors.weak === playing.turning.weak) {
         return Effect.void;
       }
-      state.turning = motors;
+      playing.turning = motors;
       return Effect.forEach(options.felt(), (device) => device.motors(motors), { discard: true });
     });
   return {
     rumble: (entity, rumble) =>
       entity === options.player
         ? Effect.sync(() => {
-            state.pulses = added(state.pulses, rumble);
+            playing.pulses = added(playing.pulses, rumble);
           })
         : Effect.void,
     silence: (entity) =>
       entity === options.player
         ? Effect.suspend(() => {
-            state.pulses = [];
+            playing.pulses = [];
             return turn(stillMotors);
           })
         : Effect.void,
     triggers: (entity, triggers) => feelFor(entity, (device) => device.triggers(triggers)),
     frame: (seconds) =>
       Effect.suspend(() => {
-        const next = mixed(state.pulses, seconds);
-        state.pulses = next.pulses;
+        const next = mixed(playing.pulses, seconds);
+        playing.pulses = next.pulses;
         return turn(next.motors);
       }),
   };

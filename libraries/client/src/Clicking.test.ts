@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { type Client, Component, Pointing, World } from '@lightocean/core';
+import { type Client, Component, Pointing, State } from '@lightocean/core';
 import { Effect, Option, Queue, Schema, Stream } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Clicking from '#src/Clicking.ts';
@@ -28,20 +28,20 @@ camera.lookAt(0, 0, 0);
 /** A labelled box in the middle with a box with no label in front of it, a labelled box to the right, and the actions a client took for clicks. */
 const clicked = (points: ReadonlyArray<{ readonly x: number; readonly y: number }>) =>
   Effect.gen(function* () {
-    const [one, middle] = World.spawn(World.empty({ seed: 1 }), [
+    const [one, middle] = State.spawn(State.empty({ seed: 1 }), [
       Spot.of({ x: 0, z: 0 }),
       Pointing.Label.of({ text: 'Middle box' }),
     ]);
-    const [two, right] = World.spawn(one, [
+    const [two, right] = State.spawn(one, [
       Spot.of({ x: 1.5, z: 0 }),
       Pointing.Label.of({ text: 'Right box' }),
     ]);
-    const [world] = World.spawn(two, [Spot.of({ x: 0, z: 2 })]);
+    const [state] = State.spawn(two, [Spot.of({ x: 0, z: 2 })]);
     const views = yield* View.make([boxes]);
-    yield* views.frame(Drawing.frameOf(Timeline.still(world), Option.none()));
+    yield* views.frame(Drawing.frameOf(Timeline.still(state), Option.none()));
     const acted: Array<unknown> = [];
-    const client: Pick<Client.Client, 'world' | 'act'> = {
-      world: Effect.succeed(world),
+    const client: Pick<Client.Client, 'state' | 'act'> = {
+      state: Effect.succeed(state),
       act: (action, value) =>
         Effect.sync(() => {
           acted.push(action.encode(value));

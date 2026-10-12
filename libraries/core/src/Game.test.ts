@@ -24,7 +24,7 @@ import * as Rule from '#src/Rule.ts';
 import * as Story from '#src/Story.ts';
 import * as Snapshot from '#src/Snapshot.ts';
 import * as System from '#src/System.ts';
-import * as World from '#src/World.ts';
+import * as State from '#src/State.ts';
 
 // SYSTEMS: what changes every step.
 
@@ -80,16 +80,16 @@ const runner = (x: number, health: number) => [
 ];
 
 const spawnRunner = (x: number, health: number) =>
-  World.spawn(World.empty({ seed: 7 }), runner(x, health));
+  State.spawn(State.empty({ seed: 7 }), runner(x, health));
 
 describe('Game.step', () => {
   it('advances the tick and runs the systems', () => {
-    const [world, runner] = spawnRunner(0, 100);
-    const after = Game.step(game, world).world;
+    const [state, runner] = spawnRunner(0, 100);
+    const after = Game.step(game, state).state;
 
     expect(after.tick).toBe(1);
     // 10 per second over a step of a tenth of a second.
-    expect(World.get(after, runner, Position)).toEqual(Option.some({ x: 1 }));
+    expect(State.get(after, runner, Position)).toEqual(Option.some({ x: 1 }));
   });
 
   it('runs the systems in order, each seeing what the ones before it wrote', () => {
@@ -128,24 +128,24 @@ describe('Game.step', () => {
   });
 
   it('reports every event of the step, in the order they happened', () => {
-    const [world, runner] = spawnRunner(10, 30);
+    const [state, runner] = spawnRunner(10, 30);
 
-    expect(Game.step(game, world).events).toEqual([
+    expect(Game.step(game, state).events).toEqual([
       { _tag: 'Bitten', entity: runner, damage: 30 },
       { _tag: 'Died', entity: runner },
     ]);
   });
 
-  it('leaves the world it was given untouched', () => {
-    const [world, runner] = spawnRunner(0, 100);
-    Game.step(game, world);
+  it('leaves the state it was given untouched', () => {
+    const [state, runner] = spawnRunner(0, 100);
+    Game.step(game, state);
 
-    expect(World.get(world, runner, Position)).toEqual(Option.some({ x: 0 }));
-    expect(world.tick).toBe(0);
+    expect(State.get(state, runner, Position)).toEqual(Option.some({ x: 0 }));
+    expect(state.tick).toBe(0);
   });
 });
 
-/** A world's contents, written out component by component: what two worlds are compared by. Worlds are compared by what they hold, not by which objects hold it. */
+/** A state's contents, written out component by component: what two states are compared by. States are compared by what they hold, not by which objects hold it. */
 const contents = Schema.encodeSync(Schema.fromJsonString(Game.schema(game)));
 
 describe('determinism', () => {
@@ -162,24 +162,24 @@ describe('determinism', () => {
   });
   const noisy = Game.only(fixture, { systems: [scatter], rules: [] });
   const run = (seed: number) => {
-    const [start] = World.spawn(World.empty({ seed }), [Position.of({ x: 0 })]);
-    return Array.from({ length: 20 }).reduce<World.World>(
-      (world) => Game.step(noisy, world).world,
+    const [start] = State.spawn(State.empty({ seed }), [Position.of({ x: 0 })]);
+    return Array.from({ length: 20 }).reduce<State.State>(
+      (state) => Game.step(noisy, state).state,
       start,
     );
   };
 
-  it('reaches the same world from the same seed', () => {
+  it('reaches the same state from the same seed', () => {
     expect(contents(run(42))).toEqual(contents(run(42)));
   });
 
-  it('reaches another world from another seed', () => {
+  it('reaches another state from another seed', () => {
     expect(contents(run(42))).not.toEqual(contents(run(43)));
   });
 
-  it('draws randomness only from the world, in [0, 1)', () => {
+  it('draws randomness only from the state, in [0, 1)', () => {
     const draws = Array.from({ length: 1000 }, (_, index) =>
-      World.query(run(index), Position).map(([, position]) => position.x),
+      State.query(run(index), Position).map(([, position]) => position.x),
     ).flat();
 
     expect(draws.every((x) => x >= 0 && x < 20)).toBe(true);
@@ -202,7 +202,7 @@ describe('input', () => {
     },
   });
   const steered = Game.only(fixture, { systems: [steer], rules: [] });
-  const [start, recorded] = World.spawn(World.empty({ seed: 1 }), [
+  const [start, recorded] = State.spawn(State.empty({ seed: 1 }), [
     Position.of({ x: 0 }),
     Controls.of({ move: 0, fire: false }),
   ]);
@@ -241,17 +241,17 @@ describe('input', () => {
     );
   });
 
-  it('replays to the same world from the same start and the same inputs', () => {
+  it('replays to the same state from the same start and the same inputs', () => {
     const recording = [push(1), [], push(-0.5), push(0.25), [], []];
     const play = () =>
-      recording.reduce<World.World>(
-        (world, inputs) => Game.step(steered, world, inputs).world,
+      recording.reduce<State.State>(
+        (state, inputs) => Game.step(steered, state, inputs).state,
         start,
       );
 
     expect(contents(play())).toEqual(contents(play()));
     // A held stick keeps moving: 1 + 1 - 0.5 + 0.25 + 0.25 + 0.25.
-    expect(World.get(play(), recorded, Position)).toEqual(Option.some({ x: 2.25 }));
+    expect(State.get(play(), recorded, Position)).toEqual(Option.some({ x: 2.25 }));
   });
 });
 
@@ -277,7 +277,7 @@ describe('actions', () => {
     },
   });
   const restarting = Game.only(fixture, { systems: [look], rules: [restart] });
-  const [world, player] = spawnRunner(0, 10);
+  const [state, player] = spawnRunner(0, 10);
   /** An action as the host hands it on: sent by a client, then accepted as from its player. */
   const restarted = (x: number) =>
     Option.getOrThrow(ChoseRestart.accept(ChoseRestart.encode({ x }), player));
@@ -296,7 +296,7 @@ describe('actions', () => {
   });
 
   it('is reported first among the step’s events, in the order the actions came', () => {
-    const { events } = Game.step(restarting, world, [], [restarted(1), restarted(2)]);
+    const { events } = Game.step(restarting, state, [], [restarted(1), restarted(2)]);
 
     expect(events).toEqual([
       { _tag: 'ChoseRestart', x: 1, player },
@@ -334,26 +334,26 @@ describe('spawning and despawning within a step', () => {
       }
     },
   });
-  const [world, keeper] = World.spawn(World.empty({ seed: 3 }), [Health.of({ current: 1 })]);
+  const [state, keeper] = State.spawn(State.empty({ seed: 3 }), [Health.of({ current: 1 })]);
 
   it('gives the spawned entity the next id, and later systems see it in the same step', () => {
     const lifecycle = Game.only(fixture, { systems: [raise, move], rules: [] });
-    const after = Game.step(lifecycle, world).world;
+    const after = Game.step(lifecycle, state).state;
     const runner = keeper + 1;
 
     // `move`, running after `raise`, already moved it by a step.
-    expect(World.get(after, runner, Position)).toEqual(Option.some({ x: 1 }));
+    expect(State.get(after, runner, Position)).toEqual(Option.some({ x: 1 }));
     expect(after.nextEntity).toBe(runner + 1);
   });
 
   it('takes a despawned entity out of every store at once, so later systems no longer see it', () => {
     const lifecycle = Game.only(fixture, { systems: [raise, move, move, remove, move], rules: [] });
-    const after = Game.step(lifecycle, world).world;
+    const after = Game.step(lifecycle, state).state;
     const runner = keeper + 1;
 
     // Moved twice to x = 2, removed, and not moved a third time.
-    expect(World.get(after, runner, Position)).toEqual(Option.none());
-    expect(World.get(after, runner, Velocity)).toEqual(Option.none());
+    expect(State.get(after, runner, Position)).toEqual(Option.none());
+    expect(State.get(after, runner, Velocity)).toEqual(Option.none());
     // Its id is never given out again.
     expect(after.nextEntity).toBe(runner + 1);
   });
@@ -375,28 +375,28 @@ describe('spawning and despawning within a step', () => {
       Story.spawn('runner', runner(10, 30)),
       Story.step(),
       Story.expectNone('runner', Health),
-      Story.world((after, named) =>
-        expect(World.get(after, named('runner') + 1, Health)).toEqual(
+      Story.state((after, named) =>
+        expect(State.get(after, named('runner') + 1, Health)).toEqual(
           Option.some({ current: 100 }),
         ),
       ),
     );
   });
 
-  it('leaves the world it was given untouched', () => {
+  it('leaves the state it was given untouched', () => {
     const lifecycle = Game.only(fixture, { systems: [raise, move, move, remove], rules: [] });
-    Game.step(lifecycle, world);
+    Game.step(lifecycle, state);
 
-    expect(world.nextEntity).toBe(keeper + 1);
-    expect(World.query(world, Position)).toEqual([]);
+    expect(state.nextEntity).toBe(keeper + 1);
+    expect(State.query(state, Position)).toEqual([]);
   });
 
-  it('replays to the same world, ids and all', () => {
+  it('replays to the same state, ids and all', () => {
     const lifecycle = Game.only(fixture, { systems: [raise, move, remove], rules: [] });
     const play = () =>
-      Array.from({ length: 12 }).reduce<World.World>(
-        (current) => Game.step(lifecycle, current).world,
-        world,
+      Array.from({ length: 12 }).reduce<State.State>(
+        (current) => Game.step(lifecycle, current).state,
+        state,
       );
 
     expect(contents(play())).toEqual(contents(play()));
@@ -409,10 +409,10 @@ describe('tracing a step', () => {
   const nothing = { set: [], spawned: [], despawned: [], emitted: [], issued: [] };
 
   it('tells what each system and rule did in it, a rule with the event it ran for', () => {
-    const [world, runner] = spawnRunner(9, 30);
+    const [state, runner] = spawnRunner(9, 30);
     const bitten = { _tag: 'Bitten', entity: runner, damage: 30 };
 
-    expect(Game.step(game, world, [], [], { trace: true }).trace).toEqual([
+    expect(Game.step(game, state, [], [], { trace: true }).trace).toEqual([
       {
         ...nothing,
         part: part('move'),
@@ -455,10 +455,10 @@ describe('tracing a step', () => {
         }
       },
     });
-    const [world, standing] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 0 })]);
+    const [state, standing] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 0 })]);
     const lifecycle = Game.only(fixture, { systems: [raise, move, clear], rules: [] });
 
-    expect(Game.step(lifecycle, world, [], [], { trace: true }).trace).toEqual([
+    expect(Game.step(lifecycle, state, [], [], { trace: true }).trace).toEqual([
       { ...nothing, part: part('raise'), cause: Option.none(), spawned: [standing + 1] },
       { ...nothing, part: part('clear'), cause: Option.none(), despawned: [standing] },
     ]);
@@ -477,10 +477,10 @@ describe('tracing a step', () => {
         }
       },
     });
-    const [world, entity] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 0 })]);
+    const [state, entity] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 0 })]);
 
     expect(
-      Game.step(Game.only(fixture, { systems: [twice], rules: [] }), world, [], [], {
+      Game.step(Game.only(fixture, { systems: [twice], rules: [] }), state, [], [], {
         trace: true,
       }).trace,
     ).toEqual([
@@ -494,9 +494,9 @@ describe('tracing a step', () => {
   });
 
   it('traces nothing unless asked to', () => {
-    const [world] = spawnRunner(9, 30);
+    const [state] = spawnRunner(9, 30);
 
-    expect(Game.step(game, world).trace).toEqual([]);
+    expect(Game.step(game, state).trace).toEqual([]);
   });
 });
 
@@ -594,16 +594,16 @@ describe('in development', () => {
   const shoving = Game.only(fixture, { systems: [shove], rules: [] });
 
   it('freezes what a step leaves, so changing it in place fails at once', () => {
-    const [world] = spawnRunner(0, 100);
-    const once = Game.step(game, world, [], [], { freeze: true }).world;
+    const [state] = spawnRunner(0, 100);
+    const once = Game.step(game, state, [], [], { freeze: true }).state;
 
     expect(() => Game.step(shoving, once, [], [], { freeze: true })).toThrow(TypeError);
   });
 
-  it('freezes what a world was spawned with, from the first step on', () => {
-    const [world] = spawnRunner(0, 100);
+  it('freezes what a state was spawned with, from the first step on', () => {
+    const [state] = spawnRunner(0, 100);
 
-    expect(() => Game.step(shoving, world, [], [], { freeze: true })).toThrow(TypeError);
+    expect(() => Game.step(shoving, state, [], [], { freeze: true })).toThrow(TypeError);
   });
 
   it('freezes in every story', () => {
@@ -1015,30 +1015,30 @@ describe('Game.only', () => {
 describe('Game.schema', () => {
   const Json = Schema.fromJsonString(Game.schema(game));
   const [withRunner, runner] = spawnRunner(4, 60);
-  const [withSplat, splat] = World.spawn(withRunner, [Splat.of({ size: 2 })]);
-  const [whole, wall] = World.spawn(withSplat, [Wall.of({ x: 12 })]);
-  const stepped = Game.step(game, whole).world;
+  const [withSplat, splat] = State.spawn(withRunner, [Splat.of({ size: 2 })]);
+  const [whole, wall] = State.spawn(withSplat, [Wall.of({ x: 12 })]);
+  const stepped = Game.step(game, whole).state;
 
-  it('carries a whole world and back: its tick, randomness, next entity, and every component', () => {
+  it('carries a whole state and back: its tick, randomness, next entity, and every component', () => {
     const text = Schema.encodeSync(Json)(stepped);
     const back = Schema.decodeSync(Json)(text);
 
     expect(back.tick).toBe(stepped.tick);
     expect(back.random).toBe(stepped.random);
     expect(back.nextEntity).toBe(stepped.nextEntity);
-    expect(World.get(back, runner, Position)).toEqual(World.get(stepped, runner, Position));
-    expect(World.get(back, runner, Health)).toEqual(Option.some({ current: 60 }));
-    // A whole world holds what is local and what is private too; only a snapshot leaves them out.
-    expect(World.get(back, splat, Splat)).toEqual(Option.some({ size: 2 }));
-    expect(World.get(back, wall, Wall)).toEqual(Option.some({ x: 12 }));
+    expect(State.get(back, runner, Position)).toEqual(State.get(stepped, runner, Position));
+    expect(State.get(back, runner, Health)).toEqual(Option.some({ current: 60 }));
+    // A whole state holds what is local and what is private too; only a snapshot leaves them out.
+    expect(State.get(back, splat, Splat)).toEqual(Option.some({ size: 2 }));
+    expect(State.get(back, wall, Wall)).toEqual(Option.some({ x: 12 }));
     expect(Schema.encodeSync(Json)(back)).toBe(text);
   });
 
-  it('steps a world it decoded as it steps the one it encoded', () => {
+  it('steps a state it decoded as it steps the one it encoded', () => {
     const back = Schema.decodeSync(Json)(Schema.encodeSync(Json)(stepped));
     const encode = Schema.encodeSync(Json);
 
-    expect(encode(Game.step(game, back).world)).toBe(encode(Game.step(game, stepped).world));
+    expect(encode(Game.step(game, back).state)).toBe(encode(Game.step(game, stepped).state));
   });
 
   it('refuses a value its component cannot decode, or a component the game does not hold', () => {
@@ -1051,11 +1051,11 @@ describe('Game.schema', () => {
   });
 });
 
-describe('a component holding a state', () => {
+describe('a component holding a mode', () => {
   const Mood = Component.make(
     'Mood',
     Schema.Struct({
-      state: Schema.Union([
+      mode: Schema.Union([
         Schema.TaggedStruct('Calm', {}),
         Schema.TaggedStruct('Fleeing', { from: Schema.Finite }),
       ]),
@@ -1078,30 +1078,30 @@ describe('a component holding a state', () => {
     ],
   });
   const Json = Schema.fromJsonString(Game.schema(moody));
-  const [calm, first] = World.spawn(World.empty({ seed: 1 }), [
-    Mood.of({ state: { _tag: 'Calm' }, target: Option.none() }),
+  const [calm, first] = State.spawn(State.empty({ seed: 1 }), [
+    Mood.of({ mode: { _tag: 'Calm' }, target: Option.none() }),
   ]);
-  const [world, second] = World.spawn(calm, [
-    Mood.of({ state: { _tag: 'Fleeing', from: 3 }, target: Option.some(7) }),
+  const [state, second] = State.spawn(calm, [
+    Mood.of({ mode: { _tag: 'Fleeing', from: 3 }, target: Option.some(7) }),
   ]);
 
   it('travels as a tagged union and an option, and arrives as one', () => {
-    const back = Schema.decodeSync(Json)(Schema.encodeSync(Json)(world));
+    const back = Schema.decodeSync(Json)(Schema.encodeSync(Json)(state));
 
-    expect(World.get(back, first, Mood)).toEqual(
-      Option.some({ state: { _tag: 'Calm' }, target: Option.none() }),
+    expect(State.get(back, first, Mood)).toEqual(
+      Option.some({ mode: { _tag: 'Calm' }, target: Option.none() }),
     );
-    expect(World.get(back, second, Mood)).toEqual(
-      Option.some({ state: { _tag: 'Fleeing', from: 3 }, target: Option.some(7) }),
+    expect(State.get(back, second, Mood)).toEqual(
+      Option.some({ mode: { _tag: 'Fleeing', from: 3 }, target: Option.some(7) }),
     );
   });
 
   it('travels in a snapshot too', () => {
     const back = Option.getOrThrow(
-      Snapshot.apply(World.empty({ seed: 0 }), Snapshot.encode(world, moody), moody),
-    ).world;
+      Snapshot.apply(State.empty({ seed: 0 }), Snapshot.encode(state, moody), moody),
+    ).state;
 
-    expect(World.get(back, second, Mood)).toEqual(World.get(world, second, Mood));
+    expect(State.get(back, second, Mood)).toEqual(State.get(state, second, Mood));
   });
 });
 
@@ -1265,30 +1265,30 @@ describe('local systems', () => {
     localSystems: [bleed],
   });
   const bleeding = Game.make({ stepRate: 10, domains: [Fixture, Blood] });
-  const [world] = spawnRunner(4, 60);
-  const drops = (after: World.World) => World.query(after, Drop);
+  const [state] = spawnRunner(4, 60);
+  const drops = (after: State.State) => State.query(after, Drop);
 
   it('run on a client, at a tick, and never on the server', () => {
-    expect(drops(Game.step(bleeding, world).world)).toEqual([]);
+    expect(drops(Game.step(bleeding, state).state)).toEqual([]);
 
-    const local = Game.stepLocal(bleeding, world, { tick: 1 });
+    const local = Game.stepLocal(bleeding, state, { tick: 1 });
     expect(drops(local)).toHaveLength(1);
   });
 
   it('give what they spawn ids of their own, below the server’s, so the two never meet', () => {
-    const once = Game.stepLocal(bleeding, world, { tick: 1 });
+    const once = Game.stepLocal(bleeding, state, { tick: 1 });
     const twice = Game.stepLocal(bleeding, once, { tick: 2 });
 
     expect(drops(twice).map(([entity]) => entity)).toEqual([-2, -1]);
-    expect(twice.nextEntity).toBe(world.nextEntity);
+    expect(twice.nextEntity).toBe(state.nextEntity);
   });
 
-  it('draw the same numbers at the same tick on every client, leaving the world’s own untouched', () => {
-    const at = (tick: number) => drops(Game.stepLocal(bleeding, world, { tick }));
+  it('draw the same numbers at the same tick on every client, leaving the state’s own untouched', () => {
+    const at = (tick: number) => drops(Game.stepLocal(bleeding, state, { tick }));
 
     expect(at(5)).toEqual(at(5));
     expect(at(5)).not.toEqual(at(6));
-    expect(Game.stepLocal(bleeding, world, { tick: 5 }).random).toBe(world.random);
+    expect(Game.stepLocal(bleeding, state, { tick: 5 }).random).toBe(state.random);
   });
 
   it('are stepped in a story too, as by a client that sees every step', () => {
@@ -1296,7 +1296,7 @@ describe('local systems', () => {
       bleeding,
       Story.spawn('runner', runner(4, 60)),
       Story.steps(3),
-      Story.world((after) => expect(drops(after)).toHaveLength(3)),
+      Story.state((after) => expect(drops(after)).toHaveLength(3)),
     );
   });
 

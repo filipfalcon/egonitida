@@ -7,7 +7,7 @@ import {
   Host,
   Rule,
   System,
-  World,
+  State,
 } from '@lightocean/core';
 import { Transport } from '@lightocean/core/internal';
 import { Effect, Exit, Schema, Scope } from 'effect';
@@ -81,7 +81,7 @@ export const brisk = gameMoving((stick) => stick.move * 2);
 /** The game stepped at another rate, which no host of the game can take up. */
 export const slow = gameMoving((stick) => stick.move, 10);
 
-/** The game as it should not be: a body moves by how many bodies it has moved before in this process, which nothing in the world holds, so no replay of it comes out the same. */
+/** The game as it should not be: a body moves by how many bodies it has moved before in this process, which nothing in the state holds, so no replay of it comes out the same. */
 export const drifting = () => {
   const moved = { count: 0 };
   return gameMoving((stick) => {
@@ -94,14 +94,14 @@ export const drifting = () => {
 type Played = typeof game;
 
 /** Joining spawns a body, standing still, at the start, hurt; leaving takes it away. */
-export const join = (world: World.World) =>
-  World.spawn(world, [Position.of({ x: 0 }), Health.of({ current: 1 }), Stick.of({ move: 0 })]);
+export const join = (state: State.State) =>
+  State.spawn(state, [Position.of({ x: 0 }), Health.of({ current: 1 }), Stick.of({ move: 0 })]);
 
-export const setup = (played: Played = game) => ({ game: played, join, leave: World.despawn });
+export const setup = (played: Played = game) => ({ game: played, join, leave: State.despawn });
 
 /** Hosts `played`, until the scope closes; a host that lets clients hold time if `mayHold`, as a local server for one player does. */
 export const host = (played: Played = game, mayHold = false) =>
-  Host.make({ ...setup(played), world: World.empty({ seed: 7 }), mayHold });
+  Host.make({ ...setup(played), state: State.empty({ seed: 7 }), mayHold });
 
 /** Lets `millis` of test time pass a little at a time, giving every fiber its turn. */
 export const advance = (millis: number) =>

@@ -1,12 +1,12 @@
 import { expect, it } from '@effect/vitest';
 import { Scene } from '@lightocean/client';
-import { Story, World } from '@lightocean/core';
+import { Story, State } from '@lightocean/core';
 import { Effect, Option } from 'effect';
 import * as Ocean from '#src/ocean.ts';
 import * as OceanView from '#src/ocean.view.ts';
 
 /** The ocean a second on, where no two places swell alike. */
-const swelling = Story.story(Ocean.game, Story.given(Ocean.world), Story.seconds(1)).world;
+const swelling = Story.story(Ocean.game, Story.given(Ocean.state), Story.seconds(1)).state;
 
 it.effect('draws every light at its place in the square, as high as it swells', () =>
   Effect.gen(function* () {
@@ -14,11 +14,11 @@ it.effect('draws every light at its place in the square, as high as it swells', 
 
     yield* scene.show(swelling);
 
-    for (const light of World.holding(swelling, [Ocean.Light])) {
+    for (const light of State.holding(swelling, [Ocean.Light])) {
       const drawn = scene.find(OceanView.lights, light);
       const expected = Option.all([
-        World.get(swelling, light, Ocean.Light),
-        World.get(swelling, light, Ocean.Swell),
+        State.get(swelling, light, Ocean.Light),
+        State.get(swelling, light, Ocean.Swell),
       ]);
       expect(Option.map(drawn, ({ position }) => [position.x, position.y, position.z])).toEqual(
         Option.map(expected, ([{ across, back }, { height }]) => [
@@ -36,10 +36,10 @@ it.effect('draws a light the brighter the higher it stands', () =>
     const scene = yield* Scene.make(OceanView.views);
     yield* scene.show(swelling);
 
-    const lights = World.holding(swelling, [Ocean.Light]).flatMap((light) =>
+    const lights = State.holding(swelling, [Ocean.Light]).flatMap((light) =>
       Option.toArray(
         Option.all([
-          World.get(swelling, light, Ocean.Swell),
+          State.get(swelling, light, Ocean.Swell),
           Option.map(
             scene.find(OceanView.lights, light),
             ({ material }) => material.emissive.getHSL({ h: 0, s: 0, l: 0 }).l,

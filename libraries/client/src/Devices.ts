@@ -66,8 +66,8 @@ export interface Mouse {
   readonly at: Option.Option<{ readonly x: number; readonly y: number }>;
 }
 
-/** Every device at one moment. */
-export interface State {
+/** What every device reads at one moment. */
+export interface Reading {
   readonly pads: ReadonlyArray<Pad>;
   /** The keys held, by `KeyboardEvent.code`: where a key is, never what it types. */
   readonly keys: ReadonlySet<string>;
@@ -99,7 +99,7 @@ export const idlePad: Pad = {
 };
 
 /** No device doing anything. */
-export const idle: State = {
+export const idle: Reading = {
   pads: [],
   keys: new Set(),
   mouse: { buttons: new Set(), dx: 0, dy: 0, wheel: 0, notches: 0, at: Option.none() },

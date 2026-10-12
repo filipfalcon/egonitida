@@ -1,15 +1,15 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, World } from '@lightocean/core';
+import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect } from 'effect';
 import * as Editing from '#src/editing.ts';
 
-// The local server: the document being edited, a world stepped off the main thread. A page that joins is an editor, whose edits are its actions. In development it goes on from the document kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
+// The local server: the document being edited, a state stepped off the main thread. A page that joins is an editor, whose edits are its actions. In development it goes on from the document kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
 const options = {
   game: Editing.game,
   join: Editing.join,
-  leave: World.despawn,
-  world: Editing.document,
+  leave: State.despawn,
+  state: Editing.document,
   mayHold: true,
 };
 

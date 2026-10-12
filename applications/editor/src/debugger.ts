@@ -34,7 +34,7 @@ const styles = stylex.create({
     fontFamily: 'ui-monospace, monospace',
     fontSize: 12,
   },
-  world: {
+  state: {
     margin: 0,
     padding: 8,
     overflowX: 'auto',
@@ -77,7 +77,7 @@ const changesOf = (model: Model, step: Log.Step): ReadonlyArray<string> =>
     ...despawned.map((entity) => `${part}: let go of ${nameOf(model, entity)}`),
   ]);
 
-/** What the document playing has been through: what happened at each step, what it changed, and the world after any of them. */
+/** What the document playing has been through: what happened at each step, what it changed, and the state after any of them. */
 export const viewDebugger = (
   model: Model,
   playing: PlayingState,
@@ -148,9 +148,9 @@ export const viewDebugger = (
       }),
       ...Option.match(playing.maybePast, {
         onNone: () => [],
-        onSome: ({ world }) => [
-          h.h2(Styled.attributes(h, ui.heading), ['World']),
-          h.pre(Styled.attributes(h, styles.world), [world]),
+        onSome: ({ state }) => [
+          h.h2(Styled.attributes(h, ui.heading), ['State']),
+          h.pre(Styled.attributes(h, styles.state), [state]),
         ],
       }),
     ],

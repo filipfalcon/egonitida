@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Domain, Game, World } from '@lightocean/core';
+import { Client, Component, Domain, Game, State } from '@lightocean/core';
 import { SocketTransport } from '@lightocean/core/experimental';
 import { type Cause, Effect, Option, Queue, References, Schema } from 'effect';
 import * as Socket from 'effect/socket/Socket';
@@ -26,9 +26,9 @@ const game = Game.make({
 });
 const options = {
   game,
-  world: World.empty({ seed: 1 }),
-  join: (world: World.World) => World.spawn(world, [Someone.of({})]),
-  leave: World.despawn,
+  state: State.empty({ seed: 1 }),
+  join: (state: State.State) => State.spawn(state, [Someone.of({})]),
+  leave: State.despawn,
   mayHold: false,
 };
 
@@ -61,12 +61,12 @@ const entered = (room: Room.Room) =>
     return { client, opened };
   });
 
-/** Who is in the world `client` sees now. */
+/** Who is in the state `client` sees now. */
 const someone = (client: Client.Client) =>
-  Effect.map(client.world, (world) => World.holding(world, [Someone]));
+  Effect.map(client.state, (state) => State.holding(state, [Someone]));
 
 describe('a room', () => {
-  // Real time: a room steps its world as time passes, as a Durable Object does.
+  // Real time: a room steps its game as time passes, as a Durable Object does.
   it.live('hosts a game for every socket that opens, as one player each', () =>
     Effect.gen(function* () {
       const room = yield* Room.make(options);
@@ -96,7 +96,7 @@ describe('a room', () => {
   it.live('stands still while no one is in it, and runs while someone is', () =>
     Effect.gen(function* () {
       const room = yield* Room.make(options);
-      const tick = Effect.map(room.host.world, ({ tick }) => tick);
+      const tick = Effect.map(room.host.state, ({ tick }) => tick);
 
       yield* Effect.sleep('200 millis');
       const empty = yield* tick;
@@ -116,7 +116,7 @@ describe('a room', () => {
   it.live('runs for a player who enters while the last one is still leaving', () =>
     Effect.gen(function* () {
       const room = yield* Room.make(options);
-      const tick = Effect.map(room.host.world, ({ tick }) => tick);
+      const tick = Effect.map(room.host.state, ({ tick }) => tick);
       const runs: Array<boolean> = [];
 
       // One leaves and the next enters at once, again and again, as a page reconnecting does.
@@ -142,7 +142,7 @@ describe('a room', () => {
     () =>
       Effect.gen(function* () {
         const room = yield* Room.make(options);
-        const tick = Effect.map(room.host.world, ({ tick }) => tick);
+        const tick = Effect.map(room.host.state, ({ tick }) => tick);
         const staying = yield* entered(room);
         const going = yield* entered(room);
 

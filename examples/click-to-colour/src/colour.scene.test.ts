@@ -10,7 +10,7 @@ it.effect('draws each cube in its colour, where a click on it finds it', () =>
   Effect.gen(function* () {
     const told = Story.story(
       Colour.game,
-      Story.given(Colour.world, { viewer: Colour.viewer }),
+      Story.given(Colour.state, { viewer: Colour.viewer }),
       Story.act('viewer', Pointing.Clicked, { entity: Colour.right }),
       Story.step(),
     );
@@ -19,7 +19,7 @@ it.effect('draws each cube in its colour, where a click on it finds it', () =>
     camera.position.set(0, 0, 8);
     camera.updateMatrixWorld();
 
-    yield* scene.show(told.world);
+    yield* scene.show(told.state);
 
     const at = new Three.Vector3(Colour.SPACING, 0, 0).project(camera);
     expect(Option.map(scene.pick(camera, at), ({ entity }) => entity)).toEqual(

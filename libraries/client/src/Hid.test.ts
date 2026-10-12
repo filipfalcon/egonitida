@@ -160,7 +160,7 @@ describe('a device through WebHID', () => {
       Effect.gen(function* () {
         const device = new Recorded();
         const connection = yield* Hid.connect(device, DualSense.driver);
-        /** The strong motor, and the right trigger's mode, of each report sent. */
+        /** The strong motor, and the right trigger's effect, of each report sent. */
         const felt = () => device.sent.map(({ bytes }) => [bytes[3], bytes[10]]);
 
         yield* connection.felt.motors({ strong: 1, weak: 0 });

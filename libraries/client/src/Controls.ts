@@ -158,7 +158,7 @@ const padUsed = (pad: Devices.Pad) =>
   Math.hypot(pad.axes.LeftX, pad.axes.LeftY) > DEAD_ZONE.inner ||
   Math.hypot(pad.axes.RightX, pad.axes.RightY) > DEAD_ZONE.inner;
 
-const keyboardAndMouseUsed = (devices: Devices.State) =>
+const keyboardAndMouseUsed = (devices: Devices.Reading) =>
   devices.keys.size > 0 ||
   devices.mouse.buttons.size > 0 ||
   devices.mouse.dx !== 0 ||
@@ -177,7 +177,7 @@ export const start = <Bindings extends Readonly<Record<string, Binding>>>(
 /** `bindings` read over `devices`, after `previous`. */
 export const read = <Bindings extends Readonly<Record<string, Binding>>>(
   bindings: Bindings,
-  devices: Devices.State,
+  devices: Devices.Reading,
   previous: Read<Bindings>,
 ): Read<Bindings> => {
   const sticks = new Map<string, Direction>();

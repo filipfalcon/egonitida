@@ -1,4 +1,4 @@
-import type { World } from '@lightocean/core';
+import type { State } from '@lightocean/core';
 import { Context, Effect, Option } from 'effect';
 
 /**
@@ -23,15 +23,15 @@ export class Lighting extends Context.Service<
   Lighting,
   {
     /** Lights what the player of `entity` holds and plays on `colour`, until it is lit again. */
-    readonly colour: (entity: World.Entity, colour: Colour) => Effect.Effect<void>;
+    readonly colour: (entity: State.Entity, colour: Colour) => Effect.Effect<void>;
     /** Lights `count` of the player lights of what the player of `entity` holds, such as how much health is left, until they are lit again. */
-    readonly players: (entity: World.Entity, count: number) => Effect.Effect<void>;
+    readonly players: (entity: State.Entity, count: number) => Effect.Effect<void>;
   }
 >()('@lightocean/client/Lighting') {}
 
 /** Lighting for a page whose player is `player`, lit on the devices `lit` gives at that moment; and lighting them all `again` as last asked, so a device connected since is lit as the rest. */
 export const make = (options: {
-  readonly player: World.Entity;
+  readonly player: State.Entity;
   readonly lit: () => ReadonlyArray<Lit>;
 }): Lighting['Service'] & { readonly again: Effect.Effect<void> } => {
   const latest = { colour: Option.none<Colour>(), players: Option.none<number>() };

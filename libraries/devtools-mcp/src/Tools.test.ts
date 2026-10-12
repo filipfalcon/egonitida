@@ -23,10 +23,10 @@ describe('the tools', () => {
 
       const hosts = yield* tools.lightocean_hosts();
       yield* tools.lightocean_advance({ steps: 2 });
-      const world = yield* tools.lightocean_world({ component: 'Count' });
+      const state = yield* tools.lightocean_state({ component: 'Count' });
 
       expect(hosts).toEqual([{ host: 'counting', name: 'counting' }]);
-      expect(world).toEqual({ tick: 2, entities: { 0: { Count: { value: 2 } } } });
+      expect(state).toEqual({ tick: 2, entities: { 0: { Count: { value: 2 } } } });
     }),
   );
 
@@ -35,7 +35,7 @@ describe('the tools', () => {
       const tools = yield* workspace;
 
       const refused = yield* tools
-        .lightocean_world({ tick: 99 })
+        .lightocean_state({ tick: 99 })
         .pipe(Effect.match({ onFailure: ({ reason }) => reason, onSuccess: () => 'answered' }));
 
       expect(refused).toBe('tick 99 is not kept: ticks 0 to 0 are');
@@ -47,10 +47,10 @@ describe('the tools', () => {
       const tools = yield* workspace;
 
       const joined = yield* tools.lightocean_join({});
-      const world = yield* tools.lightocean_world({});
+      const state = yield* tools.lightocean_state({});
 
       expect(joined).toEqual({ entity: 1 });
-      expect(world).toMatchObject({ entities: { 1: { Count: { value: 0 } } } });
+      expect(state).toMatchObject({ entities: { 1: { Count: { value: 0 } } } });
     }),
   );
 
@@ -73,7 +73,7 @@ describe('the tools', () => {
         'lightocean_seek',
         'lightocean_span',
         'lightocean_story',
-        'lightocean_world',
+        'lightocean_state',
       ].toSorted(),
     );
   });

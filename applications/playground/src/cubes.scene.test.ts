@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
 import { Scene } from '@lightocean/client';
-import { Pointing, Story, World } from '@lightocean/core';
+import { Pointing, Story, State } from '@lightocean/core';
 import { Effect, Option } from 'effect';
 import * as Cubes from '#src/cubes.ts';
 import * as CubesView from '#src/cubes.view.ts';
@@ -9,12 +9,12 @@ import * as CubesView from '#src/cubes.view.ts';
 const askedAndClicked = () => {
   const asked = Story.story(
     Cubes.game,
-    Story.given(Cubes.world, { viewer: Cubes.viewer }),
+    Story.given(Cubes.state, { viewer: Cubes.viewer }),
     Story.act('viewer', Cubes.AskedForCube, {}),
     Story.act('viewer', Cubes.AskedForCube, {}),
     Story.step(),
   );
-  const [first, second] = World.holding(asked.world, [Cubes.Cube]);
+  const [first, second] = State.holding(asked.state, [Cubes.Cube]);
   return { asked, first, second };
 };
 
@@ -28,9 +28,9 @@ it.effect('draws every cube where its place in the grid is, in the colour it is 
     });
     const scene = yield* Scene.make(CubesView.views);
 
-    yield* scene.show(clicked.world);
+    yield* scene.show(clicked.state);
 
-    const drawn = (cube: World.Entity | undefined) =>
+    const drawn = (cube: State.Entity | undefined) =>
       Option.flatMap(Option.fromNullishOr(cube), (entity) => scene.find(CubesView.cubes, entity));
     expect(Option.map(drawn(first), ({ position }) => [position.x, position.z])).toEqual(
       Option.some([Cubes.xOf(0), Cubes.zOf(0)]),
@@ -57,9 +57,9 @@ it.effect('turns every cube as time goes on', () =>
         Option.map(scene.find(CubesView.cubes, cube), ({ quaternion }) => quaternion.clone()),
       );
 
-    yield* scene.show(asked.world);
+    yield* scene.show(asked.state);
     const before = turn();
-    yield* scene.show(later.world);
+    yield* scene.show(later.state);
     const after = turn();
 
     expect(

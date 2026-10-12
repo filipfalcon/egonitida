@@ -3,9 +3,9 @@ import { Transport } from '@lightocean/core/internal';
 import { type Cause, Effect, Exit, Option, Queue, Schema, Scope, Semaphore, Stream } from 'effect';
 
 /**
- * A world hosted for the players who reach it across a network, as a Cloudflare Durable Object hosts one room: one host, joined by every socket that opens to it, one player each, and let go of when its socket closes. It knows nothing of Cloudflare: whatever runs it hands it each socket as it opens, the text each one receives, and when each closes, as a Durable Object's WebSocket handlers do.
+ * A game hosted for the players who reach it across a network, as a Cloudflare Durable Object hosts one room: one host, joined by every socket that opens to it, one player each, and let go of when its socket closes. It knows nothing of Cloudflare: whatever runs it hands it each socket as it opens, the text each one receives, and when each closes, as a Durable Object's WebSocket handlers do.
  *
- * Time stands while no one is in it, so a room with no one in it takes no steps and keeps nothing awake. What it holds lives as long as whatever runs it: a Durable Object that sleeps forgets its world.
+ * Time stands while no one is in it, so a room with no one in it takes no steps and keeps nothing awake. What it holds lives as long as whatever runs it: a Durable Object that sleeps forgets its state.
  */
 
 /** The room's side of a socket: how it sends a player text, at once, as a Durable Object's WebSocket does, since a socket opening is not cut short while it waits. */
@@ -21,7 +21,7 @@ export interface Opened {
   readonly closed: Effect.Effect<void>;
 }
 
-/** A room: the host of its world, and how a socket opens to it. */
+/** A room: the host of its game, and how a socket opens to it. */
 export interface Room<Services = never> {
   readonly host: Host.Host<Services>;
   /** Joins a player through `socket`, until it closes or the room's scope does. */
@@ -35,20 +35,20 @@ export const make = <Services = never>(
   Effect.gen(function* () {
     const parent = yield* Effect.scope;
     const host = yield* Host.make(options);
-    const state = { inside: 0 };
+    const present = { inside: 0 };
     const turns = yield* Semaphore.make(1);
     yield* host.hold;
 
     /** Holds time while no one is in the room, and lets it run while someone is, by how many are in it now; one at a time, so what one finds is what it does, and the last to settle finds the room as it is. */
     const settle = turns.withPermit(
-      Effect.suspend(() => (state.inside === 0 ? host.hold : host.release)),
+      Effect.suspend(() => (present.inside === 0 ? host.hold : host.release)),
     );
 
     const open = (socket: Socket): Effect.Effect<Opened> =>
       Effect.gen(function* () {
         const scope = yield* Scope.fork(parent);
         const inbox = yield* Queue.unbounded<Transport.Frame, Cause.Done>();
-        state.inside += 1;
+        present.inside += 1;
         yield* Effect.andThen(
           settle,
           host
@@ -62,7 +62,7 @@ export const make = <Services = never>(
           Effect.onError(() =>
             Effect.andThen(
               Effect.sync(() => {
-                state.inside -= 1;
+                present.inside -= 1;
               }),
               Effect.andThen(Scope.close(scope, Exit.void), settle),
             ),
@@ -81,7 +81,7 @@ export const make = <Services = never>(
               return Effect.void;
             }
             left.closed = true;
-            state.inside -= 1;
+            present.inside -= 1;
             // Let go of and settled, even if what closed it is cut short.
             return Effect.uninterruptible(Effect.andThen(Scope.close(scope, Exit.void), settle));
           }),

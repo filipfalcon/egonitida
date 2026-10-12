@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, World } from '@lightocean/core';
+import { Component, State } from '@lightocean/core';
 import { Effect, Exit, Option, Schema, Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Drawing from '#src/Drawing.ts';
@@ -11,21 +11,21 @@ const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }),
   network: 'server',
 });
 const Crate = Component.make('Crate', Schema.Struct({}), { owner: 'rules', network: 'server' });
-/** A moment kept as state: when something was last struck. */
+/** A moment kept as a component: when something was last struck. */
 const Struck = Component.make('Struck', Schema.Struct({ at: Schema.Int }), {
   owner: 'rules',
   network: 'server',
 });
 
-/** Draws `worlds` one frame each, through `views`, and gives what each frame left in the root. */
-const play = <R>(views: View.Views<R>, worlds: ReadonlyArray<World.World>) =>
+/** Draws `states` one frame each, through `views`, and gives what each frame left in the root. */
+const play = <R>(views: View.Views<R>, states: ReadonlyArray<State.State>) =>
   Effect.gen(function* () {
     const shown: Array<ReadonlyArray<Three.Object3D>> = [];
-    const state = { previous: Option.none<Timeline.View>() };
-    for (const world of worlds) {
-      const view = Timeline.still(world);
-      yield* views.frame(Drawing.frameOf(view, state.previous));
-      state.previous = Option.some(view);
+    const seen = { previous: Option.none<Timeline.View>() };
+    for (const state of states) {
+      const view = Timeline.still(state);
+      yield* views.frame(Drawing.frameOf(view, seen.previous));
+      seen.previous = Option.some(view);
       shown.push([...views.root.children]);
     }
     return shown;
@@ -45,9 +45,9 @@ describe('View.each', () => {
           },
         });
         const views = yield* View.make([crates]);
-        const [first] = World.spawn(World.empty({ seed: 1 }), crateAt(1));
-        const [withLoose] = World.spawn(first, [Position.of({ x: 9 })]);
-        const moved = World.despawn(World.spawn(World.empty({ seed: 1 }), crateAt(3))[0], 1);
+        const [first] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+        const [withLoose] = State.spawn(first, [Position.of({ x: 9 })]);
+        const moved = State.despawn(State.spawn(State.empty({ seed: 1 }), crateAt(3))[0], 1);
 
         const [once] = yield* play(views, [withLoose]);
         const drawnFirst = once?.map(({ position }) => position.x);
@@ -74,8 +74,8 @@ describe('View.each', () => {
           draw: () => {},
         });
         const views = yield* View.make([crates]);
-        const [two] = World.spawn(World.spawn(World.empty({ seed: 1 }), crateAt(1))[0], crateAt(2));
-        const [uncrated] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 1 })]);
+        const [two] = State.spawn(State.spawn(State.empty({ seed: 1 }), crateAt(1))[0], crateAt(2));
+        const [uncrated] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 1 })]);
 
         const [both, none] = yield* play(views, [two, uncrated]);
 
@@ -92,8 +92,8 @@ describe('View.each', () => {
         draw: () => {},
       });
       const views = yield* View.make([crates]);
-      const [crated] = World.spawn(World.empty({ seed: 1 }), crateAt(1));
-      const [uncrated] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 1 })]);
+      const [crated] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+      const [uncrated] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 1 })]);
 
       const [before, , after] = yield* play(views, [crated, uncrated, crated]);
 
@@ -113,8 +113,8 @@ describe('View.on', () => {
       );
       const views = yield* View.make([struck]);
       const at = (tick: number) =>
-        World.spawn(World.empty({ seed: 1 }), [Crate.of({}), Struck.of({ at: tick })])[0];
-      const [bare] = World.spawn(World.empty({ seed: 1 }), [Crate.of({})]);
+        State.spawn(State.empty({ seed: 1 }), [Crate.of({}), Struck.of({ at: tick })])[0];
+      const [bare] = State.spawn(State.empty({ seed: 1 }), [Crate.of({})]);
 
       yield* play(views, [bare, at(3), at(3), at(5)]);
       yield* Effect.yieldNow;
@@ -141,8 +141,8 @@ describe('View.during', () => {
         ),
       );
       const views = yield* View.make([crowded]);
-      const [one] = World.spawn(World.empty({ seed: 1 }), crateAt(1));
-      const [two] = World.spawn(one, crateAt(2));
+      const [one] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+      const [two] = State.spawn(one, crateAt(2));
 
       yield* play(views, [one, two, two, one]);
 
@@ -166,7 +166,7 @@ describe('View.make', () => {
       });
       const scope = yield* Scope.make();
       const views = yield* View.make([crates]).pipe(Scope.provide(scope));
-      yield* play(views, [World.spawn(World.empty({ seed: 1 }), [Crate.of({})])[0]]);
+      yield* play(views, [State.spawn(State.empty({ seed: 1 }), [Crate.of({})])[0]]);
 
       yield* Scope.close(scope, Exit.void);
 
@@ -204,10 +204,10 @@ describe('picking', () => {
 
   const drawn = Effect.gen(function* () {
     const views = yield* View.make([boxes, streaks]);
-    const [one, left] = World.spawn(World.empty({ seed: 1 }), crateAt(0));
-    const [two, right] = World.spawn(one, crateAt(2));
-    const [world] = World.spawn(two, [Struck.of({ at: 1 })]);
-    yield* play(views, [world]);
+    const [one, left] = State.spawn(State.empty({ seed: 1 }), crateAt(0));
+    const [two, right] = State.spawn(one, crateAt(2));
+    const [state] = State.spawn(two, [Struck.of({ at: 1 })]);
+    yield* play(views, [state]);
     return { views, left, right };
   });
 
@@ -249,10 +249,10 @@ describe('objects of an entity', () => {
         draw: () => {},
       });
       const views = yield* View.make([boxes, marks]);
-      const [world, crate] = World.spawn(World.empty({ seed: 1 }), crateAt(1));
-      const [, loose] = World.spawn(world, [Position.of({ x: 2 })]);
+      const [state, crate] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+      const [, loose] = State.spawn(state, [Position.of({ x: 2 })]);
 
-      yield* play(views, [World.spawn(world, [Position.of({ x: 2 })])[0]]);
+      yield* play(views, [State.spawn(state, [Position.of({ x: 2 })])[0]]);
 
       expect(views.objectsOf(crate)).toEqual([
         Option.getOrThrow(views.find(boxes, crate)),
@@ -279,15 +279,15 @@ describe('View.rig', () => {
       camera.position.x = body.position.x;
     });
   });
-  const [world, player] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: 4 })]);
-  const [withOther, other] = World.spawn(world, [Position.of({ x: 9 })]);
+  const [state, player] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 4 })]);
+  const [withOther, other] = State.spawn(state, [Position.of({ x: 9 })]);
 
   it.effect('draws the camera for the player after every view has drawn, from what they drew', () =>
     Effect.gen(function* () {
       const camera = new Three.PerspectiveCamera();
       const views = yield* View.make([eyes, bodies], Option.some({ camera, player }));
 
-      yield* play(views, [world]);
+      yield* play(views, [state]);
 
       expect([camera.position.x, camera.position.y]).toEqual([4, 1.6]);
     }),
@@ -301,7 +301,7 @@ describe('View.rig', () => {
       });
       const camera = new Three.PerspectiveCamera();
       const views = yield* View.make([following], Option.some({ camera, player: other }));
-      const [crated] = World.spawn(withOther, crateAt(7));
+      const [crated] = State.spawn(withOther, crateAt(7));
 
       yield* play(views, [withOther, crated]);
 
@@ -317,7 +317,7 @@ describe('View.rig', () => {
       const camera = new Three.PerspectiveCamera();
       const views = yield* View.make([shaken, bodies, eyes], Option.some({ camera, player }));
 
-      yield* play(views, [world]);
+      yield* play(views, [state]);
 
       expect(camera.position.y).toBeCloseTo(1.6);
     }),
@@ -327,7 +327,7 @@ describe('View.rig', () => {
     Effect.gen(function* () {
       const views = yield* View.make([bodies, eyes]);
 
-      const [drawn] = yield* play(views, [world]);
+      const [drawn] = yield* play(views, [state]);
 
       expect(drawn).toHaveLength(1);
     }),

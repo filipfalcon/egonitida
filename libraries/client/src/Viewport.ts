@@ -2,7 +2,7 @@ import { Data, Effect, Option, Queue, type Scope, Stream } from 'effect';
 import * as Three from 'three/webgpu';
 
 /**
- * A game's world drawn onto a canvas by a `WebGPURenderer`: a scene to put views' objects in, a camera, and a loop that draws a frame at every frame the display shows. It lives in the browser only.
+ * A game's state drawn onto a canvas by a `WebGPURenderer`: a scene to put views' objects in, a camera, and a loop that draws a frame at every frame the display shows. It lives in the browser only.
  *
  * Time comes from the display: each frame is told the time between the moments the display showed this frame and the one before, never when code happens to run.
  */
@@ -130,7 +130,7 @@ export const make = (
     );
 
     const render = Effect.sync(() => renderer.render(scene, camera));
-    // Whether the loop has drawn a frame yet, before which a shot would show nothing of the world.
+    // Whether the loop has drawn a frame yet, before which a shot would show nothing of the state.
     const drawn = { once: false };
 
     const loop = <R>(frame: (seconds: number) => Effect.Effect<void, never, R>) =>
@@ -145,11 +145,11 @@ export const make = (
           ),
           () => Effect.promise(() => renderer.setAnimationLoop(null)),
         );
-        const state = { previous: Option.none<number>() };
+        const clock = { previous: Option.none<number>() };
         yield* Effect.gen(function* () {
           const now = yield* Queue.take(shown);
-          const seconds = secondsBetween(state.previous, now);
-          state.previous = Option.some(now);
+          const seconds = secondsBetween(clock.previous, now);
+          clock.previous = Option.some(now);
           yield* frame(seconds);
           yield* render;
           drawn.once = true;

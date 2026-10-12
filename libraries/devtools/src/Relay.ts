@@ -81,7 +81,7 @@ interface Waiting {
 
 /** A relay with no host and no tool yet. */
 export const make: Effect.Effect<Relay> = Effect.sync(() => {
-  const state = {
+  const known = {
     /** The hosts that said hello, in the order they did. */
     hosts: new Array<Hosting>(),
     /** The pages that said which host they draw, in the order they did. */
@@ -92,10 +92,10 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
   };
 
   const answerTool = (id: number, toTool: (waiting: Waiting) => FromRelay) =>
-    Option.match(Option.fromNullishOr(state.waiting.get(id)), {
+    Option.match(Option.fromNullishOr(known.waiting.get(id)), {
       onNone: () => Effect.void,
       onSome: (waiting) => {
-        state.waiting.delete(id);
+        known.waiting.delete(id);
         return waiting.tool.send(toTool(waiting));
       },
     });
@@ -104,15 +104,15 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
     switch (message._tag) {
       case 'Hello':
         return Effect.sync(() => {
-          state.hosts = [
-            ...state.hosts.filter(({ host }) => host !== message.host),
+          known.hosts = [
+            ...known.hosts.filter(({ host }) => host !== message.host),
             { host: message.host, name: message.name, peer },
           ];
         });
       case 'Showing':
         return Effect.sync(() => {
-          state.pages = [
-            ...state.pages.filter(({ page }) => page !== message.page),
+          known.pages = [
+            ...known.pages.filter(({ page }) => page !== message.page),
             { page: message.page, host: message.host, peer },
           ];
         });
@@ -129,16 +129,16 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
 
   /** The host a request is for: the one named, or the newest. */
   const hostFor = (named: Option.Option<string>): Result.Result<Hosting, string> => {
-    const running = state.hosts.map(({ host }) => host);
+    const running = known.hosts.map(({ host }) => host);
     return Option.match(named, {
       onNone: () =>
-        Option.match(Option.fromNullishOr(state.hosts.at(-1)), {
+        Option.match(Option.fromNullishOr(known.hosts.at(-1)), {
           onNone: () =>
             Result.fail('no game is running: open it in a browser with the development server'),
           onSome: Result.succeed,
         }),
       onSome: (name) =>
-        Option.match(Option.fromNullishOr(state.hosts.find(({ host }) => host === name)), {
+        Option.match(Option.fromNullishOr(known.hosts.find(({ host }) => host === name)), {
           onNone: () =>
             Result.fail(
               `no host is called ${name}: ${running.join(' and ')} ${running.length === 1 ? 'is' : 'are'} running`,
@@ -153,17 +153,17 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
       return tool.send({
         _tag: 'Hosts',
         id: message.id,
-        hosts: state.hosts.map(({ host, name }) => ({ host, name })),
+        hosts: known.hosts.map(({ host, name }) => ({ host, name })),
       });
     }
     const target = hostFor(message.host);
     if (Result.isFailure(target)) {
       return tool.send({ _tag: 'Refusal', id: message.id, reason: target.failure });
     }
-    const id = state.nextId;
-    state.nextId += 1;
+    const id = known.nextId;
+    known.nextId += 1;
     if (message._tag === 'Capture') {
-      const page = state.pages.findLast(({ host }) => host === target.success.host);
+      const page = known.pages.findLast(({ host }) => host === target.success.host);
       if (page === undefined) {
         return tool.send({
           _tag: 'Refusal',
@@ -171,10 +171,10 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
           reason: `no page shows ${target.success.host}: open it in a browser with the development server`,
         });
       }
-      state.waiting.set(id, { tool, id: message.id, host: target.success.host, asked: page.peer });
+      known.waiting.set(id, { tool, id: message.id, host: target.success.host, asked: page.peer });
       return page.peer.send({ _tag: 'Capture', id, page: page.page, width: message.width });
     }
-    state.waiting.set(id, {
+    known.waiting.set(id, {
       tool,
       id: message.id,
       host: target.success.host,
@@ -196,9 +196,9 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
       }),
     hostGone: (peer) =>
       Effect.suspend(() => {
-        state.hosts = state.hosts.filter((hosting) => hosting.peer !== peer);
-        state.pages = state.pages.filter((showing) => showing.peer !== peer);
-        const unanswered = [...state.waiting].filter(([, { asked }]) => asked === peer);
+        known.hosts = known.hosts.filter((hosting) => hosting.peer !== peer);
+        known.pages = known.pages.filter((showing) => showing.peer !== peer);
+        const unanswered = [...known.waiting].filter(([, { asked }]) => asked === peer);
         return Effect.forEach(
           unanswered,
           ([id, { host }]) =>
@@ -217,9 +217,9 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
       }),
     toolGone: (tool) =>
       Effect.sync(() => {
-        for (const [id, waiting] of state.waiting) {
+        for (const [id, waiting] of known.waiting) {
           if (waiting.tool === tool) {
-            state.waiting.delete(id);
+            known.waiting.delete(id);
           }
         }
       }),

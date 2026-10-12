@@ -3,12 +3,12 @@ import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import type { Despawning, Spawning, Time } from '#src/System.ts';
-import type * as World from '#src/World.ts';
+import type * as State from '#src/State.ts';
 
 type Of<Value> = Component.Component<string, Value, Component.Owner>;
 
 /**
- * What the game decides when something happens, such as what a bite does to health. A rule handles one event, may read anything, and writes only components the rules own, and only those it declared. It may emit further events, which are handled in the same step after it, and issue the commands it declared, which are done outside the world once the step is over (see `Command.ts`).
+ * What the game decides when something happens, such as what a bite does to health. A rule handles one event, may read anything, and writes only components the rules own, and only those it declared. It may emit further events, which are handled in the same step after it, and issue the commands it declared, which are done outside the game once the step is over (see `Command.ts`).
  */
 
 export interface Context<
@@ -21,9 +21,9 @@ export interface Context<
   extends Spawning<Spawns>, Despawning<Despawns> {
   readonly time: Time;
   readonly random: () => number;
-  readonly get: <Value>(entity: World.Entity, component: Of<Value>) => Option.Option<Value>;
-  readonly query: World.Query<Component.Any>;
-  readonly set: <Value>(entity: World.Entity, component: Of<Value> & Writes, value: Value) => void;
+  readonly get: <Value>(entity: State.Entity, component: Of<Value>) => Option.Option<Value>;
+  readonly query: State.Query<Component.Any>;
+  readonly set: <Value>(entity: State.Entity, component: Of<Value> & Writes, value: Value) => void;
   readonly emit: (event: Event.ValueOf<Emits>) => void;
   /** Issues a command it declared, to be done once the step is over. A method, so a step can hand a rule written for any commands one that knows its game's. */
   command(issued: Command.IssuedOf<Commands>): void;

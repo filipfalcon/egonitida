@@ -4,7 +4,7 @@ import * as Devices from '#src/Devices.ts';
 import * as Navigation from '#src/Navigation.ts';
 
 /** A pad holding `buttons`, and nothing else held. */
-const holding = (...buttons: ReadonlyArray<Devices.PadButton>): Devices.State => ({
+const holding = (...buttons: ReadonlyArray<Devices.PadButton>): Devices.Reading => ({
   ...Devices.idle,
   pads: [
     {
@@ -52,7 +52,7 @@ describe('navigating with a pad', () => {
 
   it('moves by the left stick too, and goes on moving while a direction is held', () => {
     const { navigation, focused } = menu();
-    const leaning: Devices.State = {
+    const leaning: Devices.Reading = {
       ...Devices.idle,
       pads: [{ ...Devices.idlePad, axes: { ...Devices.idlePad.axes, LeftY: 1 } }],
     };
@@ -93,7 +93,7 @@ describe('navigating with a pad', () => {
 });
 
 /** A pad leaning its left stick `y` up, and nothing else held. */
-const leaning = (y: number): Devices.State => ({
+const leaning = (y: number): Devices.Reading => ({
   ...Devices.idle,
   pads: [{ ...Devices.idlePad, axes: { ...Devices.idlePad.axes, LeftY: -y } }],
 });

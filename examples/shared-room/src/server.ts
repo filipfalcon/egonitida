@@ -1,5 +1,5 @@
 import { Room } from '@lightocean/server/experimental';
-import { World } from '@lightocean/core';
+import { State } from '@lightocean/core';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import { Effect, Option, Schema, Scope } from 'effect';
 import { HttpServerRequest } from 'effect/http/HttpServerRequest';
@@ -21,9 +21,9 @@ export class SharedRoom extends Cloudflare.DurableObject<SharedRoom>()(
       const lives = yield* Scope.make();
       const room = yield* Room.make({
         game: Walkers.game,
-        world: Walkers.world,
+        state: Walkers.state,
         join: Walkers.join,
-        leave: World.despawn,
+        leave: State.despawn,
         mayHold: false,
       }).pipe(Scope.provide(lives));
       const inside = new Map<string, Room.Opened>();

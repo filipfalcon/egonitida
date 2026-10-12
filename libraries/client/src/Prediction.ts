@@ -1,10 +1,10 @@
-import { type Client, type Component, Game, Input, World } from '@lightocean/core';
+import { type Client, type Component, Game, Input, State } from '@lightocean/core';
 import { Effect, Option, Schedule, Schema, type Scope, Stream } from 'effect';
 import type * as Drawing from '#src/Drawing.ts';
 import * as Interpolate from '#src/Interpolate.ts';
 
 /**
- * A player's own client playing ahead of its host, so the player's input answers at once across a network. The client sends the input the player holds once a step, numbered, as the host takes one a step; the host says which number each world it sends took in. What the player's own entity holds of predicted components is drawn from the newest world the host sent, stepped on with every input it has not taken in yet. When the host disagrees with what was predicted, what is drawn goes over to it in a few frames, never in a jump. Everything else is drawn as the host sent it.
+ * A player's own client playing ahead of its host, so the player's input answers at once across a network. The client sends the input the player holds once a step, numbered, as the host takes one a step; the host says which number each state it sends took in. What the player's own entity holds of predicted components is drawn from the newest state the host sent, stepped on with every input it has not taken in yet. When the host disagrees with what was predicted, what is drawn goes over to it in a few frames, never in a jump. Everything else is drawn as the host sent it.
  */
 
 /** How fast what is drawn of the player goes over to what is predicted: the share of the way left it closes in a second, as a rate. */
@@ -28,56 +28,56 @@ export const make = (
   Effect.gen(function* () {
     const own = client.entity;
     const predicted = game.components.filter(({ network }) => network === 'predicted');
-    const state = {
+    const predicting = {
       held: new Array<Component.Instance<Input.InputComponent>>(),
       /** The inputs sent, by their numbers, oldest first. */
       sent: new Array<{ readonly seq: number; readonly inputs: ReadonlyArray<Input.Input> }>(),
-      confirmed: Option.none<World.World>(),
-      /** The number of the newest input a world the host sent took in. */
+      confirmed: Option.none<State.State>(),
+      /** The number of the newest input a state the host sent took in. */
       acked: 0,
       /** What is drawn of each predicted component of the player now, by its name. */
       shown: new Map<string, unknown>(),
     };
 
-    yield* client.worlds.pipe(
-      Stream.runForEach((world) =>
+    yield* client.states.pipe(
+      Stream.runForEach((state) =>
         Effect.sync(() => {
-          state.confirmed = Option.some(world);
+          predicting.confirmed = Option.some(state);
         }),
       ),
       Effect.forkScoped,
     );
     // Once a step, as the host takes one input a step.
     yield* Effect.suspend(() =>
-      Effect.map(client.send(state.held), (seq) => {
-        state.sent = [
-          ...state.sent,
-          { seq, inputs: state.held.map((instance) => Input.fromInstance(own, instance)) },
+      Effect.map(client.send(predicting.held), (seq) => {
+        predicting.sent = [
+          ...predicting.sent,
+          { seq, inputs: predicting.held.map((instance) => Input.fromInstance(own, instance)) },
         ].slice(-KEPT_INPUTS);
       }),
     ).pipe(Effect.repeat(Schedule.spaced(`${1000 / client.stepRate} millis`)), Effect.forkScoped);
 
-    /** The newest world the host sent, stepped on with every input it has not taken in. Which it took in the host says just after the world, so until it has, the number it said last stands. */
-    const ahead = (confirmed: World.World) => {
-      state.acked = Option.getOrElse(client.ackedAt(confirmed.tick), () => state.acked);
-      return state.sent
-        .filter(({ seq }) => seq > state.acked)
-        .reduce((world, { inputs }) => Game.step(game, world, inputs).world, confirmed);
+    /** The newest state the host sent, stepped on with every input it has not taken in. Which it took in the host says just after the state, so until it has, the number it said last stands. */
+    const ahead = (confirmed: State.State) => {
+      predicting.acked = Option.getOrElse(client.ackedAt(confirmed.tick), () => predicting.acked);
+      return predicting.sent
+        .filter(({ seq }) => seq > predicting.acked)
+        .reduce((state, { inputs }) => Game.step(game, state, inputs).state, confirmed);
     };
 
     return {
       hold: (values) => {
-        state.held = [...values];
+        predicting.held = [...values];
       },
       frame: (frame, seconds) => {
-        const world = Option.map(state.confirmed, ahead);
+        const state = Option.map(predicting.confirmed, ahead);
         const share = 1 - Math.exp(-CATCH_UP_PER_SECOND * seconds);
         for (const component of predicted) {
           Option.map(
-            Option.flatMap(world, (stepped) => World.get(stepped, own, component)),
+            Option.flatMap(state, (stepped) => State.get(stepped, own, component)),
             (target) => {
-              const before = state.shown.get(component.name);
-              state.shown.set(
+              const before = predicting.shown.get(component.name);
+              predicting.shown.set(
                 component.name,
                 before !== undefined && Schema.is(component.schema)(before)
                   ? Interpolate.between(component.schema, before, target, share)
@@ -87,7 +87,7 @@ export const make = (
           );
         }
         const get: Drawing.Frame['get'] = (entity, component) => {
-          const shown = state.shown.get(component.name);
+          const shown = predicting.shown.get(component.name);
           return entity === own &&
             component.network === 'predicted' &&
             shown !== undefined &&
@@ -98,7 +98,7 @@ export const make = (
         return {
           ...frame,
           get,
-          query: World.queryBy((components) => World.holding(frame.drawn, components), get),
+          query: State.queryBy((components) => State.holding(frame.drawn, components), get),
         };
       },
     };

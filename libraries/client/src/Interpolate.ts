@@ -1,16 +1,16 @@
 import { Option, Schema, SchemaAST } from 'effect';
 
 /**
- * Where a value is between two of its states, for drawing between two steps of the world. It is read off the value's schema, the way the editor's Details panel is: numbers move in a straight line, structs and tuples move field by field, a number annotated `interpolate: 'angle'` turns the short way round, and anything annotated `interpolate: 'step'` stays at its earlier state until the later one is reached.
+ * Where a value lies between two others, for drawing between two steps. It is read off the value's schema, the way the editor's Details panel is: numbers move in a straight line, structs and tuples move field by field, a number annotated `interpolate: 'angle'` turns the short way round, and anything annotated `interpolate: 'step'` stays at the earlier value until the later one is reached.
  *
- * The value moves in its canonical JSON form, and the result is decoded by the same schema, so its type is proven rather than claimed. Two states of a tagged union, or an option and its absence, never blend: the earlier holds until the later is reached. A value that cannot lie between two others, such as a whole number, a boolean, or a choice, fails to decode in between and stays at the earlier value until the later one is reached.
+ * The value moves in its canonical JSON form, and the result is decoded by the same schema, so its type is proven rather than claimed. Two modes of a tagged union, or an option and its absence, never blend: the earlier holds until the later is reached. A value that cannot lie between two others, such as a whole number, a boolean, or a choice, fails to decode in between and stays at the earlier value until the later one is reached.
  */
 
 declare module 'effect/Schema' {
   namespace Annotations {
     interface Annotations {
       /**
-       * How a value moves between two states: an angle turns the short way round; a step stays at its earlier state until the later one is reached, for a number that is really a choice, such as a stage.
+       * How a value moves from one to the next: an angle turns the short way round; a step stays at the earlier value until the later one is reached, for a number that is really a choice, such as a stage.
        */
       readonly interpolate?: 'angle' | 'step' | undefined;
     }
@@ -40,7 +40,7 @@ const move = (ast: SchemaAST.AST | undefined, a: unknown, b: unknown, t: number)
     return earlier.map((value, index) => move(elements[index], value, later[index], t));
   }
   if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
-    // Two states of a union stay apart: the earlier one holds until the later one is reached, whatever fields they share.
+    // Two modes of a union stay apart: the earlier one holds until the later one is reached, whatever fields they share.
     if ('_tag' in a && '_tag' in b && a._tag !== b._tag) {
       return a;
     }

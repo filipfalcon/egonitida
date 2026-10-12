@@ -1,8 +1,8 @@
-import { Component, Domain, Game, Pointing, Rule, World } from '@lightocean/core';
+import { Component, Domain, Game, Pointing, Rule, State } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 
 /**
- * The second example: cubes that a click paints the next colour of a palette. It adds one idea to the first: a world a player changes by clicking what is drawn, through the `Pointing` domain the engine gives, whose `Clicked` the rules here answer. Its view is in `colour.view.ts`.
+ * The second example: cubes that a click paints the next colour of a palette. It adds one idea to the first: a game a player plays by clicking what is drawn, through the `Pointing` domain the engine gives, whose `Clicked` the rules here answer. Its view is in `colour.view.ts`.
  */
 
 /** The colours a cube steps through, one per click, as hex. */
@@ -59,12 +59,12 @@ const cubeAt = (x: number, label: string) => [
   Pointing.Label.of({ text: label }),
 ];
 
-const [withLeft, left] = World.spawn(World.empty({ seed: 1 }), cubeAt(-SPACING, 'Left cube'));
-const [withMiddle, middle] = World.spawn(withLeft, cubeAt(0, 'Middle cube'));
-const [withRight, right] = World.spawn(withMiddle, cubeAt(SPACING, 'Right cube'));
+const [withLeft, left] = State.spawn(State.empty({ seed: 1 }), cubeAt(-SPACING, 'Left cube'));
+const [withMiddle, middle] = State.spawn(withLeft, cubeAt(0, 'Middle cube'));
+const [withRight, right] = State.spawn(withMiddle, cubeAt(SPACING, 'Right cube'));
 /** Whoever looks at the cubes and clicks them: an entity that holds nothing, whom a click is from. */
-const [withViewer, viewer] = World.spawn(withRight, []);
+const [withViewer, viewer] = State.spawn(withRight, []);
 
 /** Three cubes in a row, painted the first colour. */
-export const world = withViewer;
+export const state = withViewer;
 export { left, middle, right, viewer };

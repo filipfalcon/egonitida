@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { World } from '@lightocean/core';
+import { State } from '@lightocean/core';
 import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Queue, Stream } from 'effect';
 import * as Beside from '#src/Beside.ts';
@@ -40,7 +40,7 @@ describe('the devtools beside a host', () => {
     }),
   );
 
-  it.effect('host a game from the world kept for the tab, and keep it on', () =>
+  it.effect('host a game from the state kept for the tab, and keep it on', () =>
     Effect.gen(function* () {
       const store = Keep.memory();
       const first = yield* Fixtures.host();
@@ -48,14 +48,14 @@ describe('the devtools beside a host', () => {
       yield* Fixtures.visit(first);
       yield* first.hold;
       yield* Fixtures.advance(100);
-      const left = yield* first.world;
+      const left = yield* first.state;
       const served: Array<number> = [];
 
       yield* Beside.host(
-        { ...Fixtures.setup(), world: World.empty({ seed: 7 }), mayHold: true },
+        { ...Fixtures.setup(), state: State.empty({ seed: 7 }), mayHold: true },
         { name: 'test', id: 'tab-1', kept: {}, store: Option.some(store) },
         (hosted) =>
-          Effect.map(hosted.world, ({ tick }) => {
+          Effect.map(hosted.state, ({ tick }) => {
             served.push(tick);
           }),
       );
@@ -65,7 +65,7 @@ describe('the devtools beside a host', () => {
   );
 
   it.effect(
-    'give the client that joins first the player kept for it, if the world still holds it',
+    'give the client that joins first the player kept for it, if the state still holds it',
     () =>
       Effect.gen(function* () {
         const store = Keep.memory();
@@ -77,7 +77,7 @@ describe('the devtools beside a host', () => {
         const joined: Array<number> = [];
 
         yield* Beside.host(
-          { ...Fixtures.setup(), world: World.empty({ seed: 7 }), mayHold: true },
+          { ...Fixtures.setup(), state: State.empty({ seed: 7 }), mayHold: true },
           { name: 'test', id: 'tab-1', kept: {}, store: Option.some(store) },
           (hosted) =>
             Effect.gen(function* () {

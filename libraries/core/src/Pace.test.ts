@@ -38,9 +38,9 @@ describe('pace', () => {
   it('keeps the real rate however irregularly it is asked', () => {
     const askedAt = [1013, 1071, 1072, 1140, 1199, 1250, 1301, 1333, 1400, 1466, 2000];
     const taken = askedAt.reduce(
-      (state, now) => {
-        const { steps, pace } = Pace.due(state.pace, state.done, now);
-        return { pace, done: state.done + steps };
+      (paced, now) => {
+        const { steps, pace } = Pace.due(paced.pace, paced.done, now);
+        return { pace, done: paced.done + steps };
       },
       { pace: Pace.start({ now: 1000, stepRate: 30, maxSteps: 100 }), done: 0 },
     );

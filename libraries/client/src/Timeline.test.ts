@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, World } from '@lightocean/core';
+import { Component, State } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 import * as Timeline from '#src/Timeline.ts';
 
@@ -10,14 +10,14 @@ const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }),
 
 const STEP = 1 / 60;
 
-/** The world at `tick`, holding one entity whose position is the tick itself, so drawn positions read as times. */
-const worldAt = (tick: number): World.World => {
-  const [world] = World.spawn(World.empty({ seed: 1 }), [Position.of({ x: tick })]);
-  return { ...world, tick };
+/** The state at `tick`, holding one entity whose position is the tick itself, so drawn positions read as times. */
+const stateAt = (tick: number): State.State => {
+  const [state] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: tick })]);
+  return { ...state, tick };
 };
 
 const receiveAll = (timeline: Timeline.Timeline, ticks: ReadonlyArray<number>) =>
-  ticks.reduce((current, tick) => Timeline.receive(current, worldAt(tick)), timeline);
+  ticks.reduce((current, tick) => Timeline.receive(current, stateAt(tick)), timeline);
 
 const start = Timeline.make({ stepRate: 60, keepSeconds: 2 });
 
@@ -28,39 +28,39 @@ const drawn = (timeline: Timeline.Timeline) =>
   );
 
 describe('Timeline', () => {
-  it('has nothing to draw before a world arrives', () => {
+  it('has nothing to draw before a state arrives', () => {
     expect(Timeline.view(start)).toEqual(Option.none());
   });
 
-  it('draws the first world as soon as it arrives', () => {
-    expect(drawn(Timeline.receive(start, worldAt(1)))).toEqual(Option.some(1));
+  it('draws the first state as soon as it arrives', () => {
+    expect(drawn(Timeline.receive(start, stateAt(1)))).toEqual(Option.some(1));
   });
 
-  it('draws between the two newest worlds, a step behind the newest', () => {
+  it('draws between the two newest states, a step behind the newest', () => {
     const timeline = Timeline.advance(receiveAll(start, [1, 2]), STEP / 2);
 
     expect(Option.getOrElse(drawn(timeline), () => 0)).toBeCloseTo(1.5);
   });
 
-  it('keeps a step behind the newest while worlds arrive every step', () => {
+  it('keeps a step behind the newest while states arrive every step', () => {
     const timeline = [3, 4, 5, 6, 7, 8].reduce(
-      (current, tick) => Timeline.advance(Timeline.receive(current, worldAt(tick)), STEP),
+      (current, tick) => Timeline.advance(Timeline.receive(current, stateAt(tick)), STEP),
       receiveAll(start, [1, 2]),
     );
 
-    // The newest world is tick 8, so drawing sits at tick 7.
+    // The newest state is tick 8, so drawing sits at tick 7.
     expect(Option.getOrElse(drawn(timeline), () => 0)).toBeCloseTo(7);
   });
 
-  it('never runs past the newest world, however long none arrives', () => {
+  it('never runs past the newest state, however long none arrives', () => {
     const timeline = Timeline.advance(receiveAll(start, [1, 2]), 5);
 
     expect(drawn(timeline)).toEqual(Option.some(2));
   });
 
-  it('does not jump when worlds arrive late and together, but moves on at nearly real time', () => {
+  it('does not jump when states arrive late and together, but moves on at nearly real time', () => {
     const steady = Timeline.advance(receiveAll(start, [1, 2]), STEP);
-    // Two steps' worth of time passes with nothing new, then both worlds arrive at once.
+    // Two steps' worth of time passes with nothing new, then both states arrive at once.
     const late = Timeline.advance(receiveAll(steady, [3, 4]), STEP);
     const before = Option.getOrElse(drawn(steady), () => 0);
     const after = Option.getOrElse(drawn(late), () => 0);
@@ -77,19 +77,19 @@ describe('Timeline', () => {
     expect(Option.getOrElse(drawn(timeline), () => 0)).toBeCloseTo(59, 0);
   });
 
-  it('draws an older world at once when one arrives, as when the host goes back in time', () => {
+  it('draws an older state at once when one arrives, as when the host goes back in time', () => {
     const steady = Timeline.advance(receiveAll(start, [10, 11, 12]), STEP);
 
-    const back = Timeline.receive(steady, worldAt(5));
+    const back = Timeline.receive(steady, stateAt(5));
 
     expect(drawn(back)).toEqual(Option.some(5));
     expect(back.history.map(({ tick }) => tick)).toEqual([5]);
   });
 
-  it('shows an entity from the moment the world it appears in is reached', () => {
-    const [withOther] = World.spawn(worldAt(2), [Position.of({ x: 100 })]);
+  it('shows an entity from the moment the state it appears in is reached', () => {
+    const [withOther] = State.spawn(stateAt(2), [Position.of({ x: 100 })]);
     const timeline = Timeline.advance(
-      Timeline.receive(Timeline.receive(start, worldAt(1)), withOther),
+      Timeline.receive(Timeline.receive(start, stateAt(1)), withOther),
       STEP / 2,
     );
     const other = Option.flatMap(Timeline.view(timeline), (view) => view.get(1, Position));
@@ -97,10 +97,10 @@ describe('Timeline', () => {
     expect(other).toEqual(Option.none());
   });
 
-  it('keeps an entity until the world it is gone from is reached', () => {
-    const gone = World.despawn(worldAt(2), 0);
+  it('keeps an entity until the state it is gone from is reached', () => {
+    const gone = State.despawn(stateAt(2), 0);
     const timeline = Timeline.advance(
-      Timeline.receive(Timeline.receive(start, worldAt(1)), gone),
+      Timeline.receive(Timeline.receive(start, stateAt(1)), gone),
       STEP / 2,
     );
 
@@ -110,16 +110,16 @@ describe('Timeline', () => {
   describe('querying what is drawn', () => {
     /** Ticks 1 and 2, the second with another entity at x = 100, drawn halfway between them. */
     const halfway = (() => {
-      const [withOther] = World.spawn(worldAt(2), [Position.of({ x: 100 })]);
+      const [withOther] = State.spawn(stateAt(2), [Position.of({ x: 100 })]);
       return Timeline.advance(
-        Timeline.receive(Timeline.receive(start, worldAt(1)), withOther),
+        Timeline.receive(Timeline.receive(start, stateAt(1)), withOther),
         STEP / 2,
       );
     })();
     const rows = (timeline: Timeline.Timeline) =>
       Option.map(Timeline.view(timeline), (view) => view.query(Position));
 
-    it('gives every entity drawn, each where it is between the two worlds, as `get` has it', () => {
+    it('gives every entity drawn, each where it is between the two states, as `get` has it', () => {
       const between = Option.getOrThrow(drawn(halfway));
 
       expect(between).toBeGreaterThan(1);
@@ -127,7 +127,7 @@ describe('Timeline', () => {
       expect(rows(halfway)).toEqual(Option.some([[0, { x: between }]]));
     });
 
-    it('gives an entity from the moment the world it appears in is reached', () => {
+    it('gives an entity from the moment the state it appears in is reached', () => {
       const reached = Timeline.advance(halfway, STEP);
 
       expect(rows(reached)).toEqual(
@@ -141,10 +141,10 @@ describe('Timeline', () => {
       );
     });
 
-    it('gives an entity until the world it is gone from is reached', () => {
-      const gone = World.despawn(worldAt(2), 0);
+    it('gives an entity until the state it is gone from is reached', () => {
+      const gone = State.despawn(stateAt(2), 0);
       const between = Timeline.advance(
-        Timeline.receive(Timeline.receive(start, worldAt(1)), gone),
+        Timeline.receive(Timeline.receive(start, stateAt(1)), gone),
         STEP / 2,
       );
 
@@ -172,14 +172,14 @@ describe('Timeline', () => {
       expect(Option.getOrElse(drawn(slowed), () => 0)).toBeCloseTo(21);
     });
 
-    it('is not moved by worlds that arrive meanwhile', () => {
+    it('is not moved by states that arrive meanwhile', () => {
       const frozen = Timeline.present(recorded, { from: 20 * STEP, rate: 0 });
       const meanwhile = Timeline.advance(receiveAll(frozen, [61, 62, 63]), STEP);
 
       expect(Option.getOrElse(drawn(meanwhile), () => 0)).toBeCloseTo(20);
     });
 
-    it('returns to the live world when it ends', () => {
+    it('returns to the live state when it ends', () => {
       const presented = Timeline.advance(
         Timeline.present(recorded, { from: 20 * STEP, rate: 0 }),
         STEP,
@@ -189,7 +189,7 @@ describe('Timeline', () => {
       expect(Option.getOrElse(drawn(back), () => 0)).toBeCloseTo(60, 0);
     });
 
-    it('starts no earlier than the oldest world kept', () => {
+    it('starts no earlier than the oldest state kept', () => {
       const short = Timeline.make({ stepRate: 60, keepSeconds: 0.5 });
       const kept = receiveAll(
         short,

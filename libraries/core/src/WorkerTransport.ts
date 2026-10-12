@@ -8,7 +8,7 @@ import type * as Transport from '#src/Transport.ts';
 /**
  * A session between a page and a host running in a worker, for singleplayer: the same host a Durable Object runs, on the player's own machine, off the main thread. It is written against Effect's platform-neutral workers, so the platform decides what a worker is: a Web Worker, a shared worker, or a message port in a test.
  *
- * A worker has no notion of a connection opening, so the page says hello first, and a port's first frame is what joins it. The hello may carry what the page opens with, such as the world a host is to start from, which a worker that makes its host only then reads.
+ * A worker has no notion of a connection opening, so the page says hello first, and a port's first frame is what joins it. The hello may carry what the page opens with, such as the state a host is to start from, which a worker that makes its host only then reads.
  */
 
 /** The page's side: a connection to the host in the worker the platform spawns, opening with `opening`. */

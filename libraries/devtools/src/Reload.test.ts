@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { World } from '@lightocean/core';
+import { State } from '@lightocean/core';
 import { Effect, Fiber, Option } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Recording from '#src/Recording.ts';
@@ -14,7 +14,7 @@ const reloaded = Effect.gen(function* () {
   const watching = yield* Replay.alongside(hosted, Fixtures.setup()).pipe(Effect.forkChild);
   const rewind = yield* Rewind.make(hosted, Fixtures.setup(), { every: 3, keepSeconds: 10 });
   yield* Fixtures.advance(100);
-  const before = yield* hosted.world;
+  const before = yield* hosted.state;
   yield* hosted.reload(Fixtures.setup(Fixtures.brisk));
   yield* Fixtures.visit(hosted, Fixtures.brisk);
   return { hosted, recorder, watching, rewind, before };
@@ -49,21 +49,21 @@ describe('a game swapped for a new build', () => {
     }),
   );
 
-  it.effect('is gone back in from the world it was swapped in at, with the new build', () =>
+  it.effect('is gone back in from the state it was swapped in at, with the new build', () =>
     Effect.gen(function* () {
       const { rewind, before } = yield* reloaded;
 
       const { oldest } = yield* rewind.span;
 
       expect(oldest).toBe(before.tick);
-      expect(Option.isSome(yield* rewind.worldAt(before.tick + 2))).toBe(true);
+      expect(Option.isSome(yield* rewind.stateAt(before.tick + 2))).toBe(true);
     }),
   );
 });
 
 const options = (played = Fixtures.game) => ({
   ...Fixtures.setup(played),
-  world: World.empty({ seed: 7 }),
+  state: State.empty({ seed: 7 }),
   mayHold: false,
 });
 
@@ -74,8 +74,8 @@ describe('hosting across builds', () => {
       const served: Array<number> = [];
 
       yield* Reload.host(kept, options(), (host) =>
-        Effect.map(host.world, (world) => {
-          served.push(world.tick);
+        Effect.map(host.state, (state) => {
+          served.push(state.tick);
         }),
       );
       yield* Fixtures.advance(100);
@@ -86,7 +86,7 @@ describe('hosting across builds', () => {
       );
       const tick = yield* Option.match(Reload.kept(kept), {
         onNone: () => Effect.succeed(Option.none<number>()),
-        onSome: (host) => Effect.map(host.world, ({ tick }) => Option.some(tick)),
+        onSome: (host) => Effect.map(host.state, ({ tick }) => Option.some(tick)),
       });
 
       expect(served).toEqual([0]);
@@ -94,7 +94,7 @@ describe('hosting across builds', () => {
     }),
   );
 
-  it.effect('says why a build cannot take up the world the host holds', () =>
+  it.effect('says why a build cannot take up the state the host holds', () =>
     Effect.gen(function* () {
       const kept = {};
       yield* Reload.host(kept, options(), () => Effect.void);

@@ -15,6 +15,21 @@ describe('the routes', () => {
     expect(Route.routeToUrlPath(Route.AppRoute.Home())).toBe('/');
   });
 
+  it('leads /welcome to the welcome, and builds it back', () => {
+    expect(routeAt('/welcome')).toEqual(Route.AppRoute.Welcome());
+    expect(Route.routeToUrlPath(Route.AppRoute.Welcome())).toBe('/welcome');
+  });
+
+  it('leads /installation to the installation, and builds it back', () => {
+    expect(routeAt('/installation')).toEqual(Route.AppRoute.Installation());
+    expect(Route.routeToUrlPath(Route.AppRoute.Installation())).toBe('/installation');
+  });
+
+  it('leads /key-terms to the key terms, and builds it back', () => {
+    expect(routeAt('/key-terms')).toEqual(Route.AppRoute.KeyTerms());
+    expect(Route.routeToUrlPath(Route.AppRoute.KeyTerms())).toBe('/key-terms');
+  });
+
   it('leads /principles to the principles, and builds it back', () => {
     expect(routeAt('/principles')).toEqual(Route.AppRoute.Principles());
     expect(Route.routeToUrlPath(Route.AppRoute.Principles())).toBe('/principles');
@@ -38,6 +53,9 @@ describe('the routes', () => {
     expect(Route.isDocsRoute(routeAt('/nowhere'))).toBe(true);
     expect(Route.isDocsRoute(routeAt('/architecture'))).toBe(true);
     expect(Route.isDocsRoute(routeAt('/principles'))).toBe(true);
+    expect(Route.isDocsRoute(routeAt('/key-terms'))).toBe(true);
+    expect(Route.isDocsRoute(routeAt('/installation'))).toBe(true);
+    expect(Route.isDocsRoute(routeAt('/welcome'))).toBe(true);
     expect(Route.isDocsRoute(routeAt('/'))).toBe(false);
   });
 });

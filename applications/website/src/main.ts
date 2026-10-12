@@ -1,4 +1,4 @@
-import type { World } from '@lightocean/foldkit';
+import type { Session } from '@lightocean/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import * as Dom from 'foldkit/dom';
@@ -7,32 +7,36 @@ import { UrlRequest, load, pushUrl } from 'foldkit/navigation';
 import { modifyFields } from 'foldkit/struct';
 import * as Url from 'foldkit/url';
 import { AppRoute, urlToAppRoute } from '#src/route.ts';
+import * as GlanceStage from '#src/glanceStage.ts';
+import * as StatePress from '#src/statePress.ts';
 
 /**
- * The engine's website: a home page that says what LightOcean is, with an ocean of lights at its top that is a world on the engine, hosted in a worker and drawn on a canvas; and the engine's documentation. The pages are Foldkit's, and hold nothing of the world but whether it is shown.
+ * The engine's website: a home page that says what LightOcean is, with an ocean of lights at its top that is a game on the engine, hosted in a worker and drawn on a canvas; and the engine's documentation, whose page of key terms explains a state with the state press. The pages are Foldkit's, and hold nothing of a game's state but whether it is shown.
  */
 
 // MODEL
 
 /** The ocean as far as the page has it: being joined, or joined, with the canvas it is shown on waiting to be in the page or mounted there. */
-export const OceanState = Schema.Union([
+export const PageOcean = Schema.Union([
   Schema.TaggedStruct('Joining', {}),
   Schema.TaggedStruct('Joined', { canvas: Schema.Literals(['Waiting', 'Mounted']) }),
 ]);
-export type OceanState = typeof OceanState.Type;
+export type PageOcean = typeof PageOcean.Type;
 
-/** The website: the page its URL leads to, the URL, the ocean as far as the home page has it, and what last went wrong showing it. */
+/** The website: the page its URL leads to, the URL, the ocean as far as the home page has it, what last went wrong showing it, and the stage of First Things First and the state press on the page of key terms. */
 export const Model = Schema.Struct({
   route: AppRoute,
   url: Url.Url,
-  ocean: OceanState,
+  ocean: PageOcean,
   maybeError: Schema.Option(Schema.String),
+  glance: GlanceStage.Model,
+  statePress: StatePress.Model,
 });
 export type Model = typeof Model.Type;
 
 // MESSAGE
 
-/** What happens on the website: a link clicked and the URL changed, what came of going there, and the ocean joined, left, and shown. */
+/** What happens on the website: a link clicked and the URL changed, what came of going there, the ocean joined, left, and shown, and what happens to the stage of First Things First and to the state press. */
 export const Message = defineMessageUnion({
   ClickedLink: { request: UrlRequest },
   ChangedUrl: { url: Url.Url },
@@ -46,16 +50,21 @@ export const Message = defineMessageUnion({
   FailedJoinOcean: { reason: Schema.String },
   MountedCanvas: {},
   FailedShowOcean: { reason: Schema.String },
+  GotGlanceMessage: { message: GlanceStage.Message },
+  GotStatePressMessage: { message: StatePress.Message },
 });
 export type Message = typeof Message.Type;
 
 // RESOURCES
 
-/** The ocean's world, joined while the page is open. */
-export const OceanWorld = ManagedResource.tag<World.Joined>()('OceanWorld');
+/** The ocean's session, joined while the page is open. */
+export const OceanSession = ManagedResource.tag<Session.Joined>()('OceanSession');
 
-/** What the website's Subscriptions reach: the ocean's world. */
-export type Services = ManagedResource.ServiceOf<typeof OceanWorld>;
+/** What the website's Commands and Subscriptions reach: the ocean's session, and the press's. */
+export type Services =
+  | ManagedResource.ServiceOf<typeof OceanSession>
+  | GlanceStage.Services
+  | StatePress.Services;
 
 // COMMANDS
 
@@ -151,6 +160,24 @@ export const update = (model: Model, message: Message) =>
           : model,
     }),
     FailedShowOcean: ({ reason }) => ({ model: failed(model, reason) }),
+    GotGlanceMessage: ({ message }) => {
+      const staged = GlanceStage.update(model.glance, message);
+      return {
+        model: modifyFields(model, { glance: () => staged.model }),
+        commands: Command.mapMessages(staged.commands, (inner) =>
+          Message.GotGlanceMessage({ message: inner }),
+        ),
+      };
+    },
+    GotStatePressMessage: ({ message }) => {
+      const pressed = StatePress.update(model.statePress, message);
+      return {
+        model: modifyFields(model, { statePress: () => pressed.model }),
+        commands: Command.mapMessages(pressed.commands, (inner) =>
+          Message.GotStatePressMessage({ message: inner }),
+        ),
+      };
+    },
   });
 
 // INIT
@@ -161,6 +188,8 @@ export const initialModelAt = (url: Url.Url): Model => ({
   url,
   ocean: { _tag: 'Joining' },
   maybeError: Option.none(),
+  glance: GlanceStage.initialModel,
+  statePress: StatePress.initialModel,
 });
 
 /** The website as it opens at `url`. */

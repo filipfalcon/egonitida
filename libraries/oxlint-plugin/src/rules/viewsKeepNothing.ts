@@ -1,7 +1,7 @@
 import { type Node, type Rule, enclosingPartFunction, within } from '#src/ast.ts';
 
 /**
- * A view's `draw` changes only its own object, from what the frame holds: what is drawn is a function of the state, so a past frame drawn again looks as it did. What a view must remember belongs in the world, as a local component.
+ * A view's `draw` changes only its own object, from what the frame holds: what is drawn is a function of the state, so a past frame drawn again looks as it did. What a view must remember belongs in the state, as a local component.
  */
 
 /** The variable `target` changes at its root: `x` in `x = 1` or `x.y.z = 1`; nothing for `this`. */
@@ -17,7 +17,7 @@ export const viewsKeepNothing: Rule = {
     type: 'problem',
     messages: {
       keeps:
-        '`{{name}}` is kept from frame to frame by a view’s `draw`, so a frame drawn again would not look as it did. Change only the object the view built; keep what it must remember in the world, as a local component.',
+        '`{{name}}` is kept from frame to frame by a view’s `draw`, so a frame drawn again would not look as it did. Change only the object the view built; keep what it must remember in the state, as a local component.',
     },
   },
   create: (context) => {

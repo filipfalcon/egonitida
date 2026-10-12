@@ -8,13 +8,13 @@ import {
   Pointing,
   Rule,
   System,
-  World,
+  State,
 } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 import { Scores } from '#src/scores.ts';
 
 /**
- * The fifth example: a round against the clock, whose score is saved when it ends. It adds one idea to those before: a rule that needs something done outside the world, saving the score, issues a command, and what came of it, the best score kept or why none was, comes back as an event. Its view is in `score.view.ts`; where scores are kept is `scores.ts`'s.
+ * The fifth example: a round against the clock, whose score is saved when it ends. It adds one idea to those before: a rule that needs something done outside the game, saving the score, issues a command, and what came of it, the best score kept or why none was, comes back as an event. Its view is in `score.view.ts`; where scores are kept is `scores.ts`'s.
  */
 
 /** How long a round lasts, in seconds. */
@@ -94,9 +94,9 @@ const hit = Rule.on(Pointing.Clicked, {
     if (Option.isNone(context.get(entity, Target))) {
       return;
     }
-    for (const [round, state] of context.query(Round)) {
-      if (state._tag === 'Playing') {
-        context.set(round, Round, { ...state, hits: state.hits + 1 });
+    for (const [round, mode] of context.query(Round)) {
+      if (mode._tag === 'Playing') {
+        context.set(round, Round, { ...mode, hits: mode.hits + 1 });
         context.set(entity, Target, {
           x: (context.random() * 2 - 1) * SPREAD,
           z: (context.random() * 2 - 1) * SPREAD,
@@ -124,9 +124,9 @@ const saved = Rule.on(ScoreSaved, {
   writes: [Round],
   emits: [],
   run: (context, { best }) => {
-    for (const [round, state] of context.query(Round)) {
-      if (state._tag === 'Saving') {
-        context.set(round, Round, { _tag: 'Saved', hits: state.hits, best });
+    for (const [round, mode] of context.query(Round)) {
+      if (mode._tag === 'Saving') {
+        context.set(round, Round, { _tag: 'Saved', hits: mode.hits, best });
       }
     }
   },
@@ -137,9 +137,9 @@ const notSaved = Rule.on(ScoreNotSaved, {
   writes: [Round],
   emits: [],
   run: (context, { reason }) => {
-    for (const [round, state] of context.query(Round)) {
-      if (state._tag === 'Saving') {
-        context.set(round, Round, { _tag: 'Unsaved', hits: state.hits, reason });
+    for (const [round, mode] of context.query(Round)) {
+      if (mode._tag === 'Saving') {
+        context.set(round, Round, { _tag: 'Unsaved', hits: mode.hits, reason });
       }
     }
   },
@@ -157,8 +157,8 @@ const newRound = Rule.on(ChoseNewRound, {
   writes: [Round],
   emits: [],
   run: (context) => {
-    for (const [round, state] of context.query(Round)) {
-      if (state._tag === 'Saved' || state._tag === 'Unsaved') {
+    for (const [round, mode] of context.query(Round)) {
+      if (mode._tag === 'Saved' || mode._tag === 'Unsaved') {
         context.set(round, Round, playingFrom(context.time.tick, context.time.stepSeconds));
       }
     }
@@ -174,9 +174,9 @@ const clock = System.make({
   writes: [],
   emits: [RoundEnded],
   run: (context) => {
-    for (const [, state] of context.query(Round)) {
-      if (state._tag === 'Playing' && context.time.tick >= state.endsAt) {
-        context.emit({ _tag: 'RoundEnded', hits: state.hits });
+    for (const [, mode] of context.query(Round)) {
+      if (mode._tag === 'Playing' && context.time.tick >= mode.endsAt) {
+        context.emit({ _tag: 'RoundEnded', hits: mode.hits });
       }
     }
   },
@@ -199,21 +199,21 @@ export const domain = Domain.make({
 /** The example's game: pointing at things, and the round. */
 export const game = Game.make({ stepRate: STEP_RATE, domains: [Pointing.domain, domain] });
 
-const [withRound, round] = World.spawn(World.empty({ seed: 1 }), [
+const [withRound, round] = State.spawn(State.empty({ seed: 1 }), [
   Round.of(playingFrom(0, 1 / STEP_RATE)),
 ]);
-const [withFirst, firstTarget] = World.spawn(withRound, [
+const [withFirst, firstTarget] = State.spawn(withRound, [
   Target.of({ x: -2, z: 0 }),
   Pointing.Label.of({ text: 'Target' }),
 ]);
-const [withSecond] = World.spawn(withFirst, [
+const [withSecond] = State.spawn(withFirst, [
   Target.of({ x: 2, z: -1 }),
   Pointing.Label.of({ text: 'Target' }),
 ]);
 /** Whoever plays: an entity that holds nothing, whom a click is from. */
-const [withPlayer, player] = World.spawn(withSecond, []);
+const [withPlayer, player] = State.spawn(withSecond, []);
 
 /** A round about to start, two targets, and a player. */
-export const world = withPlayer;
+export const state = withPlayer;
 /** The round's entity, the first target's, and the player's, for stories and scenes to name. */
 export { round, firstTarget, player };

@@ -1,5 +1,5 @@
 import { Inspect, Log, Rewind } from '@lightocean/devtools';
-import { World } from '@lightocean/foldkit';
+import { Session } from '@lightocean/foldkit';
 import { Pointing } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
@@ -10,7 +10,7 @@ import * as Objects from '#src/objects.ts';
 import * as Playing from '#src/playing.ts';
 
 /**
- * The editor's page. The document is a world, joined in a worker; the page holds no more of it than its panels show, the objects in the outliner and the one the editor has selected, and sends the document every edit as the editor's action, which the document checks and decides on. Play opens a second worker from the document as it is, and the canvas shows that world until Stop ends it; nothing is edited meanwhile. While it plays, the debugger tells what happened at each step, what it changed, and the world as it was after any of them, on the canvas too.
+ * The editor's page. The document is a game, joined in a worker; the page holds no more of it than its panels show, the objects in the outliner and the one the editor has selected, and sends the document every edit as the editor's action, which the document checks and decides on. Play opens a second worker from the document as it is, and the canvas shows that game until Stop ends it; nothing is edited meanwhile. While it plays, the debugger tells what happened at each step, what it changed, and the state after any of them, on the canvas too.
  */
 
 // MODEL
@@ -44,17 +44,17 @@ export const DocumentState = Schema.Union([
 ]);
 export type DocumentState = typeof DocumentState.Type;
 
-/** What the debugger shows of the document playing: the world as it was after `tick`, entity by entity as JSON. */
-export const Past = Schema.Struct({ tick: Schema.Int, world: Schema.String });
+/** What the debugger shows of the document playing: the state after `tick`, entity by entity as JSON. */
+export const Past = Schema.Struct({ tick: Schema.Int, state: Schema.String });
 
 /**
- * Whether the document is being edited, or plays from `opening`, the document as it was when Play was pressed: its world being opened or joined, the steps its debugger told of in which something happened, and the past it shows, if not the live world.
+ * Whether the document is being edited, or plays from `opening`, the document as it was when Play was pressed: its session being opened or joined, the steps its debugger told of in which something happened, and the past it shows, if not the live game.
  */
 export const Play = Schema.Union([
   Schema.TaggedStruct('Editing', {}),
   Schema.TaggedStruct('Playing', {
     opening: Schema.String,
-    world: Schema.Literals(['Opening', 'Joined']),
+    session: Schema.Literals(['Opening', 'Joined']),
     steps: Schema.Array(Log.Step),
     maybePast: Schema.Option(Past),
   }),
@@ -75,7 +75,7 @@ export type Model = typeof Model.Type;
 
 // MESSAGE
 
-/** What happens on the page: the document and the world playing joined and left, what they tell, and what the editor does. */
+/** What happens on the page: the document and the game playing joined and left, what they tell, and what the editor does. */
 export const Message = defineMessageUnion({
   JoinedDocument: {},
   FoundDocumentJoined: {},
@@ -110,7 +110,7 @@ export const Message = defineMessageUnion({
   ClickedStop: {},
   ToldSteps: { steps: Schema.Array(Log.Step) },
   InspectedStep: { tick: Schema.Int },
-  ShowedPast: { tick: Schema.Int, world: Schema.String },
+  ShowedPast: { tick: Schema.Int, state: Schema.String },
   ClickedLive: {},
   WentLive: {},
   FailedDebug: { reason: Schema.String },
@@ -120,10 +120,10 @@ export type Message = typeof Message.Type;
 // RESOURCES
 
 /** The document, joined while the editor is open. */
-export const Document = ManagedResource.tag<World.Joined>()('Document');
+export const Document = ManagedResource.tag<Session.Joined>()('Document');
 
 /** The document playing, joined while it plays. */
-export const Played = ManagedResource.tag<World.Joined>()('Played');
+export const Played = ManagedResource.tag<Session.Joined>()('Played');
 
 /** What the editor's Commands and Subscriptions reach: its document, and the document playing. */
 export type Services =
@@ -226,15 +226,15 @@ export const SendEdit = Command.define('SendEdit', {
 export const OpenPlay = Command.define('OpenPlay', {
   messages: [Message.ReadDocumentForPlay, Message.FailedOpenPlay],
   execute: Document.get.pipe(
-    Effect.flatMap(({ client }) => client.world),
-    Effect.map((world) => Message.ReadDocumentForPlay({ opening: Playing.opening(world) })),
+    Effect.flatMap(({ client }) => client.state),
+    Effect.map((state) => Message.ReadDocumentForPlay({ opening: Playing.opening(state) })),
     Effect.catch(({ resource }) =>
       Effect.succeed(Message.FailedOpenPlay({ reason: `The document ${resource} is not joined.` })),
     ),
   ),
 });
 
-/** Holds the time of the document playing and shows it, the canvas too, as it was after `tick`, with the world then. */
+/** Holds the time of the document playing and shows it, the canvas too, as it was after `tick`, with the state then. */
 export const ShowPast = Command.define('ShowPast', {
   args: { tick: Schema.Int },
   messages: [Message.ShowedPast, Message.FailedDebug],
@@ -245,10 +245,10 @@ export const ShowPast = Command.define('ShowPast', {
           const rewind = Rewind.controls(client);
           yield* rewind.pause;
           yield* rewind.seek(tick);
-          return yield* Inspect.ask(client, { _tag: 'World', tick });
+          return yield* Inspect.ask(client, { _tag: 'State', tick });
         }),
       ),
-      Effect.map((world) => Message.ShowedPast({ tick, world: JSON.stringify(world, null, 2) })),
+      Effect.map((state) => Message.ShowedPast({ tick, state: JSON.stringify(state, null, 2) })),
       Effect.catchTags({
         ResourceNotAvailable: () =>
           Effect.succeed(Message.FailedDebug({ reason: 'The document is not playing.' })),
@@ -318,7 +318,7 @@ const whilePlaying = (model: Model, change: (playing: PlayingState) => PlayingSt
 const ofSelected = (model: Model, edit: (entity: number) => Option.Option<Edit>) =>
   Option.flatMap(model.maybeSelected, ({ entity }) => edit(entity));
 
-/** The page after `message`, and the Commands it sends: edits to the document, what Play and the debugger ask of the world playing. */
+/** The page after `message`, and the Commands it sends: edits to the document, what Play and the debugger ask of the game playing. */
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, Services>>(message, {
     // Joined again while the Model already says so, as one restored after a reload does, the canvas in the page stays as it is. What went wrong while it was not joined is past.
@@ -426,31 +426,31 @@ export const update = (model: Model, message: Message) =>
         play: () => ({
           _tag: 'Playing',
           opening,
-          world: 'Opening',
+          session: 'Opening',
           steps: [],
           maybePast: Option.none(),
         }),
       }),
     }),
     FailedOpenPlay: ({ reason }) => ({ model: failed(model, reason) }),
-    // What went wrong while the world playing was not joined is past.
+    // What went wrong while the game playing was not joined is past.
     JoinedPlay: () => ({
       model: modifyFields(
-        whilePlaying(model, (playing) => ({ ...playing, world: 'Joined' })),
+        whilePlaying(model, (playing) => ({ ...playing, session: 'Joined' })),
         {
           maybeError: () => Option.none(),
         },
       ),
     }),
     LeftPlay: () => ({
-      model: whilePlaying(model, (playing) => ({ ...playing, world: 'Opening' })),
+      model: whilePlaying(model, (playing) => ({ ...playing, session: 'Opening' })),
     }),
-    // Found joined while waiting for it, the world playing is joined; found joined once the page has it, it changes nothing.
+    // Found joined while waiting for it, the game playing is joined; found joined once the page has it, it changes nothing.
     FoundPlayJoined: () => ({
       model:
-        model.play._tag === 'Playing' && model.play.world === 'Opening'
+        model.play._tag === 'Playing' && model.play.session === 'Opening'
           ? modifyFields(
-              whilePlaying(model, (playing) => ({ ...playing, world: 'Joined' })),
+              whilePlaying(model, (playing) => ({ ...playing, session: 'Joined' })),
               {
                 maybeError: () => Option.none(),
               },
@@ -464,10 +464,10 @@ export const update = (model: Model, message: Message) =>
       model: whilePlaying(model, (playing) => ({ ...playing, steps })),
     }),
     InspectedStep: ({ tick }) => ({ model, commands: [ShowPast({ tick })] }),
-    ShowedPast: ({ tick, world }) => ({
+    ShowedPast: ({ tick, state }) => ({
       model: whilePlaying(model, (playing) => ({
         ...playing,
-        maybePast: Option.some({ tick, world }),
+        maybePast: Option.some({ tick, state }),
       })),
     }),
     ClickedLive: () => ({ model, commands: [GoLive()] }),

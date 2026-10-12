@@ -27,13 +27,13 @@ export const zombies = View.each([Horde.Zombie, Body.Position], {
     ),
   draw: (body, held, frame) => {
     const { x, z } = held(Body.Position);
-    const state = held(Horde.Zombie);
-    if (state._tag === 'Shambling') {
+    const mode = held(Horde.Zombie);
+    if (mode._tag === 'Shambling') {
       body.position.set(x, 0.75, z);
       body.rotation.x = 0;
       return;
     }
-    const lain = (frame.tick - state.at) / (Horde.FALLEN_SECONDS * Game.game.stepRate);
+    const lain = (frame.tick - mode.at) / (Horde.FALLEN_SECONDS * Game.game.stepRate);
     body.position.set(x, 0.3 - Math.min(lain, 1) * 0.6, z);
     body.rotation.x = -Math.PI / 2;
   },
