@@ -57,9 +57,30 @@ Seven principles shape every API. Each builds on the ones before it.
 
 ### 4. Determinism: the whole state replays
 
-- Determinism is a cornerstone of the engine. With the same build and the same inputs, the server's game steps to exactly the same states.
+- A game is one equation, **x′ = f(x, u)**: the step f turns the state x and the input u into the next state x′. The input is everything that enters a step from outside the state: the players' demands and the actions, in the order they arrived. The same state and the same input give the same next state. Determinism is a cornerstone of the engine: on the same build, a host's game steps to exactly the same states.
+- What a game shows and what it asks of the world outside is a second equation, **y = h(x)**: views and commands read the state and never write it. The game's course does not depend on it, so it is not part of the foundation.
+- The equation is a tool for thinking as much as a definition. Whatever is designed next is first placed in it, and its place decides what it is made as:
+
+| Part     | In the equation | In LightOcean                                        | Made as                                                 |
+| -------- | --------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| x        | the state       | the state: entities and their components             | components (`Component.make`)                           |
+| u        | the input       | the players' demands, and the actions in their order | demand components, `Action.make`, `Command.result`      |
+| f        | the step        | the step: demands written, actions, systems, events  | systems (`System.make`) and rules (`Rule.on`)           |
+| y = h(x) | the output      | what is drawn, and what is done outside the game     | views (`View.each`, `on`, `during`, `rig`) and commands |
+
+- Everything that rests on the equation is one of its consequences, and nothing else holds it up:
+
+| What follows          | From the equation                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| Replay                | A recording is the first state and the input of every step; stepping it again comes to the same states. |
+| Rewind                | Any past state is kept, since a state is only replaced, and stepping on from it is stepping it again.   |
+| Prediction            | A client steps the host's newest state with the demands it sent that the host has not yet taken in.     |
+| Stories               | A test gives a state and an input and expects the next state; no host, clock, or runtime is needed.     |
+| The determinism check | A replay beside the running game compares the fingerprints of its states with the host's.               |
+
+- What keeps f a function of x and u alone is what the rules of `AGENTS.md` enforce: randomness and time come only from the step's context, or they would be input hidden outside u; systems and rules run no Effect, since work outside the state is output and input, never part of f; a rule that needs something done outside issues a command, and its result returns as an action, through u; a state is never changed, only replaced; views only read the state, or there would be a second way into x besides f.
 - One mechanism serves three purposes: the client's prediction rewinds to the server's state and replays the demands not yet confirmed; the debugger rewinds the whole game, not only the rules; and games can build replays, spectating, and death cameras on real recordings. A recording also makes a test.
-- Systems take randomness only from the engine's `Random` resource and time only from its `Time` resource; `Math.random` and `Date.now` are lint errors there. Asynchronous results enter as recorded actions.
+- Systems and rules take randomness and time only from the step's context; `Math.random` and `Date.now` are lint errors there. Asynchronous results enter as recorded actions.
 - In development the engine replays alongside the running game and compares the fingerprints of its states, reporting the first step and component where the two diverge.
 - Cosmetics are deterministic too: an event carries a seed, so every client generates the same blood from it without anything more being sent.
 - Rewinding starts from the nearest periodic snapshot and steps forward. A recording carries the fingerprint of the build it is valid for.

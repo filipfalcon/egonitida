@@ -14,6 +14,20 @@ LightOcean is an engine for real-time web applications and games: entities and t
 - `npm run check` formats, lints, and type-checks everything; `npm test` runs every test. Both must pass before a commit.
 - Never start a development server. Ask the person to run one and report back.
 
+## The model
+
+A game is one equation: **x′ = f(x, u)**. The state x is the whole game at one tick; the input u is everything that enters a step from outside the state, the players' demands and the actions; the step f turns both into the next state. The same state and the same input give the same next state, and replay, rewind, prediction, and stories all rest on it.
+
+Most rules below keep f a function of x and u alone:
+
+- randomness and time come only from the step's context, or they would be input hidden outside u;
+- systems and rules run no Effect, since work outside the state is output and input, never part of f;
+- a rule that needs something done outside issues a command, and its result returns as an action, through u;
+- a state is never changed, only replaced, so any past state can be stepped again;
+- views only read the state, y = h(x); they never write it, or there would be a second way into x besides f.
+
+When designing something new, ask first whether it is part of x, u, f, or h: the answer decides whether it is a component, a demand or an action, a system or a rule, or a view.
+
 ## The rules
 
 A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) where it cannot, and written here only where neither can tell. A lint message says what to do instead; do that, rather than silencing it.
@@ -23,11 +37,11 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 **State.** A game is its domains (`Domain.make`), and its whole state is their components.
 
 - A domain writes only its own components. It changes another domain's components only by emitting an event that domain declares, which that domain's rules decide on. It shares a component (`shares`) only for values many domains change every step, such as where a body is.
-- Systems change what the simulation owns, every step; rules change what the rules own, when an event or action happens; players change only demand components.
+- Systems change what the simulation owns, every step; rules change what the rules own, when an action or event happens; players change only demand components, through their demands.
 - What only a client keeps, such as a ragdoll or a fire, is a local component, changed by a domain's `localSystems`.
 - Requiring is one way: two domains never require each other, so what both need belongs in a domain beneath them.
 
-**Messages.** Actions and events are facts in the past tense. An action says what a player did, whatever device did it (`PulledTrigger`, `ChoseRestart`); an event says what the game made of it (`Shot`, `LevelRestarted`). Every action is handled by a rule; an event that nothing emits and nothing handles is unused, and is removed.
+**Messages.** Actions and events are facts in the past tense. An action happened once outside the state: what a player did, whatever device did it (`PulledTrigger`, `ChoseRestart`), or what a command came to (`ScoreSaved`); an event arose within a step, what the game made of it (`Shot`, `LevelRestarted`). Every action is handled by a rule; an event that nothing emits and nothing handles is unused, and is removed.
 
 **Effects.** A rule that needs something done outside the game issues a command (`Command.make`, `context.command`), defined beside the rule. Its results are declared beside it (`Command.result`), its failures it can foresee among them, and each comes back as an action that a rule must handle. Systems issue none.
 
@@ -40,7 +54,7 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 | A rule decided something should happen outside the game       | a command                                                                                                                     |
 | An entity is in the drawing                                   | `View.each`: `acquire` builds, `draw` draws every frame                                                                       |
 | An entity just gained a component, or holds a new value of it | `View.on`, for an output that is not part of the state, such as a sound; react to components that change only at such moments |
-| A condition holds                                             | `View.during`: a resource held while it holds                                                                                 |
+| A condition is true                                           | `View.during`: a resource held while `when` is true                                                                           |
 | The player looks at the game                                  | `View.rig`: the camera, drawn for the player after every other view, from what they drew                                      |
 
 A view's `draw` changes only the object its view built, from the frame, and keeps nothing between frames: what must be remembered is a local component. Event listeners, timers, animation frames, and sockets live only inside these. A domain's own module imports no Three.js; its views live in its `.view` module.
