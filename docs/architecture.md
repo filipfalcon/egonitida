@@ -8,15 +8,16 @@ The first game to run on the engine is Border, a first-person browser game in it
 
 ## Principles
 
-Six principles shape every API. Each builds on the ones before it.
+Seven principles shape every API. Each builds on the ones before it.
 
 ### 1. State: one state, ownership is a type
 
 - A game has one state, described by Effect Schema. It is not split into a rules Model and a simulation world joined by a hand-written bridge, the way Border joins them today.
 - The simulation follows the Entity Component System model, after Bevy: an entity is an id, components are the data attached to it, and systems are functions over every entity with given components.
-- Every field has exactly one owner, declared in its schema:
-  - **Rules** own the facts the game's rules decide, such as health, ammunition, or an open door. Only `update` changes them, through Messages, which are recorded.
+- Every component has exactly one owner, declared in its schema:
+  - **Rules** own the facts the game's rules decide, such as health, ammunition, or an open door. Only rules change them, when an action or an event happens.
   - **Simulation** owns what changes every step, such as positions. Only systems change them.
+  - **Input** owns what players control, such as a stick or a trigger. The engine writes it at the start of a step, and nothing else may.
 - A game declares everything its state is made of: its components, actions, and events. One schema of the whole world, its components with its tick, randomness, and next entity, follows from the game, and snapshots, saves, recordings, and the debugger all use it.
 - A system declares what it reads, what it writes, and what it emits. Writing what it does not own is a compile error, not a runtime bug. Everything is readable by everyone, so nothing is ever copied and kept in sync.
 - State kept on the client alone, such as a ragdoll, blood, or casings, lives in the same world as local components, changed by local systems: the same kind of system, run only on the client after each step, which reads everything but writes and spawns only local components, and draws from its own randomness. A snapshot never replaces local components and a prediction's rewind never takes them back, so they only move forward. A client steps them through every tick the server's world reaches, a lost snapshot included. What they spawn takes ids counting down from -1, which never meet the server's, and what they draw comes of the tick and the world's randomness there, the same on every client; what a client keeps on an entity of the server's goes when the server's world no longer holds it.
@@ -214,7 +215,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 LightOcean stays private until the architecture above is built and Border runs on it; then its first 0.x versions are published, with changesets from then on.
 
-- Locked: the six principles and the decisions in this document.
+- Locked: the seven principles and the decisions in this document.
 - May change: names and signatures.
 - A breaking change is marked with `!` in its commit, whose body gives a before-and-after table, and Border is migrated with it.
 - 1.0 means the examples all work, Border runs with no seam where its server takes a client's word, LightOcean has held up in a project outside this repository, and no known flaw in correctness undermines the promise of stability.
