@@ -19,26 +19,36 @@ describe('a recording', () => {
     }),
   );
 
-  it.effect(
-    'keeps every join, leave, and step after it, with the input and actions that went in',
-    () =>
-      Effect.gen(function* () {
-        const { entity, recording } = yield* Fixtures.recorded();
+  it.effect('keeps every join, leave, and step after it, with its input', () =>
+    Effect.gen(function* () {
+      const { entity, recording } = yield* Fixtures.recorded();
 
-        expect(recording.entries).toEqual([
-          { _tag: 'Joined', entity },
-          {
-            _tag: 'Stepped',
-            tick: 4,
-            inputs: [{ entity, component: 'Stick', value: { move: 1 } }],
+      expect(recording.entries).toEqual([
+        { _tag: 'Joined', entity },
+        {
+          _tag: 'Stepped',
+          tick: 4,
+          input: {
+            demands: [{ entity, component: 'Stick', value: { move: 1 } }],
             actions: [{ _tag: 'AskedToHeal', amount: 50, player: entity }],
-            fingerprint: expect.anything(),
           },
-          { _tag: 'Stepped', tick: 5, inputs: [], actions: [], fingerprint: expect.anything() },
-          { _tag: 'Stepped', tick: 6, inputs: [], actions: [], fingerprint: expect.anything() },
-          { _tag: 'Left', entity },
-        ]);
-      }),
+          fingerprint: expect.anything(),
+        },
+        {
+          _tag: 'Stepped',
+          tick: 5,
+          input: { demands: [], actions: [] },
+          fingerprint: expect.anything(),
+        },
+        {
+          _tag: 'Stepped',
+          tick: 6,
+          input: { demands: [], actions: [] },
+          fingerprint: expect.anything(),
+        },
+        { _tag: 'Left', entity },
+      ]);
+    }),
   );
 
   it.effect('is data: it is the same after travelling as JSON', () =>

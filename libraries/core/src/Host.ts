@@ -2,6 +2,7 @@ import { Clock, Data, Effect, Latch, Option, PubSub, Schema, type Scope, Stream 
 import type * as Action from '#src/Action.ts';
 import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
+import * as Demand from '#src/Demand.ts';
 import type * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
 import * as Input from '#src/Input.ts';
@@ -12,11 +13,11 @@ import type * as Transport from '#src/Transport.ts';
 import type * as State from '#src/State.ts';
 
 /**
- * Hosts a game: steps it at its rate, takes the input its clients send, and sends every client the state after each step. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
+ * Hosts a game: steps it at its rate, takes the demands and actions its clients send, and sends every client the state after each step. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
  *
- * Everything that replaces its state can be watched, so its states can be told again from where watching began: a client joining or leaving, which happens between steps, and every step, with the input and actions that went into it. Command results enter as actions, so they are among them.
+ * Everything that replaces its state can be watched, so its states can be told again from where watching began: a client joining or leaving, which happens between steps, and every step, with its input.
  *
- * It also runs the commands the game's rules issue, once the step that issued them is over, with the services of the Layers it is given; so hosting a game that saves needs whatever it saves to. A command's result enters the game at the next step taken after it comes, as actions do. A command that breaks is reported, has no result, and stops nothing.
+ * It also runs the commands the game's rules issue, once the step that issued them is over, with the services of the Layers it is given; so hosting a game that saves needs whatever it saves to. A command's result is an action: it enters the game at the next step taken after it comes, among the players' actions, in the order they arrived. A client sends only a player's actions, never a result. A command that breaks is reported, has no result, and stops nothing.
  */
 
 /** What a host plays: a game whose commands need `Services`, and how a client joins it and leaves. */
@@ -25,7 +26,7 @@ export interface Setup<Services = never> {
     Component.Any,
     Action.Any,
     Event.Any,
-    Command.Command<string, unknown, Event.Any, Services>
+    Command.Command<string, unknown, Command.AnyResult, Services>
   >;
   /** Spawns the entity a joining client will control. */
   readonly join: (state: State.State) => readonly [State.State, State.Entity];
@@ -46,7 +47,7 @@ export interface Options<Services = never> extends Setup<Services> {
   readonly mayHold: boolean;
 }
 
-/** What replaced a host's state: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a state it was given or taking up another game, or a step taken, with the input that reached it and the actions, in the order the rules took them. */
+/** What replaced a host's state: a client joining or leaving, between steps, by the game's own `join` and `leave`, the host going back to a state it was given or taking up another game, or a step taken, with its input. */
 export type Happening =
   /** A player joined: through a client's connection, or from beside the host with no client. */
   | { readonly _tag: 'Joined'; readonly entity: State.Entity; readonly client: boolean }
@@ -55,12 +56,12 @@ export type Happening =
   | { readonly _tag: 'Restored'; readonly state: State.State }
   /** The host plays another game from now on, such as a new build of its own, from the state it held, as the new game read it. */
   | ({ readonly _tag: 'Reloaded'; readonly state: State.State } & Setup<unknown>)
+  /** A step taken, with its input. */
   | {
       readonly _tag: 'Stepped';
       /** The state the step took it to. */
       readonly state: State.State;
-      readonly inputs: ReadonlyArray<Input.Input>;
-      readonly actions: ReadonlyArray<Event.Tagged>;
+      readonly input: Input.Input;
     };
 
 /** A host's state as it was when watching began, and everything that has replaced it since, in order. */
@@ -121,23 +122,23 @@ export const make = <Services = never>(
   options: Options<Services>,
 ): Effect.Effect<Host<Services>, never, Scope.Scope | Services> =>
   Effect.gen(function* () {
-    /** The input components of `game`, by name. */
-    const inputsOf = (game: Setup<Services>['game']) =>
+    /** The demand components of `game`, by name. */
+    const demandsOf = (game: Setup<Services>['game']) =>
       new Map(
         game.components
-          .filter((component): component is Input.InputComponent => component.owner === 'input')
+          .filter((component): component is Demand.DemandComponent => component.owner === 'input')
           .map((component) => [component.name, component]),
       );
     const hosted = {
       setup: { game: options.game, join: options.join, leave: options.leave },
-      inputComponents: inputsOf(options.game),
+      demandComponents: demandsOf(options.game),
       state: options.state,
       /** Every client's connection, with the entity it controls. */
       connections: new Map<Transport.Connection, State.Entity>(),
-      /** The newest input of each client, waiting for the next step. */
-      pending: new Map<State.Entity, ReadonlyArray<Input.Input>>(),
-      /** The newest input given from beside the host for each entity, which goes in after its client's. */
-      pendingBeside: new Map<State.Entity, ReadonlyArray<Input.Input>>(),
+      /** The newest demands of each client, waiting for the next step. */
+      pending: new Map<State.Entity, ReadonlyArray<Demand.Demand>>(),
+      /** The newest demands given from beside the host for each entity, which go in after its client's. */
+      pendingBeside: new Map<State.Entity, ReadonlyArray<Demand.Demand>>(),
       lastSeq: new Map<State.Entity, number>(),
       pace: Pace.start({
         now: yield* Clock.currentTimeMillis,
@@ -149,8 +150,8 @@ export const make = <Services = never>(
       holders: new Set<State.Entity>(),
       /** Whether whatever runs beside the host, such as a development tool, holds time. */
       heldBeside: false,
-      /** The players' actions waiting for the next step, in the order they came. */
-      acted: new Array<Event.Tagged>(),
+      /** The actions waiting for the next step, the players' and the commands' results, in the order they arrived. */
+      acted: new Array<Input.Action>(),
       heldSince: Option.none<number>(),
       /** Counts every time the host showed its clients another state than the one it stepped to, so they take it even if it is older. */
       era: 0,
@@ -189,7 +190,7 @@ export const make = <Services = never>(
       }
     });
 
-    /** Runs a command on its own, its result waiting for the next step with the players' actions; one that breaks is reported and comes to nothing. */
+    /** Runs a command on its own, its result an action waiting for the next step with the players'; one that breaks is reported and comes to nothing. */
     const run = (issued: Command.Issued<string, Services>) =>
       issued.execute.pipe(
         Effect.flatMap((result) =>
@@ -203,7 +204,7 @@ export const make = <Services = never>(
         Effect.forkScoped,
       );
 
-    /** Sends every client `state`, in the era it is now, and the number of its newest input the state took in. */
+    /** Sends every client `state`, in the era it is now, and the number of its newest demands the state took in. */
     const broadcast = (state: State.State) =>
       Effect.suspend(() => {
         const payload = Snapshot.encode(state, hosted.setup.game, hosted.era);
@@ -225,25 +226,21 @@ export const make = <Services = never>(
         );
       });
 
-    /** Takes `count` steps: the waiting input and actions go into the first, the rest only move time on. */
+    /** Takes `count` steps: the waiting input goes into the first, the rest only move time on. */
     const takeSteps = (count: number) =>
       Effect.gen(function* () {
-        const inputs = [...hosted.pending.values(), ...hosted.pendingBeside.values()].flat();
+        const waiting: Input.Input = {
+          demands: [...hosted.pending.values(), ...hosted.pendingBeside.values()].flat(),
+          actions: hosted.acted.splice(0),
+        };
         hosted.pending.clear();
         hosted.pendingBeside.clear();
-        const actions = hosted.acted.splice(0);
         const stepping: Game.StepOptions = { freeze: options.freeze ?? false };
         for (let step = 0; step < count; step += 1) {
-          const taken = step === 0 ? { inputs, actions } : { inputs: [], actions: [] };
-          const next = Game.step(
-            hosted.setup.game,
-            hosted.state,
-            taken.inputs,
-            taken.actions,
-            stepping,
-          );
+          const input = step === 0 ? waiting : Input.none;
+          const next = Game.step(hosted.setup.game, hosted.state, input, stepping);
           hosted.state = next.state;
-          PubSub.publishUnsafe(happened, { _tag: 'Stepped', state: next.state, ...taken });
+          PubSub.publishUnsafe(happened, { _tag: 'Stepped', state: next.state, input });
           yield* Effect.forEach(next.commands, run, { discard: true });
         }
       });
@@ -284,7 +281,7 @@ export const make = <Services = never>(
         onSome: (message) =>
           Effect.suspend(() => {
             if (message._tag === 'Act') {
-              // An action is taken as from the player whose connection it came on; one the game does not know is dropped.
+              // An action is taken as from the player whose connection it came on; one that is no player's action of the game, such as a command's result, is dropped.
               for (const action of hosted.setup.game.actions) {
                 Option.map(action.accept(message.action, entity), (accepted) =>
                   hosted.acted.push(accepted),
@@ -347,12 +344,12 @@ export const make = <Services = never>(
         hosted.pending.set(
           entity,
           Object.entries(newest.values).flatMap(([name, encoded]) => {
-            const component = hosted.inputComponents.get(name);
+            const component = hosted.demandComponents.get(name);
             return component === undefined
               ? []
               : Option.match(Schema.decodeUnknownOption(component.schema)(encoded), {
                   onNone: () => [],
-                  onSome: (value) => [Input.of(entity, component, value)],
+                  onSome: (value) => [Demand.of(entity, component, value)],
                 });
           }),
         );
@@ -423,7 +420,7 @@ export const make = <Services = never>(
         Effect.gen(function* () {
           const inputs = yield* Effect.forEach(values, ({ component: name, value }) =>
             Effect.gen(function* () {
-              const component = hosted.inputComponents.get(name);
+              const component = hosted.demandComponents.get(name);
               if (component === undefined) {
                 return yield* new Unreadable({ reason: `${name} is no input of the game` });
               }
@@ -432,7 +429,7 @@ export const make = <Services = never>(
               )(value).pipe(
                 Effect.mapError((issue) => new Unreadable({ reason: `${name}: ${issue.message}` })),
               );
-              return Input.of(entity, component, decoded);
+              return Demand.of(entity, component, decoded);
             }),
           );
           hosted.pendingBeside.set(entity, inputs);
@@ -451,7 +448,9 @@ export const make = <Services = never>(
               ? String(action._tag)
               : 'What was given';
           return Effect.fail(
-            new Unreadable({ reason: `${tag} is no action of the game, or not one like it` }),
+            new Unreadable({
+              reason: `${tag} is no action a player of the game takes, or not one like it`,
+            }),
           );
         }),
       hold: Effect.suspend(() => {
@@ -487,7 +486,7 @@ export const make = <Services = never>(
             Effect.mapError((issue) => new Unreadable({ reason: issue.message })),
           );
           hosted.setup = { game: setup.game, join: setup.join, leave: setup.leave };
-          hosted.inputComponents = inputsOf(setup.game);
+          hosted.demandComponents = demandsOf(setup.game);
           hosted.state = state;
           PubSub.publishUnsafe(happened, { _tag: 'Reloaded', state, ...hosted.setup });
         }),

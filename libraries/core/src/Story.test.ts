@@ -1,6 +1,18 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Option, Schema } from 'effect';
-import { Bitten, Controls, fixture, Died, Health, Position, ChoseRestart } from '#src/fixtures.ts';
+import { Effect, Option, Schema } from 'effect';
+import * as Command from '#src/Command.ts';
+import * as Component from '#src/Component.ts';
+import * as Domain from '#src/Domain.ts';
+import {
+  Bitten,
+  Controls,
+  fixture,
+  Fixture,
+  Died,
+  Health,
+  Position,
+  ChoseRestart,
+} from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
 import * as Rule from '#src/Rule.ts';
 import * as Story from '#src/Story.ts';
@@ -251,7 +263,51 @@ describe('Story, told by name', () => {
     );
   });
 
-  it('has an event happen as it travels, such as a command’s result', () => {
+  it('has a command’s result arrive among the actions as it travels, and no event pass for one', () => {
+    const Mended = Command.result('Mended', { entity: Schema.Int });
+    const Mend = Command.make('Mend', {
+      args: {},
+      results: [Mended],
+      execute: () => Effect.die('a story never runs a command'),
+    });
+    const Whole = Component.make('Whole', Schema.Struct({}), { owner: 'rules', network: 'server' });
+    const mending = Game.make({
+      stepRate: 10,
+      domains: [
+        Fixture,
+        Domain.make({
+          name: 'Mending',
+          requires: [Fixture],
+          components: [Whole],
+          actions: [],
+          events: [],
+          commands: [Mend],
+          systems: [],
+          rules: [
+            Rule.on(Mended, {
+              writes: [Whole],
+              emits: [],
+              run: (context, { entity }) => context.set(entity, Whole, {}),
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const { events } = Story.story(
+      mending,
+      Story.spawn('her', her),
+      Story.resolveAs({ _tag: 'Mended', entity: 0 }),
+      Story.step(),
+      Story.expectAs('her', 'Whole', {}),
+    );
+    expect(events).toEqual([]);
+    expect(() =>
+      Story.story(mending, Story.resolveAs({ _tag: 'Bitten', entity: 0, damage: 1 })),
+    ).toThrow("Bitten is no result of the game's commands");
+  });
+
+  it('has an event happen as it travels, as if something had emitted it', () => {
     Story.story(
       game,
       Story.givenAs(encoded, { her: 0 }),
@@ -270,7 +326,9 @@ describe('Story, told by name', () => {
       'Health is no input of the game',
     );
     expect(told(Story.inputAs('her', 'Controls', { move: 'far' }))).toThrow('Controls');
-    expect(told(Story.actAs('her', { _tag: 'Flew' }))).toThrow('Flew is no action of the game');
+    expect(told(Story.actAs('her', { _tag: 'Flew' }))).toThrow(
+      'Flew is no action a player of the game takes',
+    );
     expect(told(Story.happenAs({ _tag: 'Flew' }))).toThrow('Flew is no event of the game');
     expect(told(Story.expectAs('her', 'Health', { current: 1 }))).toThrow(
       'her holds Health {"current":50}, not {"current":1}',

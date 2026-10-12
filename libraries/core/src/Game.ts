@@ -3,7 +3,7 @@ import type * as Action from '#src/Action.ts';
 import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
-import type * as Input from '#src/Input.ts';
+import * as Input from '#src/Input.ts';
 import type * as Domain from '#src/Domain.ts';
 import * as Random from '#src/Random.ts';
 import type * as Rule from '#src/Rule.ts';
@@ -11,11 +11,11 @@ import type * as System from '#src/System.ts';
 import * as State from '#src/State.ts';
 
 /**
- * A game: its fixed step rate and the domains it is made of, and from them everything its state is made of (its components, the actions its players take, and the events its steps emit), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
+ * A game: its fixed step rate and the domains it is made of, and from them everything its state is made of (its components, the actions its players take, the events its steps emit, and the commands its rules issue, with the results they come to), the systems that run every step in order, and the rules that handle actions and events. A host and its clients take what to send and decode from it.
  *
- * A step turns a state into the state of the next tick. The host's step takes the players' input and actions; a client's local step takes nothing and changes only local components; a prediction step takes its player's input and changes only that player's predicted components.
+ * A step turns a state and an input into the state of the next tick: the same state and the same input give the same next state. The host's step takes the players' demands and the actions; a client's local step takes no input and changes only local components; a prediction step takes an input of its player's demand and no actions, and changes only that player's predicted components.
  *
- * Within the host's step, the order is fixed: the tick moves on to the next; the step's input is written to the entities it is aimed at; the players' actions are handled by the rules, in the order they came; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they happened, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
+ * Within the host's step, the order is fixed: the tick moves on to the next; the demands are written to the entities they are on; the actions are handled by the rules, in the order they arrived; every system runs in order, each seeing what the ones before it wrote; then every event emitted is handled by the rules, one after another and in the order they arose, each rule seeing what the ones before it decided. Events the rules emit join the end of the line. The next step sees all of it.
  */
 
 export interface Game<
@@ -30,6 +30,8 @@ export interface Game<
   readonly actions: ReadonlyArray<Actions>;
   readonly events: ReadonlyArray<Events>;
   readonly commands: ReadonlyArray<Commands>;
+  /** The results its commands may come to, each once, in the order of their commands. */
+  readonly results: ReadonlyArray<Commands['results'][number]>;
   readonly systems: ReadonlyArray<System.System>;
   readonly rules: ReadonlyArray<Rule.Rule>;
   /** The systems each client runs for itself after every step, in the order of their domains. */
@@ -42,9 +44,10 @@ type Missing<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
   Domains[number]['name']
 >;
 
-/** The tags of the actions no rule of `Domains` handles. */
+/** The tags of the actions no rule of `Domains` handles: the players' and the results of their commands. */
 type Unhandled<Domains extends ReadonlyArray<Domain.Any>> = Exclude<
-  Domains[number]['actions'][number]['tag'],
+  | Domains[number]['actions'][number]['tag']
+  | Domains[number]['commands'][number]['results'][number]['tag'],
   Parts<Domains>['handles']
 >;
 
@@ -62,7 +65,7 @@ type Refuse<Name extends string, Found> = [Found] extends [never]
   : { readonly [K in Name]: Found };
 
 /**
- * A game is rejected if it is missing a domain that another domain requires, holds an unhandled action, or declares an unused event: one that nothing emits and nothing handles.
+ * A game is rejected if it is missing a domain that another domain requires, holds an unhandled action, a player's or a command's result, since every action must be handled by a rule, or declares an unused event: one that nothing emits and nothing handles.
  */
 type Requirements<Domains extends ReadonlyArray<Domain.Any>> = Refuse<'missing', Missing<Domains>> &
   Refuse<'unhandled', Unhandled<Domains>> &
@@ -82,7 +85,7 @@ const refuseRepeated = (names: ReadonlyArray<string>, what: string) => {
 };
 
 /**
- * A game made of `domains`: their components, actions, and events, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an unhandled action, and an unused event do not compile. Two components of one name, which a state keeps in one store, two actions or events of one tag, and two commands of one name are refused when the game is made.
+ * A game made of `domains`: their components, actions, events, and commands, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an unhandled action, and an unused event do not compile. Two components of one name, which a state keeps in one store, two actions, results, or events of one tag, and two commands of one name are refused when the game is made.
  */
 export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
   game: { readonly stepRate: number; readonly domains: Domains } & Requirements<Domains>,
@@ -97,10 +100,13 @@ export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
     'components named',
   );
   refuseRepeated(
-    game.domains.flatMap((domain) => [
-      ...domain.actions.map(({ tag }) => tag),
-      ...domain.events.map(({ tag }) => tag),
-    ]),
+    [
+      ...game.domains.flatMap((domain) => [
+        ...domain.actions.map(({ tag }) => tag),
+        ...domain.events.map(({ tag }) => tag),
+      ]),
+      ...resultsOf(game.domains.flatMap((domain) => domain.commands)).map(({ tag }) => tag),
+    ],
     'actions or events tagged',
   );
   refuseRepeated(
@@ -109,6 +115,13 @@ export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
   );
   return made(game);
 };
+
+/** The results `commands` may come to, each once, though two commands may come to the same. */
+const resultsOf = <C extends Command.Any>(
+  commands: ReadonlyArray<C>,
+): ReadonlyArray<C['results'][number]> => [
+  ...new Set(commands.flatMap((command) => command.results)),
+];
 
 const made = <const Domains extends ReadonlyArray<Domain.Any>>(game: {
   readonly stepRate: number;
@@ -125,13 +138,14 @@ const made = <const Domains extends ReadonlyArray<Domain.Any>>(game: {
   actions: game.domains.flatMap((domain) => domain.actions),
   events: game.domains.flatMap((domain) => domain.events),
   commands: game.domains.flatMap((domain) => domain.commands),
+  results: resultsOf(game.domains.flatMap((domain) => domain.commands)),
   systems: game.domains.flatMap((domain) => domain.systems),
   rules: game.domains.flatMap((domain) => domain.rules),
   localSystems: game.domains.flatMap((domain) => domain.localSystems),
 });
 
 /**
- * `game` with only `systems` and `rules`, for a test told about some of what a game does, such as the undead standing still while a blast is tested. They may be any parts over what the game declares; which domain owns what is not checked here, nor that every action is answered.
+ * `game` with only `systems` and `rules`, for a test told about some of what a game does, such as the undead standing still while a blast is tested. They may be any parts over what the game declares; which domain owns what is not checked here, nor that every action is handled.
  */
 export const only = <
   Components extends Component.Any,
@@ -151,7 +165,7 @@ export const only = <
     >;
     readonly rules: ReadonlyArray<
       Rule.Rule<
-        NoInfer<Actions> | NoInfer<Events>,
+        NoInfer<Actions> | NoInfer<Events> | NoInfer<Commands['results'][number]>,
         NoInfer<Extract<Components, Rule.RulesComponent>>,
         NoInfer<Events>,
         NoInfer<Components>,
@@ -168,7 +182,7 @@ export const only = <
 /** An outcome records what one step produced: the next state, the events and commands that arose in it, and its trace. */
 export interface Outcome<Commands extends Command.Any = Command.Any> {
   readonly state: State.State;
-  /** Every event of the step, in the order it happened. */
+  /** Every event that arose in the step, in the order it arose; the actions it took are its input, not among them. */
   readonly events: ReadonlyArray<Event.Tagged>;
   /** Every command the rules issued, in the order they issued them; none of them has run. */
   readonly commands: ReadonlyArray<Command.IssuedOf<Commands>>;
@@ -176,10 +190,10 @@ export interface Outcome<Commands extends Command.Any = Command.Any> {
   readonly trace: ReadonlyArray<Trace>;
 }
 
-/** What one part of a game did in a step: the values it set, the entities it spawned and despawned, the events it emitted, and the commands it issued; a rule, with the event or action it ran for. */
+/** What one part of a game did in a step: the values it set, the entities it spawned and despawned, the events it emitted, and the commands it issued; a rule, with the action or event it ran for. */
 export interface Trace {
   readonly part: Part;
-  /** The event or action a rule ran for; none for a system. */
+  /** The action or event a rule ran for; none for a system. */
   readonly cause: Option.Option<Event.Tagged>;
   /** Each value it set, once, however often it set it. */
   readonly set: ReadonlyArray<{ readonly entity: State.Entity; readonly component: string }>;
@@ -240,11 +254,11 @@ const traced = (trace: Tracing): ReadonlyArray<Trace> =>
         },
       ];
 
+/** `state` stepped by `game` with `input` to the state of the next tick, and what arose in the step. */
 export const step = <Commands extends Command.Any>(
   game: Game<Component.Any, Action.Any, Event.Any, Commands>,
   state: State.State,
-  inputs: ReadonlyArray<Input.Input> = [],
-  actions: ReadonlyArray<Event.Tagged> = [],
+  input: Input.Input = Input.none,
   options: StepOptions = {},
 ): Outcome<Commands> => {
   // The state a step is given is frozen too, so even what it was spawned with fails at once when changed in place.
@@ -257,14 +271,14 @@ export const step = <Commands extends Command.Any>(
   }
   const draft = State.draft(state);
   draft.tick += 1;
-  // Input only reaches an entity spawned to accept it; anything else a client sends is ignored, not added.
-  for (const input of inputs) {
-    if (Option.isSome(State.get(draft, input.entity, input.component))) {
-      input.writeInto(draft);
+  // A demand only reaches an entity spawned to accept it; anything else a client sends is ignored, not added.
+  for (const demand of input.demands) {
+    if (Option.isSome(State.get(draft, demand.entity, demand.component))) {
+      demand.writeInto(draft);
     }
   }
-  // Everything that happens in the step, in order: the actions first, then what systems and rules emit.
-  const line: Array<Event.Tagged> = [...actions];
+  // Everything the rules handle in the step, in order: the actions first, then what systems and rules emit.
+  const line: Array<Event.Tagged> = [...input.actions];
   // What the rules decided should be done outside the game, in the order they decided it.
   const commands: Array<Command.IssuedOf<Commands>> = [];
   const handled = { count: 0 };
@@ -354,7 +368,7 @@ export const step = <Commands extends Command.Any>(
     },
   };
 
-  // The players' actions are decided before anything moves, so the systems see what the rules made of them.
+  // The actions are handled before anything moves, so the systems see what the rules made of them.
   settle();
   for (const system of game.systems) {
     runAs(system, Option.none(), () => system.run(context));
@@ -363,7 +377,7 @@ export const step = <Commands extends Command.Any>(
 
   return {
     state: State.finish(draft, freezing),
-    events: line,
+    events: line.slice(input.actions.length),
     commands,
     trace: traces,
   };
@@ -437,7 +451,7 @@ export interface EventChanges {
 
 export interface CommandChanges {
   readonly issuedBy: ReadonlyArray<Part>;
-  /** The tags of the events it may come to. */
+  /** The tags of the results it may come to. */
   readonly results: ReadonlyArray<string>;
 }
 
@@ -524,7 +538,7 @@ export const changes = (game: Game): Changes => {
       ]),
     ),
     events: new Map(
-      [...game.actions, ...game.events].map((event) => [
+      [...game.actions, ...game.results, ...game.events].map((event) => [
         event.tag,
         {
           emittedBy: by(({ emits }) => emits.some(({ tag }) => tag === event.tag)),

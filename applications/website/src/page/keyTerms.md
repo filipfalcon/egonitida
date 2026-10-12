@@ -91,9 +91,9 @@ A rule may read anything, but it writes only components the rules own, and it de
 
 ### Command
 
-A command is work a rule needs done outside the game, such as saving a score or asking a service. It is made with `Command.make`, beside the rule that issues it, and it lists the events its result may be, including every failure it can foresee.
+A command is work a rule needs done outside the game, such as saving a score or asking a service. It is made with `Command.make`, beside the rule that issues it, and it lists the results it may come to, each made with `Command.result`, including every failure it can foresee.
 
-A rule issues a command as a value and moves on; the command never runs inside a step. The host runs it afterward, and its result returns to the game as one of its events at a later step. A recording keeps that result, so a replay never runs the command again. Systems never issue commands.
+A rule issues a command as a value and moves on; the command never runs inside a step. The host runs it afterward, and its result returns to the game as an action at a later step, which a rule must handle. A result carries no player, and no client can send one. A recording keeps that result, so a replay never runs the command again. Systems never issue commands.
 
 ### View
 

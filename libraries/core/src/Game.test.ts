@@ -18,6 +18,7 @@ import {
   Wall,
 } from '#src/fixtures.ts';
 import * as Game from '#src/Game.ts';
+import * as Demand from '#src/Demand.ts';
 import * as Input from '#src/Input.ts';
 import * as Domain from '#src/Domain.ts';
 import * as Rule from '#src/Rule.ts';
@@ -206,7 +207,10 @@ describe('input', () => {
     Position.of({ x: 0 }),
     Controls.of({ move: 0, fire: false }),
   ]);
-  const push = (move: number) => [Input.of(recorded, Controls, { move, fire: false })];
+  const push = (move: number): Input.Input => ({
+    demands: [Demand.of(recorded, Controls, { move, fire: false })],
+    actions: [],
+  });
 
   const player = [Position.of({ x: 0 }), Controls.of({ move: 0, fire: false })];
 
@@ -241,11 +245,11 @@ describe('input', () => {
     );
   });
 
-  it('replays to the same state from the same start and the same inputs', () => {
-    const recording = [push(1), [], push(-0.5), push(0.25), [], []];
+  it('replays to the same state from the same start and the same input', () => {
+    const recording = [push(1), Input.none, push(-0.5), push(0.25), Input.none, Input.none];
     const play = () =>
       recording.reduce<State.State>(
-        (state, inputs) => Game.step(steered, state, inputs).state,
+        (state, input) => Game.step(steered, state, input).state,
         start,
       );
 
@@ -295,13 +299,22 @@ describe('actions', () => {
     expect(seen).toEqual([100]);
   });
 
-  it('is reported first among the step’s events, in the order the actions came', () => {
-    const { events } = Game.step(restarting, state, [], [restarted(1), restarted(2)]);
+  it('is handled in the order the actions came, and is no event of the step, which arose outside it', () => {
+    const handled: Array<number> = [];
+    const noting = Rule.on(ChoseRestart, {
+      writes: [],
+      emits: [],
+      run: (_, restarted) => {
+        handled.push(restarted.x);
+      },
+    });
+    const { events } = Game.step(Game.only(fixture, { systems: [], rules: [noting] }), state, {
+      demands: [],
+      actions: [restarted(1), restarted(2)],
+    });
 
-    expect(events).toEqual([
-      { _tag: 'ChoseRestart', x: 1, player },
-      { _tag: 'ChoseRestart', x: 2, player },
-    ]);
+    expect(handled).toEqual([1, 2]);
+    expect(events).toEqual([]);
   });
 });
 
@@ -412,7 +425,7 @@ describe('tracing a step', () => {
     const [state, runner] = spawnRunner(9, 30);
     const bitten = { _tag: 'Bitten', entity: runner, damage: 30 };
 
-    expect(Game.step(game, state, [], [], { trace: true }).trace).toEqual([
+    expect(Game.step(game, state, Input.none, { trace: true }).trace).toEqual([
       {
         ...nothing,
         part: part('move'),
@@ -458,7 +471,7 @@ describe('tracing a step', () => {
     const [state, standing] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 0 })]);
     const lifecycle = Game.only(fixture, { systems: [raise, move, clear], rules: [] });
 
-    expect(Game.step(lifecycle, state, [], [], { trace: true }).trace).toEqual([
+    expect(Game.step(lifecycle, state, Input.none, { trace: true }).trace).toEqual([
       { ...nothing, part: part('raise'), cause: Option.none(), spawned: [standing + 1] },
       { ...nothing, part: part('clear'), cause: Option.none(), despawned: [standing] },
     ]);
@@ -480,7 +493,7 @@ describe('tracing a step', () => {
     const [state, entity] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 0 })]);
 
     expect(
-      Game.step(Game.only(fixture, { systems: [twice], rules: [] }), state, [], [], {
+      Game.step(Game.only(fixture, { systems: [twice], rules: [] }), state, Input.none, {
         trace: true,
       }).trace,
     ).toEqual([
@@ -595,15 +608,15 @@ describe('in development', () => {
 
   it('freezes what a step leaves, so changing it in place fails at once', () => {
     const [state] = spawnRunner(0, 100);
-    const once = Game.step(game, state, [], [], { freeze: true }).state;
+    const once = Game.step(game, state, Input.none, { freeze: true }).state;
 
-    expect(() => Game.step(shoving, once, [], [], { freeze: true })).toThrow(TypeError);
+    expect(() => Game.step(shoving, once, Input.none, { freeze: true })).toThrow(TypeError);
   });
 
   it('freezes what a state was spawned with, from the first step on', () => {
     const [state] = spawnRunner(0, 100);
 
-    expect(() => Game.step(shoving, state, [], [], { freeze: true })).toThrow(TypeError);
+    expect(() => Game.step(shoving, state, Input.none, { freeze: true })).toThrow(TypeError);
   });
 
   it('freezes in every story', () => {
@@ -698,8 +711,8 @@ export const refused = () => {
     },
   });
 
-  // @ts-expect-error Position is not input; no player can send it.
-  Input.of(0, Position, { x: 1 });
+  // @ts-expect-error Position is no demand; no player can send it.
+  Demand.of(0, Position, { x: 1 });
 
   Rule.on(Bitten, {
     // @ts-expect-error Position belongs to the simulation; a rule cannot write it.
@@ -1106,8 +1119,8 @@ describe('a component holding a mode', () => {
 });
 
 describe('commands', () => {
-  const SavedHealth = Event.make('SavedHealth', { entity: Schema.Int });
-  const FailedToSaveHealth = Event.make('FailedToSaveHealth', { entity: Schema.Int });
+  const SavedHealth = Command.result('SavedHealth', { entity: Schema.Int });
+  const FailedToSaveHealth = Command.result('FailedToSaveHealth', { entity: Schema.Int });
   const ran: Array<number> = [];
   const SaveHealth = Command.make('SaveHealth', {
     args: { entity: Schema.Int, current: Schema.Int },
@@ -1130,15 +1143,16 @@ describe('commands', () => {
     emits: [],
     run: (context, saved) => context.set(saved.entity, Saved, {}),
   });
+  const unsaved = Rule.on(FailedToSaveHealth, { writes: [], emits: [], run: () => {} });
   const Saver = Domain.make({
     name: 'Saver',
     requires: [Fixture],
     components: [Saved],
     actions: [],
-    events: [SavedHealth, FailedToSaveHealth],
+    events: [],
     commands: [SaveHealth],
     systems: [],
-    rules: [save, mark],
+    rules: [save, mark, unsaved],
   });
   const saving = Game.make({ stepRate: 10, domains: [Fixture, Saver] });
 
@@ -1188,20 +1202,14 @@ describe('commands', () => {
     );
   });
 
-  it('are issued only by rules, and only those a rule and its domain declare', () => {
+  it('are issued only by rules, and only those a rule declares', () => {
     const Elsewhere = Command.make('Elsewhere', {
       args: {},
-      results: [Bitten],
+      results: [SavedHealth],
       execute: () =>
-        Effect.succeed({ _tag: 'Bitten', entity: 0, damage: 0 } satisfies Event.ValueOf<
-          typeof Bitten
+        Effect.succeed({ _tag: 'SavedHealth', entity: 0 } satisfies Rule.ValueOf<
+          typeof SavedHealth
         >),
-    });
-    const Foreign = Event.make('Foreign', {});
-    const Unknown = Command.make('Unknown', {
-      args: {},
-      results: [Foreign],
-      execute: () => Effect.succeed({ _tag: 'Foreign' } satisfies Event.ValueOf<typeof Foreign>),
     });
 
     Rule.on(Died, {
@@ -1221,17 +1229,52 @@ describe('commands', () => {
         context.command(SaveHealth.of({ entity: 0, current: 0 }));
       },
     });
-    Domain.make({
-      name: 'Strange',
-      requires: [Fixture],
+  });
+
+  it('come to actions from outside the step, never to events, which arise within it', () => {
+    Command.make('Biting', {
+      args: {},
+      // @ts-expect-error Bitten is an event: it arises within a step, and no command comes to it.
+      results: [Bitten],
+      execute: () => Effect.die('never run'),
+    });
+    Rule.on(Died, {
+      writes: [],
+      // @ts-expect-error SavedHealth is a command's result: it comes from outside, and no rule emits it.
+      emits: [SavedHealth],
+      run: () => {},
+    });
+  });
+
+  it('refuse a game that leaves one of their results unhandled, since every action must be', () => {
+    const Forgot = Command.result('Forgot', {});
+    const Forget = Command.make('Forget', {
+      args: {},
+      results: [Forgot],
+      execute: () => Effect.succeed({ _tag: 'Forgot' } satisfies Rule.ValueOf<typeof Forgot>),
+    });
+    const Careless = Domain.make({
+      name: 'Careless',
+      requires: [],
       components: [],
       actions: [],
       events: [],
-      // @ts-expect-error Foreign is not an event of the domain or of one it requires.
-      commands: [Unknown],
+      commands: [Forget],
       systems: [],
       rules: [],
     });
+
+    // @ts-expect-error Forgot is a result no rule handles.
+    Game.make({ stepRate: 10, domains: [Careless] });
+  });
+
+  it('come back as actions, handled before the systems run and never among the step’s events', () => {
+    const [state, her] = State.spawn(State.empty({ seed: 1 }), [Health.of({ current: 10 })]);
+    const saved: Rule.ValueOf<typeof SavedHealth> = { _tag: 'SavedHealth', entity: her };
+    const { state: after, events } = Game.step(saving, state, { demands: [], actions: [saved] });
+
+    expect(State.get(after, her, Saved)).toEqual(Option.some({}));
+    expect(events).toEqual([]);
   });
 });
 

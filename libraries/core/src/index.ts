@@ -2,6 +2,7 @@ export * as Action from '#src/Action.ts';
 export * as Client from '#src/Client.ts';
 export * as Command from '#src/Command.ts';
 export * as Component from '#src/Component.ts';
+export * as Demand from '#src/Demand.ts';
 export * as Domain from '#src/Domain.ts';
 export * as Event from '#src/Event.ts';
 export * as Game from '#src/Game.ts';

@@ -1,7 +1,7 @@
 import { Data, Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
-import type * as Event from '#src/Event.ts';
+import type * as Input from '#src/Input.ts';
 import * as Game from '#src/Game.ts';
 import * as Protocol from '#src/Protocol.ts';
 import * as Snapshot from '#src/Snapshot.ts';
@@ -40,7 +40,7 @@ export interface Client {
   readonly ask: (question: unknown) => Effect.Effect<unknown, Unanswered>;
   /** Takes an action, which the host hands to the rules at its next step, as from this client's player. */
   readonly act: <Sent>(
-    action: Action.Action<string, Sent, Event.Tagged>,
+    action: Action.Action<string, Sent, Input.Action>,
     value: Sent,
   ) => Effect.Effect<void>;
 }

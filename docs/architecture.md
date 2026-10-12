@@ -59,7 +59,7 @@ Seven principles shape every API. Each builds on the ones before it.
 
 - Determinism is a cornerstone of the engine. With the same build and the same inputs, the server's game steps to exactly the same states.
 - One mechanism serves three purposes: the client's prediction rewinds to the server's state and replays the inputs not yet confirmed; the debugger rewinds the whole game, not only the rules; and games can build replays, spectating, and death cameras on real recordings. A recording also makes a test.
-- Systems take randomness only from the engine's `Random` resource and time only from its `Time` resource; `Math.random` and `Date.now` are lint errors there. Asynchronous results enter as recorded events.
+- Systems take randomness only from the engine's `Random` resource and time only from its `Time` resource; `Math.random` and `Date.now` are lint errors there. Asynchronous results enter as recorded actions.
 - In development the engine replays alongside the running game and compares the fingerprints of its states, reporting the first step and component where the two diverge.
 - Cosmetics are deterministic too: an event carries a seed, so every client generates the same blood from it without anything more being sent.
 - Rewinding starts from the nearest periodic snapshot and steps forward. A recording carries the fingerprint of the build it is valid for.
@@ -164,7 +164,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 - Which systems and rules write, emit, spawn, and listen for what follows from the game's declarations, as a map of how its components change: in a game of systems there is no single `update` to read, so the declarations are what is read.
 - In development the values in a state are frozen, so changing one in place fails at once.
 
-**Commands.** A rule that needs something done outside the game, such as saving progress, returns a command: a declared value with a name, arguments, and the events its result may be, failure included. Systems never issue them, since they run every step. The host executes a command outside the step with the services of its Layers, and its result enters the game as an event at a later step, recorded, so a replay or a prediction never executes one. A command is defined beside the rule that issues it.
+**Commands.** A rule that needs something done outside the game, such as saving progress, returns a command: a declared value with a name, arguments, and the results it may come to (`Command.result`), failure included. Systems never issue them, since they run every step. The host executes a command outside the step with the services of its Layers, and its result enters the game as an action at a later step, recorded, so a replay or a prediction never executes one. A result carries no player, a client cannot send one, and a game whose rules leave one unhandled does not compile. A command is defined beside the rule that issues it.
 
 **Views.** A game's client draws through four primitives over the drawn frame, each releasing what it holds through a `Scope`:
 

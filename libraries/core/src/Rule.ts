@@ -1,4 +1,4 @@
-import { Option } from 'effect';
+import { Option, type Schema } from 'effect';
 import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
@@ -8,8 +8,23 @@ import type * as State from '#src/State.ts';
 type Of<Value> = Component.Component<string, Value, Component.Owner>;
 
 /**
- * What the game decides when something happens, such as what a bite does to health. A rule handles one event, may read anything, and writes only components the rules own, and only those it declared. It may emit further events, which are handled in the same step after it, and issue the commands it declared, which are done outside the game once the step is over (see `Command.ts`).
+ * What the game decides when something happens, such as what a bite does to health. A rule handles one action or event, may read anything, and writes only components the rules own, and only those it declared. It may emit further events, which are handled in the same step after it, and issue the commands it declared, which are done outside the game once the step is over (see `Command.ts`).
  */
+
+/** What a rule handles: an action, a player's (`Action.make`) or a command's result (`Command.result`), or an event (`Event.make`), declared by its tag and the schema its values are recorded with. Which of the three it is, its declaration says, and never changes. */
+export interface Cause<Tag extends string = string, Value = Event.Tagged> {
+  readonly _tag: 'Action' | 'Result' | 'Event';
+  readonly tag: Tag;
+  /** Encodes and decodes it with no services, so it can be recorded, replayed, and sent. */
+  readonly schema: Schema.Codec<Value, unknown>;
+  /** Carries the value's type; never set. */
+  readonly '~value'?: Value;
+  /** Whether `value` is one of this kind, checked by its schema. */
+  is(value: Event.Tagged): value is Event.Tagged & Value;
+}
+
+/** The value of `C`, an action or event, as a rule handles it. */
+export type ValueOf<C> = C extends Cause<string, infer Value> ? Value : never;
 
 export interface Context<
   Writes extends Component.Any,
@@ -24,7 +39,7 @@ export interface Context<
   readonly get: <Value>(entity: State.Entity, component: Of<Value>) => Option.Option<Value>;
   readonly query: State.Query<Component.Any>;
   readonly set: <Value>(entity: State.Entity, component: Of<Value> & Writes, value: Value) => void;
-  readonly emit: (event: Event.ValueOf<Emits>) => void;
+  readonly emit: (event: ValueOf<Emits>) => void;
   /** Issues a command it declared, to be done once the step is over. A method, so a step can hand a rule written for any commands one that knows its game's. */
   command(issued: Command.IssuedOf<Commands>): void;
 }
@@ -33,13 +48,13 @@ export type RulesComponent = Component.Component<string, unknown, 'rules'>;
 
 /** A rule, with what it declared kept in its type, so a game can check it holds all of them. */
 export interface Rule<
-  On extends Event.Any = Event.Any,
+  On extends Cause = Cause,
   Writes extends RulesComponent = RulesComponent,
   Emits extends Event.Any = Event.Any,
   Spawns extends Component.Any = Component.Any,
   Commands extends Command.Any = Command.Any,
 > {
-  /** The event or action it handles. */
+  /** The action or event it handles. */
   readonly on: On;
   /** What it is called, where more than one rule handles its event and the map of a game's changes should tell them apart. */
   readonly name: Option.Option<string>;
@@ -49,16 +64,16 @@ export interface Rule<
   readonly despawns: boolean;
   readonly commands: ReadonlyArray<Commands>;
   /**
-   * A method, so a rule written for its own event fits here: the engine calls a rule only with events of its tag, which the type of `event` cannot say on its own.
+   * A method, so a rule written for its own action or event fits here: the engine calls a rule only with values of its tag, which the type of `cause` cannot say on its own.
    */
   run(
     context: Context<Component.Any, Event.Any, Component.Any, true, Command.Any>,
-    event: Event.Tagged,
+    cause: Event.Tagged,
   ): void;
 }
 
 export const on = <
-  E extends Event.Any,
+  E extends Cause,
   const Writes extends ReadonlyArray<RulesComponent>,
   const Emits extends ReadonlyArray<Event.Any>,
   const Spawns extends ReadonlyArray<Component.Any> = [],
@@ -79,7 +94,7 @@ export const on = <
     readonly commands?: Commands;
     readonly run: (
       context: Context<Writes[number], Emits[number], Spawns[number], Despawns, Commands[number]>,
-      event: Event.ValueOf<E>,
+      cause: ValueOf<E>,
     ) => void;
   },
 ): Rule<E, Writes[number], Emits[number], Spawns[number], Commands[number]> => ({

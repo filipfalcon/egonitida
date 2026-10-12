@@ -1,6 +1,7 @@
 import type { Option } from 'effect';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
+import type * as Rule from '#src/Rule.ts';
 import type * as State from '#src/State.ts';
 
 type Of<Value> = Component.Component<string, Value, Component.Owner>;
@@ -52,7 +53,7 @@ export interface Context<
   ) => Option.Option<Value>;
   readonly query: State.Query<Reads | Writes>;
   readonly set: <Value>(entity: State.Entity, component: Of<Value> & Writes, value: Value) => void;
-  readonly emit: (event: Event.ValueOf<Emits>) => void;
+  readonly emit: (event: Rule.ValueOf<Emits>) => void;
 }
 
 export type SimulationComponent = Component.Component<string, unknown, 'simulation'>;

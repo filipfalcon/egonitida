@@ -29,7 +29,7 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 
 **Messages.** Actions and events are facts in the past tense. An action says what a player did, whatever device did it (`PulledTrigger`, `ChoseRestart`); an event says what the game made of it (`Shot`, `LevelRestarted`). Every action is handled by a rule; an event that nothing emits and nothing handles is unused, and is removed.
 
-**Effects.** A rule that needs something done outside the game issues a command (`Command.make`, `context.command`), defined beside the rule. Its failures it can foresee are among its result events. Systems issue none.
+**Effects.** A rule that needs something done outside the game issues a command (`Command.make`, `context.command`), defined beside the rule. Its results are declared beside it (`Command.result`), its failures it can foresee among them, and each comes back as an action that a rule must handle. Systems issue none.
 
 **Steps and frames are plain code.** A system's or rule's `run` and a view's `draw` take randomness and time only from their context, and run no Effect. Effect is for the edges: hosting, transports, services and Layers, commands, and what a view acquires.
 

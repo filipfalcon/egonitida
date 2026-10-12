@@ -28,7 +28,7 @@ export type Line =
       readonly _tag: 'Stepped';
       readonly tick: number;
       /** The input that reached the step, if asked for. */
-      readonly inputs: Option.Option<ReadonlyArray<Recording.Input>>;
+      readonly inputs: Option.Option<ReadonlyArray<Recording.Demand>>;
       readonly actions: ReadonlyArray<unknown>;
       readonly parts: ReadonlyArray<PartLine>;
     }
@@ -68,8 +68,8 @@ export const from = (
       return {
         _tag: 'Stepped',
         tick: entry.tick,
-        inputs: options.inputs === true ? Option.some(entry.inputs) : Option.none(),
-        actions: entry.actions,
+        inputs: options.inputs === true ? Option.some(entry.input.demands) : Option.none(),
+        actions: entry.input.actions,
         parts: trace.map((done) => ({
           part: nameOf(done.part),
           cause: Option.map(done.cause, encode),

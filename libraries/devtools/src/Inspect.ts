@@ -1,4 +1,4 @@
-import { Client, type Event, Game, type Host, type State } from '@lightocean/core';
+import { Client, Game, type Host, type Rule, type State } from '@lightocean/core';
 import { Data, Effect, Option, Result, Schema, type Scope } from 'effect';
 import * as Log from '#src/Log.ts';
 import type * as Rewind from '#src/Rewind.ts';
@@ -95,7 +95,7 @@ const jsonSchemaOf = (schema: Schema.Top) =>
 const describe = (game: Game.Game) => {
   const changes = Game.changes(game);
   const names = (parts: ReadonlyArray<Game.Part>) => parts.map(Log.nameOf);
-  const eventOf = (event: Event.Any) => {
+  const eventOf = (event: Rule.Cause) => {
     const changed = changes.events.get(event.tag);
     return {
       tag: event.tag,

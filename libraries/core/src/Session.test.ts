@@ -6,10 +6,10 @@ import * as Client from '#src/Client.ts';
 import * as Command from '#src/Command.ts';
 import * as Component from '#src/Component.ts';
 import { Controls, Health, Position } from '#src/fixtures.ts';
-import * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
 import * as Domain from '#src/Domain.ts';
 import * as Host from '#src/Host.ts';
+import * as Protocol from '#src/Protocol.ts';
 import * as Rule from '#src/Rule.ts';
 import * as System from '#src/System.ts';
 import * as Transport from '#src/Transport.ts';
@@ -370,16 +370,16 @@ describe('watching a host', () => {
         expect(
           firstStep?._tag === 'Stepped' && {
             tick: firstStep.state.tick,
-            inputs: firstStep.inputs.map((input) => [
-              input.entity,
-              input.component.name,
-              input.encoded(),
+            demands: firstStep.input.demands.map((demand) => [
+              demand.entity,
+              demand.component.name,
+              demand.encoded(),
             ]),
-            actions: firstStep.actions,
+            actions: firstStep.input.actions,
           },
         ).toEqual({
           tick: 4,
-          inputs: [[entity, 'Controls', { move: 1, fire: false }]],
+          demands: [[entity, 'Controls', { move: 1, fire: false }]],
           actions: [{ _tag: 'AskedToHeal', amount: 50, player: entity }],
         });
         expect(rest.at(-1)).toEqual({ _tag: 'Left', entity });
@@ -669,7 +669,7 @@ describe('playing from beside the host', () => {
         expect(reasons).toEqual([
           'Position is no input of the game',
           expect.stringContaining('Controls'),
-          'Flew is no action of the game, or not one like it',
+          'Flew is no action a player of the game takes, or not one like it',
         ]);
       }),
   );
@@ -761,8 +761,8 @@ describe('commands', () => {
   const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(
     'Vault',
   );
-  const KeptHealth = Event.make('KeptHealth', { player: Schema.Int });
-  const FailedToKeepHealth = Event.make('FailedToKeepHealth', { player: Schema.Int });
+  const KeptHealth = Command.result('KeptHealth', { player: Schema.Int });
+  const FailedToKeepHealth = Command.result('FailedToKeepHealth', { player: Schema.Int });
   const KeepHealth = Command.make('KeepHealth', {
     args: { player: Schema.Int, amount: Schema.Int },
     results: [KeptHealth, FailedToKeepHealth],
@@ -770,8 +770,8 @@ describe('commands', () => {
       Effect.gen(function* () {
         const vault = yield* Vault;
         const kept = yield* vault.keep(amount);
-        const done: Event.ValueOf<typeof KeptHealth> = { _tag: 'KeptHealth', player };
-        const failed: Event.ValueOf<typeof FailedToKeepHealth> = {
+        const done: Rule.ValueOf<typeof KeptHealth> = { _tag: 'KeptHealth', player };
+        const failed: Rule.ValueOf<typeof FailedToKeepHealth> = {
           _tag: 'FailedToKeepHealth',
           player,
         };
@@ -791,7 +791,7 @@ describe('commands', () => {
         requires: [],
         components: [Health, Kept],
         actions: [AskedToHeal],
-        events: [KeptHealth, FailedToKeepHealth],
+        events: [],
         commands: [KeepHealth],
         systems: [],
         rules: [
@@ -830,7 +830,7 @@ describe('commands', () => {
       const [clientEnd, hostEnd] = yield* Transport.memoryPair;
       yield* host.connect(hostEnd);
       const client = yield* Client.connect(clientEnd, { game: keepGame });
-      return { host, client };
+      return { host, client, clientEnd };
     }).pipe(Effect.provideService(Vault, vault));
   const keptIn = (state: State.State, entity: State.Entity) =>
     Option.map(State.get(state, entity, Kept), ({ _tag }) => _tag);
@@ -878,6 +878,29 @@ describe('commands', () => {
       yield* elapse(100);
 
       expect(keptIn(yield* host.state, client.entity)).toEqual(Option.some('No'));
+    }),
+  );
+
+  it.effect('takes no result from a client, since only the host’s own commands bring one', () =>
+    Effect.gen(function* () {
+      const { host, client, clientEnd } = yield* keeping({ keep: () => Effect.succeed(true) });
+
+      yield* clientEnd.send({
+        channel: 'reliable',
+        payload: Protocol.encodeClientReliable({
+          _tag: 'Act',
+          action: { _tag: 'KeptHealth', player: client.entity },
+        }),
+      });
+      const beside = yield* Effect.flip(
+        host.act(client.entity, { _tag: 'KeptHealth', player: client.entity }),
+      );
+      yield* elapse(100);
+
+      expect(beside.reason).toBe(
+        'KeptHealth is no action a player of the game takes, or not one like it',
+      );
+      expect(keptIn(yield* host.state, client.entity)).toEqual(Option.none());
     }),
   );
 

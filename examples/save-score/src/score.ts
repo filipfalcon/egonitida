@@ -14,7 +14,7 @@ import { Effect, Option, Schema } from 'effect';
 import { Scores } from '#src/scores.ts';
 
 /**
- * The fifth example: a round against the clock, whose score is saved when it ends. It adds one idea to those before: a rule that needs something done outside the game, saving the score, issues a command, and what came of it, the best score kept or why none was, comes back as an event. Its view is in `score.view.ts`; where scores are kept is `scores.ts`'s.
+ * The fifth example: a round against the clock, whose score is saved when it ends. It adds one idea to those before: a rule that needs something done outside the game, saving the score, issues a command, and what came of it, the best score kept or why none was, comes back as an action, which a rule must handle. Its view is in `score.view.ts`; where scores are kept is `scores.ts`'s.
  */
 
 /** How long a round lasts, in seconds. */
@@ -60,13 +60,13 @@ export const ChoseNewRound = Action.make('ChoseNewRound', {});
 /** The round's time is up, with so many hits. */
 export const RoundEnded = Event.make('RoundEnded', { hits: Schema.Int });
 
+// COMMANDS
+
 /** The score was saved, and `best` is the best kept so far. */
-export const ScoreSaved = Event.make('ScoreSaved', { best: Schema.Int });
+export const ScoreSaved = Command.result('ScoreSaved', { best: Schema.Int });
 
 /** The score was not saved, for `reason`. */
-export const ScoreNotSaved = Event.make('ScoreNotSaved', { reason: Schema.String });
-
-// COMMANDS
+export const ScoreNotSaved = Command.result('ScoreNotSaved', { reason: Schema.String });
 
 /** Saves a score where scores are kept, coming to the best kept so far, or to why it could not be saved. */
 export const SaveScore = Command.make('SaveScore', {
@@ -76,9 +76,9 @@ export const SaveScore = Command.make('SaveScore', {
     Effect.gen(function* () {
       const scores = yield* Scores;
       return yield* scores.save(score).pipe(
-        Effect.map((best): Event.ValueOf<typeof ScoreSaved> => ({ _tag: 'ScoreSaved', best })),
+        Effect.map((best): Rule.ValueOf<typeof ScoreSaved> => ({ _tag: 'ScoreSaved', best })),
         Effect.catchTag('Unsaved', ({ reason }) =>
-          Effect.succeed<Event.ValueOf<typeof ScoreNotSaved>>({ _tag: 'ScoreNotSaved', reason }),
+          Effect.succeed<Rule.ValueOf<typeof ScoreNotSaved>>({ _tag: 'ScoreNotSaved', reason }),
         ),
       );
     }),
@@ -190,7 +190,7 @@ export const domain = Domain.make({
   requires: [Pointing.domain],
   components: [Target, Round],
   actions: [ChoseNewRound],
-  events: [RoundEnded, ScoreSaved, ScoreNotSaved],
+  events: [RoundEnded],
   commands: [SaveScore],
   systems: [clock],
   rules: [hit, endRound, saved, notSaved, newRound],

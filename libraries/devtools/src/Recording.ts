@@ -3,20 +3,27 @@ import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 
 /**
- * A game as it was played on a host: the state as it was when recording began, and everything that replaced it after, in order. Everything else follows from them, since a step is a function of the state and what went into it; so a recording can be replayed, checked for determinism, rewound, and turned into a test.
+ * A game as it was played on a host: the state as it was when recording began, and everything that replaced it after, in order: steps, with their input, players joining and leaving, and the host going back to another state. Everything else follows from them, since the same state and the same input give the same next state; so a recording can be replayed, checked for determinism, rewound, and turned into a test.
  *
  * It is data: the state and every value in it are encoded by the game's own schemas, so it travels as JSON and is read back with the game that played it.
  */
 
-/** An input that reached a step: the entity it was aimed at, its component's name, and its value as the component encodes it. */
-export const Input = Schema.Struct({
+/** A demand that reached a step: the entity it was on, its component's name, and its value as the component encodes it. */
+export const Demand = Schema.Struct({
   entity: Schema.Int,
   component: Schema.String,
   value: Schema.Unknown,
 });
+export type Demand = typeof Demand.Type;
+
+/** The input of a step: its demands, and its actions as their schemas encode them, in the order they arrived. */
+export const Input = Schema.Struct({
+  demands: Schema.Array(Demand),
+  actions: Schema.Array(Schema.Unknown),
+});
 export type Input = typeof Input.Type;
 
-/** One thing that replaced the state: a client joining or leaving, between steps, the host going back to a state, or a step taken, with the input that reached it, the actions the rules took in it, as their events encode them, and the fingerprint of the state it led to, which a replay must come to. */
+/** One thing that replaced the state: a client joining or leaving, between steps, the host going back to a state, or a step taken, with its input and the fingerprint of the state it led to, which a replay must come to. */
 export const Entry = Schema.Union([
   Schema.TaggedStruct('Joined', { entity: Schema.Int }),
   Schema.TaggedStruct('Left', { entity: Schema.Int }),
@@ -24,8 +31,7 @@ export const Entry = Schema.Union([
   Schema.TaggedStruct('Restored', { state: Schema.Unknown }),
   Schema.TaggedStruct('Stepped', {
     tick: Schema.Int,
-    inputs: Schema.Array(Input),
-    actions: Schema.Array(Schema.Unknown),
+    input: Input,
     fingerprint: Fingerprint.Fingerprint,
   }),
 ]);
@@ -51,20 +57,20 @@ export interface Recorder {
 /** What happens to a host's state within one build of its game. */
 export type Happening = Exclude<Host.Happening, { readonly _tag: 'Reloaded' }>;
 
-/** Encodes an action or event of `game` by its own schema, found by its tag. */
+/** Encodes an action of `game`, a player's or a command's result, or an event, by its own schema, found by its tag. */
 export const encoderOf = (game: Game.Game) => {
   const byTag = new Map(
-    [...game.actions, ...game.events].map((event) => [
-      event.tag,
-      Schema.encodeSync(Schema.toCodecJson(event.schema)),
+    [...game.actions, ...game.results, ...game.events].map((cause) => [
+      cause.tag,
+      Schema.encodeSync(Schema.toCodecJson(cause.schema)),
     ]),
   );
-  return (action: Event.Tagged): unknown =>
-    Option.match(Option.fromNullishOr(byTag.get(action._tag)), {
+  return (cause: Event.Tagged): unknown =>
+    Option.match(Option.fromNullishOr(byTag.get(cause._tag)), {
       onNone: () => {
-        throw new Error(`${action._tag} is no action or event of the game recorded`);
+        throw new Error(`${cause._tag} is no action or event of the game recorded`);
       },
-      onSome: (encode) => encode(action),
+      onSome: (encode) => encode(cause),
     });
 };
 
@@ -79,12 +85,14 @@ export const entryOf = (game: Game.Game): ((happening: Happening) => Entry) => {
         ? {
             _tag: 'Stepped',
             tick: happening.state.tick,
-            inputs: happening.inputs.map((input) => ({
-              entity: input.entity,
-              component: input.component.name,
-              value: input.encoded(),
-            })),
-            actions: happening.actions.map(encodeAction),
+            input: {
+              demands: happening.input.demands.map((demand) => ({
+                entity: demand.entity,
+                component: demand.component.name,
+                value: demand.encoded(),
+              })),
+              actions: happening.input.actions.map(encodeAction),
+            },
             fingerprint: Fingerprint.of(game, happening.state),
           }
         : happening._tag === 'Joined'

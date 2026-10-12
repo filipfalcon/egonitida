@@ -1,41 +1,21 @@
-import type * as Component from '#src/Component.ts';
-import * as State from '#src/State.ts';
+import type * as Demand from '#src/Demand.ts';
+import type * as Event from '#src/Event.ts';
 
 /**
- * What a player sent for a step, aimed at the entity it controls. Only the engine writes input, at the start of the step it belongs to, so a recording of a game is its first state and the input of every step after it.
+ * An input is everything that enters a step from outside the state: the players' demands and the actions, in the order they arrived.
+ *
+ * The same state and the same input give the same next state, so a recording of a game is its first state and the input of every step after it.
  */
 
-export type InputComponent = Component.Component<string, unknown, 'input'>;
+/** An action as a step takes it, a player's or a command's result: its value, tagged with the action it is. */
+export type Action = Event.Tagged;
 
-/** An input aimed at an entity. Its value stays inside `writeInto`, made where the value's type is known, so no input can carry a value its component does not hold. */
 export interface Input {
-  readonly entity: State.Entity;
-  readonly component: InputComponent;
-  /** Its value, encoded as JSON by its component's schema, as it is sent and recorded. */
-  readonly encoded: () => unknown;
-  /** Writes the value into a draft of the next state. */
-  readonly writeInto: (draft: State.Draft) => void;
+  /** What the players are doing with their controls, each written to the entity it is on before anything else runs. */
+  readonly demands: ReadonlyArray<Demand.Demand>;
+  /** The actions, in the order they arrived, which the rules handle before the systems run. */
+  readonly actions: ReadonlyArray<Action>;
 }
 
-export const of = <Value>(
-  entity: State.Entity,
-  component: Component.Component<string, Value, 'input'>,
-  value: Value,
-): Input => ({
-  entity,
-  component,
-  encoded: () => component.of(value).encoded(),
-  writeInto: (draft) => State.write(draft, entity, component, value),
-});
-
-/** `instance`, a value of an input component, as an input aimed at `entity`: as a client predicting its own player steps its state with the input it sent. */
-export const fromInstance = (
-  entity: State.Entity,
-  instance: Component.Instance<InputComponent>,
-): Input => ({
-  entity,
-  component: instance.component,
-  encoded: instance.encoded,
-  writeInto: (draft) =>
-    instance.writeWith((component, value) => State.write(draft, entity, component, value)),
-});
+/** No input: a step that only moves time on. */
+export const none: Input = { demands: [], actions: [] };

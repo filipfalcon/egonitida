@@ -1,4 +1,4 @@
-import { type Client, type Component, Game, Input, State } from '@lightocean/core';
+import { type Client, type Component, Demand, Game, type Input, State } from '@lightocean/core';
 import { Effect, Option, Schedule, Schema, type Scope, Stream } from 'effect';
 import type * as Drawing from '#src/Drawing.ts';
 import * as Interpolate from '#src/Interpolate.ts';
@@ -15,7 +15,7 @@ const KEPT_INPUTS = 600;
 
 export interface Prediction {
   /** Holds `values` of input components as the player's input from now on, sent once a step until another is held. */
-  readonly hold: (values: ReadonlyArray<Component.Instance<Input.InputComponent>>) => void;
+  readonly hold: (values: ReadonlyArray<Component.Instance<Demand.DemandComponent>>) => void;
   /** `frame` with the player's own entity drawn as predicted, `seconds` after the frame before. */
   readonly frame: (frame: Drawing.Frame, seconds: number) => Drawing.Frame;
 }
@@ -29,9 +29,9 @@ export const make = (
     const own = client.entity;
     const predicted = game.components.filter(({ network }) => network === 'predicted');
     const predicting = {
-      held: new Array<Component.Instance<Input.InputComponent>>(),
-      /** The inputs sent, by their numbers, oldest first. */
-      sent: new Array<{ readonly seq: number; readonly inputs: ReadonlyArray<Input.Input> }>(),
+      held: new Array<Component.Instance<Demand.DemandComponent>>(),
+      /** The input of each step sent, by its number, oldest first: the player's demands, and no actions, which the host alone hands to the rules. */
+      sent: new Array<{ readonly seq: number; readonly input: Input.Input }>(),
       confirmed: Option.none<State.State>(),
       /** The number of the newest input a state the host sent took in. */
       acked: 0,
@@ -52,7 +52,13 @@ export const make = (
       Effect.map(client.send(predicting.held), (seq) => {
         predicting.sent = [
           ...predicting.sent,
-          { seq, inputs: predicting.held.map((instance) => Input.fromInstance(own, instance)) },
+          {
+            seq,
+            input: {
+              demands: predicting.held.map((instance) => Demand.fromInstance(own, instance)),
+              actions: [],
+            },
+          },
         ].slice(-KEPT_INPUTS);
       }),
     ).pipe(Effect.repeat(Schedule.spaced(`${1000 / client.stepRate} millis`)), Effect.forkScoped);
@@ -62,7 +68,7 @@ export const make = (
       predicting.acked = Option.getOrElse(client.ackedAt(confirmed.tick), () => predicting.acked);
       return predicting.sent
         .filter(({ seq }) => seq > predicting.acked)
-        .reduce((state, { inputs }) => Game.step(game, state, inputs).state, confirmed);
+        .reduce((state, { input }) => Game.step(game, state, input).state, confirmed);
     };
 
     return {

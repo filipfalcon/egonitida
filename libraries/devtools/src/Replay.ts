@@ -1,10 +1,10 @@
-import { type Event, Game, Input, type Host, State } from '@lightocean/core';
+import { Demand, Game, type Host, type Input, State } from '@lightocean/core';
 import { Data, Effect, Option, Result, Schema, type Scope, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 import * as Recording from '#src/Recording.ts';
 
 /**
- * A recording played again: from its first state, every join, leave, and step taken anew by the game itself, each step's state compared with the fingerprint recorded for it. A game whose steps take nothing but the state and what went into them comes to the same states every time; one that reads anything else, such as a clock, `Math.random`, or anything kept outside the state, comes apart, and the replay says at which step and in which component.
+ * A recording played again: from its first state, every join, leave, and step taken anew by the game itself, each step's state compared with the fingerprint recorded for it. A game whose steps take nothing but the state and the input comes to the same states every time; one that reads anything else, such as a clock, `Math.random`, or anything kept outside the state, comes apart, and the replay says at which step and in which component.
  *
  * A replay runs a recording made earlier, as a test of the build at hand, or beside a host as it plays, as a check in development.
  */
@@ -47,22 +47,22 @@ export interface Taken {
 
 /** How `setup` takes one entry after another, from a state to the next, or to where it came apart. */
 const taking = (setup: Setup, options: { readonly trace: boolean }) => {
-  const inputs = new Map(
+  const demands = new Map(
     setup.game.components
-      .filter((component): component is Input.InputComponent => component.owner === 'input')
+      .filter((component): component is Demand.DemandComponent => component.owner === 'input')
       .map((component) => [
         component.name,
         (entity: State.Entity, value: unknown) =>
           Option.map(
             Schema.decodeUnknownOption(Schema.toCodecJson(component.schema))(value),
-            (decoded) => Input.of(entity, component, decoded),
+            (decoded) => Demand.of(entity, component, decoded),
           ),
       ]),
   );
   const actions = new Map(
-    [...setup.game.actions, ...setup.game.events].map((event) => [
-      event.tag,
-      Schema.decodeUnknownOption(Schema.toCodecJson(event.schema)),
+    [...setup.game.actions, ...setup.game.results].map((action) => [
+      action.tag,
+      Schema.decodeUnknownOption(Schema.toCodecJson(action.schema)),
     ]),
   );
   const read = <A>(found: Option.Option<A>, what: () => string) =>
@@ -92,29 +92,34 @@ const taking = (setup: Setup, options: { readonly trace: boolean }) => {
       if (entry._tag === 'Left') {
         return Result.succeed({ entry, state: setup.leave(state, entry.entity), trace: [] });
       }
-      const given = yield* Effect.forEach(entry.inputs, ({ entity, component, value }) =>
+      const given = yield* Effect.forEach(entry.input.demands, ({ entity, component, value }) =>
         read(
-          Option.flatMap(Option.fromNullishOr(inputs.get(component)), (decode) =>
+          Option.flatMap(Option.fromNullishOr(demands.get(component)), (decode) =>
             decode(entity, value),
           ),
-          () => `an input of ${component} the game cannot read`,
+          () => `a demand of ${component} the game cannot read`,
         ),
       );
-      const taken = yield* Effect.forEach(entry.actions, (encoded) =>
+      const taken = yield* Effect.forEach(entry.input.actions, (encoded) =>
         read(
           Option.flatMap(tagOf(encoded), (tag) =>
             Option.flatMap(
               Option.fromNullishOr(actions.get(tag)),
-              (decode): Option.Option<Event.Tagged> => decode(encoded),
+              (decode): Option.Option<Input.Action> => decode(encoded),
             ),
           ),
           () => 'an action the game cannot read',
         ),
       );
-      const stepped = Game.step(setup.game, state, given, taken, {
-        freeze: false,
-        trace: options.trace,
-      });
+      const stepped = Game.step(
+        setup.game,
+        state,
+        { demands: given, actions: taken },
+        {
+          freeze: false,
+          trace: options.trace,
+        },
+      );
       return Option.match(
         Fingerprint.difference(entry.fingerprint, Fingerprint.of(setup.game, stepped.state)),
         {

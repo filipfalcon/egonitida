@@ -4,7 +4,7 @@ import type * as Recording from '#src/Recording.ts';
 import type * as Replay from '#src/Replay.ts';
 
 /**
- * A stretch of a recording told as a story test: the state at its first tick, the input and actions that went into each step after it, and, at its end, every value that came of them. It is told with components, actions, and events by name, as a tool that knows a game only as data tells it, and it holds when told again with the game itself; so what an agent did while playing becomes a test.
+ * A stretch of a recording told as a story test: the state at its first tick, the input of each step after it, and, at its end, every value that came of them. It is told with components and actions by name, as a tool that knows a game only as data tells it, and it holds when told again with the game itself; so what an agent did while playing becomes a test.
  *
  * A stretch in which a player joined or left, or the host went back in time, cannot be told, since a story has no part for them: it must start after them, or end before.
  */
@@ -23,7 +23,7 @@ export type Line =
       readonly value: unknown;
     }
   | { readonly _tag: 'ActAs'; readonly name: string; readonly action: unknown }
-  | { readonly _tag: 'HappenAs'; readonly event: unknown }
+  | { readonly _tag: 'ResolveAs'; readonly result: unknown }
   | { readonly _tag: 'Steps'; readonly count: number }
   | {
       readonly _tag: 'ExpectAs';
@@ -44,18 +44,18 @@ const valuesOf = (game: Game.Game, state: State.State) =>
     ]),
   );
 
-/** What went into one step, told by name. */
+/** The input of one step, told by name: its demands, then its actions, each a player's or a command's result. */
 const stepLines = (actionTags: ReadonlySet<string>, entry: Recording.Entry): ReadonlyArray<Line> =>
   entry._tag !== 'Stepped'
     ? []
     : [
-        ...entry.inputs.map(({ entity, component, value }): Line => ({
+        ...entry.input.demands.map(({ entity, component, value }): Line => ({
           _tag: 'InputAs',
           name: nameOf(entity),
           component,
           value,
         })),
-        ...entry.actions.map((encoded): Line => {
+        ...entry.input.actions.map((encoded): Line => {
           if (
             typeof encoded === 'object' &&
             encoded !== null &&
@@ -68,7 +68,7 @@ const stepLines = (actionTags: ReadonlySet<string>, entry: Recording.Entry): Rea
             const { player, ...action } = encoded;
             return { _tag: 'ActAs', name: nameOf(player), action };
           }
-          return { _tag: 'HappenAs', event: encoded };
+          return { _tag: 'ResolveAs', result: encoded };
         }),
       ];
 
@@ -165,8 +165,8 @@ export const steps = (lines: ReadonlyArray<Line>): ReadonlyArray<Story.Line> =>
         return Story.inputAs(line.name, line.component, line.value);
       case 'ActAs':
         return Story.actAs(line.name, line.action);
-      case 'HappenAs':
-        return Story.happenAs(line.event);
+      case 'ResolveAs':
+        return Story.resolveAs(line.result);
       case 'Steps':
         return Story.steps(line.count);
       case 'ExpectAs':
@@ -189,8 +189,8 @@ const sourceOf = (line: Line): string => {
       return `Story.inputAs(${quoted(line.name)}, ${quoted(line.component)}, ${json(line.value)})`;
     case 'ActAs':
       return `Story.actAs(${quoted(line.name)}, ${json(line.action)})`;
-    case 'HappenAs':
-      return `Story.happenAs(${json(line.event)})`;
+    case 'ResolveAs':
+      return `Story.resolveAs(${json(line.result)})`;
     case 'Steps':
       return `Story.steps(${line.count})`;
     case 'ExpectAs':

@@ -4,7 +4,9 @@ import type * as Command from '#src/Command.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Event from '#src/Event.ts';
 import * as Game from '#src/Game.ts';
+import * as Demand from '#src/Demand.ts';
 import * as Input from '#src/Input.ts';
+import type * as Rule from '#src/Rule.ts';
 import * as State from '#src/State.ts';
 
 /**
@@ -20,11 +22,11 @@ export interface Simulation {
   readonly state: State.State;
   /** The entities the story named, by name. */
   readonly names: ReadonlyMap<string, State.Entity>;
-  /** The input waiting for the next step. */
-  readonly inputs: ReadonlyArray<Input.Input>;
-  /** The actions taken and events made to happen, waiting for the next step in the order they came. */
-  readonly actions: ReadonlyArray<Event.Tagged>;
-  /** Every event of the steps last taken, in the order it happened. */
+  /** The input waiting for the next step: the demands sent, and the actions taken and events made to happen, in the order they came. */
+  readonly input: Input.Input;
+  /** The events made to happen among the input's actions, which the next step tells among its own events. */
+  readonly happened: ReadonlyArray<Event.Tagged>;
+  /** Every event of the steps last taken, in the order it arose. */
   readonly events: ReadonlyArray<Event.Tagged>;
   /** Every command the rules issued in the steps last taken, in order; a story never runs one. */
   readonly commands: ReadonlyArray<Command.Issued>;
@@ -47,8 +49,8 @@ export const story = (game: Game.Game, ...lines: ReadonlyArray<Line>): Simulatio
     game,
     state: State.empty({ seed: 0 }),
     names: new Map(),
-    inputs: [],
-    actions: [],
+    input: Input.none,
+    happened: [],
     events: [],
     commands: [],
   });
@@ -70,41 +72,60 @@ export const spawn =
 
 // WHAT PLAYERS SEND
 
-/** Sends input for the entity named `name`, as its client would; it reaches the next step, and stays in the state after it. */
+/** The input waiting in `simulation` with `demand` added. */
+const withDemand = (simulation: Simulation, demand: Demand.Demand): Simulation => ({
+  ...simulation,
+  input: { ...simulation.input, demands: [...simulation.input.demands, demand] },
+});
+
+/** The input waiting in `simulation` with `action` added, after those before it. */
+const withAction = (simulation: Simulation, action: Input.Action): Simulation => ({
+  ...simulation,
+  input: { ...simulation.input, actions: [...simulation.input.actions, action] },
+});
+
+/** Sends a demand on the entity named `name`, as its client would; it reaches the next step, and stays in the state after it. */
 export const input =
   <Value>(
     name: string,
     component: Component.Component<string, Value, 'input'>,
     value: Value,
   ): Line =>
-  (simulation) => ({
-    ...simulation,
-    inputs: [...simulation.inputs, Input.of(entityOf(simulation, name), component, value)],
-  });
+  (simulation) =>
+    withDemand(simulation, Demand.of(entityOf(simulation, name), component, value));
 
 /** Takes `action` as from the player named `name`, sent and accepted as a host would; the rules handle it at the next step. */
 export const act =
-  <Sent>(name: string, action: Action.Action<string, Sent, Event.Tagged>, value: Sent): Line =>
+  <Sent>(name: string, action: Action.Action<string, Sent, Input.Action>, value: Sent): Line =>
   (simulation) =>
     Option.match(action.accept(action.encode(value), entityOf(simulation, name)), {
       onNone: () => {
         throw new Error(`${action.tag} does not accept what it encodes`);
       },
-      onSome: (accepted) => ({ ...simulation, actions: [...simulation.actions, accepted] }),
+      onSome: (accepted) => withAction(simulation, accepted),
     });
 
-/** Has `event` happen at the next step with `fields`, as if something had emitted it, so the rules that handle it can be told on their own. */
+/** `fields` as a value of `cause`, or a failure saying it is none. */
+const told = <Value extends Event.Tagged>(
+  cause: Rule.Cause<string, Value>,
+  fields: Omit<Value, '_tag'>,
+): Value => {
+  const value = { ...fields, _tag: cause.tag };
+  if (!cause.is(value)) {
+    throw new Error(`what is to happen is not a ${cause.tag}`);
+  }
+  return value;
+};
+
+/** Has `event` happen at the next step with `fields`, as if something had emitted it, so the rules that handle it can be told on their own: it is handled with the actions, and told among the step's events. */
 export const happen =
   <Value extends Event.Tagged>(
     event: Event.Event<string, Value>,
     fields: Omit<Value, '_tag'>,
   ): Line =>
   (simulation) => {
-    const value = { ...fields, _tag: event.tag };
-    if (!event.is(value)) {
-      throw new Error(`what is to happen is not a ${event.tag}`);
-    }
-    return { ...simulation, actions: [...simulation.actions, value] };
+    const value = told(event, fields);
+    return { ...withAction(simulation, value), happened: [...simulation.happened, value] };
   };
 
 // TIME
@@ -112,27 +133,29 @@ export const happen =
 // A story always freezes the states it steps through: a test is where changing one in place should fail.
 const frozen: Game.StepOptions = { freeze: true };
 
-/** Takes `count` steps: the waiting input and actions go into the first. */
+/** Takes `count` steps: the waiting input goes into the first. */
 export const steps =
   (count: number): Line =>
   (simulation) => {
     const events: Array<Event.Tagged> = [];
     const commands: Array<Command.Issued> = [];
     const state = Array.from({ length: count }).reduce<State.State>((current, _, index) => {
-      const step =
-        index === 0
-          ? Game.step(simulation.game, current, simulation.inputs, simulation.actions, frozen)
-          : Game.step(simulation.game, current, [], [], frozen);
-      events.push(...step.events);
+      const step = Game.step(
+        simulation.game,
+        current,
+        index === 0 ? simulation.input : Input.none,
+        frozen,
+      );
+      events.push(...(index === 0 ? simulation.happened : []), ...step.events);
       commands.push(...step.commands);
       // As a client that sees every step: what it keeps for itself is stepped too.
       return Game.stepLocal(simulation.game, step.state, { tick: step.state.tick });
     }, simulation.state);
-    return { ...simulation, state, inputs: [], actions: [], events, commands };
+    return { ...simulation, state, input: Input.none, happened: [], events, commands };
   };
 
 /**
- * Takes one step at a time until `holds` says so of the state, taking the waiting input and actions into the first; fails if that does not come to pass within `limit` steps, 600 unless given. The events expected afterwards are those of every step it took.
+ * Takes one step at a time until `holds` says so of the state, taking the waiting input into the first; fails if that does not come to pass within `limit` steps, 600 unless given. The events expected afterwards are those of every step it took.
  */
 export const until =
   (
@@ -231,7 +254,7 @@ export const expectEvent =
 /** Expects `command` among the commands the rules issued in the steps last taken, and hands the arguments of every one of them, in order, to `assert`. A story never runs a command; it has its result happen with `resolve`. */
 export const expectCommand =
   <Args>(
-    command: Command.Command<string, Args, Event.Any, unknown>,
+    command: Command.Command<string, Args, Command.AnyResult, unknown>,
     assert: (args: ReadonlyArray<Args>) => void = () => {},
   ): Line =>
   (simulation) => {
@@ -245,17 +268,19 @@ export const expectCommand =
     return simulation;
   };
 
-/** Has `result`, one of the events `command` may come to, happen at the next step with `fields`, as if the command had run and come to it. */
-export const resolve = <Results extends Event.Any, Value extends Event.Tagged>(
-  command: Command.Command<string, unknown, Results, unknown>,
-  result: Results & Event.Event<string, Value>,
-  fields: Omit<Value, '_tag'>,
-): Line => {
-  if (!command.results.some((one) => one.tag === result.tag)) {
-    throw new Error(`${result.tag} is not what ${command.name} comes to`);
-  }
-  return happen(result, fields);
-};
+/** Has `result`, one of the results `command` may come to, arrive at the next step with `fields` among the actions, as if the command had run and come to it. */
+export const resolve =
+  <Results extends Command.AnyResult, Value extends Input.Action>(
+    command: Command.Command<string, unknown, Results, unknown>,
+    result: Results & Command.Result<string, Value>,
+    fields: Omit<Value, '_tag'>,
+  ): Line =>
+  (simulation) => {
+    if (!command.results.some((one) => one.tag === result.tag)) {
+      throw new Error(`${result.tag} is not what ${command.name} comes to`);
+    }
+    return withAction(simulation, told(result, fields));
+  };
 
 /** Expects no `event` among the events of the steps last taken. */
 export const expectNoEvent =
@@ -300,12 +325,13 @@ export const givenAs =
       onSome: (state) => given(state, names)(simulation),
     });
 
-/** Sends input for the entity named `name`: a value of the input component called `component`, as it travels. */
+/** Sends a demand on the entity named `name`: a value of the demand component called `component`, as it travels. */
 export const inputAs =
   (name: string, component: string, value: unknown): Line =>
   (simulation) => {
     const found = simulation.game.components.find(
-      (known): known is Input.InputComponent => known.name === component && known.owner === 'input',
+      (known): known is Demand.DemandComponent =>
+        known.name === component && known.owner === 'input',
     );
     if (found === undefined) {
       throw new Error(`${component} is no input of the game`);
@@ -314,10 +340,8 @@ export const inputAs =
       onNone: () => {
         throw new Error(`${component} holds no such value as ${JSON.stringify(value)}`);
       },
-      onSome: (decoded) => ({
-        ...simulation,
-        inputs: [...simulation.inputs, Input.of(entityOf(simulation, name), found, decoded)],
-      }),
+      onSome: (decoded) =>
+        withDemand(simulation, Demand.of(entityOf(simulation, name), found, decoded)),
     });
   };
 
@@ -329,20 +353,36 @@ export const actAs =
     for (const known of simulation.game.actions) {
       const accepted = known.accept(action, player);
       if (Option.isSome(accepted)) {
-        return { ...simulation, actions: [...simulation.actions, accepted.value] };
+        return withAction(simulation, accepted.value);
       }
     }
-    throw new Error(`${tagOf(action)} is no action of the game, or not one like it`);
+    throw new Error(`${tagOf(action)} is no action a player of the game takes, or not one like it`);
   };
 
-/** Has an event happen at the next step, as it travels: such as a command's result. */
+/** Has a command's result arrive at the next step among the actions, as it travels. */
+export const resolveAs =
+  (result: unknown): Line =>
+  (simulation) => {
+    for (const known of simulation.game.results) {
+      const decoded = Schema.decodeUnknownOption(Schema.toCodecJson(known.schema))(result);
+      if (Option.isSome(decoded)) {
+        return withAction(simulation, decoded.value);
+      }
+    }
+    throw new Error(`${tagOf(result)} is no result of the game's commands, or not one like it`);
+  };
+
+/** Has an event happen at the next step, as it travels, as if something had emitted it. */
 export const happenAs =
   (event: unknown): Line =>
   (simulation) => {
-    for (const known of [...simulation.game.events, ...simulation.game.actions]) {
+    for (const known of simulation.game.events) {
       const decoded = Schema.decodeUnknownOption(Schema.toCodecJson(known.schema))(event);
       if (Option.isSome(decoded)) {
-        return { ...simulation, actions: [...simulation.actions, decoded.value] };
+        return {
+          ...withAction(simulation, decoded.value),
+          happened: [...simulation.happened, decoded.value],
+        };
       }
     }
     throw new Error(`${tagOf(event)} is no event of the game, or not one like it`);

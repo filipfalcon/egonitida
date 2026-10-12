@@ -6,7 +6,6 @@ import {
   Command,
   Component,
   Domain,
-  Event,
   Game,
   Host,
   Rule,
@@ -97,14 +96,14 @@ describe('a local server', () => {
         'Mouth',
       );
       const Waved = Action.make('Waved', {});
-      const Greeted = Event.make('Greeted', { player: Schema.Int });
+      const Greeted = Command.result('Greeted', { player: Schema.Int });
       const Greet = Command.make('Greet', {
         args: { player: Schema.Int },
         results: [Greeted],
         execute: ({ player }) =>
           Effect.gen(function* () {
             yield* (yield* Mouth).say(`hello, ${player}`);
-            const greeted: Event.ValueOf<typeof Greeted> = { _tag: 'Greeted', player };
+            const greeted: Rule.ValueOf<typeof Greeted> = { _tag: 'Greeted', player };
             return greeted;
           }),
       });
@@ -124,10 +123,11 @@ describe('a local server', () => {
             requires: [],
             components: [Position, Controls],
             actions: [Waved],
-            events: [Greeted],
+            events: [],
             commands: [Greet],
             systems: [],
-            rules: [greet],
+            // Nothing more comes of a greeting once it is said.
+            rules: [greet, Rule.on(Greeted, { writes: [], emits: [], run: () => {} })],
           }),
         ],
       });
