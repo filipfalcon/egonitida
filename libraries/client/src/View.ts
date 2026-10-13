@@ -1,5 +1,5 @@
 import { type Component, State } from '@lightocean/core';
-import { Effect, Exit, Option, Scope } from 'effect';
+import { Effect, Exit, Fiber, Option, Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import type * as Drawing from '#src/Drawing.ts';
 
@@ -12,6 +12,7 @@ import type * as Drawing from '#src/Drawing.ts';
  * | An entity just gained a component, or holds another value of it | `on`: a one-off output that is not part of the state, such as a sound |
  * | A condition is true | `during`: a resource held while `when` is true, such as music or pointer lock |
  * | Many entities together, or none | `whole`: one object, drawn every frame from the whole frame, such as one light for every fire |
+ * | A value outside the drawing follows the state, time and all | `follow`: worked out every frame, and put out as it changes, such as a pad's lightbar |
  * | The player looks at the game | `rig`: the camera, drawn for the player after every other view, from what they drew |
  *
  * Whatever a view acquires is released through a `Scope`, never by hand. What a view draws is a function of the frame: it keeps nothing between frames, and what it must remember is a local component instead.
@@ -77,7 +78,25 @@ export interface Whole<R, Built extends Three.Object3D = Three.Object3D> {
   own(object: Three.Object3D): Option.Option<Built>;
 }
 
-export type View<R = never> = Each<R, Three.Object3D> | On<R> | During<R> | Whole<R> | Rig;
+/** What a `follow` view worked out of a frame, told apart by identity alone. */
+export type Followed = object;
+
+export interface Follow<R> {
+  readonly _tag: 'Follow';
+  /** What follows from `frame`, given what followed from the frame before, if one was drawn: it now, and what puts it out, if it is another. */
+  readonly next: (
+    frame: Drawing.Frame,
+    before: Option.Option<Followed>,
+  ) => { readonly now: Followed; readonly put: Option.Option<Effect.Effect<void, never, R>> };
+}
+
+export type View<R = never> =
+  | Each<R, Three.Object3D>
+  | On<R>
+  | During<R>
+  | Whole<R>
+  | Follow<R>
+  | Rig;
 
 /** What `entity` holds in `frame`, of components it is known to hold. */
 const heldIn =
@@ -143,6 +162,32 @@ export const whole = <Built extends Three.Object3D, R = never>(spec: {
       }),
     draw: (object, frame) => Option.map(own(object), (mine) => spec.draw(mine, frame)),
     own,
+  };
+};
+
+/**
+ * A view of a value outside the drawing that follows the state, time and all, such as a pad's lightbar as bright as a heartbeat flares it: `of` works it out of every frame, and `to` puts it out at the first frame and then only as it changes, `same` telling one value from another, by identity unless told. `of` is plain code, as a view's `draw` is, and keeps nothing between frames.
+ */
+export const follow = <A, R = never>(spec: {
+  readonly of: (frame: Drawing.Frame) => A;
+  readonly to: (value: A) => Effect.Effect<void, never, R>;
+  readonly same?: (a: A, b: A) => boolean;
+}): Follow<R> => {
+  const same = spec.same ?? Object.is;
+  // What each frame's token stands for: the value worked out of it.
+  const values = new WeakMap<Followed, A>();
+  return {
+    _tag: 'Follow',
+    next: (frame, before) => {
+      const value = spec.of(frame);
+      const now: Followed = {};
+      values.set(now, value);
+      const changed = !Option.exists(
+        Option.flatMap(before, (token) => Option.fromNullishOr(values.get(token))),
+        (was) => same(was, value),
+      );
+      return { now, put: changed ? Option.some(spec.to(value)) : Option.none() };
+    },
   };
 };
 
@@ -251,6 +296,10 @@ export const make = <R = never>(
     const held = new Map<During<R>, Scope.Closeable>();
     // What each view of the whole frame built, once it has drawn one.
     const wholes = new Map<object, Three.Object3D>();
+    // What each `follow` view worked out of the frame before, and what it is
+    // putting out, so each value goes out after the one before it.
+    const followed = new Map<Follow<R>, Followed>();
+    const putting = new Map<Follow<R>, Fiber.Fiber<void>>();
 
     const letGo = (keeping: Kept) =>
       Effect.suspend(() => {
@@ -303,6 +352,24 @@ export const make = <R = never>(
           root.add(object);
         }
         view.draw(object, frame);
+      });
+
+    const follow = (view: Follow<R>, frame: Drawing.Frame) =>
+      Effect.suspend(() => {
+        const { now, put } = view.next(frame, Option.fromNullishOr(followed.get(view)));
+        followed.set(view, now);
+        return Option.match(put, {
+          onNone: () => Effect.void,
+          onSome: (effect) => {
+            const after = Option.match(Option.fromNullishOr(putting.get(view)), {
+              onNone: () => effect,
+              onSome: (before) => Effect.andThen(Fiber.join(before), effect),
+            });
+            return Effect.map(Effect.forkIn(Scope.provide(after, scope), scope), (fiber) => {
+              putting.set(view, fiber);
+            });
+          },
+        });
       });
 
     const react = (view: On<R>, frame: Drawing.Frame) =>
@@ -396,7 +463,9 @@ export const make = <R = never>(
                     ? hold(view, frame)
                     : view._tag === 'Whole'
                       ? drawWhole(view, frame)
-                      : Effect.void,
+                      : view._tag === 'Follow'
+                        ? follow(view, frame)
+                        : Effect.void,
             { discard: true },
           ),
           Effect.sync(() => drawRigs(frame)),

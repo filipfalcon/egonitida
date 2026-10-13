@@ -34,6 +34,7 @@ export const PARTS: ReadonlyArray<readonly [callee: string, property: string]> =
   ['Rule.on', 'run'],
   ['View.each', 'draw'],
   ['View.whole', 'draw'],
+  ['View.follow', 'of'],
 ];
 
 /** A part's function, run every step or every frame, that something sits in: which call made the part, which of its functions it is, and the function. */

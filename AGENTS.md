@@ -58,6 +58,7 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 | An entity just gained a component, or holds a new value of it | `View.on`, for an output that is not part of the state, such as a sound; react to components that change only at such moments |
 | A condition is true                                           | `View.during`: a resource held while `when` is true                                                                           |
 | Many entities together, or none                               | `View.whole`: one object, drawn every frame from the whole frame, such as one light for every fire                            |
+| A value outside the drawing follows the state, time and all   | `View.follow`: `of` works it out every frame, `to` puts it out as it changes, such as a pad's lightbar                        |
 | The player looks at the game                                  | `View.rig`: the camera, drawn for the player after every other view, from what they drew                                      |
 
 A view's `draw` changes only the object its view built, from the frame, and keeps nothing between frames: what must be remembered is a local component. Event listeners, timers, animation frames, and sockets live only inside these. A domain's own module imports no Three.js; its views live in its `.view` module.

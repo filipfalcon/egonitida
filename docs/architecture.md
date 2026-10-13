@@ -191,14 +191,15 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 **Views.** A game's client draws through four primitives over the drawn frame, each releasing what it holds through a `Scope`:
 
-| What causes it                                          | Primitive                                                                                                                                                  |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A rule decided something should happen outside the game | a command                                                                                                                                                  |
-| An entity is in the drawing                             | `View.each(components, { acquire, draw })`: `acquire` builds its objects when the entity comes in, and the scope closes when it leaves or stops matching   |
-| An entity just gained a component                       | `View.on`: a one-off output that is not part of the state, such as a sound or a haptic pulse                                                               |
-| A condition is true                                     | `View.during`: a resource held while `when`, a condition over the drawn state and the UI Model, is true, such as music, an `AudioContext`, or pointer lock |
-| Many entities together, or none                         | `View.whole({ acquire, draw })`: one object, built at the first frame and drawn every frame from the whole frame, such as one light for every fire burning |
-| The player looks at the game                            | `View.rig(components, draw)`: the camera, drawn for the player's entity after every other view, from what they drew this frame, such as the eyes of a body |
+| What causes it                                              | Primitive                                                                                                                                                    |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A rule decided something should happen outside the game     | a command                                                                                                                                                    |
+| An entity is in the drawing                                 | `View.each(components, { acquire, draw })`: `acquire` builds its objects when the entity comes in, and the scope closes when it leaves or stops matching     |
+| An entity just gained a component                           | `View.on`: a one-off output that is not part of the state, such as a sound or a haptic pulse                                                                 |
+| A condition is true                                         | `View.during`: a resource held while `when`, a condition over the drawn state and the UI Model, is true, such as music, an `AudioContext`, or pointer lock   |
+| Many entities together, or none                             | `View.whole({ acquire, draw })`: one object, built at the first frame and drawn every frame from the whole frame, such as one light for every fire burning   |
+| A value outside the drawing follows the state, time and all | `View.follow({ of, to })`: `of` works the value out of every frame, and `to` puts it out as it changes, such as a pad's lightbar or the feel of its triggers |
+| The player looks at the game                                | `View.rig(components, draw)`: the camera, drawn for the player's entity after every other view, from what they drew this frame, such as the eyes of a body   |
 
 - `draw` changes only its own objects, from the drawn values, the UI Model, and the frame's time, in place and without allocating: what is drawn is a function of the state even though the scene is kept between frames. Building and diffing a whole tree every frame would allocate at the display's rate. A view keeps nothing between frames; what it must remember is a local component.
 - A view's identity is the pair of its declaration and its entity, and entity ids are never reused, so nothing one entity's objects held carries over to another.
@@ -306,7 +307,7 @@ The API above is built in this order, each step test-first, and each breaking on
 4. Domains: owning their components, requiring one another, every action handled and no event unused, and the `/internal` entry.
 5. Commands.
 6. Local systems.
-7. Views (`View.each`, `View.on`, `View.during`, `View.whole`, `View.rig`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.
+7. Views (`View.each`, `View.on`, `View.during`, `View.whole`, `View.follow`, `View.rig`), `Drawing.Frame`, `Scene`, and `Viewport` in `client`, with the first example.
 8. The lint plugin, and `AGENTS.md`.
 9. Devtools: recording, the log, rewinding, the determinism check, and reloading with the state kept, with the horde example.
 10. The agent bridge.

@@ -14,6 +14,10 @@ tester.run('pure-steps', pureSteps, {
   ],
   invalid: [
     {
+      code: `View.follow({ of: () => Math.random() > 0.5, to: (lit) => Effect.void });`,
+      errors: [{ messageId: 'impure' }],
+    },
+    {
       code: `View.whole({ acquire: () => Effect.succeed(new PointLight()), draw: (light) => { light.intensity = Math.random(); } });`,
       errors: [{ messageId: 'impure' }],
     },

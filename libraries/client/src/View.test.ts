@@ -198,6 +198,52 @@ describe('View.whole', () => {
   );
 });
 
+describe('View.follow', () => {
+  it.effect(
+    'puts out what follows from each frame, once as it comes to be and again only as it changes',
+    () =>
+      Effect.gen(function* () {
+        const put: Array<number> = [];
+        const crates = View.follow({
+          of: (frame) => frame.query(Crate).length,
+          to: (count) =>
+            Effect.sync(() => {
+              put.push(count);
+            }),
+        });
+        const views = yield* View.make([crates]);
+        const [one] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+        const [two] = State.spawn(one, crateAt(2));
+
+        yield* play(views, [one, one, two, two, one]);
+        yield* Effect.yieldNow;
+
+        expect(put).toEqual([1, 2, 1]);
+      }),
+  );
+
+  it.effect('tells one value from another as told, such as colours by what they are', () =>
+    Effect.gen(function* () {
+      const put: Array<{ readonly lit: boolean }> = [];
+      const lamp = View.follow({
+        of: (frame) => ({ lit: frame.query(Crate).length > 0 }),
+        same: (a, b) => a.lit === b.lit,
+        to: (value) =>
+          Effect.sync(() => {
+            put.push(value);
+          }),
+      });
+      const views = yield* View.make([lamp]);
+      const [one] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+
+      yield* play(views, [one, one]);
+      yield* Effect.yieldNow;
+
+      expect(put).toEqual([{ lit: true }]);
+    }),
+  );
+});
+
 describe('View.make', () => {
   it.effect('lets go of everything its views hold when its scope closes', () =>
     Effect.gen(function* () {
