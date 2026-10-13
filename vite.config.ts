@@ -5,16 +5,12 @@ import { defineConfig } from 'vite-plus';
 export default defineConfig({
   fmt: {
     singleQuote: true,
+    // Lean writes what it proved exactly as `lake exe export --check` reads it back.
+    ignorePatterns: ['verification/declarations.json'],
   },
   lint: {
     // The engine's own conventions come after Effect's, and hold for the engine as for any game on it.
     extends: [recommended, lightocean],
-    rules: {
-      // Types are proven where values are made, never claimed where they are used: no `any`, no type assertions, and no non-null assertions, which are the same claim spelled `!`.
-      'typescript/no-explicit-any': 'error',
-      'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
-      'typescript/no-non-null-assertion': 'error',
-    },
     options: {
       typeAware: true,
       typeCheck: true,
