@@ -27,7 +27,9 @@ const main = Effect.gen(function* () {
   viewport.camera.lookAt(0, 0, 0);
 
   yield* viewport.loop((seconds) =>
-    Option.match(drawing.frame(seconds), { onNone: () => Effect.void, onSome: views.frame }),
+    Option.match(drawing.frame(seconds), { onNone: () => Effect.void, onSome: views.frame }).pipe(
+      Effect.andThen(viewport.render),
+    ),
   );
   return yield* Effect.never;
 }).pipe(

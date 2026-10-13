@@ -78,7 +78,7 @@ const main = Effect.gen(function* () {
           prediction.demand([Walkers.Steering.of(steered.last.steering)]);
           return views.frame(prediction.frame(frame, seconds));
         }),
-    }),
+    }).pipe(Effect.andThen(viewport.render)),
   );
   return yield* Effect.never;
 }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal), Effect.scoped);

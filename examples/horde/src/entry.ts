@@ -279,7 +279,7 @@ const main = Effect.gen(function* () {
             },
           );
         }),
-    }),
+    }).pipe(Effect.andThen(viewport.render)),
   );
   return yield* Effect.never;
 }).pipe(

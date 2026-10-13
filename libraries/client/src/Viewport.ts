@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Queue, type Scope, Stream } from 'effect';
+import { Data, Deferred, Effect, Option, Queue, type Scope, Stream } from 'effect';
 import { denoise } from 'three/addons/tsl/display/DenoiseNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
@@ -22,18 +22,23 @@ import * as Three from 'three/webgpu';
 import * as Antialiasing from '#src/Antialiasing.ts';
 
 /**
- * A game's state drawn onto a canvas by a `WebGPURenderer`: a scene to put views' objects in, a camera, and a loop that draws a frame at every frame the display shows. It lives in the browser only.
+ * A game's state drawn onto a canvas by a `WebGPURenderer`: a scene to put views' objects in, a camera, and a loop that runs at every frame the display shows. It lives in the browser only.
  *
  * Time comes from the display: each frame is told the time between the moments the display showed this frame and the one before, never when code happens to run.
+ *
+ * The renderer, the scene, and the camera are Three.js's own, as bare Three.js has them: what a viewport does not do, such as drawing another camera's picture into a texture, is done with them as Three.js does it.
  */
 export interface Viewport {
   readonly canvas: HTMLCanvasElement;
+  readonly renderer: Three.WebGPURenderer;
   readonly scene: Three.Scene;
   readonly camera: Three.PerspectiveCamera;
   /** Every click on the canvas from now on, as a point of the screen, from -1 to 1 across it and up it. */
   readonly clicks: Stream.Stream<{ readonly x: number; readonly y: number }>;
-  /** Draws the scene as it is now. */
+  /** Draws the scene as it is now, from the camera; nothing once the graphics device is lost. */
   readonly render: Effect.Effect<void>;
+  /** Waits until the graphics device is lost, such as when a driver resets or the browser takes it back, and is why: nothing is drawn after it. */
+  readonly lost: Effect.Effect<{ readonly reason: string }>;
   /** Draws the scene as it is now and takes a shot of it: a PNG, as base64, at most `width` pixels across if given, and its size; for showing a tool what a person sees. */
   readonly capture: (
     width: Option.Option<number>,
@@ -41,7 +46,7 @@ export interface Viewport {
     { readonly png: string; readonly width: number; readonly height: number },
     ViewportError
   >;
-  /** Runs `frame` with the seconds since the frame before, at every frame the display shows, then draws the scene; until the scope closes. */
+  /** Runs `frame` with the seconds since the frame before, at every frame the display shows, until the scope closes. A frame draws with `render` when there is something to draw, as a frame of bare Three.js's draws itself: one paused can leave the picture as it was. */
   readonly loop: <R>(
     frame: (seconds: number) => Effect.Effect<void, never, R>,
   ) => Effect.Effect<void, never, R | Scope.Scope>;
@@ -110,11 +115,51 @@ export const occlusion = (told: Partial<Occlusion> = {}): Occlusion => ({
   resolution: Math.min(Math.max(told.resolution ?? 0.5, 0.1), 1),
 });
 
-/** How a viewport draws: with ambient occlusion, if given, and antialiased as told, by multisampling unless told otherwise. */
-export interface Options {
+/** A viewport drawing into a picture, from which the screen's is made at the end: with ambient occlusion, if given, and antialiased as told, by multisampling unless told otherwise. What blends over what is behind it blends in the picture's linear colours. */
+export interface Pictured {
+  readonly output?: 'Picture';
   readonly occlusion?: Option.Option<Occlusion>;
   readonly antialiasing?: Antialiasing.Antialiasing;
 }
+
+/** A viewport drawing straight onto the screen, each shader putting its colours in the screen's as it draws, with no picture in between: cheaper, and what blends over what is behind it blends in the screen's colours, as WebGL's renderer has it. With no picture, nothing is drawn through passes after it: it is antialiased by the renderer alone, by multisampling unless told otherwise. */
+export interface Direct {
+  readonly output: 'Direct';
+  readonly antialiasing?: Antialiasing.Alone;
+}
+
+/** How a viewport draws: into a picture unless told to draw straight onto the screen, with as many pixels for each of the screen's as `pixelRatio` makes of its density, a pixel for each of them unless told otherwise. It is asked again whenever the canvas changes its size or moves to a screen of another density. */
+export type Options = {
+  readonly pixelRatio?: (screen: number) => number;
+} & (Pictured | Direct);
+
+/** How a viewport draws, as its options come to: the renderer alone, multisampled or not; straight onto the screen, multisampled or not; or through passes. */
+export type Drawing =
+  | { readonly _tag: 'Alone'; readonly multisampled: boolean }
+  | { readonly _tag: 'Direct'; readonly multisampled: boolean }
+  | {
+      readonly _tag: 'Passes';
+      readonly occlusion: Option.Option<Occlusion>;
+      readonly antialiasing: Antialiasing.Antialiasing;
+    };
+
+/** How a viewport told `options` draws: the renderer draws alone unless ambient occlusion or antialiasing needs a pass. */
+export const drawingOf = (options: Options): Drawing => {
+  if (options.output === 'Direct') {
+    const antialiasing = options.antialiasing ?? Antialiasing.multisample;
+    return { _tag: 'Direct', multisampled: Antialiasing.multisampled(antialiasing) };
+  }
+  const occlusion = options.occlusion ?? Option.none();
+  const antialiasing = options.antialiasing ?? Antialiasing.multisample;
+  return Option.isNone(occlusion) &&
+    (antialiasing._tag === 'None' || antialiasing._tag === 'Multisample')
+    ? { _tag: 'Alone', multisampled: Antialiasing.multisampled(antialiasing) }
+    : { _tag: 'Passes', occlusion, antialiasing };
+};
+
+/** How many pixels a viewport told `options` draws for each of a screen of `screen` pixels a point. */
+export const pixelRatioOf = (options: Options, screen: number): number =>
+  (options.pixelRatio ?? ((density) => density))(screen);
 
 /** Something drawn with that holds resources on the graphics device until it is let go of. */
 interface Held {
@@ -269,34 +314,58 @@ export const pointOf = (
   y: 1 - ((pointer.clientY - canvas.top) / canvas.height) * 2,
 });
 
-/** A viewport drawing onto `canvas`, as `options` tell it to: with no ambient occlusion unless given, and antialiased by multisampling unless told otherwise. */
+/** A viewport drawing onto `canvas`, as `options` tell it to: into a picture with no ambient occlusion unless told otherwise, antialiased by multisampling, a pixel for each of the screen's. */
 export const make = (
   canvas: HTMLCanvasElement,
   options: Options = {},
 ): Effect.Effect<Viewport, ViewportError, Scope.Scope> =>
   Effect.gen(function* () {
-    const occlusion = options.occlusion ?? Option.none();
-    const antialiasing = options.antialiasing ?? Antialiasing.multisample;
-    const renderer = yield* startRenderer(canvas, Antialiasing.multisampled(antialiasing));
+    const drawing = drawingOf(options);
+    const renderer = yield* startRenderer(
+      canvas,
+      drawing._tag !== 'Passes' && drawing.multisampled,
+    );
     const scene = new Three.Scene();
     const camera = new Three.PerspectiveCamera();
-    // The renderer draws the scene by itself, multisampled or not; anything more is drawn through passes.
-    const alone =
-      Option.isNone(occlusion) &&
-      (antialiasing._tag === 'None' || antialiasing._tag === 'Multisample');
-    const pipeline = alone
-      ? Option.none<{ readonly render: () => void }>()
-      : Option.some(yield* pipelineOf(renderer, scene, camera, occlusion, antialiasing));
-    const draw = () =>
-      Option.match(pipeline, {
-        onNone: () => renderer.render(scene, camera),
-        onSome: (drawn) => drawn.render(),
-      });
+    const draw = yield* (() => {
+      switch (drawing._tag) {
+        case 'Alone':
+          return Effect.succeed(() => renderer.render(scene, camera));
+        case 'Direct':
+          return Effect.map(
+            Effect.acquireRelease(
+              Effect.sync(() => new Three.DirectRenderPipeline(renderer)),
+              (direct) => Effect.sync(() => direct.dispose()),
+            ),
+            (direct) => () => direct.render(scene, camera),
+          );
+        case 'Passes':
+          return Effect.map(
+            pipelineOf(renderer, scene, camera, drawing.occlusion, drawing.antialiasing),
+            (pipeline) => pipeline.render,
+          );
+      }
+    })();
+
+    // The graphics device lost is never had again: nothing is drawn on it.
+    const lost = yield* Deferred.make<{ readonly reason: string }>();
+    const tell = renderer.onDeviceLost;
+    renderer.onDeviceLost = (info) => {
+      tell.call(renderer, info);
+      Deferred.doneUnsafe(lost, Effect.succeed({ reason: info.message }));
+    };
+    // Whether a frame has been drawn yet, before which a shot would show nothing of the state.
+    const drawn = { once: false };
+    const drawNow = () => {
+      if (Deferred.isDoneUnsafe(lost)) return;
+      draw();
+      drawn.once = true;
+    };
 
     const fit = () => {
       const width = Math.max(canvas.clientWidth, 1);
       const height = Math.max(canvas.clientHeight, 1);
-      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setPixelRatio(pixelRatioOf(options, window.devicePixelRatio));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -311,9 +380,23 @@ export const make = (
       (observer) => Effect.sync(() => observer.disconnect()),
     );
 
-    const render = Effect.sync(draw);
-    // Whether the loop has drawn a frame yet, before which a shot would show nothing of the state.
-    const drawn = { once: false };
+    // Moved to a screen of another density, the canvas changes no size: the density is watched on its own, afresh after every change.
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const density = { query: matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`) };
+        const changed = () => {
+          density.query.removeEventListener('change', changed);
+          fit();
+          density.query = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+          density.query.addEventListener('change', changed);
+        };
+        density.query.addEventListener('change', changed);
+        return () => density.query.removeEventListener('change', changed);
+      }),
+      (stop) => Effect.sync(stop),
+    );
+
+    const render = Effect.sync(drawNow);
 
     const loop = <R>(frame: (seconds: number) => Effect.Effect<void, never, R>) =>
       Effect.gen(function* () {
@@ -333,8 +416,6 @@ export const make = (
           const seconds = secondsBetween(clock.previous, now);
           clock.previous = Option.some(now);
           yield* frame(seconds);
-          yield* render;
-          drawn.once = true;
         }).pipe(Effect.forever, Effect.forkScoped);
       });
 
@@ -357,6 +438,9 @@ export const make = (
     // The canvas holds what was drawn only until the task that drew it ends, so the shot is taken in the same task.
     const capture = (width: Option.Option<number>) =>
       Effect.suspend(() => {
+        if (Deferred.isDoneUnsafe(lost)) {
+          return Effect.fail(new ViewportError({ reason: 'The graphics device was lost.' }));
+        }
         if (!drawn.once) {
           return Effect.fail(
             new ViewportError({
@@ -364,9 +448,19 @@ export const make = (
             }),
           );
         }
-        draw();
+        drawNow();
         return shot(canvas, width);
       });
 
-    return { canvas, scene, camera, clicks, render, capture, loop };
+    return {
+      canvas,
+      renderer,
+      scene,
+      camera,
+      clicks,
+      render,
+      lost: Deferred.await(lost),
+      capture,
+      loop,
+    };
   });

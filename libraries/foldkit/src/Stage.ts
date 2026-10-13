@@ -50,7 +50,7 @@ export const show = <R>(
       Option.match(joined.drawing.frame(seconds), {
         onNone: () => Effect.void,
         onSome: (frame) => Effect.andThen(views.frame(frame), mirror.frame(frame)),
-      }),
+      }).pipe(Effect.andThen(viewport.render)),
     );
   });
 

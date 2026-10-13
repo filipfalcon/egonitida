@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
+import * as Antialiasing from '#src/Antialiasing.ts';
 import * as Viewport from '#src/Viewport.ts';
 
 describe('Viewport.secondsBetween', () => {
@@ -47,5 +48,50 @@ describe('Viewport.occlusion', () => {
       resolution: 0.1,
     });
     expect(Viewport.occlusion({ resolution: 3 }).resolution).toBe(1);
+  });
+});
+
+describe('Viewport.drawingOf', () => {
+  it('has the renderer draw alone, multisampled, unless told otherwise', () => {
+    expect(Viewport.drawingOf({})).toEqual({ _tag: 'Alone', multisampled: true });
+  });
+
+  it('has it draw alone when nothing needs a pass, multisampled or not', () => {
+    expect(Viewport.drawingOf({ antialiasing: Antialiasing.none })).toEqual({
+      _tag: 'Alone',
+      multisampled: false,
+    });
+  });
+
+  it('draws through passes for ambient occlusion, or antialiasing the renderer cannot do alone', () => {
+    expect(Viewport.drawingOf({ antialiasing: Antialiasing.morphological })).toEqual({
+      _tag: 'Passes',
+      occlusion: Option.none(),
+      antialiasing: Antialiasing.morphological,
+    });
+    expect(Viewport.drawingOf({ occlusion: Option.some(Viewport.occlusion()) })._tag).toBe(
+      'Passes',
+    );
+  });
+
+  it('draws straight to the screen when told, multisampled unless told otherwise', () => {
+    expect(Viewport.drawingOf({ output: 'Direct' })).toEqual({
+      _tag: 'Direct',
+      multisampled: true,
+    });
+    expect(Viewport.drawingOf({ output: 'Direct', antialiasing: Antialiasing.none })).toEqual({
+      _tag: 'Direct',
+      multisampled: false,
+    });
+  });
+});
+
+describe('Viewport.pixelRatioOf', () => {
+  it('draws a pixel for each of the screen’s unless told otherwise', () => {
+    expect(Viewport.pixelRatioOf({}, 2)).toBe(2);
+  });
+
+  it('draws as many as told, from the screen’s density', () => {
+    expect(Viewport.pixelRatioOf({ pixelRatio: (screen) => Math.min(screen, 1.5) }, 2)).toBe(1.5);
   });
 });

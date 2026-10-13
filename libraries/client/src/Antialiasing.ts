@@ -8,11 +8,24 @@
  * - `Temporal` (TAA) draws the scene a fraction of a pixel aside each frame and blends each frame into the ones before, following what moved: it smooths edges, shimmer, and the noise of ambient occlusion alike, softer than the rest, and leaving a faint trail behind what moves fast. Drawn at a share of the resolution, it brings the picture to the whole from the frames before (TAAU), for less cost.
  */
 export type Antialiasing =
-  | { readonly _tag: 'None' }
-  | { readonly _tag: 'Multisample' }
+  | None
+  | Multisample
   | { readonly _tag: 'Morphological' }
   | Supersample
   | Temporal;
+
+/** No antialiasing. */
+export interface None {
+  readonly _tag: 'None';
+}
+
+/** Multisampling, which the renderer does as it draws. */
+export interface Multisample {
+  readonly _tag: 'Multisample';
+}
+
+/** The antialiasing a renderer does alone as it draws, with no pass after it: none, or multisampling. */
+export type Alone = None | Multisample;
 
 /** Supersampling, `samples` times a frame. */
 export interface Supersample {
@@ -27,10 +40,10 @@ export interface Temporal {
 }
 
 /** No antialiasing: one sample a pixel. */
-export const none: Antialiasing = { _tag: 'None' };
+export const none: None = { _tag: 'None' };
 
 /** Multisampling: four samples a pixel along the edges of geometry, as many as a browser draws. */
-export const multisample: Antialiasing = { _tag: 'Multisample' };
+export const multisample: Multisample = { _tag: 'Multisample' };
 
 /** Morphological antialiasing: edges found in the drawn picture, and blended across. */
 export const morphological: Antialiasing = { _tag: 'Morphological' };

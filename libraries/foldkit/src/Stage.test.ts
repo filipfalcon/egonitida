@@ -62,7 +62,7 @@ const joinedLamp = Effect.gen(function* () {
   return { lamp, joined: yield* Session.join(game, () => channel.port1) };
 });
 
-/** A viewport as a canvas on a display gives one, which plays a frame every twentieth of a second and the clicks a test hands it, and draws by bringing where everything is up to date, as a renderer does before it draws. */
+/** A viewport as a canvas on a display gives one, which plays a frame every twentieth of a second and the clicks a test hands it, and draws, when a frame asks, by bringing where everything is up to date, as a renderer does before it draws. */
 const played = Effect.gen(function* () {
   const clicked = yield* Queue.unbounded<{ readonly x: number; readonly y: number }>();
   const scene = new Three.Scene();
@@ -73,15 +73,17 @@ const played = Effect.gen(function* () {
   });
   const viewport: Viewport.Viewport = {
     canvas: document.createElement('canvas'),
+    // Never started, so never drawn with: a stage draws through the viewport alone.
+    renderer: new Three.WebGPURenderer(),
     scene,
     camera,
     clicks: Stream.fromQueue(clicked),
     render,
+    lost: Effect.never,
     capture: () => Effect.die('A played viewport takes no shots.'),
     loop: (frame) =>
       Effect.sleep('50 millis').pipe(
         Effect.andThen(Effect.suspend(() => frame(0.05))),
-        Effect.andThen(render),
         Effect.forever,
         Effect.forkScoped,
         Effect.asVoid,
