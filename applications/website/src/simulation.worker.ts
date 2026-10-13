@@ -2,6 +2,7 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect } from 'effect';
+import { build } from 'virtual:lightocean/build';
 import * as Ocean from '#src/ocean.ts';
 
 // The local server: the ocean, stepped off the main thread. A page that joins is whoever clicks the lights: an entity that holds nothing, whom its clicks are from. In development it goes on from the state kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.
@@ -11,6 +12,7 @@ const options = {
   leave: State.despawn,
   state: Ocean.state,
   maySuspend: true,
+  build,
 };
 
 Effect.runFork(

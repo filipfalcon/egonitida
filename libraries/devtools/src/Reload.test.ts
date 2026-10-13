@@ -1,41 +1,97 @@
 import { describe, expect, it } from '@effect/vitest';
-import { State } from '@lightocean/core';
+import { Host, State } from '@lightocean/core';
 import { Effect, Fiber, Option } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Recording from '#src/Recording.ts';
 import * as Reload from '#src/Reload.ts';
 import * as Replay from '#src/Replay.ts';
 import * as Rewind from '#src/Rewind.ts';
+import * as Version from '#src/Version.ts';
 
-/** A host recorded, replayed beside, and kept for going back, while its game is swapped for a new build. */
+/** A host of build `one` recorded, replayed beside, and kept for going back, while its game is swapped for build `two`. */
 const reloaded = Effect.gen(function* () {
-  const hosted = yield* Fixtures.host(Fixtures.game, true);
+  const hosted = yield* Host.make({
+    ...Fixtures.setup(Fixtures.game, 'one'),
+    state: State.empty({ seed: 7 }),
+    maySuspend: true,
+  });
   const recorder = yield* Recording.record(hosted, Fixtures.game);
-  const watching = yield* Replay.alongside(hosted, Fixtures.setup()).pipe(Effect.forkChild);
-  const rewind = yield* Rewind.make(hosted, Fixtures.setup(), { every: 3, keepSeconds: 10 });
+  const watching = yield* Replay.alongside(hosted, Fixtures.setup(Fixtures.game, 'one')).pipe(
+    Effect.forkChild,
+  );
+  const rewind = yield* Rewind.make(hosted, Fixtures.setup(Fixtures.game, 'one'), {
+    every: 3,
+    keepSeconds: 10,
+  });
   yield* Fixtures.elapse(100);
   const before = yield* hosted.state;
-  yield* hosted.reload(Fixtures.setup(Fixtures.brisk));
+  yield* hosted.reload(Fixtures.setup(Fixtures.brisk, 'two'));
   yield* Fixtures.visit(hosted, Fixtures.brisk);
-  return { hosted, recorder, watching, rewind, before };
+  const recording = yield* recorder.recording;
+  return { hosted, recorder, recording, watching, rewind, before };
 });
 
 describe('a game swapped for a new build', () => {
-  it.effect('is recorded in a new segment, each replaying with its own build', () =>
+  it.effect('is recorded in a new segment, each with its build, replaying with its own', () =>
     Effect.gen(function* () {
-      const { recorder } = yield* reloaded;
+      const { recording, recorder } = yield* reloaded;
+      const { segments } = recording;
+      const setups = [Fixtures.setup(Fixtures.game, 'one'), Fixtures.setup(Fixtures.brisk, 'two')];
 
-      const segments = yield* recorder.segments;
-      const builds = [Fixtures.game, Fixtures.brisk];
-
-      expect(segments).toHaveLength(2);
-      expect(segments.at(-1)).toEqual(yield* recorder.recording);
+      expect(segments.map(({ version }) => version.build)).toEqual([
+        Option.some('one'),
+        Option.some('two'),
+      ]);
+      expect(segments.at(-1)).toEqual(yield* recorder.segment);
       expect(
         yield* Effect.forEach(segments, (segment, index) =>
-          Replay.check(Fixtures.setup(builds[index]), segment),
+          Replay.check(setups[index] ?? Fixtures.setup(), segment),
         ),
       ).toEqual([Option.none(), Option.none()]);
     }),
+  );
+
+  it.effect('begins each segment at the state the host went on from', () =>
+    Effect.gen(function* () {
+      const { recording, before } = yield* reloaded;
+
+      expect(
+        recording.segments.map(({ first }) =>
+          typeof first === 'object' && first !== null && 'tick' in first ? first.tick : undefined,
+        ),
+      ).toEqual([0, before.tick]);
+    }),
+  );
+
+  it.effect('is not checked for determinism by another build', () =>
+    Effect.gen(function* () {
+      const { recording } = yield* reloaded;
+      const first = yield* Effect.fromOption(Option.fromNullishOr(recording.segments[0]));
+
+      const refused = yield* Replay.check(Fixtures.setup(Fixtures.brisk, 'two'), first).pipe(
+        Effect.flip,
+      );
+
+      expect(refused._tag).toBe('OtherVersion');
+    }),
+  );
+
+  it.effect(
+    'is replayed by another build, saying so first, and where it comes apart is a change of code',
+    () =>
+      Effect.gen(function* () {
+        const { recording } = yield* reloaded;
+        const second = yield* Effect.fromOption(Option.fromNullishOr(recording.segments[1]));
+
+        const replayed = yield* Replay.steps(Fixtures.setup(Fixtures.game, 'one'), second);
+
+        expect(Option.map(replayed.version, Version.told)).toEqual(
+          Option.some('recorded by build two, replayed by build one (no component changed)'),
+        );
+        expect(Option.map(replayed.divergence, ({ cause }) => cause)).toEqual(
+          Option.some('ChangedCode'),
+        );
+      }),
   );
 
   it.effect('is replayed beside the host with the new build', () =>
@@ -49,13 +105,15 @@ describe('a game swapped for a new build', () => {
     }),
   );
 
-  it.effect('is gone back in from the state it was swapped in at, with the new build', () =>
+  it.effect('is one stretch of time to go back in, across the reload, marked where it was', () =>
     Effect.gen(function* () {
       const { rewind, before } = yield* reloaded;
 
-      const { oldest } = yield* rewind.span;
+      const span = yield* rewind.span;
 
-      expect(oldest).toBe(before.tick);
+      expect(span.oldest).toBe(0);
+      expect(span.reloads).toEqual([{ tick: before.tick, build: Option.some('two') }]);
+      expect(Option.isSome(yield* rewind.stateAt(before.tick - 1))).toBe(true);
       expect(Option.isSome(yield* rewind.stateAt(before.tick + 2))).toBe(true);
     }),
   );

@@ -32,6 +32,8 @@ export interface Setup<Services = never> {
   readonly join: (state: State.State) => readonly [State.State, State.Entity];
   /** Removes what a leaving client controlled. */
   readonly leave: (state: State.State, entity: State.Entity) => State.State;
+  /** Which build of the game's code it is, as its bundler names it, so what is recorded of it says what played; none outside a bundler, as in a test. */
+  readonly build?: string | undefined;
 }
 
 /** What it takes to host a game whose commands need `Services`: what it plays, and the state it starts from. */
@@ -55,7 +57,12 @@ export type Happening =
   /** The host went back to a state it was given, such as a past one, and steps on from it. */
   | { readonly _tag: 'Restored'; readonly state: State.State }
   /** The host plays another game from now on, such as a new build of its own, from the state it held, as the new game read it. */
-  | ({ readonly _tag: 'Reloaded'; readonly state: State.State } & Setup<unknown>)
+  | ({
+      readonly _tag: 'Reloaded';
+      readonly state: State.State;
+      /** The build of the code it plays from now on, if its bundler named one. */
+      readonly build: Option.Option<string>;
+    } & Omit<Setup<unknown>, 'build'>)
   /** A step taken, with its input. */
   | {
       readonly _tag: 'Stepped';
@@ -67,6 +74,8 @@ export type Happening =
 /** A host's state as it was when watching began, and everything that has replaced it since, in order. */
 export interface Watching {
   readonly state: State.State;
+  /** The build of the code the host played when watching began, if its bundler named one. */
+  readonly build: Option.Option<string>;
   readonly happenings: Stream.Stream<Happening>;
 }
 
@@ -131,6 +140,7 @@ export const make = <Services = never>(
       );
     const hosted = {
       setup: { game: options.game, join: options.join, leave: options.leave },
+      build: Option.fromNullishOr(options.build),
       demandComponents: demandsOf(options.game),
       state: options.state,
       /** Every client's connection, with the entity it controls. */
@@ -486,9 +496,15 @@ export const make = <Services = never>(
             Effect.mapError((issue) => new Unreadable({ reason: issue.message })),
           );
           hosted.setup = { game: setup.game, join: setup.join, leave: setup.leave };
+          hosted.build = Option.fromNullishOr(setup.build);
           hosted.demandComponents = demandsOf(setup.game);
           hosted.state = state;
-          PubSub.publishUnsafe(happened, { _tag: 'Reloaded', state, ...hosted.setup });
+          PubSub.publishUnsafe(happened, {
+            _tag: 'Reloaded',
+            state,
+            build: hosted.build,
+            ...hosted.setup,
+          });
         }),
       restore: (state) =>
         Effect.suspend(() => {
@@ -500,6 +516,7 @@ export const make = <Services = never>(
       // Subscribing and reading the state happen with nothing in between, so the first happening told is the first after the state given.
       watch: Effect.map(PubSub.subscribe(happened), (subscription) => ({
         state: hosted.state,
+        build: hosted.build,
         happenings: Stream.fromSubscription(subscription),
       })),
     };

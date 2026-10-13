@@ -1,0 +1,5 @@
+/** Which build of a game's code runs, as `@lightocean/vite-plugin`'s `Build.plugin` names it. */
+declare module 'virtual:lightocean/build' {
+  /** The id of the build: one for each production build, and a new one with every change to the game's code while serving. */
+  export const build: string;
+}

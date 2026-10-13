@@ -40,7 +40,7 @@ describe('a bridge from a host', () => {
       expect(yield* Queue.take(sent)).toEqual({
         _tag: 'Answered',
         id: 7,
-        answer: { oldest: 0, newest: 3 },
+        answer: { oldest: 0, newest: 3, reloads: [] },
       });
     }),
   );

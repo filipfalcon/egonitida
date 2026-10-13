@@ -2,6 +2,7 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect } from 'effect';
+import { build } from 'virtual:lightocean/build';
 import * as Game from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 
@@ -12,6 +13,7 @@ const options = {
   leave: State.despawn,
   state: Game.state,
   maySuspend: true,
+  build,
 };
 
 Effect.runFork(

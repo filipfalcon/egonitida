@@ -35,7 +35,7 @@ describe('the devtools beside a host', () => {
       expect(yield* Queue.take(sent)).toEqual({
         _tag: 'Answered',
         id: 1,
-        answer: { oldest: 0, newest: 3 },
+        answer: { oldest: 0, newest: 3, reloads: [] },
       });
     }),
   );

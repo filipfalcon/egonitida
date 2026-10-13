@@ -1,11 +1,12 @@
 import { type Event, Game, type Host, type State } from '@lightocean/core';
 import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
+import * as Version from '#src/Version.ts';
 
 /**
- * A game as it was played on a host: the state as it was when recording began, and everything that replaced it after, in order: steps, with their input, players joining and leaving, and the host going back to another state. Everything else follows from them, since the same state and the same input give the same next state; so a recording can be replayed, checked for determinism, rewound, and turned into a test.
+ * A game as it was played on a host, in segments, one for each version of its code the host played, x′ = f_v(x, u): a reload of new code ends one segment and begins the next. A segment is the state as it was when it began, the version that played it, and everything that replaced the state after, in order: steps, with their input, players joining and leaving, and the host going back to another state. Everything else follows from them, since the same state and the same input give the same next state under one version; so a segment can be replayed with its own version alone, checked for determinism, rewound, and turned into a test.
  *
- * It is data: the state and every value in it are encoded by the game's own schemas, so it travels as JSON and is read back with the game that played it.
+ * It is data: each state and every value in it are encoded by the schemas of the version that played it, so it travels as JSON and is read back with that version's game.
  */
 
 /** A demand that reached a step: the entity it was on, its component's name, and its value as the component encodes it. */
@@ -37,21 +38,28 @@ export const Entry = Schema.Union([
 ]);
 export type Entry = typeof Entry.Type;
 
-export const Recording = Schema.Struct({
+/** What a recording holds of one version of a game: the state it began at, the version, and everything that replaced the state under it. */
+export const Segment = Schema.Struct({
   /** The rate the game steps at, which every replay keeps. */
   stepRate: Schema.Int,
-  /** The state when recording began, as the game's schema encodes it. */
+  /** The code that played it: its build, and the schema of its state. */
+  version: Version.Version,
+  /** The state when the segment began, as its version's schema encodes it. */
   first: Schema.Unknown,
   entries: Schema.Array(Entry),
 });
+export type Segment = typeof Segment.Type;
+
+/** A game as a host played it: a segment for every version of its code, oldest first. */
+export const Recording = Schema.Struct({ segments: Schema.Array(Segment) });
 export type Recording = typeof Recording.Type;
 
-/** A recording being made, until its scope closes: a segment for every build of the game the host played, since a recording is valid for one build. */
+/** A recording being made, until its scope closes. */
 export interface Recorder {
-  /** Everything recorded so far of the build the host plays now. */
+  /** Every segment recorded so far, the last of them the one being recorded. */
   readonly recording: Effect.Effect<Recording>;
-  /** Every segment recorded so far, oldest first, the last of them the one being recorded. */
-  readonly segments: Effect.Effect<ReadonlyArray<Recording>>;
+  /** The segment being recorded: of the version the host plays now. */
+  readonly segment: Effect.Effect<Segment>;
 }
 
 /** What happens to a host's state within one build of its game. */
@@ -100,30 +108,36 @@ export const entryOf = (game: Game.Game): ((happening: Happening) => Entry) => {
           : happening;
 };
 
-/** A segment begun from `state`, as `game` encodes it. */
-const begin = (game: Game.Game, state: State.State) => ({
-  game,
+/** A segment begun from `state` by the build `build` of `game`, as `game` encodes it. */
+const begin = (game: Game.Game, build: Option.Option<string>, state: State.State) => ({
   toEntry: entryOf(game),
   // A state its own game cannot encode is a bug in the engine, not something a recording can go on from.
-  recording: { stepRate: game.stepRate, first: Schema.encodeSync(Game.schema(game))(state) },
+  segment: {
+    stepRate: game.stepRate,
+    version: Version.of(game, build),
+    first: Schema.encodeSync(Game.schema(game))(state),
+  },
   entries: new Array<Entry>(),
 });
 
-/** Records `game` as `host` plays it, from now until the scope closes, beginning a new segment whenever the host takes up another build. */
+/** Records `game` as `host` plays it, from now until the scope closes, beginning a new segment whenever the host takes up another version of its code. */
 export const record = (
   host: Host.Host,
   game: Game.Game,
 ): Effect.Effect<Recorder, never, Scope.Scope> =>
   Effect.gen(function* () {
     const watching = yield* host.watch;
-    const taking = { done: new Array<Recording>(), now: begin(game, watching.state) };
-    const current = () => ({ ...taking.now.recording, entries: [...taking.now.entries] });
+    const taking = {
+      done: new Array<Segment>(),
+      now: begin(game, watching.build, watching.state),
+    };
+    const current = (): Segment => ({ ...taking.now.segment, entries: [...taking.now.entries] });
     yield* watching.happenings.pipe(
       Stream.runForEach((happening) =>
         Effect.sync(() => {
           if (happening._tag === 'Reloaded') {
             taking.done.push(current());
-            taking.now = begin(happening.game, happening.state);
+            taking.now = begin(happening.game, happening.build, happening.state);
             return;
           }
           taking.now.entries.push(taking.now.toEntry(happening));
@@ -132,7 +146,7 @@ export const record = (
       Effect.forkScoped,
     );
     return {
-      recording: Effect.sync(current),
-      segments: Effect.sync(() => [...taking.done, current()]),
+      recording: Effect.sync(() => ({ segments: [...taking.done, current()] })),
+      segment: Effect.sync(current),
     };
   });

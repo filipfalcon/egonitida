@@ -1,6 +1,6 @@
 import { markdown } from '@foldkit/markdown/vite';
 import { foldkit } from '@foldkit/vite-plugin';
-import { Devtools } from '@lightocean/vite-plugin';
+import { Build, Devtools } from '@lightocean/vite-plugin';
 import stylex from '@stylexjs/unplugin';
 import type { Plugin } from 'vite';
 import { islandAttributes } from './src/islands.ts';
@@ -24,6 +24,7 @@ export default defineConfig({
     // Every `.md` file imported, read into a typed document at build time, with the live views it places checked; the browser is sent data, never a parser.
     markdown({ islands: islandAttributes }),
     Devtools.plugin(),
+    Build.plugin(),
     pinAlchemyDevPort(5294),
   ],
   optimizeDeps: {
@@ -39,4 +40,6 @@ export default defineConfig({
     name: 'website',
     include: ['src/**/*.test.ts'],
   },
+  // A worker is built on its own, so the plugin naming the game's build is given to it too.
+  worker: { plugins: () => [Build.plugin()] },
 });

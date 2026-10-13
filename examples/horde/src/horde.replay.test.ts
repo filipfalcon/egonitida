@@ -32,17 +32,17 @@ const played = Effect.gen(function* () {
       yield* Effect.yieldNow;
     }
   }
-  return yield* recorder.recording;
+  return yield* recorder.segment;
 });
 
 it.effect(
   'replays as it was played',
   () =>
     Effect.gen(function* () {
-      const recording = yield* played;
+      const segment = yield* played;
 
-      expect(recording.entries.length).toBeGreaterThan(1000);
-      expect(yield* Replay.check(setup, recording)).toEqual(Option.none());
+      expect(segment.entries.length).toBeGreaterThan(1000);
+      expect(yield* Replay.check(setup, segment)).toEqual(Option.none());
     }),
   PLAYING,
 );
@@ -63,8 +63,8 @@ it.effect(
   'is told as a story that holds, from what was played',
   () =>
     Effect.gen(function* () {
-      const recording = yield* played;
-      const { taken } = yield* Replay.steps(setup, recording);
+      const segment = yield* played;
+      const { taken } = yield* Replay.steps(setup, segment);
       // A stretch after the survivor joined, as the horde rises, shambles, and falls to shots.
       const [start, end] = Option.getOrThrow(
         Option.all([Option.fromNullishOr(taken[300]), Option.fromNullishOr(taken[900])]),

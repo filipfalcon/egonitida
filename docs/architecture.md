@@ -71,20 +71,21 @@ Seven principles shape every API. Each builds on the ones before it.
 
 - Everything that rests on the equation is one of its consequences, and nothing else holds it up:
 
-| What follows          | From the equation                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| Replay                | A recording is the first state and the input of every step; stepping it again comes to the same states. |
-| Rewind                | Any past state is kept, since a state is only replaced, and stepping on from it is stepping it again.   |
-| Prediction            | A client steps the host's newest state with the demands it sent that the host has not yet taken in.     |
-| Stories               | A test gives a state and an input and expects the next state; no host, clock, or runtime is needed.     |
-| The determinism check | A replay beside the running game compares the fingerprints of its states with the host's.               |
+| What follows          | From the equation                                                                                               |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Replay                | A segment is a first state, a version, and the input of every step; stepping it again comes to the same states. |
+| Rewind                | Any past state is kept, since a state is only replaced, and stepping on from it is stepping it again.           |
+| Prediction            | A client steps the host's newest state with the demands it sent that the host has not yet taken in.             |
+| Stories               | A test gives a state and an input and expects the next state; no host, clock, or runtime is needed.             |
+| The determinism check | A replay beside the running game compares the fingerprints of its states with the host's.                       |
 
 - What keeps f a function of x and u alone is what the rules of `AGENTS.md` enforce: randomness and time come only from the step's context, or they would be input hidden outside u; systems and rules run no Effect, since work outside the state is output and input, never part of f; a rule that needs something done outside issues a command, and its result returns as an action, through u; a state is never changed, only replaced; views only read the state, or there would be a second way into x besides f.
 - One mechanism serves three purposes: the client's prediction rewinds to the server's state and replays the demands not yet confirmed; the debugger rewinds the whole game, not only the rules; and games can build replays, spectating, and death cameras on real recordings. A recording also makes a test.
 - Systems and rules take randomness and time only from the step's context; `Math.random` and `Date.now` are lint errors there. Asynchronous results enter as recorded actions.
 - In development the engine replays alongside the running game and compares the fingerprints of its states, reporting the first step and component where the two diverge.
 - Cosmetics are deterministic too: an event carries a seed, so every client generates the same blood from it without anything more being sent.
-- Rewinding starts from the nearest periodic snapshot and steps forward. A recording carries the fingerprint of the build it is valid for.
+- Rewinding starts from the nearest periodic snapshot and steps forward.
+- The equation holds for one version of the code: exactly, x′ = f_v(x, u), and code changes, by a deployment or a reload while running. A recording is therefore made of segments, one for each version, each with its own first state, the state the host went on from, so each replays with its own version alone. A version is the build the bundler names, which tells every change to the code apart, and the schema of the state, a hash for each component, which tells which components changed. A check of determinism refuses another version, since what it found would mean nothing; a replay by another version, as a recording of a bug after its fix, says so first, and where it comes apart is a change of the code, not a game that is not deterministic.
 
 ### 5. Boundaries: everything is a domain
 
@@ -232,7 +233,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 **Mods, a direction.** A mod is a domain loaded while the game runs, from outside it: it requires the game's domains, owns only its own components, and reaches the game's only through the events and shared components those domains declare, which make up the game's modding interface without anyone writing one. What types check for a domain today, a game checks when it loads a mod. The first mods are data, not code: rules made in the editor, which the engine carries out as declared actions and which need no sandbox. Mods as code wait on loading code at run time, a sandbox on the server, determinism no lint can hold for code it never saw, and versions; none of it is planned yet.
 
-**Development.** When a file changes, the host keeps its state and swaps in the new game, so a game runs on with the new logic; a state the new schema cannot decode starts over from the initial state, with the reason given. A recording starts a new segment, since a recording is valid for one build.
+**Development.** When a file changes, the host keeps its state and swaps in the new game, so a game runs on with the new logic; a state the new schema cannot decode starts over from the initial state, with the reason given. A recording starts a new segment, since a segment holds for one version of the code; going back keeps one stretch of time across every reload, each tick replayed by the build that played it.
 
 ### Stability
 
@@ -273,8 +274,8 @@ LightOcean is sold by its structure, not its stack: _Your game is data. LightOce
 - `libraries/server`: as experimental, `Room`, a game hosted for players across a network, one room in each Durable Object, standing still while no one is in it, and `Room.Id`, a room's address, refused at the Worker before a Durable Object is reached.
 - `libraries/client`: the timeline, interpolation, and the drawing; and, as experimental, `Prediction`, a player's own client playing ahead of its host, its demands sent once a step and replayed on the newest state until the host says it took it in, and what is drawn going over to the host's in a few frames when they disagree.
 - `libraries/foldkit`: a game in an application built on Foldkit: `Session`, a player's connection to it, joined in a worker the page starts and held as a Foldkit Managed Resource while the application's Model wants it; and `Stage`, the game shown on a canvas Foldkit keeps, through the game's views, played by a click, and mirrored for the keyboard, while a Subscription runs, with what the application runs beside it, such as serving the canvas to the devtools, or drawn by the page itself on an element of its own, such as with a renderer of its own, its Messages going on to the application (`Stage.run`); `Projection`, what an application shows of a game's state, kept in its Model, told as it is and again only when it changes; and `Styled`, StyleX on Foldkit's elements.
-- `libraries/devtools`: `Recording`, a game as a host played it, made from what the host lets be watched; `Fingerprint`, a state told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent or a page asks of a hosted game, answered as data, to a page over the game's own connection; `Debugger`, the past kept beside a host and its clients' questions answered, wherever it runs; and `Bridge` and `Relay`, the way an agent's requests travel from a tool to a host and back.
-- `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__lightocean/mcp`; and a banner saying what is served and where both are reached.
+- `libraries/devtools`: `Recording`, a game as a host played it, in a segment for each version of its code, made from what the host lets be watched; `Version`, which code played: its build and the schema of its state; `Fingerprint`, a state told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent or a page asks of a hosted game, answered as data, to a page over the game's own connection; `Debugger`, the past kept beside a host and its clients' questions answered, wherever it runs; and `Bridge` and `Relay`, the way an agent's requests travel from a tool to a host and back.
+- `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__lightocean/mcp`; and a banner saying what is served and where both are reached. `Build` names each build of a game's code, in the module `virtual:lightocean/build`, which a game's worker gives its host.
 - `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio or over HTTP at a development server, reaching its hosts through the development server's relay; `.mcp.json` offers it over stdio.
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
 - `skills/`: the agent skills, `lightocean`, `generate-domain`, and `audit-game`.
@@ -325,6 +326,7 @@ Later, for the editor:
 
 Later, for the model:
 
+- Migrating a state between versions: a save made by an earlier version, read by one whose schema changed. Today a state the new schema cannot read starts over; a version could instead declare how it reads the states of the one before.
 - Entity ids a client predicts. A step gives out ids from one counter, so a part spawning from what a client does not hold moves the ids every part after it gives out, and a predicted component holding the id of another entity would differ on the client. Ids by part, as randomness is drawn, would close it.
 
 Optimization waits until the raw engine works: an interpolation buffer, binary encoding, and sending each client only what is near it are tuned against something real, not ahead of it.

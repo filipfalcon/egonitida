@@ -3,6 +3,7 @@ import { Host, WorkerTransport, State } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
+import { build } from 'virtual:lightocean/build';
 import * as Score from '#src/score.ts';
 import * as Scores from '#src/scores.ts';
 
@@ -21,6 +22,7 @@ const options: Host.Options<Scores.Scores> = {
   leave: State.despawn,
   state: Score.state,
   maySuspend: true,
+  build,
 };
 
 Effect.runFork(

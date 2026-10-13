@@ -3,6 +3,6 @@
   "compilerOptions": {
     // The website runs in the browser, and imports its documentation as `.md` documents; its build configuration runs in Node.
     "lib": ["esnext", "dom", "dom.iterable"],
-    "types": ["node", "vite/client", "@foldkit/markdown/content"]
+    "types": ["node", "vite/client", "@foldkit/markdown/content", "@lightocean/vite-plugin/build"]
   }
 }

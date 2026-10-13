@@ -12,3 +12,4 @@ export * as Reload from '#src/Reload.ts';
 export * as Replay from '#src/Replay.ts';
 export * as Rewind from '#src/Rewind.ts';
 export * as Transcript from '#src/Transcript.ts';
+export * as Version from '#src/Version.ts';

@@ -5,12 +5,12 @@ import * as Log from '#src/Log.ts';
 
 const nothing = { spawned: [], despawned: [], emitted: [], issued: [] };
 
-describe('the log of a recording', () => {
+describe('the log of a segment', () => {
   it.effect('tells, step by step, what each part did and for what, and who joined and left', () =>
     Effect.gen(function* () {
-      const { recording, entity } = yield* Fixtures.recorded();
+      const { segment, entity } = yield* Fixtures.recorded();
 
-      const lines = yield* Log.of(Fixtures.setup(), recording);
+      const lines = yield* Log.of(Fixtures.setup(), segment);
 
       const asked = { _tag: 'AskedToHeal', amount: 50, player: entity };
       const steered = {
@@ -45,9 +45,9 @@ describe('the log of a recording', () => {
 
   it.effect('tells the demands that reached each step, when asked to', () =>
     Effect.gen(function* () {
-      const { recording, entity } = yield* Fixtures.recorded();
+      const { segment, entity } = yield* Fixtures.recorded();
 
-      const lines = yield* Log.of(Fixtures.setup(), recording, { demands: true });
+      const lines = yield* Log.of(Fixtures.setup(), segment, { demands: true });
 
       expect(lines.flatMap((line) => (line._tag === 'Stepped' ? [line.demands] : []))).toEqual([
         Option.some([{ entity, component: 'Stick', value: { move: 1 } }]),
@@ -60,23 +60,24 @@ describe('the log of a recording', () => {
   it.effect('ends where the replay it is told from comes apart, saying where', () =>
     Effect.gen(function* () {
       const drifting = Fixtures.drifting();
-      const { recording } = yield* Fixtures.recorded(drifting);
+      const { segment } = yield* Fixtures.recorded(drifting);
 
-      const lines = yield* Log.of(Fixtures.setup(drifting), recording);
+      const lines = yield* Log.of(Fixtures.setup(drifting), segment);
 
       expect(lines.at(-1)).toEqual({
         _tag: 'CameApart',
         tick: 4,
         where: { _tag: 'Component', name: 'Position' },
+        cause: 'Nondeterminism',
       });
     }),
   );
 
   it.effect('reads as text, a step to a paragraph', () =>
     Effect.gen(function* () {
-      const { recording } = yield* Fixtures.recorded();
+      const { segment } = yield* Fixtures.recorded();
 
-      const text = Log.format(yield* Log.of(Fixtures.setup(), recording));
+      const text = Log.format(yield* Log.of(Fixtures.setup(), segment));
 
       expect(text).toBe(
         [

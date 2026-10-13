@@ -22,7 +22,7 @@ describe('a debugger beside a host', () => {
         const span = yield* Inspect.ask(client, { _tag: 'Span' });
         const steps = yield* Inspect.steps(client, { from: 3, to: 5 });
 
-        expect(span).toEqual({ oldest: 0, newest: 6 });
+        expect(span).toEqual({ oldest: 0, newest: 6, reloads: [] });
         expect(steps.flatMap(({ actions }) => actions.map(({ tag }) => tag))).toEqual([
           'AskedToHeal',
         ]);

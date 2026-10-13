@@ -1,5 +1,5 @@
 import { foldkit } from '@foldkit/vite-plugin';
-import { Devtools } from '@lightocean/vite-plugin';
+import { Build, Devtools } from '@lightocean/vite-plugin';
 import stylex from '@stylexjs/unplugin';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vite-plus';
@@ -19,6 +19,7 @@ export default defineConfig({
     process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),
     ...foldkit(),
     Devtools.plugin(),
+    Build.plugin(),
     pinAlchemyDevPort(5292),
   ],
   optimizeDeps: {
@@ -30,4 +31,6 @@ export default defineConfig({
     // IPv4 loopback, explicitly: a dual-stack bind lets two inner dev servers under `alchemy dev` own the same port, one per address family.
     host: '127.0.0.1',
   },
+  // A worker is built on its own, so the plugin naming the game's build is given to it too.
+  worker: { plugins: () => [Build.plugin()] },
 });

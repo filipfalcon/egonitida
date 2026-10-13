@@ -88,7 +88,7 @@ export const toolkit = Toolkit.make(
   reading(
     asking(
       'lightocean_span',
-      'Tells the ticks of the state that are kept: the oldest and the newest.',
+      'Tells the ticks of the state that are kept: the oldest, the newest, and every tick between at which the host took up a new build of the game, with the build. The ticks before a reload were played by an earlier build: they can be read, logged, and seeked, but not played on from or told as a story.',
       {},
     ),
   ),
@@ -120,7 +120,7 @@ export const toolkit = Toolkit.make(
   reading(
     asking(
       'lightocean_story',
-      "Writes what happened after the state at one tick, up to the state at another, as the source of a story test: the state at the first tick, the input of every step, and every value that came of them, by name. Save it as a *.story.test.ts file in the game's package. A stretch in which a player joined or left cannot be told; start after it, or end before.",
+      "Writes what happened after the state at one tick, up to the state at another, as the source of a story test: the state at the first tick, the input of every step, and every value that came of them, by name. Save it as a *.story.test.ts file in the game's package. A stretch in which a player joined or left cannot be told; start after it, or end before. Nor can one played by an earlier build than the one running now, or across a reload: the story is told by the code at hand.",
       {
         from: tick,
         to: tick,

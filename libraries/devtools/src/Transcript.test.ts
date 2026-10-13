@@ -18,7 +18,9 @@ const visited = Effect.gen(function* () {
 const transcribed = (from: number, to: number) =>
   Effect.gen(function* () {
     const rewind = yield* visited;
-    const stretch = yield* rewind.between(from, to);
+    const stretch = Option.flatMap(yield* rewind.between(from, to), ([only]) =>
+      Option.fromNullishOr(only),
+    );
     const end = yield* rewind.stateAt(to);
     return Option.match(Option.all([stretch, end]), {
       onNone: () => Result.fail('not kept'),

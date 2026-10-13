@@ -2,12 +2,13 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Host, WorkerTransport } from '@lightocean/core';
 import { Beside } from '@lightocean/devtools';
 import { Effect } from 'effect';
+import { build } from 'virtual:lightocean/build';
 import * as Beginning from '#src/beginning.ts';
 import * as Glance from '#src/glance.ts';
 import * as Stepping from '#src/stepping.ts';
 
 // The local server of the game that tells how a state begins, stepped off the main thread; the page may stop its time, and step it while it is stopped. The telling starts anew every time the page is opened, so nothing of it is kept: in development the devtools run beside it, by the id the page named this worker with, but it goes on from no state but its first.
-const options = { ...Glance.setup, state: Glance.state, maySuspend: true };
+const options = { ...Glance.setup, state: Glance.state, maySuspend: true, build };
 
 /** Serves `host` to the page, which may stop its time and step it while stopped; and begins its state anew at the point the telling comes to. */
 const serving = (host: Host.Host) =>

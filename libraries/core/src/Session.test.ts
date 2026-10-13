@@ -552,6 +552,26 @@ describe('reloading a game', () => {
       ).toEqual(Option.some(brisk));
     }),
   );
+
+  it.effect('carries the build of the code it plays from now on, as the bundler gave it', () =>
+    Effect.gen(function* () {
+      const host = yield* Host.make({ ...hostOptions(true), build: 'first' });
+      yield* elapse(100);
+      const watching = yield* host.watch;
+      const told = yield* watching.happenings.pipe(Stream.runHead, Effect.forkChild);
+      yield* Effect.yieldNow;
+
+      yield* host.reload({ ...setupOf(brisk), build: 'second' });
+
+      const happening = yield* Fiber.join(told);
+      expect(
+        Option.flatMap(happening, (reloaded) =>
+          reloaded._tag === 'Reloaded' ? reloaded.build : Option.none(),
+        ),
+      ).toEqual(Option.some('second'));
+      expect(watching.build).toEqual(Option.some('first'));
+    }),
+  );
 });
 
 describe('time suspended beside the host', () => {

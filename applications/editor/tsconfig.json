@@ -3,6 +3,6 @@
   "compilerOptions": {
     // The playground runs in the browser; its build configuration runs in Node.
     "lib": ["esnext", "dom", "dom.iterable"],
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client", "@lightocean/vite-plugin/build"]
   }
 }

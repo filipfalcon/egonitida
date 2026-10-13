@@ -1,12 +1,12 @@
 import type { Client, Host, State } from '@lightocean/core';
-import { Effect, Option, Schema, type Scope, Stream } from 'effect';
+import { Data, Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Recording from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';
 
 /**
  * Going back in a hosted game: the state the host was at, at any tick of a bounded span of time, shown to its clients through the same views while time is suspended, and played on from if asked. It keeps a keyframe, a state the host stepped to, every so many steps, and what happened after each, and comes to any tick by replaying from the keyframe before it, so a tick costs at most a few steps.
  *
- * It runs beside a host, in development; a page drives it with controls. When the host takes up a new build of its game, it starts over from there, since the past was played by another.
+ * It runs beside a host, in development; a page drives it with controls. The time it keeps is one, across every new build of the game the host takes up: each tick is replayed by the build that played it, and each reload is marked where it came. A tick of an earlier build can be shown, but not played on from, since that build no longer runs.
  */
 
 export interface Options {
@@ -16,41 +16,69 @@ export interface Options {
   readonly keepSeconds: number;
 }
 
+/** A tick asked of an earlier build than the one the host plays, which cannot be played on from, and why. */
+export class Earlier extends Data.TaggedError('Earlier')<{ readonly reason: string }> {}
+
+/** A build the host played: how its ticks are replayed, and what its bundler named it. */
+interface Played {
+  readonly setup: Replay.Setup;
+  readonly toEntry: (happening: Recording.Happening) => Recording.Entry;
+}
+
 /** A tick it may come back to, and how: from a keyframe, and the entries after it. */
 interface Keyframe {
   readonly state: State.State;
   /** Where in the moments kept it stands: the moments after it are what came of it. */
   readonly at: number;
+  /** The build that played it, by its place among those played. */
+  readonly played: number;
 }
 
-/** Something that happened to the host's state, and the tick the state was at after it. */
-interface Moment {
-  readonly entry: Recording.Entry;
-  readonly tick: number;
+/** Something that happened to the host's state, and the tick the state was at after it: an entry of a recording, or the host taking up another build, which a keyframe always follows. */
+type Moment =
+  | { readonly _tag: 'Entry'; readonly entry: Recording.Entry; readonly tick: number }
+  | { readonly _tag: 'Reloaded'; readonly tick: number; readonly played: number };
+
+/** The ticks between two, as one build played them: the state at the first, and what happened after it. */
+export interface Stretch {
+  readonly setup: Replay.Setup;
+  readonly state: State.State;
+  readonly entries: ReadonlyArray<Recording.Entry>;
 }
 
 export interface Rewind {
-  /** The oldest and newest ticks it can come back to. */
-  readonly span: Effect.Effect<{ readonly oldest: number; readonly newest: number }>;
+  /** The oldest and newest ticks it can come back to, and every tick in between at which the host took up another build, with the build. */
+  readonly span: Effect.Effect<{
+    readonly oldest: number;
+    readonly newest: number;
+    readonly reloads: ReadonlyArray<{
+      readonly tick: number;
+      readonly build: Option.Option<string>;
+    }>;
+  }>;
   /** The state the host was at, at `tick`, if it keeps that tick. */
   readonly stateAt: (tick: number) => Effect.Effect<Option.Option<State.State>, Replay.Unreadable>;
-  /** The state at `from`, and everything that happened after it up to the state at `to`, if it keeps both. */
+  /** The state at `from`, and everything that happened after it up to the state at `to`, if it keeps both: a stretch for each build that played them, in order. */
   readonly between: (
     from: number,
     to: number,
-  ) => Effect.Effect<
-    Option.Option<{
-      readonly state: State.State;
-      readonly entries: ReadonlyArray<Recording.Entry>;
-    }>,
-    Replay.Unreadable
-  >;
-  /** The build of the game it goes back in now. */
+  ) => Effect.Effect<Option.Option<ReadonlyArray<Stretch>>, Replay.Unreadable>;
+  /** The build of the game the host plays now. */
   readonly setup: Effect.Effect<Replay.Setup>;
-  /** Goes back to the state at `tick` and plays on from it: what came after it is gone. */
-  readonly playFrom: (tick: number) => Effect.Effect<void, Replay.Unreadable>;
+  /** Goes back to the state at `tick` and plays on from it: what came after it is gone. Only a tick of the build the host plays now can be played on from. */
+  readonly playFrom: (tick: number) => Effect.Effect<void, Replay.Unreadable | Earlier>;
   readonly host: Host.Host;
 }
+
+/** What a replay needs of the build a host plays now. */
+const setupOf = (
+  reloaded: Extract<Host.Happening, { readonly _tag: 'Reloaded' }>,
+): Replay.Setup => ({
+  game: reloaded.game,
+  join: reloaded.join,
+  leave: reloaded.leave,
+  build: Option.getOrUndefined(reloaded.build),
+});
 
 /** Keeps what `host` plays, from now until the scope closes, so it can come back to any tick of the last `keepSeconds`. */
 export const make = (
@@ -62,10 +90,9 @@ export const make = (
     const watching = yield* host.watch;
     const keepTicks = options.keepSeconds * setup.game.stepRate;
     const rewinding = {
-      /** The build played now, which every tick kept is gone back to with. */
-      setup,
-      toEntry: Recording.entryOf(setup.game),
-      keyframes: [{ state: watching.state, at: 0 }] satisfies Array<Keyframe>,
+      /** Every build played since keeping began, the one played now last. */
+      played: [{ setup, toEntry: Recording.entryOf(setup.game) }] satisfies Array<Played>,
+      keyframes: [{ state: watching.state, at: 0, played: 0 }] satisfies Array<Keyframe>,
       moments: new Array<Moment>(),
       /** How many moments have been forgotten, so a keyframe's place stays where it was. */
       forgotten: 0,
@@ -73,12 +100,16 @@ export const make = (
       /** Whether the host is going back to a state this rewind gave it, and its keyframes are cut to match already. */
       restoring: false,
     };
+    const now = () => rewinding.played.length - 1;
+    const playedBy = (index: number): Played =>
+      rewinding.played[index] ??
+      rewinding.played[now()] ?? { setup, toEntry: Recording.entryOf(setup.game) };
 
     /** Starts over from `state`, keeping nothing from before it. */
     const startFrom = (state: State.State) => {
       rewinding.forgotten += rewinding.moments.length;
       rewinding.moments = [];
-      rewinding.keyframes = [{ state, at: rewinding.forgotten }];
+      rewinding.keyframes = [{ state, at: rewinding.forgotten, played: now() }];
       rewinding.newest = state.tick;
     };
 
@@ -100,13 +131,15 @@ export const make = (
       Stream.runForEach((happening) =>
         Effect.sync(() => {
           if (happening._tag === 'Reloaded') {
-            rewinding.setup = {
-              game: happening.game,
-              join: happening.join,
-              leave: happening.leave,
-            };
-            rewinding.toEntry = Recording.entryOf(happening.game);
-            startFrom(happening.state);
+            const reloaded = setupOf(happening);
+            rewinding.played.push({ setup: reloaded, toEntry: Recording.entryOf(reloaded.game) });
+            rewinding.moments.push({ _tag: 'Reloaded', tick: happening.state.tick, played: now() });
+            rewinding.keyframes.push({
+              state: happening.state,
+              at: rewinding.forgotten + rewinding.moments.length,
+              played: now(),
+            });
+            rewinding.newest = happening.state.tick;
             return;
           }
           if (happening._tag === 'Restored') {
@@ -118,12 +151,17 @@ export const make = (
             return;
           }
           const tick = happening._tag === 'Stepped' ? happening.state.tick : rewinding.newest;
-          rewinding.moments.push({ entry: rewinding.toEntry(happening), tick });
+          rewinding.moments.push({
+            _tag: 'Entry',
+            entry: playedBy(now()).toEntry(happening),
+            tick,
+          });
           rewinding.newest = tick;
           if (happening._tag === 'Stepped' && tick % options.every === 0) {
             rewinding.keyframes.push({
               state: happening.state,
               at: rewinding.forgotten + rewinding.moments.length,
+              played: now(),
             });
             forget();
           }
@@ -145,54 +183,105 @@ export const make = (
       return Option.some(rewinding.forgotten + Option.getOrElse(after, () => 0));
     };
 
-    const stateAt = (tick: number) =>
+    /** The keyframe a place is come to from: the last at or before it. */
+    const keyframeAt = (place: number) => rewinding.keyframes.findLast(({ at }) => at <= place);
+
+    /** The entries between two places, which a reload never falls between, since a keyframe always follows one. */
+    const entriesBetween = (from: number, to: number) =>
+      rewinding.moments
+        .slice(from - rewinding.forgotten, to - rewinding.forgotten)
+        .flatMap((moment) => (moment._tag === 'Entry' ? [moment.entry] : []));
+
+    /** The state at a place, by its keyframe, replayed by the build that played it. */
+    const stateAtPlace = (place: number) =>
       Effect.gen(function* () {
-        const place = placeOf(tick);
-        if (Option.isNone(place)) {
-          return Option.none<State.State>();
-        }
-        const keyframe = rewinding.keyframes.findLast(({ at }) => at <= place.value);
+        const keyframe = keyframeAt(place);
         if (keyframe === undefined) {
           return Option.none<State.State>();
         }
-        const entries = rewinding.moments
-          .slice(keyframe.at - rewinding.forgotten, place.value - rewinding.forgotten)
-          .map(({ entry }) => entry);
-        const { taken, divergence } = yield* Replay.from(rewinding.setup, keyframe.state, entries);
+        const { taken, divergence } = yield* Replay.from(
+          playedBy(keyframe.played).setup,
+          keyframe.state,
+          entriesBetween(keyframe.at, place),
+        );
         // A game that does not replay cannot be gone back in; the replay beside the host says where.
         return Option.isSome(divergence)
           ? Option.none<State.State>()
           : Option.some(taken.at(-1)?.state ?? keyframe.state);
       });
 
+    const stateAt = (tick: number) =>
+      Option.match(placeOf(tick), {
+        onNone: () => Effect.succeed(Option.none<State.State>()),
+        onSome: stateAtPlace,
+      });
+
     return {
       host,
-      setup: Effect.sync(() => rewinding.setup),
+      setup: Effect.sync(() => playedBy(now()).setup),
       between: (from, to) =>
         Effect.gen(function* () {
-          const state = yield* stateAt(from);
           const start = placeOf(from);
           const end = placeOf(to);
-          if (Option.isNone(state) || Option.isNone(start) || Option.isNone(end)) {
+          if (Option.isNone(start) || Option.isNone(end)) {
             return Option.none();
           }
-          return Option.some({
-            state: state.value,
-            entries: rewinding.moments
-              .slice(start.value - rewinding.forgotten, end.value - rewinding.forgotten)
-              .map(({ entry }) => entry),
-          });
+          // Cut at every reload in between: each stretch begins at the keyframe that follows one.
+          const cuts = rewinding.keyframes
+            .filter(
+              ({ at }) =>
+                at > start.value &&
+                at <= end.value &&
+                rewinding.moments[at - rewinding.forgotten - 1]?._tag === 'Reloaded',
+            )
+            .map(({ at }) => at);
+          const bounds = [start.value, ...cuts, end.value];
+          const stretches: Array<Stretch> = [];
+          for (let index = 0; index + 1 < bounds.length; index++) {
+            const [from, to] = [bounds[index] ?? 0, bounds[index + 1] ?? 0];
+            const state = yield* stateAtPlace(from);
+            const keyframe = keyframeAt(from);
+            if (Option.isNone(state) || keyframe === undefined) {
+              return Option.none();
+            }
+            stretches.push({
+              setup: playedBy(keyframe.played).setup,
+              state: state.value,
+              // The last stretch ends at `to`; one before a reload ends where the reload came.
+              entries: entriesBetween(from, index + 2 < bounds.length ? to - 1 : to),
+            });
+          }
+          return Option.some(stretches);
         }),
       span: Effect.sync(() => ({
         oldest: rewinding.keyframes[0]?.state.tick ?? rewinding.newest,
         newest: rewinding.newest,
+        reloads: rewinding.moments.flatMap((moment) =>
+          moment._tag === 'Reloaded'
+            ? [
+                {
+                  tick: moment.tick,
+                  build: Option.fromNullishOr(playedBy(moment.played).setup.build),
+                },
+              ]
+            : [],
+        ),
       })),
       stateAt,
       playFrom: (tick) =>
         Effect.gen(function* () {
-          const state = yield* stateAt(tick);
           const place = placeOf(tick);
-          if (Option.isNone(state) || Option.isNone(place)) {
+          if (Option.isNone(place)) {
+            return;
+          }
+          const keyframe = keyframeAt(place.value);
+          if (keyframe !== undefined && keyframe.played !== now()) {
+            return yield* new Earlier({
+              reason: `tick ${tick} was played by an earlier build of the game, which no longer runs`,
+            });
+          }
+          const state = yield* stateAtPlace(place.value);
+          if (Option.isNone(state)) {
             return;
           }
           rewinding.moments = rewinding.moments.slice(0, place.value - rewinding.forgotten);
@@ -257,9 +346,7 @@ export const serve = (host: Host.Host, rewind: Rewind): Effect.Effect<void, neve
       Stream.filterMap(({ payload }) => Schema.decodeUnknownResult(Control)(payload)),
       Stream.runForEach((control) =>
         carryOut(control).pipe(
-          Effect.catch((unreadable) =>
-            Effect.logError('The game cannot be gone back in', unreadable),
-          ),
+          Effect.catch((refused) => Effect.logError('The game cannot be gone back in', refused)),
         ),
       ),
       Effect.forkScoped,

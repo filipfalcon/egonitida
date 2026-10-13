@@ -3,6 +3,6 @@
   "compilerOptions": {
     // The example runs in the browser; its game also runs in a worker and in tests.
     "lib": ["esnext", "dom", "dom.iterable"],
-    "types": ["vite/client"]
+    "types": ["vite/client", "@lightocean/vite-plugin/build"]
   }
 }

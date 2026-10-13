@@ -98,7 +98,13 @@ type Played = typeof game;
 export const join = (state: State.State) =>
   State.spawn(state, [Position.of({ x: 0 }), Health.of({ current: 1 }), Stick.of({ move: 0 })]);
 
-export const setup = (played: Played = game) => ({ game: played, join, leave: State.despawn });
+/** How `played` is hosted, as the build `build` of its code, if named. */
+export const setup = (played: Played = game, build?: string) => ({
+  game: played,
+  join,
+  leave: State.despawn,
+  ...(build === undefined ? {} : { build }),
+});
 
 /** Hosts `played`, until the scope closes; a host that lets clients suspend time if `maySuspend`, as a local server for one player does. */
 export const host = (played: Played = game, maySuspend = false) =>
@@ -135,5 +141,10 @@ export const recorded = (played: Played = game) =>
     yield* elapse(100);
     const recorder = yield* Recording.record(hosted, played);
     const entity = yield* visit(hosted, played);
-    return { hosted, entity, recording: yield* recorder.recording };
+    return {
+      hosted,
+      entity,
+      recording: yield* recorder.recording,
+      segment: yield* recorder.segment,
+    };
   });

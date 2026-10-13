@@ -1,5 +1,5 @@
 import { foldkit } from '@foldkit/vite-plugin';
-import { Devtools } from '@lightocean/vite-plugin';
+import { Build, Devtools } from '@lightocean/vite-plugin';
 import stylex from '@stylexjs/unplugin';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vite-plus';
@@ -20,6 +20,7 @@ export default defineConfig({
     process.env['VITEST'] === undefined ? stylex.vite() : stylex.rolldown(),
     ...foldkit(),
     Devtools.plugin(),
+    Build.plugin(),
     pinAlchemyDevPort(5290),
   ],
   optimizeDeps: {
@@ -35,4 +36,6 @@ export default defineConfig({
     name: 'playground',
     include: ['src/**/*.test.ts'],
   },
+  // A worker is built on its own, so the plugin naming the game's build is given to it too.
+  worker: { plugins: () => [Build.plugin()] },
 });

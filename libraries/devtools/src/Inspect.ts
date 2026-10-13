@@ -176,6 +176,44 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
     });
   const stateAt = (tick: Option.Option<number>) =>
     Option.match(tick, { onNone: () => host.state, onSome: kept });
+  /** The stretches between `from` and `to`, a stretch for each build that played them, or why there are none. */
+  const stretchesBetween = (from: number, to: number) =>
+    Effect.gen(function* () {
+      const found = yield* rewind
+        .between(from, to)
+        .pipe(Effect.mapError(({ reason }) => refuse(reason)));
+      if (Option.isNone(found)) {
+        const { oldest, newest } = yield* rewind.span;
+        return yield* refuse(
+          `ticks ${from} to ${to} are not kept: ticks ${oldest} to ${newest} are`,
+        );
+      }
+      return found.value;
+    });
+  /** The log of `stretches`, one after another, marking where the host took up each new build. */
+  const logOf = (
+    stretches: ReadonlyArray<Rewind.Stretch>,
+    options: { readonly demands?: boolean } = {},
+  ) =>
+    Effect.map(
+      Effect.forEach(stretches, (stretch, index) =>
+        Effect.map(
+          Log.from(stretch.setup, stretch.state, stretch.entries, options),
+          (lines): ReadonlyArray<Log.Line> =>
+            index === 0
+              ? lines
+              : [
+                  {
+                    _tag: 'Reloaded',
+                    tick: stretch.state.tick,
+                    build: Option.fromNullishOr(stretch.setup.build),
+                  },
+                  ...lines,
+                ],
+        ),
+      ),
+      (logs) => logs.flat(),
+    ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
 
   const answer = (request: Request) =>
     Effect.gen(function* () {
@@ -183,8 +221,17 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
       switch (request._tag) {
         case 'Describe':
           return describe(game);
-        case 'Span':
-          return yield* rewind.span;
+        case 'Span': {
+          const { oldest, newest, reloads } = yield* rewind.span;
+          return {
+            oldest,
+            newest,
+            reloads: reloads.map(({ tick, build }) => ({
+              tick,
+              ...Option.match(build, { onNone: () => ({}), onSome: (named) => ({ build: named }) }),
+            })),
+          };
+        }
         case 'State': {
           const state = yield* stateAt(request.tick);
           const wanted = (entity: string) =>
@@ -221,59 +268,33 @@ export const make = (host: Host.Host, rewind: Rewind.Rewind): Inspector => {
           };
         }
         case 'Steps': {
-          const stretch = yield* rewind
-            .between(request.from, request.to)
-            .pipe(Effect.mapError(({ reason }) => refuse(reason)));
-          if (Option.isNone(stretch)) {
-            const { oldest, newest } = yield* rewind.span;
-            return yield* refuse(
-              `ticks ${request.from} to ${request.to} are not kept: ticks ${oldest} to ${newest} are`,
-            );
-          }
-          const lines = yield* Log.from(
-            yield* rewind.setup,
-            stretch.value.state,
-            stretch.value.entries,
-          ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
+          const lines = yield* logOf(yield* stretchesBetween(request.from, request.to));
           return yield* Schema.encodeEffect(Steps)(Log.stepsOf(lines)).pipe(
             Effect.mapError(() => refuse('the steps cannot be told as data')),
           );
         }
         case 'Log': {
-          const stretch = yield* rewind
-            .between(request.from, request.to)
-            .pipe(Effect.mapError(({ reason }) => refuse(reason)));
-          if (Option.isNone(stretch)) {
-            const { oldest, newest } = yield* rewind.span;
-            return yield* refuse(
-              `ticks ${request.from} to ${request.to} are not kept: ticks ${oldest} to ${newest} are`,
-            );
-          }
-          const lines = yield* Log.from(
-            yield* rewind.setup,
-            stretch.value.state,
-            stretch.value.entries,
-            { demands: Option.getOrElse(request.demands, () => false) },
-          ).pipe(Effect.mapError(({ reason }) => refuse(reason)));
+          const lines = yield* logOf(yield* stretchesBetween(request.from, request.to), {
+            demands: Option.getOrElse(request.demands, () => false),
+          });
           return { text: Log.format(lines) };
         }
         case 'Story': {
-          const stretch = yield* rewind
-            .between(request.from, request.to)
-            .pipe(Effect.mapError(({ reason }) => refuse(reason)));
-          if (Option.isNone(stretch)) {
-            const { oldest, newest } = yield* rewind.span;
+          const stretches = yield* stretchesBetween(request.from, request.to);
+          const current = yield* rewind.setup;
+          const [stretch] = stretches;
+          if (stretch === undefined || stretches.length > 1) {
             return yield* refuse(
-              `ticks ${request.from} to ${request.to} are not kept: ticks ${oldest} to ${newest} are`,
+              `ticks ${request.from} to ${request.to} were played by more than one build: a story is told by one, the build played now`,
+            );
+          }
+          if (stretch.setup !== current) {
+            return yield* refuse(
+              `ticks ${request.from} to ${request.to} were played by an earlier build: a story is told by the build played now`,
             );
           }
           const end = yield* kept(request.to);
-          const lines = Transcript.of(
-            yield* rewind.setup,
-            stretch.value.state,
-            stretch.value.entries,
-            end,
-          );
+          const lines = Transcript.of(stretch.setup, stretch.state, stretch.entries, end);
           if (Result.isFailure(lines)) {
             return yield* refuse(lines.failure);
           }

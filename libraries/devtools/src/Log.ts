@@ -3,6 +3,7 @@ import { Effect, Option, Schema } from 'effect';
 import type * as Recording from '#src/Recording.ts';
 import { encoderOf } from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';
+import * as Version from '#src/Version.ts';
 
 /**
  * What happened in a recording, step by step, for people and agents: who joined and left, the actions each step took, and what each system and rule did in it, and for what. The demands are left out unless asked for, since they reach nearly every step and say little on their own. It is told from a replay of the recording, which is how everything but the recording follows from it.
@@ -33,7 +34,11 @@ export type Line =
       readonly parts: ReadonlyArray<PartLine>;
     }
   /** Where the replay the log is told from came apart, after which it tells nothing. */
-  | ({ readonly _tag: 'CameApart' } & Replay.Divergence);
+  | ({ readonly _tag: 'CameApart' } & Replay.Divergence)
+  /** The log is told by another version of the code than the one that recorded it, said before anything else. */
+  | { readonly _tag: 'Replayed'; readonly told: string }
+  /** The host took up another build of the code at `tick`, from the state it held. */
+  | { readonly _tag: 'Reloaded'; readonly tick: number; readonly build: Option.Option<string> };
 
 /** How a part is named in a log, and wherever devtools name one: by its domain and name, a rule by what it handles. */
 export const nameOf = (part: Game.Part): string => {
@@ -52,11 +57,14 @@ export const from = (
   setup: Replay.Setup,
   state: State.State,
   entries: ReadonlyArray<Recording.Entry>,
-  options: { readonly demands?: boolean } = {},
+  options: { readonly demands?: boolean; readonly cause?: Replay.Divergence['cause'] } = {},
 ): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
   Effect.gen(function* () {
     const encode = encoderOf(setup.game);
-    const { taken, divergence } = yield* Replay.from(setup, state, entries, { trace: true });
+    const { taken, divergence } = yield* Replay.from(setup, state, entries, {
+      trace: true,
+      ...(options.cause === undefined ? {} : { cause: options.cause }),
+    });
     const lines = taken.map(({ entry, state, trace }): Line => {
       // Joining, leaving, and going back take no step, so the state after one is at the tick it came to.
       if (entry._tag === 'Restored') {
@@ -93,15 +101,27 @@ export const from = (
     });
   });
 
-/** The log of `recording`, replayed with `setup`; with the demands of every step if `demands` is asked for. */
+/** The log of `segment`, replayed with `setup`, saying first if `setup` is another version than the one that recorded it; with the demands of every step if `demands` is asked for. */
 export const of = (
   setup: Replay.Setup,
-  recording: Recording.Recording,
+  segment: Recording.Segment,
   options: { readonly demands?: boolean } = {},
 ): Effect.Effect<ReadonlyArray<Line>, Replay.Unreadable> =>
-  Effect.flatMap(Replay.first(setup.game, recording.first), (state) =>
-    from(setup, state, recording.entries, options),
-  );
+  Effect.gen(function* () {
+    const version = Version.mismatch(segment.version, Replay.versionOf(setup));
+    const state = yield* Replay.first(setup.game, segment.first);
+    const lines = yield* from(setup, state, segment.entries, {
+      ...options,
+      cause: Option.isSome(version) ? 'ChangedCode' : 'Nondeterminism',
+    });
+    return Option.match(version, {
+      onNone: () => lines,
+      onSome: (mismatch): ReadonlyArray<Line> => [
+        { _tag: 'Replayed', told: Version.told(mismatch) },
+        ...lines,
+      ],
+    });
+  });
 
 /** The tag of an encoded event or action, and its other fields as JSON. */
 const partsOf = (encoded: unknown): readonly [string, string] => {
@@ -152,7 +172,16 @@ const lineText = (line: Line): string => {
     case 'Restored':
       return `tick ${line.tick}: went back to this tick`;
     case 'CameApart':
-      return `tick ${line.tick}: the replay came apart ${whereText(line.where)}`;
+      return `tick ${line.tick}: the replay came apart ${whereText(line.where)}${
+        line.cause === 'ChangedCode' ? ', as the code changed since it was recorded' : ''
+      }`;
+    case 'Replayed':
+      return line.told;
+    case 'Reloaded':
+      return `tick ${line.tick}: took up ${Option.match(line.build, {
+        onNone: () => 'an unnamed build',
+        onSome: (build) => `build ${build}`,
+      })}`;
     case 'Stepped':
       return [
         `tick ${line.tick}`,

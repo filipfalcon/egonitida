@@ -3,13 +3,13 @@ import { Effect, Schema } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Recording from '#src/Recording.ts';
 
-describe('a recording', () => {
-  it.effect('starts from the state as it was when recording began, as its game encodes it', () =>
+describe('a segment', () => {
+  it.effect('starts from the state as it was when segment began, as its game encodes it', () =>
     Effect.gen(function* () {
-      const { recording } = yield* Fixtures.recorded();
+      const { segment } = yield* Fixtures.recorded();
 
-      expect(recording.stepRate).toBe(30);
-      expect(recording.first).toEqual({
+      expect(segment.stepRate).toBe(30);
+      expect(segment.first).toEqual({
         tick: 3,
         nextEntity: 0,
         nextLocal: -1,
@@ -21,9 +21,9 @@ describe('a recording', () => {
 
   it.effect('keeps every join, leave, and step after it, with its input', () =>
     Effect.gen(function* () {
-      const { entity, recording } = yield* Fixtures.recorded();
+      const { entity, segment } = yield* Fixtures.recorded();
 
-      expect(recording.entries).toEqual([
+      expect(segment.entries).toEqual([
         { _tag: 'Joined', entity },
         {
           _tag: 'Stepped',
@@ -53,14 +53,12 @@ describe('a recording', () => {
 
   it.effect('is data: it is the same after travelling as JSON', () =>
     Effect.gen(function* () {
-      const { recording } = yield* Fixtures.recorded();
-      const json = Schema.fromJsonString(Recording.Recording);
+      const { segment } = yield* Fixtures.recorded();
+      const json = Schema.fromJsonString(Recording.Segment);
 
-      const travelled = yield* Schema.decodeEffect(json)(
-        yield* Schema.encodeEffect(json)(recording),
-      );
+      const travelled = yield* Schema.decodeEffect(json)(yield* Schema.encodeEffect(json)(segment));
 
-      expect(travelled).toEqual(recording);
+      expect(travelled).toEqual(segment);
     }),
   );
 });

@@ -167,7 +167,7 @@ describe('inspecting a hosted game', () => {
       const span = yield* Inspect.ask(client, { _tag: 'Span' });
       const steps = yield* Inspect.steps(client, { from: 3, to: 4 });
 
-      expect(span).toEqual({ oldest: 0, newest: 6 });
+      expect(span).toEqual({ oldest: 0, newest: 6, reloads: [] });
       expect(steps.map(({ tick }) => tick)).toEqual([4]);
     }),
   );
@@ -176,7 +176,11 @@ describe('inspecting a hosted game', () => {
     Effect.gen(function* () {
       const { inspector } = yield* inspected;
 
-      expect(yield* inspector.answer({ _tag: 'Span' })).toEqual({ oldest: 0, newest: 6 });
+      expect(yield* inspector.answer({ _tag: 'Span' })).toEqual({
+        oldest: 0,
+        newest: 6,
+        reloads: [],
+      });
     }),
   );
 
@@ -214,7 +218,11 @@ describe('inspecting a hosted game', () => {
       yield* inspector.answer({ _tag: 'PlayFrom', tick: 4 });
 
       expect((yield* hosted.state).tick).toBe(4);
-      expect(yield* inspector.answer({ _tag: 'Span' })).toEqual({ oldest: 0, newest: 4 });
+      expect(yield* inspector.answer({ _tag: 'Span' })).toEqual({
+        oldest: 0,
+        newest: 4,
+        reloads: [],
+      });
     }),
   );
 
@@ -225,7 +233,7 @@ describe('inspecting a hosted game', () => {
       const span = yield* inspector.answerUnknown({ _tag: 'Span' });
       const refused = yield* refusal(inspector.answerUnknown({ _tag: 'Explode' }));
 
-      expect(span).toEqual({ oldest: 0, newest: 6 });
+      expect(span).toEqual({ oldest: 0, newest: 6, reloads: [] });
       expect(Option.isSome(refused)).toBe(true);
     }),
   );

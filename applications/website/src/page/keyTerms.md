@@ -56,7 +56,9 @@ An input is everything that enters a step from outside the state: the players' d
 
 A demand is what a player is doing with their controls, such as a stick held to the left or a trigger held halfway, written at the start of the step to the entity the player controls. A client repeats its demands over an unreliable channel, since only the newest matters, while an action travels reliably, since none may be lost.
 
-A recording of a game is its first state and, in order, everything that replaced it after: its steps, each with its input, players joining and leaving, and restores of another state. Everything else follows from them.
+A recording of a game is made of segments, one for each version of its code the host played: a reload of new code ends one segment and begins the next. A segment is the state it began at, its version, and, in order, everything that replaced the state after: its steps, each with its input, players joining and leaving, and restores of another state. Everything else follows from them, under that version.
+
+A build is which code of a game runs, as its bundler names it: `@lightocean/vite-plugin` gives each build an id, and a game's worker gives it to its host. With the schema of the state, a hash for each component, it makes up the version a segment holds for. A segment replayed by another version says so before anything else, and where it comes apart is a change of the code, not a game that is not deterministic.
 
 ## Primitives
 
