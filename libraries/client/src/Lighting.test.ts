@@ -75,4 +75,25 @@ describe('lighting', () => {
         expect(later.players).toEqual([3]);
       }),
   );
+
+  it.effect(
+    'lights them only when asked for another colour, or as many player lights otherwise',
+    () =>
+      Effect.gen(function* () {
+        const [, own] = State.spawn(State.empty({ seed: 1 }), []);
+        const pad = recorded();
+        const lighting = Lighting.make({ player: own, lit: () => [pad.device] });
+        const red = { red: 1, green: 0, blue: 0 };
+        const blue = { red: 0, green: 0, blue: 1 };
+
+        yield* lighting.colour(own, red);
+        yield* lighting.colour(own, { ...red });
+        yield* lighting.colour(own, blue);
+        yield* lighting.players(own, 2);
+        yield* lighting.players(own, 2);
+
+        expect(pad.lit).toEqual([red, blue]);
+        expect(pad.players).toEqual([2]);
+      }),
+  );
 });

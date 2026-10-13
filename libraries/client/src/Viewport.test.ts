@@ -1,5 +1,6 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from '@effect/vitest';
-import { Option } from 'effect';
+import { Effect, Option } from 'effect';
 import * as Antialiasing from '#src/Antialiasing.ts';
 import * as Viewport from '#src/Viewport.ts';
 
@@ -94,4 +95,14 @@ describe('Viewport.pixelRatioOf', () => {
   it('draws as many as told, from the screen’s density', () => {
     expect(Viewport.pixelRatioOf({ pixelRatio: (screen) => Math.min(screen, 1.5) }, 2)).toBe(1.5);
   });
+});
+
+describe('Viewport.painted', () => {
+  it.live(
+    'is done once the page has shown what it was told, or a short while on where no frame comes',
+    () =>
+      Effect.gen(function* () {
+        expect(yield* Viewport.painted).toBeUndefined();
+      }),
+  );
 });

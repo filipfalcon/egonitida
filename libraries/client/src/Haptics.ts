@@ -1,5 +1,5 @@
 import type { State } from '@lightocean/core';
-import { Context, Effect } from 'effect';
+import { Context, Effect, Option } from 'effect';
 
 /**
  * What a player feels through what they hold: a rumble of a pad's motors, a moment such as a hit, and its triggers pushing back, set as something comes to hold, such as a gun being drawn. Views make it felt through the `Haptics` service, for an entity, and only the page whose player that entity is makes it felt; each device is felt as it can be, through the Gamepad API or a WebHID driver, and a device that cannot is left still.
@@ -93,20 +93,45 @@ export class Haptics extends Context.Service<
   }
 >()('@lightocean/client/Haptics') {}
 
-/** Haptics for a page whose player is `player`, felt on the devices `felt` gives at that moment. Its rumbles are mixed and turn the motors as the page's frames go, by `frame`, which the page calls every frame with the seconds since the one before; a device's motors are turned only when they turn otherwise. */
+/** Whether `a` and `b` push back alike. */
+const sameTrigger = (a: Trigger, b: Trigger): boolean => {
+  switch (a._tag) {
+    case 'Free':
+      return b._tag === 'Free';
+    case 'Resisting':
+      return b._tag === 'Resisting' && a.from === b.from && a.strength === b.strength;
+    case 'Clicking':
+      return (
+        b._tag === 'Clicking' && a.from === b.from && a.to === b.to && a.strength === b.strength
+      );
+  }
+};
+
+/** Haptics for a page whose player is `player`, felt on the devices `felt` gives at that moment. Its rumbles are mixed and turn the motors as the page's frames go, by `frame`, which the page calls every frame with the seconds since the one before; a device's motors are turned, and its triggers set, only when they are otherwise, so a view may ask every frame; and `again` sets them all as last asked, so a device connected since is set as the rest. */
 export const make = (options: {
   readonly player: State.Entity;
   readonly felt: () => ReadonlyArray<Felt>;
-}): Haptics['Service'] & { readonly frame: (seconds: number) => Effect.Effect<void> } => {
-  const playing: { pulses: ReadonlyArray<Pulse>; turning: Motors } = {
+}): Haptics['Service'] & {
+  readonly frame: (seconds: number) => Effect.Effect<void>;
+  readonly again: Effect.Effect<void>;
+} => {
+  const playing: {
+    pulses: ReadonlyArray<Pulse>;
+    turning: Motors;
+    triggers: Option.Option<Triggers>;
+  } = {
     pulses: [],
     turning: stillMotors,
+    triggers: Option.none(),
   };
-  /** Does `feel` to every device, if `entity` is the player's. */
-  const feelFor = (entity: State.Entity, feel: (device: Felt) => Effect.Effect<void>) =>
-    entity === options.player
-      ? Effect.suspend(() => Effect.forEach(options.felt(), feel, { discard: true }))
-      : Effect.void;
+  /** Sets every device's triggers `triggers`. */
+  const set = (triggers: Triggers) =>
+    Effect.suspend(() => {
+      playing.triggers = Option.some(triggers);
+      return Effect.forEach(options.felt(), (device) => device.triggers(triggers), {
+        discard: true,
+      });
+    });
   /** Turns every device's motors `motors`, unless they turn so already. */
   const turn = (motors: Motors) =>
     Effect.suspend(() => {
@@ -130,7 +155,17 @@ export const make = (options: {
             return turn(stillMotors);
           })
         : Effect.void,
-    triggers: (entity, triggers) => feelFor(entity, (device) => device.triggers(triggers)),
+    triggers: (entity, triggers) =>
+      entity === options.player &&
+      !Option.exists(
+        playing.triggers,
+        (now) => sameTrigger(now.left, triggers.left) && sameTrigger(now.right, triggers.right),
+      )
+        ? set(triggers)
+        : Effect.void,
+    again: Effect.suspend(() =>
+      Option.match(playing.triggers, { onNone: () => Effect.void, onSome: set }),
+    ),
     frame: (seconds) =>
       Effect.suspend(() => {
         const next = mixed(playing.pulses, seconds);

@@ -29,7 +29,11 @@ export class Lighting extends Context.Service<
   }
 >()('@lightocean/client/Lighting') {}
 
-/** Lighting for a page whose player is `player`, lit on the devices `lit` gives at that moment; and lighting them all `again` as last asked, so a device connected since is lit as the rest. */
+/** Whether `a` and `b` are the same colour. */
+const sameColour = (a: Colour, b: Colour) =>
+  a.red === b.red && a.green === b.green && a.blue === b.blue;
+
+/** Lighting for a page whose player is `player`, lit on the devices `lit` gives at that moment, and only when asked to light them otherwise than they are, so a view may ask every frame; and lighting them all `again` as last asked, so a device connected since is lit as the rest. */
 export const make = (options: {
   readonly player: State.Entity;
   readonly lit: () => ReadonlyArray<Lit>;
@@ -46,8 +50,14 @@ export const make = (options: {
       return Effect.forEach(options.lit(), (device) => device.players(count), { discard: true });
     });
   return {
-    colour: (entity, colour) => (entity === options.player ? light(colour) : Effect.void),
-    players: (entity, count) => (entity === options.player ? lightPlayers(count) : Effect.void),
+    colour: (entity, colour) =>
+      entity === options.player && !Option.exists(latest.colour, (lit) => sameColour(lit, colour))
+        ? light(colour)
+        : Effect.void,
+    players: (entity, count) =>
+      entity === options.player && !Option.contains(latest.players, count)
+        ? lightPlayers(count)
+        : Effect.void,
     again: Effect.andThen(
       Effect.suspend(() =>
         Option.match(latest.colour, { onNone: () => Effect.void, onSome: light }),

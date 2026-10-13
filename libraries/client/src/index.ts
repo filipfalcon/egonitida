@@ -6,6 +6,7 @@ export * as Devices from '#src/Devices.ts';
 export * as Drawing from '#src/Drawing.ts';
 export * as DualSense from '#src/DualSense.ts';
 export * as Gamepads from '#src/Gamepads.ts';
+export * as Gestures from '#src/Gestures.ts';
 export * as Haptics from '#src/Haptics.ts';
 export * as Hid from '#src/Hid.ts';
 export * as Interpolate from '#src/Interpolate.ts';

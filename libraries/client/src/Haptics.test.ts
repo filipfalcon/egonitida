@@ -104,4 +104,37 @@ describe('haptics', () => {
       expect(pad.felt).toEqual([resisting]);
     }),
   );
+
+  it.effect('set the triggers only when they are set otherwise', () =>
+    Effect.gen(function* () {
+      const { own } = players();
+      const pad = recorded();
+      const haptics = Haptics.make({ player: own, felt: () => [pad.device] });
+
+      yield* haptics.triggers(own, resisting);
+      yield* haptics.triggers(own, { ...resisting, right: { ...resisting.right } });
+      yield* haptics.triggers(own, Haptics.freeTriggers);
+
+      expect(pad.felt).toEqual([resisting, Haptics.freeTriggers]);
+    }),
+  );
+
+  it.effect(
+    'set the triggers of a device connected since as the rest were last set, once asked to again',
+    () =>
+      Effect.gen(function* () {
+        const { own } = players();
+        const pad = recorded();
+        const devices = { felt: [pad.device] };
+        const haptics = Haptics.make({ player: own, felt: () => devices.felt });
+
+        yield* haptics.again;
+        yield* haptics.triggers(own, resisting);
+        const later = recorded();
+        devices.felt.push(later.device);
+        yield* haptics.again;
+
+        expect(later.felt).toEqual([resisting]);
+      }),
+  );
 });

@@ -66,6 +66,24 @@ export const secondsBetween = (previous: Option.Option<number>, now: number): nu
     onSome: (then) => Math.min(Math.max((now - then) / 1000, 0), LONGEST_FRAME),
   });
 
+/** The longest a page is waited on to show what it was told, where no frame comes, as for a tab in the background. */
+const PAINTED_AT_LATEST = 200;
+
+/** Done once the page has shown what it was just told, two frames of the display on, or a short while on where no frame comes: for a page about to hold the browser up, such as while its shaders are made, to say so first. */
+export const painted: Effect.Effect<void> = Effect.callback<void>((resume) => {
+  const finish = () => resume(Effect.void);
+  const timer = setTimeout(finish, PAINTED_AT_LATEST);
+  const frames = { first: 0, second: 0 };
+  frames.first = requestAnimationFrame(() => {
+    frames.second = requestAnimationFrame(finish);
+  });
+  return Effect.sync(() => {
+    clearTimeout(timer);
+    cancelAnimationFrame(frames.first);
+    cancelAnimationFrame(frames.second);
+  });
+});
+
 /** A shot of what `canvas` holds now, as a PNG in base64, at most `width` pixels across if given, over the canvas's own background as the page styles it. A canvas holds what was drawn only until the task that drew it ends, so a shot is taken in the same task as the drawing: for a page that draws with a renderer of its own rather than a viewport. */
 export const shot = (
   canvas: HTMLCanvasElement,
