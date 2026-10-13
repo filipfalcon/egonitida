@@ -78,6 +78,7 @@ A view's `draw` changes only the object its view built, from the frame and the p
 - What views draw is told as a scene (`Scene.make`, `scene.show`, `scene.find`), in a `*.scene.test.ts` file, found by view and entity, never by walking the scene graph.
 - An application's page is told with Foldkit's own `Story` over its `update`, its Commands expected and resolved, never run; the game it shows is told by the game's stories.
 - No mocks and no fake timers: time is the game's step, effects are values, and services are given as Layers that record.
+- A number that comes of arithmetic, such as a position, an angle, or a camera's direction, is compared within a tolerance (`toBeCloseTo`, or a vector by its distance or the dot product with what is expected), never with `toEqual`: that tells -0 from 0, and 0.1 + 0.2 from 0.3. `toEqual` is for what is counted or chosen, such as ticks, tags, and ids.
 
 ## A running game
 
