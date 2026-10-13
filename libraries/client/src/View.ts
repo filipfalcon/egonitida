@@ -11,6 +11,7 @@ import type * as Drawing from '#src/Drawing.ts';
  * | An entity is in the drawing | `each`: builds its objects when the entity comes, draws them every frame, and lets them go when it leaves |
  * | An entity just gained a component, or holds another value of it | `on`: a one-off output that is not part of the state, such as a sound |
  * | A condition is true | `during`: a resource held while `when` is true, such as music or pointer lock |
+ * | Many entities together, or none | `whole`: one object, drawn every frame from the whole frame, such as one light for every fire |
  * | The player looks at the game | `rig`: the camera, drawn for the player after every other view, from what they drew |
  *
  * Whatever a view acquires is released through a `Scope`, never by hand. What a view draws is a function of the frame: it keeps nothing between frames, and what it must remember is a local component instead.
@@ -66,7 +67,17 @@ export interface Rig {
   ): void;
 }
 
-export type View<R = never> = Each<R, Three.Object3D> | On<R> | During<R> | Rig;
+export interface Whole<R, Built extends Three.Object3D = Three.Object3D> {
+  readonly _tag: 'Whole';
+  /** Builds what this view draws, at the first frame, within the scope of the views. */
+  readonly acquire: (frame: Drawing.Frame) => Effect.Effect<Built, never, R | Scope.Scope>;
+  /** Draws what this view built, from the whole of `frame`. */
+  draw(object: Three.Object3D, frame: Drawing.Frame): void;
+  /** `object`, as the type this view built it, if this view built it. */
+  own(object: Three.Object3D): Option.Option<Built>;
+}
+
+export type View<R = never> = Each<R, Three.Object3D> | On<R> | During<R> | Whole<R> | Rig;
 
 /** What `entity` holds in `frame`, of components it is known to hold. */
 const heldIn =
@@ -110,6 +121,27 @@ export const each = <
       Option.map(own(object), (mine) =>
         spec.draw(mine, heldIn<Components[number]>(frame, entity), frame),
       ),
+    own,
+  };
+};
+
+/**
+ * A view of the whole frame rather than of one entity: `acquire` builds its object at the first frame, `draw` draws it every frame from everything the frame holds, such as one light for every fire burning, and the object is let go when the views are. `draw` changes only its own object, in place, and allocates nothing.
+ */
+export const whole = <Built extends Three.Object3D, R = never>(spec: {
+  readonly acquire: (frame: Drawing.Frame) => Effect.Effect<Built, never, R | Scope.Scope>;
+  readonly draw: (object: Built, frame: Drawing.Frame) => void;
+}): Whole<R, Built> => {
+  const built = new WeakMap<Three.Object3D, Built>();
+  const own = (object: Three.Object3D) => Option.fromNullishOr(built.get(object));
+  return {
+    _tag: 'Whole',
+    acquire: (frame) =>
+      Effect.map(spec.acquire(frame), (object) => {
+        built.set(object, object);
+        return object;
+      }),
+    draw: (object, frame) => Option.map(own(object), (mine) => spec.draw(mine, frame)),
     own,
   };
 };
@@ -178,6 +210,10 @@ export interface Views<R = never> {
     camera: Three.Camera,
     point: { readonly x: number; readonly y: number },
   ) => Option.Option<Picked>;
+  /** What the view of the whole frame `view` built and draws now, once it has drawn a frame. */
+  readonly whole: <Built extends Three.Object3D>(
+    view: Whole<unknown, Built>,
+  ) => Option.Option<Built>;
   /** Every object the views built for `entity` and draw now, in the order of the views. */
   readonly objectsOf: (entity: State.Entity) => ReadonlyArray<Three.Object3D>;
   /** Draws `frame`: builds and lets go of what entities coming and going need, draws every object, and reacts to what just happened. */
@@ -213,6 +249,8 @@ export const make = <R = never>(
     const raycaster = new Three.Raycaster();
     // The scope each `during` view holds open, while its condition is true.
     const held = new Map<During<R>, Scope.Closeable>();
+    // What each view of the whole frame built, once it has drawn one.
+    const wholes = new Map<object, Three.Object3D>();
 
     const letGo = (keeping: Kept) =>
       Effect.suspend(() => {
@@ -254,6 +292,17 @@ export const make = <R = never>(
         for (const [entity, { object }] of keeping) {
           view.draw(object, entity, frame);
         }
+      });
+
+    const drawWhole = (view: Whole<R>, frame: Drawing.Frame) =>
+      Effect.gen(function* () {
+        const known = wholes.get(view);
+        const object = known ?? (yield* view.acquire(frame).pipe(Scope.provide(scope)));
+        if (known === undefined) {
+          wholes.set(view, object);
+          root.add(object);
+        }
+        view.draw(object, frame);
       });
 
     const react = (view: On<R>, frame: Drawing.Frame) =>
@@ -332,6 +381,8 @@ export const make = <R = never>(
             : [],
         ),
       find: drawn,
+      whole: (view) =>
+        Option.flatMap(Option.fromNullishOr(wholes.get(view)), (object) => view.own(object)),
       frame: (frame) =>
         Effect.andThen(
           Effect.forEach(
@@ -343,7 +394,9 @@ export const make = <R = never>(
                   ? react(view, frame)
                   : view._tag === 'During'
                     ? hold(view, frame)
-                    : Effect.void,
+                    : view._tag === 'Whole'
+                      ? drawWhole(view, frame)
+                      : Effect.void,
             { discard: true },
           ),
           Effect.sync(() => drawRigs(frame)),

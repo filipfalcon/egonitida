@@ -10,6 +10,10 @@ tester.run('views-keep-nothing', viewsKeepNothing, {
   ],
   invalid: [
     {
+      code: `let flashes = 0; View.whole({ acquire: () => Effect.succeed(new PointLight()), draw: () => { flashes += 1; } });`,
+      errors: [{ messageId: 'keeps' }],
+    },
+    {
       code: `let drawn = 0; View.each([Crate], { acquire: () => Effect.succeed(new Group()), draw: () => { drawn += 1; } });`,
       errors: [{ messageId: 'keeps' }],
     },

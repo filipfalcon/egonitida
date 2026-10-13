@@ -22,6 +22,8 @@ export interface Frame extends Timeline.View {
   readonly lost: (component: Component.Any) => ReadonlyArray<State.Entity>;
   /** Numbers in [0, 1) for what `part` of a view draws for `entity`, such as a fireball's flicker or how a wreck lies: drawn from the game's seed and the tick drawn, so the same frame draws the same numbers wherever and whenever it is drawn, in a replay too, and another entity, part, or tick draws others. A view takes randomness from nowhere else. */
   readonly random: (entity: State.Entity, part: string) => () => number;
+  /** How many of the game's ticks drawing advanced since the frame before: a fraction between steps, nothing at the first frame, slower while the past plays slowly, and fewer than none as drawing goes back. What moves with the game's time, such as an animation, moves by as much. */
+  readonly advanced: number;
 }
 
 export interface Drawing {
@@ -90,6 +92,7 @@ export const frameOf = (view: Timeline.View, previous: Option.Option<Timeline.Vi
         onSome: (last) => changedBetween(last.drawn, view.drawn, component),
       }),
     lost: (component) => without(holdingBefore(component), holding(view, component)),
+    advanced: Option.match(previous, { onNone: () => 0, onSome: (last) => view.tick - last.tick }),
     random: (entity, part) => {
       const stream = {
         counter: Random.streamOf(view.drawn.random, view.drawn.tick, `${part} of ${entity}`),

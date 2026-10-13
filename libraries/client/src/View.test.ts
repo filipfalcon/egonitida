@@ -151,6 +151,53 @@ describe('View.during', () => {
   );
 });
 
+describe('View.whole', () => {
+  it.effect('builds its object once, and draws it every frame from the whole frame', () =>
+    Effect.gen(function* () {
+      const tally = View.whole({
+        acquire: () => Effect.succeed(new Three.Group()),
+        draw: (group, frame) => {
+          group.position.x = frame.query(Crate).length;
+        },
+      });
+      const views = yield* View.make([tally]);
+      const [one] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+      const [two] = State.spawn(one, crateAt(2));
+
+      const [first] = yield* play(views, [one]);
+      const drawnFirst = first?.map(({ position }) => position.x);
+      const [second] = yield* play(views, [two]);
+
+      expect(drawnFirst).toEqual([1]);
+      expect(second?.map(({ position }) => position.x)).toEqual([2]);
+      expect(second?.[0]).toBe(first?.[0]);
+      expect(Option.map(views.whole(tally), ({ position }) => position.x)).toEqual(Option.some(2));
+    }),
+  );
+
+  it.effect('lets go of what it built once the views close', () =>
+    Effect.gen(function* () {
+      const released: Array<string> = [];
+      const tally = View.whole({
+        acquire: () =>
+          Effect.acquireRelease(Effect.succeed(new Three.Group()), () =>
+            Effect.sync(() => {
+              released.push('tally');
+            }),
+          ),
+        draw: () => {},
+      });
+      const scope = yield* Scope.make();
+      const views = yield* View.make([tally]).pipe(Scope.provide(scope));
+      yield* play(views, [State.empty({ seed: 1 })]);
+      const before = [...released];
+      yield* Scope.close(scope, Exit.void);
+
+      expect([before, released]).toEqual([[], ['tally']]);
+    }),
+  );
+});
+
 describe('View.make', () => {
   it.effect('lets go of everything its views hold when its scope closes', () =>
     Effect.gen(function* () {

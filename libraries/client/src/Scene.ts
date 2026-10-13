@@ -19,6 +19,8 @@ export interface Scene<R = never> {
   readonly show: (state: State.State) => Effect.Effect<void, never, R>;
   /** What `view` drew for `entity` in the last frame shown, if anything. */
   readonly find: View.Views<R>['find'];
+  /** What a view of the whole frame drew in the last frame shown, if it has drawn one. */
+  readonly whole: View.Views<R>['whole'];
   /** What is under a point of the screen, seen through a camera, in the last frame shown, as a click would find it. */
   readonly pick: View.Views<R>['pick'];
 }
@@ -46,6 +48,7 @@ export const make = <R = never>(
           return working.frame(frame);
         }),
       find: working.find,
+      whole: working.whole,
       pick: working.pick,
     };
   });

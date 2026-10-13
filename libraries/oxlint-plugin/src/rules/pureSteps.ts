@@ -8,6 +8,7 @@ import { PARTS, type Rule, calleeName, enclosingPart } from '#src/ast.ts';
 const DRAWN: ReadonlyArray<readonly [callee: string, property: string]> = [
   ...PARTS,
   ['View.each', 'acquire'],
+  ['View.whole', 'acquire'],
 ];
 
 /** Calls that return another value every time, wherever they run. */

@@ -244,3 +244,16 @@ describe('a frame’s randomness', () => {
     }
   });
 });
+
+describe('how far a frame’s drawing advanced', () => {
+  const at = (tick: number) => Timeline.still({ ...State.empty({ seed: 1 }), tick });
+
+  it('is nothing at the first frame', () => {
+    expect(Drawing.frameOf(at(5), Option.none()).advanced).toBe(0);
+  });
+
+  it('is the ticks drawn since the frame before, back as well as on', () => {
+    expect(Drawing.frameOf(at(5), Option.some(at(3))).advanced).toBe(2);
+    expect(Drawing.frameOf(at(3), Option.some(at(5))).advanced).toBe(-2);
+  });
+});

@@ -14,6 +14,10 @@ tester.run('pure-steps', pureSteps, {
   ],
   invalid: [
     {
+      code: `View.whole({ acquire: () => Effect.succeed(new PointLight()), draw: (light) => { light.intensity = Math.random(); } });`,
+      errors: [{ messageId: 'impure' }],
+    },
+    {
       code: `View.each([Wreck], { acquire: () => Effect.sync(() => { const wreck = new Group(); wreck.rotation.y = Math.random(); return wreck; }), draw: () => {} });`,
       errors: [{ messageId: 'impure' }],
     },
