@@ -97,7 +97,7 @@ A system declares what it reads, what it writes, and what events it may emit, an
 
 A rule is what the game decides when an action or an event happens: a hit takes health, a click opens a door. It is made with `Rule.on`, naming the action or event it handles.
 
-A rule may read anything, but it writes only components the rules own, and it declares which ones. When its decision needs something done outside the game, it issues a command.
+A rule declares what it reads and what it writes, and it writes only components the rules own. The action or event it handles it need not declare: `Rule.on` names it. When its decision needs something done outside the game, it issues a command.
 
 ### Command
 

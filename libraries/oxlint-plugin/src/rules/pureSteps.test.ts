@@ -16,7 +16,7 @@ tester.run('pure-steps', pureSteps, {
       errors: [{ messageId: 'impure' }],
     },
     {
-      code: `Rule.on(Died, { writes: [], emits: [], run: function () { return Date.now() + performance.now(); } });`,
+      code: `Rule.on(Died, { reads: [], writes: [], emits: [], run: function () { return Date.now() + performance.now(); } });`,
       errors: [{ messageId: 'impure' }, { messageId: 'impure' }],
     },
     {

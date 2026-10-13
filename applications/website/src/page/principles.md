@@ -18,7 +18,7 @@ Every component has exactly one owner, declared in its schema:
 
 A game declares everything its state is made of: its components, actions, events, and commands with their results. One schema for the whole state follows from that declaration, covering its components, its tick, and its counters for the next entity id and for randomness. Snapshots, saves, recordings, and the debugger all speak that same schema.
 
-A system declares what it reads, writes, and emits; a rule declares what it writes and emits. The type checker holds both to their word, so writing a component they do not own is a compile error, not a runtime bug. Spawning works the same way: each lists the components it may create an entity with, whoever owns them, since being born changes no one's existing components. Everyone can read everything, so nothing is ever copied and nothing drifts out of sync.
+A system and a rule each declare what they read, write, and emit. The type checker holds both to their word, so reading a component they did not declare, or writing one they do not own, is a compile error, not a runtime bug. Spawning works the same way: each lists the components it may create an entity with, whoever owns them, since being born changes no one's existing components. Everyone can read everything, so nothing is ever copied and nothing drifts out of sync.
 
 What only a client keeps, such as a ragdoll, blood, or spent casings, lives in that client's state as local components, written by systems that run on that client alone.
 

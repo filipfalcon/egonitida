@@ -93,6 +93,7 @@ export const make = <
   const Rules extends ReadonlyArray<
     Rule.Rule<
       Hears<Actions, Events, Commands, Requires>,
+      Reads<Components, Requires>,
       Extract<Writes<Components, Requires>, Rule.RulesComponent>,
       Says<Events, Requires>,
       Reads<Components, Requires>,

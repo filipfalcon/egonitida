@@ -67,6 +67,7 @@ const rippleAt = (
 
 /** A click on a light sends a ripple out from it; a click on anything else does nothing. */
 const ripple = Rule.on(Pointing.Clicked, {
+  reads: [Light],
   writes: [],
   emits: [],
   spawns: [Ripple],

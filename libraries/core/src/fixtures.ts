@@ -52,6 +52,7 @@ export const Wall = Component.make('Wall', Schema.Struct({ x: Schema.Finite }), 
 
 /** A bite takes from health, and one that takes the last of it is a death. */
 export const takeBite = Rule.on(Bitten, {
+  reads: [],
   writes: [Health],
   emits: [Died],
   run: (context, bitten) => {
@@ -66,6 +67,7 @@ export const takeBite = Rule.on(Bitten, {
 
 /** A player who chose to restart is healed whole. */
 export const restart = Rule.on(ChoseRestart, {
+  reads: [],
   writes: [Health],
   emits: [],
   run: (context, restarted) => {

@@ -108,6 +108,7 @@ describe('a local server', () => {
           }),
       });
       const greet = Rule.on(Waved, {
+        reads: [],
         writes: [],
         emits: [],
         commands: [Greet],
@@ -127,7 +128,7 @@ describe('a local server', () => {
             commands: [Greet],
             systems: [],
             // Nothing more comes of a greeting once it is said.
-            rules: [greet, Rule.on(Greeted, { writes: [], emits: [], run: () => {} })],
+            rules: [greet, Rule.on(Greeted, { reads: [], writes: [], emits: [], run: () => {} })],
           }),
         ],
       });

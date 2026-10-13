@@ -16,6 +16,7 @@ const Lamp = Component.make('Lamp', Schema.Struct({ on: Schema.Boolean }), {
   network: 'server',
 });
 const toggle = Rule.on(Pointing.Clicked, {
+  reads: [],
   writes: [Lamp],
   emits: [],
   run: (context, { entity }) => {

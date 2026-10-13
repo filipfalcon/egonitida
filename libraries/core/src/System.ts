@@ -47,9 +47,9 @@ export interface Context<
   /** A number in [0, 1) from the game's own generator, whose counter the state keeps. Systems take randomness from nowhere else. */
   readonly random: () => number;
   /** Only components the system declared; a component's name is what identifies it. */
-  readonly get: <Value, Name extends (Reads | Writes)['name']>(
+  readonly get: <Value>(
     entity: State.Entity,
-    component: Component.Component<Name, Value, Component.Owner>,
+    component: Component.Component<(Reads | Writes)['name'], Value, Component.Owner>,
   ) => Option.Option<Value>;
   readonly query: State.Query<Reads | Writes>;
   readonly set: <Value>(entity: State.Entity, component: Of<Value> & Writes, value: Value) => void;

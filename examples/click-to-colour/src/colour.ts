@@ -29,6 +29,7 @@ export const Paint = Component.make('Paint', Schema.Struct({ shade: Schema.Int }
 
 /** A click on a painted cube paints it the next colour, round to the first after the last. */
 const repaint = Rule.on(Pointing.Clicked, {
+  reads: [],
   writes: [Paint],
   emits: [],
   run: (context, { entity }) => {

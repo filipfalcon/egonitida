@@ -67,6 +67,7 @@ export const ChangedReactionSetting = Action.make('ChangedReactionSetting', {
 
 /** An object added is named by the next number and stands in the next place, which the `Objects` domain makes. */
 const addObject = Rule.on(AddedObject, {
+  reads: [],
   writes: [Numbering],
   emits: [Objects.Added],
   run: (context, { player, shape }) => {
@@ -85,6 +86,7 @@ const addObject = Rule.on(AddedObject, {
 
 /** An object made for an editor is the one they have selected. */
 const selectMade = Rule.on(Objects.Made, {
+  reads: [],
   writes: [Selection],
   emits: [],
   run: (context, { entity, by }) => {
@@ -96,6 +98,7 @@ const selectMade = Rule.on(Objects.Made, {
 
 /** An object removed is the `Objects` domain's to let go of, and every editor who had it selected lets go of it too. */
 const removeObject = Rule.on(RemovedObject, {
+  reads: [Objects.Shape],
   writes: [Selection],
   emits: [Objects.Removed],
   run: (context, { entity }) => {
@@ -113,6 +116,7 @@ const removeObject = Rule.on(RemovedObject, {
 
 /** A property edited is the `Objects` domain's to check and set, but for a label, which is renamed. */
 const editProperty = Rule.on(EditedProperty, {
+  reads: [Objects.Shape],
   writes: [],
   emits: [Objects.Edited, Pointing.Relabelled],
   run: (context, { entity, component, field, value }) => {
@@ -131,6 +135,7 @@ const editProperty = Rule.on(EditedProperty, {
 
 /** An object clicked while editing is selected by whoever clicked it. */
 const select = Rule.on(Pointing.Clicked, {
+  reads: [Objects.Shape],
   writes: [Selection],
   emits: [],
   run: (context, { player, entity }) => {
@@ -141,6 +146,7 @@ const select = Rule.on(Pointing.Clicked, {
 });
 
 const deselect = Rule.on(Deselected, {
+  reads: [],
   writes: [Selection],
   emits: [],
   run: (context, { player }) => {
@@ -151,6 +157,7 @@ const deselect = Rule.on(Deselected, {
 // Each edit of an object's reactions is the `Objects` domain's to check and make.
 
 const addReaction = Rule.on(AddedReaction, {
+  reads: [],
   writes: [],
   emits: [Objects.ReactionEdited],
   run: (context, { entity }) => {
@@ -159,6 +166,7 @@ const addReaction = Rule.on(AddedReaction, {
 });
 
 const removeReaction = Rule.on(RemovedReaction, {
+  reads: [],
   writes: [],
   emits: [Objects.ReactionEdited],
   run: (context, { entity, index }) => {
@@ -167,6 +175,7 @@ const removeReaction = Rule.on(RemovedReaction, {
 });
 
 const changeKind = Rule.on(ChangedReactionKind, {
+  reads: [],
   writes: [],
   emits: [Objects.ReactionEdited],
   run: (context, { entity, index, kind }) => {
@@ -175,6 +184,7 @@ const changeKind = Rule.on(ChangedReactionKind, {
 });
 
 const changeTarget = Rule.on(ChangedReactionTarget, {
+  reads: [],
   writes: [],
   emits: [Objects.ReactionEdited],
   run: (context, { entity, index, target }) => {
@@ -187,6 +197,7 @@ const changeTarget = Rule.on(ChangedReactionTarget, {
 });
 
 const changeSetting = Rule.on(ChangedReactionSetting, {
+  reads: [],
   writes: [],
   emits: [Objects.ReactionEdited],
   run: (context, { entity, index, field, value }) => {

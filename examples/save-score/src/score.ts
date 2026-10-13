@@ -88,6 +88,7 @@ export const SaveScore = Command.make('SaveScore', {
 
 /** A click on a target while the round plays is a hit, and the target moves somewhere else. */
 const hit = Rule.on(Pointing.Clicked, {
+  reads: [],
   writes: [Round, Target],
   emits: [],
   run: (context, { entity }) => {
@@ -108,6 +109,7 @@ const hit = Rule.on(Pointing.Clicked, {
 
 /** A round over has its score saved. */
 const endRound = Rule.on(RoundEnded, {
+  reads: [],
   writes: [Round],
   emits: [],
   commands: [SaveScore],
@@ -121,6 +123,7 @@ const endRound = Rule.on(RoundEnded, {
 
 /** A score saved ends the round with the best kept so far. */
 const saved = Rule.on(ScoreSaved, {
+  reads: [],
   writes: [Round],
   emits: [],
   run: (context, { best }) => {
@@ -134,6 +137,7 @@ const saved = Rule.on(ScoreSaved, {
 
 /** A score not saved ends the round with why. */
 const notSaved = Rule.on(ScoreNotSaved, {
+  reads: [],
   writes: [Round],
   emits: [],
   run: (context, { reason }) => {
@@ -154,6 +158,7 @@ const playingFrom = (tick: number, secondsPerStep: number): typeof Round.schema.
 
 /** A new round, once the last is over, plays for its time from now. */
 const newRound = Rule.on(ChoseNewRound, {
+  reads: [],
   writes: [Round],
   emits: [],
   run: (context) => {

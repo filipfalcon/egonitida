@@ -87,6 +87,7 @@ export const risen = (zombie: {
 
 /** A living survivor's shot hits the first shambling zombie near its line, which falls once it has no health left, and the kill is theirs. */
 const shoot = Rule.on(Survivor.PulledTrigger, {
+  reads: [Survivor.Life, Body.Position, Survivor.Stick],
   writes: [Zombie, LastShot],
   emits: [Survivor.Killed],
   run: (context, { player }) => {
@@ -129,6 +130,7 @@ const shoot = Rule.on(Survivor.PulledTrigger, {
 
 /** A survivor rising again finds the arena cleared of the horde. */
 const clear = Rule.on(Survivor.Revived, {
+  reads: [Zombie],
   writes: [],
   emits: [],
   despawns: true,

@@ -59,6 +59,7 @@ const bite = System.make({
 // RULES: what the game decides.
 
 const takeBite = Rule.on(Bitten, {
+  reads: [],
   writes: [Health],
   emits: [Died],
   run: (context, bitten) => {
@@ -262,6 +263,7 @@ describe('demands', () => {
 describe('actions', () => {
   // The rules put a restarting player's health back, and a system that runs after sees it this very step.
   const restart = Rule.on(ChoseRestart, {
+    reads: [],
     writes: [Health],
     emits: [],
     run: (context, restarted) => {
@@ -302,6 +304,7 @@ describe('actions', () => {
   it('is handled in the order the actions came, and is no event of the step, which arose outside it', () => {
     const handled: Array<number> = [];
     const noting = Rule.on(ChoseRestart, {
+      reads: [],
       writes: [],
       emits: [],
       run: (_, restarted) => {
@@ -373,6 +376,7 @@ describe('spawning and despawning within a step', () => {
 
   it('lets the rules spawn and despawn as they handle an event', () => {
     const replace = Rule.on(Died, {
+      reads: [],
       writes: [],
       emits: [],
       spawns: [Health],
@@ -527,6 +531,21 @@ describe('Game.changes', () => {
     ]);
   });
 
+  it('tells which rules read each component, as they declare it', () => {
+    const watching = Rule.on(Died, {
+      name: 'watch',
+      reads: [Position],
+      writes: [],
+      emits: [],
+      run: () => {},
+    });
+    expect(
+      Game.changes(Game.only(fixture, { systems: [], rules: [watching] })).components.get(
+        'Position',
+      )?.readBy,
+    ).toEqual([{ _tag: 'Rule', on: 'Died', name: Option.some('watch'), domain: Option.none() }]);
+  });
+
   it('tells what emits each event and what handles it, actions included', () => {
     expect(changes.events.get('Bitten')).toEqual({
       emittedBy: [{ _tag: 'System', name: 'bite', domain: Option.none() }],
@@ -550,7 +569,13 @@ describe('Game.changes', () => {
       owner: 'rules',
       network: 'server',
     });
-    const keeping = Rule.on(Died, { name: 'keep', writes: [Owned], emits: [], run: () => {} });
+    const keeping = Rule.on(Died, {
+      name: 'keep',
+      reads: [],
+      writes: [Owned],
+      emits: [],
+      run: () => {},
+    });
     const Keeper = Domain.make({
       name: 'Keeper',
       requires: [Fixture],
@@ -626,8 +651,34 @@ describe('in development', () => {
   });
 });
 
+/** A helper that reads Position, as a part that declared it may hand its context to. */
+const readsPosition = (
+  context: Pick<System.Context<typeof Position, never, never>, 'get' | 'query'>,
+) => [context.get(0, Position), context.query(Position)];
+
 // What the type checker refuses: each line below must stay a compile error, or `vp check` fails on a directive that no longer expects an error.
 export const refused = () => {
+  System.make({
+    name: 'readsUndeclaredThroughAHelper',
+    reads: [],
+    writes: [],
+    emits: [],
+    run: (context) => {
+      // @ts-expect-error Position is not declared, and a helper reading it does not make it so.
+      readsPosition(context);
+    },
+  });
+
+  Rule.on(Bitten, {
+    reads: [],
+    writes: [],
+    emits: [],
+    run: (context) => {
+      // @ts-expect-error Position is not declared, and a helper reading it does not make it so.
+      readsPosition(context);
+    },
+  });
+
   System.make({
     name: 'writesTheRules',
     reads: [],
@@ -703,6 +754,27 @@ export const refused = () => {
   });
 
   Rule.on(Bitten, {
+    reads: [],
+    writes: [],
+    emits: [],
+    run: (context) => {
+      // @ts-expect-error Position is not declared.
+      context.get(0, Position);
+    },
+  });
+
+  Rule.on(Bitten, {
+    reads: [],
+    writes: [],
+    emits: [],
+    run: (context) => {
+      // @ts-expect-error Velocity is not declared.
+      context.query(Velocity);
+    },
+  });
+
+  Rule.on(Bitten, {
+    reads: [],
     writes: [],
     emits: [],
     run: (context) => {
@@ -715,6 +787,7 @@ export const refused = () => {
   Demand.of(0, Position, { x: 1 });
 
   Rule.on(Bitten, {
+    reads: [],
     // @ts-expect-error Position belongs to the simulation; a rule cannot write it.
     writes: [Position],
     emits: [],
@@ -738,7 +811,7 @@ describe('Domain.make', () => {
       spawns: [Health, Owned],
       run: () => {},
     });
-    const noticing = Rule.on(Died, { writes: [], emits: [Noticed], run: () => {} });
+    const noticing = Rule.on(Died, { reads: [], writes: [], emits: [Noticed], run: () => {} });
     const Watcher = Domain.make({
       name: 'Watcher',
       requires: [Fixture],
@@ -760,7 +833,7 @@ describe('Domain.make', () => {
       emits: [],
       run: () => {},
     });
-    const overruling = Rule.on(Died, { writes: [Health], emits: [], run: () => {} });
+    const overruling = Rule.on(Died, { reads: [], writes: [Health], emits: [], run: () => {} });
 
     Domain.make({
       name: 'Meddler',
@@ -860,7 +933,7 @@ describe('Domain.make', () => {
       emits: [Noticed],
       run: () => {},
     });
-    const handling = Rule.on(Noticed, { writes: [], emits: [], run: () => {} });
+    const handling = Rule.on(Noticed, { reads: [], writes: [], emits: [], run: () => {} });
     const parts = {
       name: 'Stranger',
       requires: [Fixture],
@@ -1003,10 +1076,16 @@ describe('Game.only', () => {
   });
 
   it('refuses a rule handling, writing, emitting, or spawning what the game does not declare', () => {
-    const handling = Rule.on(Unknown, { writes: [], emits: [], run: () => {} });
-    const writing = Rule.on(Died, { writes: [Kept], emits: [], run: () => {} });
-    const emitting = Rule.on(Died, { writes: [], emits: [Unknown], run: () => {} });
-    const spawning = Rule.on(Died, { writes: [], emits: [], spawns: [Elsewhere], run: () => {} });
+    const handling = Rule.on(Unknown, { reads: [], writes: [], emits: [], run: () => {} });
+    const writing = Rule.on(Died, { reads: [], writes: [Kept], emits: [], run: () => {} });
+    const emitting = Rule.on(Died, { reads: [], writes: [], emits: [Unknown], run: () => {} });
+    const spawning = Rule.on(Died, {
+      reads: [],
+      writes: [],
+      emits: [],
+      spawns: [Elsewhere],
+      run: () => {},
+    });
 
     // @ts-expect-error `Unknown` is not part of the game.
     Game.only(fixture, { systems: [], rules: [handling] });
@@ -1019,7 +1098,7 @@ describe('Game.only', () => {
   });
 
   it('lets a rule handle an action the game declares', () => {
-    const restart = Rule.on(ChoseRestart, { writes: [], emits: [], run: () => {} });
+    const restart = Rule.on(ChoseRestart, { reads: [], writes: [], emits: [], run: () => {} });
 
     expect(Game.only(fixture, { systems: [], rules: [restart] }).rules).toEqual([restart]);
   });
@@ -1133,17 +1212,19 @@ describe('commands', () => {
   });
   const Saved = Component.make('Saved', Schema.Struct({}), { owner: 'rules', network: 'server' });
   const save = Rule.on(Died, {
+    reads: [],
     writes: [],
     emits: [],
     commands: [SaveHealth],
     run: (context, died) => context.command(SaveHealth.of({ entity: died.entity, current: 0 })),
   });
   const mark = Rule.on(SavedHealth, {
+    reads: [],
     writes: [Saved],
     emits: [],
     run: (context, saved) => context.set(saved.entity, Saved, {}),
   });
-  const unsaved = Rule.on(FailedToSaveHealth, { writes: [], emits: [], run: () => {} });
+  const unsaved = Rule.on(FailedToSaveHealth, { reads: [], writes: [], emits: [], run: () => {} });
   const Saver = Domain.make({
     name: 'Saver',
     requires: [Fixture],
@@ -1213,6 +1294,7 @@ describe('commands', () => {
     });
 
     Rule.on(Died, {
+      reads: [],
       writes: [],
       emits: [],
       commands: [SaveHealth],
@@ -1239,6 +1321,7 @@ describe('commands', () => {
       execute: () => Effect.die('never run'),
     });
     Rule.on(Died, {
+      reads: [],
       writes: [],
       // @ts-expect-error SavedHealth is a command's result: it comes from outside, and no rule emits it.
       emits: [SavedHealth],

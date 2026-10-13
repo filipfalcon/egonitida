@@ -48,6 +48,7 @@ export const AskedForCube = Action.make('AskedForCube', {});
 
 /** A cube asked for stands in the next place of the grid. */
 const spawnCube = Rule.on(AskedForCube, {
+  reads: [Cube],
   writes: [],
   emits: [],
   spawns: [Cube, Paint, Pointing.Label],
@@ -58,6 +59,7 @@ const spawnCube = Rule.on(AskedForCube, {
 
 /** A click on a cube paints it the next colour, round to the first after the last. */
 const repaint = Rule.on(Pointing.Clicked, {
+  reads: [],
   writes: [Paint],
   emits: [],
   run: (context, { entity }) => {

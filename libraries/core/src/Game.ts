@@ -166,6 +166,7 @@ export const only = <
     readonly rules: ReadonlyArray<
       Rule.Rule<
         NoInfer<Actions> | NoInfer<Events> | NoInfer<Commands['results'][number]>,
+        NoInfer<Components>,
         NoInfer<Extract<Components, Rule.RulesComponent>>,
         NoInfer<Events>,
         NoInfer<Components>,
@@ -327,7 +328,7 @@ export const step = <Commands extends Command.Any>(
 
   // Systems and rules share one context at run time; their types are what keep each to what it declared.
   const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> &
-    Rule.Context<Component.Any, Event.Any, Component.Any, true, Commands> = {
+    Rule.Context<Component.Any, Component.Any, Event.Any, Component.Any, true, Commands> = {
     time: { tick: draft.tick, secondsPerStep: 1 / game.stepRate },
     random: () => {
       const [value, counter] = Random.next(draft.random);
@@ -438,7 +439,7 @@ export type Part =
     };
 
 export interface ComponentChanges {
-  /** The systems that read it. Rules may read anything, so they are never listed. */
+  /** The systems and rules that read it, as they declare it. */
   readonly readBy: ReadonlyArray<Part>;
   readonly writtenBy: ReadonlyArray<Part>;
   readonly spawnedBy: ReadonlyArray<Part>;
@@ -515,7 +516,7 @@ export const changes = (game: Game): Changes => {
     })),
     ...game.rules.map((rule) => ({
       part: partOf(rule),
-      reads: [],
+      reads: rule.reads,
       writes: rule.writes,
       spawns: rule.spawns,
       emits: rule.emits,

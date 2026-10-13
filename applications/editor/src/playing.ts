@@ -10,6 +10,7 @@ import * as Objects from '#src/objects.ts';
 
 /** A click on an object carries out each of its reactions, on whom the reaction names. */
 const react = Rule.on(Pointing.Clicked, {
+  reads: [Objects.Behaviour],
   writes: [],
   emits: [Objects.Recoloured, Objects.Moved, Objects.SpinChanged],
   run: (context, { entity }) => {

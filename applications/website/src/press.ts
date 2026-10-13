@@ -52,6 +52,7 @@ export const Withered = Event.make('Withered', { entity: Schema.Int });
 
 /** A withering takes from a thing's health, and one that would leave it too low restores it whole. */
 const wither = Rule.on(Withered, {
+  reads: [],
   writes: [Health],
   emits: [],
   run: (context, { entity }) => {

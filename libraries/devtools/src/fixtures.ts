@@ -61,6 +61,7 @@ const gameMoving = (move: (stick: { readonly move: number }) => number, stepRate
         ],
         rules: [
           Rule.on(AskedToHeal, {
+            reads: [],
             writes: [Health],
             emits: [],
             run: (context, asked) => {

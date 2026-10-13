@@ -218,6 +218,7 @@ export const SpinChanged = Event.make('SpinChanged', { entity: Schema.Int, speed
 // RULES
 
 const edit = Rule.on(Edited, {
+  reads: [],
   writes: [Shape, Transform, Colour, Spin],
   emits: [],
   run: (context, { entity, component, field, value }) => {
@@ -269,6 +270,7 @@ const changeAt = (
   );
 
 const editReactions = Rule.on(ReactionEdited, {
+  reads: [Shape],
   writes: [Behaviour],
   emits: [],
   run: (context, { entity, edit }) => {
@@ -305,6 +307,7 @@ const editReactions = Rule.on(ReactionEdited, {
 
 /** An object added is made as asked, and said to have been made. */
 const add = Rule.on(Added, {
+  reads: [],
   writes: [],
   emits: [Made],
   spawns: [Shape, Transform, Colour, Spin, Behaviour, Pointing.Label],
@@ -316,6 +319,7 @@ const add = Rule.on(Added, {
 
 /** An object removed is gone; anything else is left be. */
 const remove = Rule.on(Removed, {
+  reads: [Shape],
   writes: [],
   emits: [],
   despawns: true,
@@ -327,6 +331,7 @@ const remove = Rule.on(Removed, {
 });
 
 const recolour = Rule.on(Recoloured, {
+  reads: [],
   writes: [Colour],
   emits: [],
   run: (context, { entity, hex }) => {
@@ -338,6 +343,7 @@ const recolour = Rule.on(Recoloured, {
 
 /** A move is from where the object is by then, so two in one step add up. */
 const move = Rule.on(Moved, {
+  reads: [],
   writes: [Transform],
   emits: [],
   run: (context, { entity, offset }) => {
@@ -352,6 +358,7 @@ const move = Rule.on(Moved, {
 });
 
 const changeSpin = Rule.on(SpinChanged, {
+  reads: [],
   writes: [Spin],
   emits: [],
   run: (context, { entity, speed }) => {

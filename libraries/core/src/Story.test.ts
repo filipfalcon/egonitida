@@ -50,6 +50,7 @@ const bite = System.make({
 });
 
 const takeBite = Rule.on(Bitten, {
+  reads: [],
   writes: [Health],
   emits: [],
   run: (context, bitten) => {
@@ -61,6 +62,7 @@ const takeBite = Rule.on(Bitten, {
 
 /** A player who restarts is healed whole. */
 const restart = Rule.on(ChoseRestart, {
+  reads: [],
   writes: [Health],
   emits: [],
   run: (context, restarted) => {
@@ -285,6 +287,7 @@ describe('Story, told by name', () => {
           systems: [],
           rules: [
             Rule.on(Mended, {
+              reads: [],
               writes: [Whole],
               emits: [],
               run: (context, { entity }) => context.set(entity, Whole, {}),

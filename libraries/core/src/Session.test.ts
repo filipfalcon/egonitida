@@ -33,6 +33,7 @@ const steer = System.make({
 /** A player asked to be healed to an amount; the rules grant it to whoever asked. */
 const AskedToHeal = Action.make('AskedToHeal', { amount: Schema.Int });
 const heal = Rule.on(AskedToHeal, {
+  reads: [],
   writes: [Health],
   emits: [],
   run: (context, healed) => {
@@ -798,6 +799,7 @@ describe('commands', () => {
         systems: [],
         rules: [
           Rule.on(AskedToHeal, {
+            reads: [],
             writes: [Health],
             emits: [],
             commands: [KeepHealth],
@@ -807,11 +809,13 @@ describe('commands', () => {
             },
           }),
           Rule.on(KeptHealth, {
+            reads: [],
             writes: [Kept],
             emits: [],
             run: (context, kept) => context.set(kept.player, Kept, { _tag: 'Yes' }),
           }),
           Rule.on(FailedToKeepHealth, {
+            reads: [],
             writes: [Kept],
             emits: [],
             run: (context, failed) => context.set(failed.player, Kept, { _tag: 'No' }),

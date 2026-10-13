@@ -68,6 +68,7 @@ export const Revived = Event.make('Revived', { survivor: Schema.Int });
 
 /** A bite takes from a living survivor's health, and one that takes the last of it kills them. */
 const takeBite = Rule.on(Bitten, {
+  reads: [],
   writes: [Life],
   emits: [],
   run: (context, { survivor, damage }) => {
@@ -87,6 +88,7 @@ const takeBite = Rule.on(Bitten, {
 
 /** A kill is counted to whoever made it. */
 const count = Rule.on(Killed, {
+  reads: [],
   writes: [Tally],
   emits: [],
   run: (context, { survivor }) => {
@@ -98,6 +100,7 @@ const count = Rule.on(Killed, {
 
 /** A dead survivor who chooses to rise again whole, with no kills; a living one cannot. */
 const restart = Rule.on(ChoseRestart, {
+  reads: [],
   writes: [Life, Tally],
   emits: [Revived],
   run: (context, { player }) => {

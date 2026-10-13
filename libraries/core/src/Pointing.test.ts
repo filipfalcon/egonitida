@@ -22,6 +22,7 @@ const lighting = Domain.make({
   systems: [],
   rules: [
     Rule.on(Pointing.Clicked, {
+      reads: [],
       writes: [Lamp],
       emits: [],
       run: (context, { entity }) => {

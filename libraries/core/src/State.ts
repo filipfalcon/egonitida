@@ -72,6 +72,8 @@ export const entities = (state: Readable): ReadonlyArray<Entity> =>
  * A query over the components in `Allowed`, giving each entity holding all the components asked for, with their values. TypeScript cannot turn an array of values into a typed tuple, so there is one signature per number of components, up to six, the way Bevy writes one per tuple length.
  */
 export interface Query<Allowed extends Component.Any> {
+  /** Carries `Allowed` so that a query over some components is no query over others, even passed on to a helper; never set. */
+  readonly '~allowed'?: (allowed: Allowed) => void;
   <A>(a: Of<A> & Allowed): ReadonlyArray<readonly [Entity, A]>;
   <A, B>(a: Of<A> & Allowed, b: Of<B> & Allowed): ReadonlyArray<readonly [Entity, A, B]>;
   <A, B, C>(

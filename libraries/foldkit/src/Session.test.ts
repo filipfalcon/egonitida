@@ -22,6 +22,7 @@ const Tally = Component.make('Tally', Schema.Struct({ count: Schema.Int }), {
 });
 const Counted = Action.make('Counted', {});
 const count = Rule.on(Counted, {
+  reads: [],
   writes: [Tally],
   emits: [],
   run: (context, { player }) => {

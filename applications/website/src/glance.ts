@@ -114,8 +114,14 @@ const beatFrom = (beat: Moment, by: number): Moment =>
     Math.min(BEATS.length - 1, Math.max(beat === 'Waiting' ? 0 : 1, BEATS.indexOf(beat) + by))
   ] ?? beat;
 
-/** What moving the telling needs of a rule: to write the telling, and to make and let go of what it tells of. */
-type TellingContext = Rule.Context<typeof Telling, never, typeof Bang | typeof Body, true>;
+/** What moving the telling needs of a rule: to read what it tells of, write the telling, and make and let go of what it tells of. */
+type TellingContext = Rule.Context<
+  typeof Idea | typeof Bang | typeof Body,
+  typeof Telling,
+  never,
+  typeof Bang | typeof Body,
+  true
+>;
 
 /** Moves the telling `by` beats: the beat begins now; what the telling tells of comes as its beat begins, or as it is passed, and is gone again before it; a beat moved back to itself begins again, and one moved on past the last stays as it is. */
 const move = (context: TellingContext, by: number) => {
@@ -158,6 +164,7 @@ const move = (context: TellingContext, by: number) => {
 };
 
 const changesTheTelling = {
+  reads: [Idea, Bang, Body],
   writes: [Telling],
   emits: [],
   spawns: [Bang, Body],

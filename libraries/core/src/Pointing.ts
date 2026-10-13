@@ -33,6 +33,7 @@ export const Relabelled = Event.make('Relabelled', { entity: Schema.Int, text: S
 
 /** A labelled entity relabelled is read out by its new label; one with no label stays without, as only a label makes an entity clickable. */
 const relabel = Rule.on(Relabelled, {
+  reads: [],
   writes: [Label],
   emits: [],
   run: (context, { entity, text }) => {
