@@ -29,7 +29,7 @@ export const calleeName = (call: CallExpression | NewExpression): string | undef
 };
 
 /** The parts of the engine whose functions run every step or every frame: which call makes them, and which of their functions it is. */
-const PARTS: ReadonlyArray<readonly [callee: string, property: string]> = [
+export const PARTS: ReadonlyArray<readonly [callee: string, property: string]> = [
   ['System.make', 'run'],
   ['Rule.on', 'run'],
   ['View.each', 'draw'],
@@ -42,8 +42,11 @@ export interface PartFunction {
   readonly function_: Node;
 }
 
-/** The part's function, run every step or every frame, that `node` sits in, if any: `System.make`'s `run`, say. */
-export const enclosingPartFunction = (node: Node): PartFunction | undefined => {
+/** The part's function, of `parts`, those run every step or every frame unless told, that `node` sits in, if any: `System.make`'s `run`, say. */
+export const enclosingPartFunction = (
+  node: Node,
+  parts: ReadonlyArray<readonly [callee: string, property: string]> = PARTS,
+): PartFunction | undefined => {
   for (let at: Node | null = node; at !== null; at = at.parent) {
     if (at.type !== 'ArrowFunctionExpression' && at.type !== 'FunctionExpression') continue;
     const property = at.parent;
@@ -54,7 +57,7 @@ export const enclosingPartFunction = (node: Node): PartFunction | undefined => {
     const key = property.key.name;
     if (
       callee !== undefined &&
-      PARTS.some(([name, function_]) => name === callee && function_ === key)
+      parts.some(([name, function_]) => name === callee && function_ === key)
     ) {
       return { callee, key, function_: at };
     }
@@ -63,8 +66,11 @@ export const enclosingPartFunction = (node: Node): PartFunction | undefined => {
 };
 
 /** Which part's function, run every step or every frame, `node` sits in, if any, as a message names it. */
-export const enclosingPart = (node: Node): string | undefined => {
-  const part = enclosingPartFunction(node);
+export const enclosingPart = (
+  node: Node,
+  parts: ReadonlyArray<readonly [callee: string, property: string]> = PARTS,
+): string | undefined => {
+  const part = enclosingPartFunction(node, parts);
   return part === undefined ? undefined : `${part.callee}'s \`${part.key}\``;
 };
 

@@ -1,4 +1,4 @@
-import { type Client, type Component, State } from '@lightocean/core';
+import { type Client, type Component, Random, State } from '@lightocean/core';
 import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Timeline from '#src/Timeline.ts';
 
@@ -20,6 +20,8 @@ export interface Frame extends Timeline.View {
   readonly changed: (component: Component.Any) => ReadonlyArray<State.Entity>;
   /** The entities that held `component` the frame before and do not now, gone or not. */
   readonly lost: (component: Component.Any) => ReadonlyArray<State.Entity>;
+  /** Numbers in [0, 1) for what `part` of a view draws for `entity`, such as a fireball's flicker or how a wreck lies: drawn from the game's seed and the tick drawn, so the same frame draws the same numbers wherever and whenever it is drawn, in a replay too, and another entity, part, or tick draws others. A view takes randomness from nowhere else. */
+  readonly random: (entity: State.Entity, part: string) => () => number;
 }
 
 export interface Drawing {
@@ -88,6 +90,16 @@ export const frameOf = (view: Timeline.View, previous: Option.Option<Timeline.Vi
         onSome: (last) => changedBetween(last.drawn, view.drawn, component),
       }),
     lost: (component) => without(holdingBefore(component), holding(view, component)),
+    random: (entity, part) => {
+      const stream = {
+        counter: Random.streamOf(view.drawn.random, view.drawn.tick, `${part} of ${entity}`),
+      };
+      return () => {
+        const [value, counter] = Random.next(stream.counter);
+        stream.counter = counter;
+        return value;
+      };
+    },
   };
 };
 

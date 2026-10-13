@@ -4,6 +4,7 @@ import { Transport } from '@lightocean/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Drawing from '#src/Drawing.ts';
+import * as Timeline from '#src/Timeline.ts';
 
 const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }), {
   owner: 'simulation',
@@ -212,4 +213,34 @@ describe('Drawing', () => {
         expect(changes).toEqual(['+1', 'flag +1', 'flag ~1', 'flag -1', '-1']);
       }),
   );
+});
+
+describe('a frame’s randomness', () => {
+  const [state, crate] = State.spawn(State.empty({ seed: 7 }), []);
+  const [withTwo, barrel] = State.spawn(state, []);
+  const drawn = (at: State.State) => Drawing.frameOf(Timeline.still(at), Option.none());
+  const draws = (random: () => number) => [random(), random(), random()];
+
+  it('is the same for the same state, entity, and part, wherever it is drawn', () => {
+    expect(draws(drawn(withTwo).random(crate, 'tilt'))).toEqual(
+      draws(drawn(withTwo).random(crate, 'tilt')),
+    );
+  });
+
+  it('is another for another entity, part, tick, or seed', () => {
+    const first = draws(drawn(withTwo).random(crate, 'tilt'));
+    expect(draws(drawn(withTwo).random(barrel, 'tilt'))).not.toEqual(first);
+    expect(draws(drawn(withTwo).random(crate, 'flicker'))).not.toEqual(first);
+    expect(draws(drawn({ ...withTwo, tick: 1 }).random(crate, 'tilt'))).not.toEqual(first);
+    expect(draws(drawn({ ...withTwo, random: 8 }).random(crate, 'tilt'))).not.toEqual(first);
+  });
+
+  it('draws numbers from 0 up to 1, each another', () => {
+    const numbers = draws(drawn(withTwo).random(crate, 'tilt'));
+    expect(new Set(numbers).size).toBe(3);
+    for (const number of numbers) {
+      expect(number).toBeGreaterThanOrEqual(0);
+      expect(number).toBeLessThan(1);
+    }
+  });
 });

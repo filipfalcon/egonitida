@@ -7,10 +7,16 @@ tester.run('pure-steps', pureSteps, {
     `System.make({ name: 'scatter', reads: [], writes: [], emits: [], run: (context) => context.random() + context.time.tick });`,
     // Outside a step, anything goes.
     `const seed = Math.random(); const now = Date.now();`,
+    // A view draws its randomness from the frame.
+    `View.each([Crate], { acquire: (held, frame, entity) => Effect.succeed(new Group()), draw: (group, held, frame) => { group.rotation.y = frame.random(1, 'tilt')(); } });`,
     // A view's acquire may do Effect work; only its draw runs every frame.
     `View.each([Crate], { acquire: () => Effect.succeed(new Group()), draw: (group) => { group.visible = true; } });`,
   ],
   invalid: [
+    {
+      code: `View.each([Wreck], { acquire: () => Effect.sync(() => { const wreck = new Group(); wreck.rotation.y = Math.random(); return wreck; }), draw: () => {} });`,
+      errors: [{ messageId: 'impure' }],
+    },
     {
       code: `System.make({ name: 'scatter', reads: [], writes: [], emits: [], run: () => Math.random() });`,
       errors: [{ messageId: 'impure' }],
