@@ -1,0 +1,9 @@
+name = "verification"
+defaultTargets = ["Verification"]
+
+[leanOptions]
+# A proof left as `sorry` is a warning in Lean, and here it fails the build.
+warningAsError = true
+
+[[lean_lib]]
+name = "Verification"

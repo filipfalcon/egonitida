@@ -12,9 +12,10 @@
   "scripts": {
     "prepare": "effect-tsgo patch --oxlint",
     "dev": "alchemy dev",
-    "check": "vp check",
+    "check": "vp check && npm run verify",
     "check:fix": "vp check --fix",
-    "test": "vp test"
+    "test": "vp test",
+    "verify": "cd verification && lake build"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",

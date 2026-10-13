@@ -11,7 +11,8 @@ LightOcean is an engine for real-time web applications and games: entities and t
 
 ## Checking
 
-- `npm run check` formats, lints, and type-checks everything; `npm test` runs every test. Both must pass before a commit.
+- `npm run check` formats, lints, and type-checks everything, and proves the engine's theory; `npm test` runs every test. Both must pass before a commit.
+- `verification/` proves in Lean what the principles rest on: the equation, replay, segments, hosts composed through their input, and prediction. A theorem that fails, or rests on `sorry`, fails the check, and `Verification/Principles.lean` states each one again, so none goes missing or weaker unseen. A principle changes together with its proof. Lean comes through elan (`brew install elan-init`), at the version `verification/lean-toolchain` pins.
 - Never start a development server. Ask the person to run one and report back.
 
 ## The model
