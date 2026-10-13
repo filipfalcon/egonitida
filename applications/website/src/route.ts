@@ -10,6 +10,7 @@ export const AppRoute = defineRouteUnion({
   Home: {},
   Welcome: {},
   Installation: {},
+  Foundation: {},
   KeyTerms: {},
   Principles: {},
   Architecture: {},
@@ -21,6 +22,7 @@ export type AppRoute = typeof AppRoute.Type;
 export const DocsRoute = AppRoute.subset([
   'Welcome',
   'Installation',
+  'Foundation',
   'KeyTerms',
   'Principles',
   'Architecture',
@@ -42,6 +44,9 @@ export const welcomeRouter = pipe(literal('welcome'), mapTo(AppRoute.Welcome));
 /** How to get the engine running. */
 export const installationRouter = pipe(literal('installation'), mapTo(AppRoute.Installation));
 
+/** What the whole engine stands on: a state, its input, and the step from one state to the next. */
+export const foundationRouter = pipe(literal('foundation'), mapTo(AppRoute.Foundation));
+
 /** The terms the whole engine is told in. */
 export const keyTermsRouter = pipe(literal('key-terms'), mapTo(AppRoute.KeyTerms));
 
@@ -55,6 +60,7 @@ const routeParser = oneOf(
   homeRouter,
   welcomeRouter,
   installationRouter,
+  foundationRouter,
   keyTermsRouter,
   principlesRouter,
   architectureRouter,
@@ -69,6 +75,7 @@ export const routeToUrlPath = (route: AppRoute): string =>
     Home: () => homeRouter(),
     Welcome: () => welcomeRouter(),
     Installation: () => installationRouter(),
+    Foundation: () => foundationRouter(),
     KeyTerms: () => keyTermsRouter(),
     Principles: () => principlesRouter(),
     Architecture: () => architectureRouter(),

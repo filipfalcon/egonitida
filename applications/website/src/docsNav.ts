@@ -1,6 +1,7 @@
 import { Array, Option, pipe } from 'effect';
 import {
   architectureRouter,
+  foundationRouter,
   installationRouter,
   keyTermsRouter,
   principlesRouter,
@@ -35,6 +36,7 @@ export const docsSections: ReadonlyArray<DocsSection> = [
   {
     label: 'Introduction',
     pages: [
+      { label: 'Foundation', href: foundationRouter() },
       { label: 'Key Terms', href: keyTermsRouter() },
       { label: 'Principles', href: principlesRouter() },
       { label: 'Architecture', href: architectureRouter() },

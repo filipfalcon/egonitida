@@ -1,4 +1,5 @@
 export * as Architecture from '#src/page/architecture.ts';
+export * as Foundation from '#src/page/foundation.ts';
 export * as Home from '#src/page/home.ts';
 export * as Installation from '#src/page/installation.ts';
 export * as KeyTerms from '#src/page/keyTerms.ts';

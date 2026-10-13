@@ -5,6 +5,8 @@ import * as Interpolate from '#src/Interpolate.ts';
 
 /**
  * A player's own client playing ahead of its host, so what the player does with their controls takes effect at once across a network. The client sends the player's demands once a step, numbered, as the host takes them once a step; the host says which number each state it sends took in. What the player's own entity holds of predicted components is drawn from the newest state the host sent, stepped on with every demand it has not taken in yet. When the host disagrees with what was predicted, what is drawn goes over to it in a few frames, never in a jump. Everything else is drawn as the host sent it.
+ *
+ * The host disagrees only over what the client could not know: the other players' demands and the actions, which reach the host alone. Never over what the client holds differently, since a game whose predicted components follow from what its clients do not hold as its host does is refused when it is made (`Game.make`).
  */
 
 /** How fast what is drawn of the player goes over to what is predicted: the share of the way left it closes in a second, as a rate. */

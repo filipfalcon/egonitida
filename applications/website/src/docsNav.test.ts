@@ -55,4 +55,13 @@ describe('the documentation navigation', () => {
     );
     expect(DocsNav.sectionOf(sections, '/nowhere')).toEqual(Option.none());
   });
+
+  it('opens the introduction with the foundation, before the key terms', () => {
+    expect(
+      Option.map(
+        Option.fromNullishOr(DocsNav.docsSections.find(({ label }) => label === 'Introduction')),
+        ({ pages }) => pages.slice(0, 2).map(({ label }) => label),
+      ),
+    ).toEqual(Option.some(['Foundation', 'Key Terms']));
+  });
 });

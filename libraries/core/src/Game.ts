@@ -65,7 +65,7 @@ type Refuse<Name extends string, Found> = [Found] extends [never]
   : { readonly [K in Name]: Found };
 
 /**
- * A game is rejected if it is missing a domain that another domain requires, declares an unhandled action, a player's or a command's result, since every action must be handled by a rule, or declares an unused event: one that nothing emits and nothing handles.
+ * A game is rejected if it is missing a domain that another domain requires, declares an unhandled action, a player's or a command's result, since every action must be handled by a rule, or declares an unused event: one that nothing emits and nothing handles. One with an unpredictable component, which a client cannot step as its host does, is refused when it is made, since following a component through every read is a fixed point the type checker is not given: a domain keeps its systems' and rules' declarations out of its type.
  */
 type Requirements<Domains extends ReadonlyArray<Domain.Any>> = Refuse<'missing', Missing<Domains>> &
   Refuse<'unhandled', Unhandled<Domains>> &
@@ -84,8 +84,84 @@ const refuseRepeated = (names: ReadonlyArray<string>, what: string) => {
   }
 };
 
+/** Why a part, a component, or an event depends on what a client does not hold as its host does: the source itself, or what wrote it from what. */
+type Taint =
+  | { readonly _tag: 'Unshared' }
+  | { readonly _tag: 'Written'; readonly by: string; readonly from: string };
+
 /**
- * A game made of `domains`: their components, actions, events, and commands, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an unhandled action, and an unused event do not compile. Two components of one name, which a state keeps in one store, two actions, results, or events of one tag, and two commands of one name are refused when the game is made.
+ * The predicted components of `game` that a client cannot predict, each with why: those that follow, through any chain of reads, writes, and events, from a component its clients do not hold as its host does, one kept by the host alone (`private`) or by each client alone (`local`).
+ *
+ * A prediction step runs the systems and the rules for events, but no actions, over the state a client holds. A part that reads anything tainted taints all it writes, spawns, and emits, and a rule handling a tainted event taints all it writes; repeated until nothing more is tainted, so the order the parts run in does not matter. What is left untainted is exactly what the proof `prediction_matches_host` in `verification/Verification/Prediction.lean` calls clean: held alike by host and client, and written only from what is clean. That theorem shows a client's step then gives every clean predicted component exactly as the host's does, from the same input, so this check is enough.
+ */
+const unpredictable = (game: Game): ReadonlyArray<string> => {
+  const tainted = new Map<string, Taint>(
+    game.components
+      .filter(({ network }) => network === 'private' || network === 'local')
+      .map(({ name }) => [name, { _tag: 'Unshared' }]),
+  );
+  const taintedEvents = new Map<string, Taint>();
+  const parts = [
+    ...game.systems.map((system) => ({
+      name: system.name,
+      reads: [...system.reads, ...system.writes].map(({ name }) => name),
+      handles: Option.none<string>(),
+      writes: [...system.writes, ...system.spawns].map(({ name }) => name),
+      emits: system.emits.map(({ tag }) => tag),
+    })),
+    // A prediction step hands the rules no actions, so only those for events run in it.
+    ...game.rules
+      .filter((rule) => rule.on._tag === 'Event')
+      .map((rule) => ({
+        name: Option.getOrElse(rule.name, () => `the rule on ${rule.on.tag}`),
+        reads: [...rule.reads, ...rule.writes].map(({ name }) => name),
+        handles: Option.some(rule.on.tag),
+        writes: [...rule.writes, ...rule.spawns].map(({ name }) => name),
+        emits: rule.emits.map(({ tag }) => tag),
+      })),
+  ];
+  const spread = (): boolean =>
+    parts.some((part) => {
+      const from = [
+        ...part.reads.filter((name) => tainted.has(name)),
+        ...Option.toArray(Option.filter(part.handles, (tag) => taintedEvents.has(tag))),
+      ][0];
+      if (from === undefined) {
+        return false;
+      }
+      const taint: Taint = { _tag: 'Written', by: part.name, from };
+      const fresh = [
+        ...part.writes.filter((name) => !tainted.has(name)),
+        ...part.emits.filter((tag) => !taintedEvents.has(tag)),
+      ];
+      for (const name of part.writes) {
+        if (!tainted.has(name)) tainted.set(name, taint);
+      }
+      for (const tag of part.emits) {
+        if (!taintedEvents.has(tag)) taintedEvents.set(tag, taint);
+      }
+      return fresh.length > 0;
+    });
+  while (spread()) {
+    // Until nothing more is tainted.
+  }
+  /** How `name` came to be tainted, back to what its clients do not hold. */
+  const chain = (name: string, seen: ReadonlySet<string>): string => {
+    const written = tainted.get(name);
+    const taint = written ?? taintedEvents.get(name);
+    if (taint === undefined || taint._tag === 'Unshared' || seen.has(name)) {
+      return `${name}, which its clients do not hold as its host does`;
+    }
+    const how = written === undefined ? 'emitted' : 'written';
+    return `${name}, ${how} by ${taint.by} from ${chain(taint.from, new Set([...seen, name]))}`;
+  };
+  return game.components
+    .filter(({ network, name }) => network === 'predicted' && tainted.has(name))
+    .map(({ name }) => chain(name, new Set()));
+};
+
+/**
+ * A game made of `domains`: their components, actions, events, and commands, their systems in the order the domains come and then the order each lists them, and their rules likewise. A domain required by one of them and missing from the list, an unhandled action, and an unused event do not compile. Two components of one name, which a state keeps in one store, two actions, results, or events of one tag, two commands of one name, and an unpredictable component, a predicted one that follows from what its clients do not hold as its host does, are refused when the game is made.
  */
 export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
   game: { readonly stepRate: number; readonly domains: Domains } & Requirements<Domains>,
@@ -113,7 +189,12 @@ export const make = <const Domains extends ReadonlyArray<Domain.Any>>(
     game.domains.flatMap((domain) => domain.commands.map(({ name }) => name)),
     'commands named',
   );
-  return made(game);
+  const built = made(game);
+  const found = unpredictable(built);
+  if (found.length > 0) {
+    throw new Error(`a game has unpredictable components: ${found.join('; ')}`);
+  }
+  return built;
 };
 
 /** The results `commands` may come to, each once, though two commands may come to the same. */

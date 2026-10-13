@@ -125,7 +125,7 @@ A domain writes only its own components. To change another domain's components, 
 
 A game is its step rate and the list of its domains, made with `Game.make`. Their systems run in the order of that list, and everything the game's state is made of follows from it.
 
-`Game.make` also checks the game as a whole before it ever runs. A missing domain, one that another domain requires; an unhandled action, a player's or a command's result; or an unused event, one that nothing emits and nothing handles, is a compile error, not a surprise at run time. An event that something emits may go unhandled: it is a domain's offer to others.
+`Game.make` also checks the game as a whole before it ever runs. A missing domain, one that another domain requires; an unhandled action, a player's or a command's result; or an unused event, one that nothing emits and nothing handles, is a compile error, not a surprise at run time. An unpredictable component, a predicted one that follows from what its clients do not hold as its host does, private or local components, is refused the moment the game is made. An event that something emits may go unhandled: it is a domain's offer to others.
 
 ## Where a Game Runs
 

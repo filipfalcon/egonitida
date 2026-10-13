@@ -3,6 +3,7 @@ import { Docs } from '#src/layout/index.ts';
 import type { Message, Model } from '#src/main.ts';
 import {
   Architecture,
+  Foundation,
   Home,
   Installation,
   KeyTerms,
@@ -23,6 +24,10 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
     Installation: () => ({
       title: 'Installation · LightOcean',
       body: Docs.view(model, Installation, h),
+    }),
+    Foundation: () => ({
+      title: 'Foundation · LightOcean',
+      body: Docs.view(model, Foundation, h),
     }),
     KeyTerms: () => ({
       title: 'Key Terms · LightOcean',

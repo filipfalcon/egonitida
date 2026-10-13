@@ -1548,3 +1548,107 @@ describe('a game declaring names twice', () => {
     );
   });
 });
+
+describe('a game its clients can predict', () => {
+  /** Where a mover is, guessed by its player's client; how fast it goes, decided by the host and sent; what it carries, kept by the host alone; and a mark each client keeps for itself. */
+  const Spot = Component.make('Spot', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'simulation',
+    network: 'predicted',
+  });
+  const Pace = Component.make('Pace', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'simulation',
+    network: 'server',
+  });
+  const Load = Component.make('Load', Schema.Struct({ weight: Schema.Finite }), {
+    owner: 'rules',
+    network: 'private',
+  });
+  const Mark = Component.make('Mark', Schema.Struct({ x: Schema.Finite }), {
+    owner: 'simulation',
+    network: 'local',
+  });
+  const Burden = Component.make('Burden', Schema.Struct({ weight: Schema.Finite }), {
+    owner: 'rules',
+    network: 'server',
+  });
+  const Weighed = Event.make('Weighed', { weight: Schema.Finite });
+  const Loaded = Action.make('Loaded', { weight: Schema.Finite });
+
+  const moving = (reads: ReadonlyArray<typeof Pace | typeof Burden>) =>
+    System.make({ name: 'moving', reads, writes: [Spot], emits: [], run: () => {} });
+  const pacing = (reads: ReadonlyArray<typeof Load | typeof Mark | typeof Spot>) =>
+    System.make({ name: 'pacing', reads, writes: [Pace], emits: [], run: () => {} });
+  const weighing = System.make({
+    name: 'weighing',
+    reads: [Load],
+    writes: [],
+    emits: [Weighed],
+    run: () => {},
+  });
+  const burdening = Rule.on(Weighed, {
+    reads: [],
+    writes: [Burden],
+    emits: [],
+    run: () => {},
+  });
+  const loading = Rule.on(Loaded, { reads: [Load], writes: [Burden], emits: [], run: () => {} });
+
+  const gameOf = (parts: {
+    readonly systems: ReadonlyArray<
+      ReturnType<typeof moving> | ReturnType<typeof pacing> | typeof weighing
+    >;
+    readonly rules?: ReadonlyArray<typeof burdening>;
+  }) =>
+    Game.make({
+      stepRate: 10,
+      domains: [
+        Domain.make({
+          name: 'Movers',
+          requires: [],
+          components: [Spot, Pace, Load, Mark, Burden],
+          actions: [Loaded],
+          events: [Weighed],
+          systems: parts.systems,
+          rules: [...(parts.rules ?? []), loading],
+        }),
+      ],
+    });
+
+  it('lets a predicted component follow from what host and client hold alike', () => {
+    expect(() => gameOf({ systems: [pacing([Spot]), moving([Pace])] })).not.toThrow();
+  });
+
+  it('refuses a predicted component that follows from what the host keeps for itself', () => {
+    expect(() => gameOf({ systems: [pacing([Load]), moving([Pace])] })).toThrow(
+      /unpredictable.*Spot/,
+    );
+  });
+
+  it('refuses one that follows from what each client keeps for itself', () => {
+    expect(() => gameOf({ systems: [pacing([Mark]), moving([Pace])] })).toThrow(
+      /unpredictable.*Spot/,
+    );
+  });
+
+  it('follows what follows through the whole chain, whatever order the systems run in', () => {
+    expect(() => gameOf({ systems: [moving([Pace]), pacing([Load])] })).toThrow(
+      /unpredictable.*Spot/,
+    );
+  });
+
+  it('follows it through an event, to the rule that handles it', () => {
+    expect(() => gameOf({ systems: [weighing, moving([Burden])], rules: [burdening] })).toThrow(
+      /unpredictable.*Spot/,
+    );
+  });
+
+  it('lets an action’s rule read what a client lacks, as a prediction step hands the rules no actions', () => {
+    expect(() => gameOf({ systems: [moving([Burden])] })).not.toThrow();
+  });
+
+  it('says what the predicted component follows from, and through what', () => {
+    expect(() => gameOf({ systems: [pacing([Load]), moving([Pace])] })).toThrow(
+      'a game has unpredictable components: Spot, written by moving from Pace, written by pacing from Load, which its clients do not hold as its host does',
+    );
+  });
+});
