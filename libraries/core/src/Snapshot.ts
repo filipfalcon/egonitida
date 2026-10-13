@@ -4,7 +4,7 @@ import type * as Game from '#src/Game.ts';
 import * as State from '#src/State.ts';
 
 /**
- * A state as the server sends it to its clients: the game's state schema, over only the components that travel. Local components each client keeps for itself, and private ones the server keeps for itself. A snapshot is whole and carries its tick, so a client can take any one of them, in any order, and lose some on the way.
+ * A state as the host sends it to a client: the host's output for that client, y = h(x), in the game's state schema. Today h is the same for every client: the state without its local components, which each client keeps for itself, and its private ones, which the host keeps for itself. A snapshot is whole and carries its tick, so a client can take any one of them, in any order, and lose some on the way.
  *
  * It carries its era too: a host that goes back in time, or shows its clients a past state, starts a new era, so a client tells a state it is meant to go back to from one that arrived late.
  *

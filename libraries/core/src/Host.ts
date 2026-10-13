@@ -13,7 +13,7 @@ import type * as Transport from '#src/Transport.ts';
 import type * as State from '#src/State.ts';
 
 /**
- * Hosts a game: steps it at its rate, takes the demands and actions its clients send, and sends every client the state after each step. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
+ * Hosts a game: steps it at its rate, takes the demands and actions its clients send, and sends every client its snapshot of the state after each step, today the same for every client. It does not know where it runs; a Web Worker, a Durable Object, and a test each give it their own connections and their own clock.
  *
  * Everything that replaces its state can be watched, so its states can be told again from where watching began: a client joining or leaving, which happens between steps, and every step, with its input.
  *

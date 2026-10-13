@@ -26,6 +26,7 @@ Most rules below keep f a function of x and u alone:
 - a rule that needs something done outside issues a command, and its result returns as an action, through u;
 - a state is never changed, only replaced, so any past state can be stepped again;
 - views only read the state, y = h(x); they never write it, or there would be a second way into x besides f.
+- a snapshot is output too, y = h(x), made by the host for each client; a client's prediction can step only what that output holds.
 
 When designing something new, ask first whether it is part of x, u, f, or h: the answer decides whether it is a component, a demand or an action, a system or a rule, or a view.
 

@@ -35,7 +35,7 @@ Seven principles shape every API. Each builds on the ones before it.
   - **Server**: decided by the server and sent to every client.
   - **Predicted**: guessed by the client, confirmed by the server.
   - **Local**: kept on the client only and never sent, such as blood, casings, or a ragdoll after death. Most of what is expensive in Border is local.
-  - **Private**: kept on the server only and never sent: what clients do not need, such as the size of a body; what each builds for itself, such as a level's walls; and, with several players, what a player must not see.
+  - **Private**: kept on the server only and never sent to any client: what clients do not need, such as the size of a body; and what each builds for itself, such as a level's walls.
 - The engine always has the client–server shape. Singleplayer is the same code with the server running in a Web Worker in the browser, the way Minecraft runs an integrated server; switching to multiplayer is configuration. The price is that a singleplayer game also sends its demands and actions to a host and marks what is local.
 - There is no single player in the API, only the set of players.
 - Whether time may be suspended is the host's policy, not the game's: a local server lets its player suspend it, a shared room refuses. Switching a game to multiplayer turns its pause into a menu that does not stop anything, and the game has to live with that.
@@ -326,6 +326,8 @@ Later, for the editor:
 
 Later, for the model:
 
+- Output for each client, yₚ = hₚ(x). A snapshot is the host's output for a client, and today it is the same for every client: the state without its private and local components, so private hides a thing from every player, the one who should see it included. A game would declare what each client sees as a function of the state and the player, and the host would make each client's snapshot by it, the roles staying the h of every game that declares nothing more: a player's own hand in a card game, fog of war, only what is near a player in a large world, and stealth. The check of predictions would then count what a given client does not receive among what it does not hold.
+- Messages between hosts. A game may run on several hosts that talk by commands and actions, but a host cannot yet take in a message from another: there is no input for one and no kind of action for it. It needs that input, a third kind of action beside a player's and a command's result, and a way to address a host.
 - Migrating a state between versions: a save made by an earlier version, read by one whose schema changed. Today a state the new schema cannot read starts over; a version could instead declare how it reads the states of the one before.
 - Entity ids a client predicts. A step gives out ids from one counter, so a part spawning from what a client does not hold moves the ids every part after it gives out, and a predicted component holding the id of another entity would differ on the client. Ids by part, as randomness is drawn, would close it.
 

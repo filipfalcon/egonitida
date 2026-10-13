@@ -15,7 +15,7 @@ export type Entity = number;
 export type Owner = 'rules' | 'simulation' | 'demand';
 
 /**
- * How a component travels: decided by the server and sent to every client; guessed by a client and confirmed by the server; kept on the client alone; or kept on the server alone, for what a client does not need, builds for itself, or must not see.
+ * How a component travels: decided by the server and sent to every client; guessed by a client and confirmed by the server; kept on the client alone; or kept on the server alone, sent to no client, for what clients do not need, build for themselves, or must not see. A role is the same for every client: what one player may see and another may not, no role tells.
  *
  * A client guesses a predicted component by stepping the state it holds, which lacks what the server keeps alone and holds what the client keeps alone. So a predicted component must follow, through every read and event that leads to it, only from components server and client hold alike, `server` and `predicted` ones; a game in which one does not is refused when it is made, as unpredictable.
  */
