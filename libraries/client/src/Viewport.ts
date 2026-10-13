@@ -1,4 +1,4 @@
-import { Data, Deferred, Effect, Option, Queue, type Scope, Stream } from 'effect';
+import { Data, Deferred, Effect, Option, PubSub, Queue, type Scope, Stream } from 'effect';
 import { denoise } from 'three/addons/tsl/display/DenoiseNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
@@ -35,6 +35,8 @@ export interface Viewport {
   readonly camera: Three.PerspectiveCamera;
   /** Every click on the canvas from now on, as a point of the screen, from -1 to 1 across it and up it. */
   readonly clicks: Stream.Stream<{ readonly x: number; readonly y: number }>;
+  /** Every time from now on the canvas is fitted anew, to a new size or a screen of another density: blank after it until drawn again, so a frame that leaves the picture as it was, such as one paused, draws it once more. */
+  readonly fitted: Stream.Stream<void>;
   /** Draws the scene as it is now, from the camera; nothing once the graphics device is lost. */
   readonly render: Effect.Effect<void>;
   /** Waits until the graphics device is lost, such as when a driver resets or the browser takes it back, and is why: nothing is drawn after it. */
@@ -389,6 +391,7 @@ export const make = (
       drawn.once = true;
     };
 
+    const refits = yield* PubSub.unbounded<void>();
     const fit = () => {
       const width = Math.max(canvas.clientWidth, 1);
       const height = Math.max(canvas.clientHeight, 1);
@@ -396,6 +399,7 @@ export const make = (
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      PubSub.publishUnsafe(refits, undefined);
     };
     fit();
     yield* Effect.acquireRelease(
@@ -485,6 +489,7 @@ export const make = (
       scene,
       camera,
       clicks,
+      fitted: Stream.fromPubSub(refits),
       render,
       lost: Deferred.await(lost),
       capture,

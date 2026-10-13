@@ -78,6 +78,7 @@ const played = Effect.gen(function* () {
     scene,
     camera,
     clicks: Stream.fromQueue(clicked),
+    fitted: Stream.empty,
     render,
     lost: Effect.never,
     capture: () => Effect.die('A played viewport takes no shots.'),
