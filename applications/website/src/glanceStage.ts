@@ -1,3 +1,4 @@
+import { Viewport } from '@lightocean/client';
 import { Projection, Stage, Styled, type Session } from '@lightocean/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Effect, Match, Option, Schema, Stream } from 'effect';
@@ -300,6 +301,7 @@ const paneEntry = (
               resource: GlanceSession,
               canvasId: canvasIdOf(pane),
               views: viewsOf(pane),
+              viewport: Viewport.sharp,
               setup: setUp,
               onNotJoined: (): Message => Message.LeftGame(),
               onFailed: (reason) => Message.FailedShowState({ reason }),

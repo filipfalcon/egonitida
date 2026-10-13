@@ -1,4 +1,4 @@
-import { Tab, type Viewport } from '@lightocean/client';
+import { Tab, Viewport } from '@lightocean/client';
 import { Bridge, Page } from '@lightocean/devtools';
 import { Projection, Session, Stage } from '@lightocean/foldkit';
 import { Effect, Option, Schema, Stream } from 'effect';
@@ -85,6 +85,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               resource: RoundSession,
               canvasId: CANVAS_ID,
               views: ScoreView.views,
+              viewport: Viewport.sharp,
               setup: setUp,
               alongside: capturedAs(host),
               onNotJoined: (): Message => Message.LeftGame(),

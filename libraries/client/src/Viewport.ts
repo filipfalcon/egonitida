@@ -133,20 +133,20 @@ export const occlusion = (told: Partial<Occlusion> = {}): Occlusion => ({
   resolution: Math.min(Math.max(told.resolution ?? 0.5, 0.1), 1),
 });
 
-/** A viewport drawing into a picture, from which the screen's is made at the end: with ambient occlusion, if given, and antialiased as told, by multisampling unless told otherwise. What blends over what is behind it blends in the picture's linear colours. */
+/** A viewport drawing into a picture, from which the screen's is made at the end: with ambient occlusion, if given, and antialiased as told, not at all unless told otherwise. What blends over what is behind it blends in the picture's linear colours. */
 export interface Pictured {
   readonly output?: 'Picture';
   readonly occlusion?: Option.Option<Occlusion>;
   readonly antialiasing?: Antialiasing.Antialiasing;
 }
 
-/** A viewport drawing straight onto the screen, each shader putting its colours in the screen's as it draws, with no picture in between: cheaper, and what blends over what is behind it blends in the screen's colours, as WebGL's renderer has it. With no picture, nothing is drawn through passes after it: it is antialiased by the renderer alone, by multisampling unless told otherwise. */
+/** A viewport drawing straight onto the screen, each shader putting its colours in the screen's as it draws, with no picture in between: cheaper, and what blends over what is behind it blends in the screen's colours, as WebGL's renderer has it. With no picture, nothing is drawn through passes after it: it is antialiased by the renderer alone, if told to. */
 export interface Direct {
   readonly output: 'Direct';
   readonly antialiasing?: Antialiasing.Alone;
 }
 
-/** How a viewport draws: into a picture unless told to draw straight onto the screen, with as many pixels for each of the screen's as `pixelRatio` makes of its density, a pixel for each of them unless told otherwise. It is asked again whenever the canvas changes its size or moves to a screen of another density. */
+/** How a viewport draws: into a picture unless told to draw straight onto the screen, with as many pixels for each of the canvas's as `pixelRatio` makes of the screen's density, one unless told otherwise. It is asked again whenever the canvas changes its size or moves to a screen of another density. Unless told otherwise, a viewport draws as bare Three.js does; what more it should do is asked for, one thing at a time or through a preset such as `sharp`. */
 export type Options = {
   readonly pixelRatio?: (screen: number) => number;
 } & (Pictured | Direct);
@@ -164,11 +164,11 @@ export type Drawing =
 /** How a viewport told `options` draws: the renderer draws alone unless ambient occlusion or antialiasing needs a pass. */
 export const drawingOf = (options: Options): Drawing => {
   if (options.output === 'Direct') {
-    const antialiasing = options.antialiasing ?? Antialiasing.multisample;
+    const antialiasing = options.antialiasing ?? Antialiasing.none;
     return { _tag: 'Direct', multisampled: Antialiasing.multisampled(antialiasing) };
   }
   const occlusion = options.occlusion ?? Option.none();
-  const antialiasing = options.antialiasing ?? Antialiasing.multisample;
+  const antialiasing = options.antialiasing ?? Antialiasing.none;
   return Option.isNone(occlusion) &&
     (antialiasing._tag === 'None' || antialiasing._tag === 'Multisample')
     ? { _tag: 'Alone', multisampled: Antialiasing.multisampled(antialiasing) }
@@ -177,7 +177,16 @@ export const drawingOf = (options: Options): Drawing => {
 
 /** How many pixels a viewport told `options` draws for each of a screen of `screen` pixels a point. */
 export const pixelRatioOf = (options: Options, screen: number): number =>
-  (options.pixelRatio ?? ((density) => density))(screen);
+  (options.pixelRatio ?? (() => 1))(screen);
+
+/** A pixel drawn for each of the screen's, however dense, the screen's own density. */
+export const screenDensity = (screen: number) => screen;
+
+/** Sharp: multisampled, and a pixel drawn for each of the screen's. A preset to spread into options and change as needed, such as `{ ...Viewport.sharp, output: 'Direct' }`. */
+export const sharp: {
+  readonly antialiasing: Antialiasing.Multisample;
+  readonly pixelRatio: (screen: number) => number;
+} = { antialiasing: Antialiasing.multisample, pixelRatio: screenDensity };
 
 /** Something drawn with that holds resources on the graphics device until it is let go of. */
 interface Held {
@@ -332,7 +341,7 @@ export const pointOf = (
   y: 1 - ((pointer.clientY - canvas.top) / canvas.height) * 2,
 });
 
-/** A viewport drawing onto `canvas`, as `options` tell it to: into a picture with no ambient occlusion unless told otherwise, antialiased by multisampling, a pixel for each of the screen's. */
+/** A viewport drawing onto `canvas`, as `options` tell it to, and as bare Three.js does unless told otherwise: into a picture, with no ambient occlusion and no antialiasing, a pixel for each of the canvas's. */
 export const make = (
   canvas: HTMLCanvasElement,
   options: Options = {},

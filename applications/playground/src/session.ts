@@ -1,4 +1,4 @@
-import { Tab, type Viewport } from '@lightocean/client';
+import { Tab, Viewport } from '@lightocean/client';
 import { State } from '@lightocean/core';
 import { Bridge, Page } from '@lightocean/devtools';
 import { Projection, Session, Stage } from '@lightocean/foldkit';
@@ -86,6 +86,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               resource: CubesSession,
               canvasId: CANVAS_ID,
               views: CubesView.views,
+              viewport: Viewport.sharp,
               setup: setUp,
               alongside: capturedAs(host),
               onNotJoined: (): Message => Message.LeftGame(),

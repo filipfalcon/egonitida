@@ -10,6 +10,8 @@ import type * as Session from '#src/Session.ts';
 /** How a stage is set: the game's views, and what else the scene holds, such as its camera and its lights. */
 export interface Options<R> {
   readonly views: ReadonlyArray<View.View<R>>;
+  /** How the viewport draws, as bare Three.js does unless told otherwise, such as through a preset like `Viewport.sharp`. */
+  readonly viewport?: Viewport.Options | undefined;
   /** Sets the scene up before the first frame, such as where the camera looks from and what lights it. */
   readonly setup?: ((viewport: Viewport.Viewport) => void) | undefined;
   /** What runs beside the stage while it is shown, given its viewport, such as the devtools' `Page.serve`, which captures the canvas for an agent to see what is drawn. */
@@ -117,7 +119,7 @@ export const stream = <Message, Service, R>(
               reason: `There is no canvas with the id ${options.canvasId}.`,
             });
           }
-          const viewport = yield* Viewport.make(element).pipe(
+          const viewport = yield* Viewport.make(element, options.viewport ?? {}).pipe(
             Effect.mapError(({ reason }) => new Unshown({ reason })),
           );
           yield* show(viewport, joined, {

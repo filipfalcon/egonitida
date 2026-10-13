@@ -1,4 +1,4 @@
-import { Tab, type Viewport } from '@lightocean/client';
+import { Tab, Viewport } from '@lightocean/client';
 import { Bridge, Page } from '@lightocean/devtools';
 import { Session, Stage } from '@lightocean/foldkit';
 import { Effect, Option, Schema, Stream } from 'effect';
@@ -131,6 +131,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               resource: OceanSession,
               canvasId: CANVAS_ID,
               views: OceanView.views,
+              viewport: Viewport.sharp,
               setup: setUp,
               alongside: capturedAs(host),
               onNotJoined: (): Message => Message.LeftOcean(),

@@ -15,7 +15,7 @@ const main = Effect.gen(function* () {
   const connection = yield* WorkerTransport.connect;
   const client = yield* Client.connect(connection, { game: Cube.game });
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
-  const viewport = yield* Viewport.make(canvas);
+  const viewport = yield* Viewport.make(canvas, Viewport.sharp);
   const views = yield* View.make(CubeView.views);
 
   viewport.scene.add(views.root);

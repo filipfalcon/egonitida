@@ -48,7 +48,7 @@ const main = Effect.gen(function* () {
   const connection = yield* SocketTransport.connect(yield* roomUrl);
   const client = yield* Client.connect(connection, { game: Walkers.game });
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
-  const viewport = yield* Viewport.make(canvas);
+  const viewport = yield* Viewport.make(canvas, Viewport.sharp);
   const views = yield* View.make(WalkersView.views);
   const prediction = yield* Prediction.make(client, Walkers.game);
 

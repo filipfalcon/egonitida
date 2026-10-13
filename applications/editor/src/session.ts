@@ -1,4 +1,4 @@
-import { Tab, type Viewport } from '@lightocean/client';
+import { Tab, Viewport } from '@lightocean/client';
 import { Pointing, State } from '@lightocean/core';
 import { Projection, Session, Stage } from '@lightocean/foldkit';
 import { Bridge, Inspect, Log, Page } from '@lightocean/devtools';
@@ -201,6 +201,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               resource: Document,
               canvasId: CANVAS_ID,
               views: [...ObjectsView.views, ...EditingView.views],
+              viewport: Viewport.sharp,
               setup: setUp,
               alongside: capturedAs(host),
               onNotJoined: (): Message => Message.LeftDocument(),
@@ -211,6 +212,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
               resource: Played,
               canvasId: CANVAS_ID,
               views: ObjectsView.views,
+              viewport: Viewport.sharp,
               setup: setUp,
               alongside: capturedAs(`${host}-playing`),
               onNotJoined: (): Message => Message.LeftPlay(),

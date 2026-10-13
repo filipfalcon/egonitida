@@ -53,8 +53,8 @@ describe('Viewport.occlusion', () => {
 });
 
 describe('Viewport.drawingOf', () => {
-  it('has the renderer draw alone, multisampled, unless told otherwise', () => {
-    expect(Viewport.drawingOf({})).toEqual({ _tag: 'Alone', multisampled: true });
+  it('has the renderer draw alone, one sample a pixel, unless told otherwise, as bare Three.js does', () => {
+    expect(Viewport.drawingOf({})).toEqual({ _tag: 'Alone', multisampled: false });
   });
 
   it('has it draw alone when nothing needs a pass, multisampled or not', () => {
@@ -75,8 +75,10 @@ describe('Viewport.drawingOf', () => {
     );
   });
 
-  it('draws straight to the screen when told, multisampled unless told otherwise', () => {
-    expect(Viewport.drawingOf({ output: 'Direct' })).toEqual({
+  it('draws straight to the screen when told, one sample a pixel unless told otherwise', () => {
+    expect(
+      Viewport.drawingOf({ output: 'Direct', antialiasing: Antialiasing.multisample }),
+    ).toEqual({
       _tag: 'Direct',
       multisampled: true,
     });
@@ -88,8 +90,8 @@ describe('Viewport.drawingOf', () => {
 });
 
 describe('Viewport.pixelRatioOf', () => {
-  it('draws a pixel for each of the screen’s unless told otherwise', () => {
-    expect(Viewport.pixelRatioOf({}, 2)).toBe(2);
+  it('draws one pixel for each of the canvas’s unless told otherwise, as bare Three.js does', () => {
+    expect(Viewport.pixelRatioOf({}, 2)).toBe(1);
   });
 
   it('draws as many as told, from the screen’s density', () => {
@@ -105,4 +107,16 @@ describe('Viewport.painted', () => {
         expect(yield* Viewport.painted).toBeUndefined();
       }),
   );
+});
+
+describe('Viewport.sharp', () => {
+  it('is multisampled, a pixel for each of the screen’s, and spreads into options', () => {
+    const options: Viewport.Options = {
+      ...Viewport.sharp,
+      occlusion: Option.some(Viewport.occlusion()),
+    };
+    expect(Viewport.pixelRatioOf(Viewport.sharp, 2)).toBe(2);
+    expect(Viewport.drawingOf(Viewport.sharp)).toEqual({ _tag: 'Alone', multisampled: true });
+    expect(Viewport.drawingOf(options)._tag).toBe('Passes');
+  });
 });

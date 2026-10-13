@@ -76,6 +76,7 @@ const main = Effect.gen(function* () {
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
   // The ambient light darkens where the undead crowd each other and stand on the floor, which grounds them in the arena.
   const viewport = yield* Viewport.make(canvas, {
+    ...Viewport.sharp,
     occlusion: Option.some(Viewport.occlusion({ radius: 1, strength: 2 })),
   });
 
