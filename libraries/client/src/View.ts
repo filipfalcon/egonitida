@@ -23,15 +23,34 @@ type Of<Value> = Component.Component<string, Value, Component.Owner>;
 /** What an entity a view is drawn for holds, of the components the view asks for: every one of them is there. */
 export type Held<C extends Component.Any> = <Value>(component: Of<Value> & C) => Value;
 
+/**
+ * What a view for every entity holding all of `Components` is written as, given to `each`: `acquire` builds what stands for an entity as it comes into the drawing, given what the entity holds, the frame, and the entity, in that order; and `draw` draws it every frame, given what it built, what the entity holds, and the frame.
+ */
+export interface EachSpec<
+  Components extends ReadonlyArray<Component.Any>,
+  Built extends Three.Object3D,
+  R,
+> {
+  readonly acquire: (
+    held: Held<Components[number]>,
+    frame: Drawing.Frame,
+    entity: State.Entity,
+  ) => Effect.Effect<Built, never, R | Scope.Scope>;
+  readonly draw: (object: Built, held: Held<Components[number]>, frame: Drawing.Frame) => void;
+}
+
+/**
+ * A view for every entity holding all of `components`, as the views at work call it: made by `each` from an `EachSpec`, which is what a view is written as. Its functions take the entity where the spec's take what it holds, which they work out from it.
+ */
 export interface Each<R, Built extends Three.Object3D = Three.Object3D> {
   readonly _tag: 'Each';
   readonly components: ReadonlyArray<Component.Any>;
-  /** Builds what stands for `entity`, within the scope it is held for. */
+  /** Builds what stands for `entity`, within the scope it is held for, by the spec's `acquire`, given what `entity` holds in `frame`, the frame, and the entity. */
   readonly acquire: (
     entity: State.Entity,
     frame: Drawing.Frame,
   ) => Effect.Effect<Built, never, R | Scope.Scope>;
-  /** Draws what this view built, as `frame` has the entity; any other object it leaves alone. */
+  /** Draws what this view built, as `frame` has the entity, by the spec's `draw`; any other object it leaves alone. */
   draw(object: Three.Object3D, entity: State.Entity, frame: Drawing.Frame): void;
   /** `object`, as the type this view built it, if this view built it. */
   own(object: Three.Object3D): Option.Option<Built>;
@@ -56,10 +75,11 @@ export type Drawn = <Built extends Three.Object3D>(
   entity: State.Entity,
 ) => Option.Option<Built>;
 
+/** The camera drawn for the player, as the views at work call it: made by `rig`, whose `draw` is written to take what the player's entity holds where this one takes the entity itself. */
 export interface Rig {
   readonly _tag: 'Rig';
   readonly components: ReadonlyArray<Component.Any>;
-  /** Draws `camera` for the player's `entity`, which holds every one of `components`, after every other view has drawn `frame`. */
+  /** Draws `camera` for the player's `entity`, which holds every one of `components`, after every other view has drawn `frame`, by the `draw` given to `rig`, given what `entity` holds. */
   draw(
     camera: Three.PerspectiveCamera,
     entity: State.Entity,
@@ -113,14 +133,7 @@ export const each = <
   R = never,
 >(
   components: Components,
-  spec: {
-    readonly acquire: (
-      held: Held<Components[number]>,
-      frame: Drawing.Frame,
-      entity: State.Entity,
-    ) => Effect.Effect<Built, never, R | Scope.Scope>;
-    readonly draw: (object: Built, held: Held<Components[number]>, frame: Drawing.Frame) => void;
-  },
+  spec: EachSpec<Components, Built, R>,
 ): Each<R, Built> => {
   // What this view built, as the type it built it: the runner keeps objects of any view, and hands each back to the view that built it.
   const built = new WeakMap<Three.Object3D, Built>();

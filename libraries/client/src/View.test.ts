@@ -102,6 +102,30 @@ describe('View.each', () => {
   );
 });
 
+describe('what View.each is given', () => {
+  it.effect('is, to acquire, what the entity holds, the frame, and the entity, in that order', () =>
+    Effect.gen(function* () {
+      const given: Array<string> = [];
+      const crates = View.each([Crate, Position], {
+        acquire: (held, frame, entity) =>
+          Effect.sync(() => {
+            given.push(`${held(Position).x} ${frame.tick} ${entity}`);
+            return new Three.Group();
+          }),
+        draw: (_group, held, frame) => {
+          given.push(`drawn ${held(Position).x} ${frame.tick}`);
+        },
+      });
+      const views = yield* View.make([crates]);
+      const [state, crate] = State.spawn(State.empty({ seed: 1 }), crateAt(4));
+
+      yield* play(views, [state]);
+
+      expect(given).toEqual([`4 0 ${crate}`, 'drawn 4 0']);
+    }),
+  );
+});
+
 describe('View.on', () => {
   it.effect('reacts when an entity gains a component, and when it holds another value of it', () =>
     Effect.gen(function* () {
