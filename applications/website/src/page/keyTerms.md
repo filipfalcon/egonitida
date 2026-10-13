@@ -20,7 +20,7 @@ What a game holds, and the clock that moves it forward.
 
 ### State
 
-A state is an immutable value that records one tick: the entities that exist, the components they hold, and the counters for the next entity ids and for randomness. Nothing a game holds lives anywhere else.
+A state is an immutable value that records one tick: the entities that exist, the components they hold, and the counter for the next entity id, and the seed its randomness is drawn from. Nothing a game holds lives anywhere else.
 
 The host holds a state with every component, private ones included; a client holds the last state it received from the host, plus its own local components and, with prediction, its player's predicted components; a snapshot carries the part of the host's state that travels.
 

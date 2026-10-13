@@ -55,10 +55,10 @@ export const Jaws = Component.make('Jaws', Schema.Struct({ readyAt: Schema.Int }
   network: 'server',
 });
 
-/** When the next zombie rises: the horde's one value that belongs to no zombie. */
+/** When the next zombie rises: the horde's one value that belongs to no zombie. Sent to every client, so a client stepping ahead raises the zombies its host does. */
 export const Tide = Component.make('Tide', Schema.Struct({ nextAt: Schema.Int }), {
   owner: 'simulation',
-  network: 'private',
+  network: 'server',
 });
 
 const Point = Schema.Struct({ x: Schema.Finite, z: Schema.Finite });

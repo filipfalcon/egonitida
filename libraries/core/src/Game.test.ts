@@ -179,6 +179,47 @@ describe('determinism', () => {
     expect(contents(run(42))).not.toEqual(contents(run(43)));
   });
 
+  /** A system that draws as often as there are positions, writing what it drew as the velocity of each. */
+  const drawing = (name: string) =>
+    System.make({
+      name,
+      reads: [Position],
+      writes: [Velocity],
+      emits: [],
+      run: (context) => {
+        for (const [entity] of context.query(Position)) {
+          context.set(entity, Velocity, { x: context.random() });
+        }
+      },
+    });
+  const drawn = (systems: ReadonlyArray<ReturnType<typeof drawing>>) => {
+    const [start] = State.spawn(State.empty({ seed: 7 }), [Position.of({ x: 0 })]);
+    return Game.step(Game.only(fixture, { systems, rules: [] }), start).state;
+  };
+
+  it('gives each part numbers of its own, whatever the parts before it drew', () => {
+    const alone = drawn([drawing('steady')]);
+    const after = drawn([drawing('greedy'), drawing('steady')]);
+    const steadyOf = (state: State.State) => State.query(state, Velocity)[0]?.[1].x;
+
+    expect(steadyOf(after)).toBe(steadyOf(alone));
+  });
+
+  it('gives a part other numbers at another tick, and another part other numbers at the same', () => {
+    const [start] = State.spawn(State.empty({ seed: 7 }), [Position.of({ x: 0 })]);
+    const game = Game.only(fixture, { systems: [drawing('steady')], rules: [] });
+    const first = Game.step(game, start).state;
+    const second = Game.step(game, first).state;
+    const xOf = (state: State.State) => State.query(state, Velocity)[0]?.[1].x;
+
+    expect(xOf(second)).not.toBe(xOf(first));
+    expect(xOf(drawn([drawing('other')]))).not.toBe(xOf(first));
+  });
+
+  it('keeps the seed the parts draw from as it was', () => {
+    expect(drawn([drawing('steady')]).random).toBe(State.empty({ seed: 7 }).random);
+  });
+
   it('draws randomness only from the state, in [0, 1)', () => {
     const draws = Array.from({ length: 1000 }, (_, index) =>
       State.query(run(index), Position).map(([, position]) => position.x),
@@ -1595,7 +1636,12 @@ describe('a game its clients can predict', () => {
 
   const gameOf = (parts: {
     readonly systems: ReadonlyArray<
-      ReturnType<typeof moving> | ReturnType<typeof pacing> | typeof weighing
+      System.System<
+        typeof Load | typeof Pace | typeof Burden | typeof Mark | typeof Spot,
+        typeof Spot | typeof Pace,
+        typeof Weighed,
+        never
+      >
     >;
     readonly rules?: ReadonlyArray<typeof burdening>;
   }) =>
@@ -1639,6 +1685,20 @@ describe('a game its clients can predict', () => {
   it('follows it through an event, to the rule that handles it', () => {
     expect(() => gameOf({ systems: [weighing, moving([Burden])], rules: [burdening] })).toThrow(
       /unpredictable.*Spot/,
+    );
+  });
+
+  it('refuses a game whose part may despawn anything from what a client lacks, a predicted component with it', () => {
+    const clearing = System.make({
+      name: 'clearing',
+      reads: [Load],
+      writes: [],
+      emits: [],
+      despawns: true,
+      run: () => {},
+    });
+    expect(() => gameOf({ systems: [clearing, moving([Pace])] })).toThrow(
+      'a game has unpredictable components: Spot, despawned by clearing from Load, which its clients do not hold as its host does',
     );
   });
 

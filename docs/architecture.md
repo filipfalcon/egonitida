@@ -323,6 +323,10 @@ Later, for the editor:
 - Saving the document to disk, through a local CLI.
 - Browser tests for what Node cannot cover.
 
+Later, for the model:
+
+- Entity ids a client predicts. A step gives out ids from one counter, so a part spawning from what a client does not hold moves the ids every part after it gives out, and a predicted component holding the id of another entity would differ on the client. Ids by part, as randomness is drawn, would close it.
+
 Optimization waits until the raw engine works: an interpolation buffer, binary encoding, and sending each client only what is near it are tuned against something real, not ahead of it.
 
 ## Findings

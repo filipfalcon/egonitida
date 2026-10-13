@@ -87,12 +87,17 @@ const refuseRepeated = (names: ReadonlyArray<string>, what: string) => {
 /** Why a part, a component, or an event depends on what a client does not hold as its host does: the source itself, or what wrote it from what. */
 type Taint =
   | { readonly _tag: 'Unshared' }
-  | { readonly _tag: 'Written'; readonly by: string; readonly from: string };
+  | {
+      readonly _tag: 'Followed';
+      readonly how: 'written' | 'emitted' | 'despawned';
+      readonly by: string;
+      readonly from: string;
+    };
 
 /**
  * The predicted components of `game` that a client cannot predict, each with why: those that follow, through any chain of reads, writes, and events, from a component its clients do not hold as its host does, one kept by the host alone (`private`) or by each client alone (`local`).
  *
- * A prediction step runs the systems and the rules for events, but no actions, over the state a client holds. A part that reads anything tainted taints all it writes, spawns, and emits, and a rule handling a tainted event taints all it writes; repeated until nothing more is tainted, so the order the parts run in does not matter. What is left untainted is exactly what the proof `prediction_matches_host` in `verification/Verification/Prediction.lean` calls clean: held alike by host and client, and written only from what is clean. That theorem shows a client's step then gives every clean predicted component exactly as the host's does, from the same input, so this check is enough.
+ * A prediction step runs the systems and the rules for events, but no actions, over the state a client holds. A part that reads anything tainted taints all it writes, spawns, and emits, and every component if it may despawn, since a despawn takes an entity out of all of them; a rule handling a tainted event taints the same; repeated until nothing more is tainted, so the order the parts run in does not matter. What is left untainted is exactly what the proof `prediction_matches_host` in `verification/Verification/Prediction.lean` calls clean: held alike by host and client, and written only from what is clean. That theorem shows a client's step then gives every clean predicted component exactly as the host's does, from the same input, so this check is enough.
  */
 const unpredictable = (game: Game): ReadonlyArray<string> => {
   const tainted = new Map<string, Taint>(
@@ -108,6 +113,7 @@ const unpredictable = (game: Game): ReadonlyArray<string> => {
       handles: Option.none<string>(),
       writes: [...system.writes, ...system.spawns].map(({ name }) => name),
       emits: system.emits.map(({ tag }) => tag),
+      despawns: system.despawns,
     })),
     // A prediction step hands the rules no actions, so only those for events run in it.
     ...game.rules
@@ -118,6 +124,7 @@ const unpredictable = (game: Game): ReadonlyArray<string> => {
         handles: Option.some(rule.on.tag),
         writes: [...rule.writes, ...rule.spawns].map(({ name }) => name),
         emits: rule.emits.map(({ tag }) => tag),
+        despawns: rule.despawns,
       })),
   ];
   const spread = (): boolean =>
@@ -129,31 +136,39 @@ const unpredictable = (game: Game): ReadonlyArray<string> => {
       if (from === undefined) {
         return false;
       }
-      const taint: Taint = { _tag: 'Written', by: part.name, from };
+      const by = (how: 'written' | 'emitted' | 'despawned'): Taint => ({
+        _tag: 'Followed',
+        how,
+        by: part.name,
+        from,
+      });
       const fresh = [
-        ...part.writes.filter((name) => !tainted.has(name)),
-        ...part.emits.filter((tag) => !taintedEvents.has(tag)),
+        ...part.writes
+          .filter((name) => !tainted.has(name))
+          .map((name) => [name, by('written')] as const),
+        ...(part.despawns ? game.components.map(({ name }) => name) : [])
+          .filter((name) => !tainted.has(name) && !part.writes.includes(name))
+          .map((name) => [name, by('despawned')] as const),
       ];
-      for (const name of part.writes) {
-        if (!tainted.has(name)) tainted.set(name, taint);
+      const freshEvents = part.emits.filter((tag) => !taintedEvents.has(tag));
+      for (const [name, taint] of fresh) {
+        tainted.set(name, taint);
       }
-      for (const tag of part.emits) {
-        if (!taintedEvents.has(tag)) taintedEvents.set(tag, taint);
+      for (const tag of freshEvents) {
+        taintedEvents.set(tag, by('emitted'));
       }
-      return fresh.length > 0;
+      return fresh.length + freshEvents.length > 0;
     });
   while (spread()) {
     // Until nothing more is tainted.
   }
   /** How `name` came to be tainted, back to what its clients do not hold. */
   const chain = (name: string, seen: ReadonlySet<string>): string => {
-    const written = tainted.get(name);
-    const taint = written ?? taintedEvents.get(name);
+    const taint = tainted.get(name) ?? taintedEvents.get(name);
     if (taint === undefined || taint._tag === 'Unshared' || seen.has(name)) {
       return `${name}, which its clients do not hold as its host does`;
     }
-    const how = written === undefined ? 'emitted' : 'written';
-    return `${name}, ${how} by ${taint.by} from ${chain(taint.from, new Set([...seen, name]))}`;
+    return `${name}, ${taint.how} by ${taint.by} from ${chain(taint.from, new Set([...seen, name]))}`;
   };
   return game.components
     .filter(({ network, name }) => network === 'predicted' && tainted.has(name))
@@ -336,6 +351,69 @@ const traced = (trace: Tracing): ReadonlyArray<Trace> =>
         },
       ];
 
+/** What each part of `game` draws its stream of randomness by: its kind, its name, and which of that name it is, so no two parts share one. */
+const streamNamesOf = (game: Game): ReadonlyMap<System.System | Rule.Rule, string> => {
+  const counted = new Map<string, number>();
+  const named = (base: string) => {
+    const count = counted.get(base) ?? 0;
+    counted.set(base, count + 1);
+    return `${base}#${count}`;
+  };
+  return new Map<System.System | Rule.Rule, string>([
+    ...game.systems.map((system): [System.System, string] => [
+      system,
+      named(`system:${system.name}`),
+    ]),
+    ...game.localSystems.map((system): [System.System, string] => [
+      system,
+      named(`local:${system.name}`),
+    ]),
+    ...game.rules.map((rule): [Rule.Rule, string] => [
+      rule,
+      named(`rule:${rule.on.tag}:${Option.getOrElse(rule.name, () => '')}`),
+    ]),
+  ]);
+};
+
+const streamNames = new WeakMap<Game, ReadonlyMap<System.System | Rule.Rule, string>>();
+
+/**
+ * Draws for the parts of `game` in the step reaching `tick`, of `seed`: each part from a stream of its own, which goes on across every time it runs in the step. So how many numbers one part draws never changes what another draws: not a part a client does not run, nor one that drew from what the client does not hold.
+ */
+const drawingFor = (game: Game, seed: number, tick: number) => {
+  const names =
+    streamNames.get(game) ??
+    (() => {
+      const made = streamNamesOf(game);
+      streamNames.set(game, made);
+      return made;
+    })();
+  const counters = new Map<System.System | Rule.Rule, number>();
+  const drawing: { part: Option.Option<System.System | Rule.Rule> } = { part: Option.none() };
+  return {
+    /** Draws from now on for `part`, until another is drawn for. */
+    as: (part: System.System | Rule.Rule) => {
+      drawing.part = Option.some(part);
+    },
+    random: (): number => {
+      const part = Option.getOrThrowWith(
+        drawing.part,
+        () => new Error('a number was drawn outside every part of the step'),
+      );
+      const counter =
+        counters.get(part) ??
+        Random.streamOf(
+          seed,
+          tick,
+          names.get(part) ?? ('on' in part ? `rule:${part.on.tag}` : `system:${part.name}`),
+        );
+      const [value, next] = Random.next(counter);
+      counters.set(part, next);
+      return value;
+    },
+  };
+};
+
 /** `state` stepped by `game` with `input` to the state of the next tick, and what arose in the step. */
 export const step = <Commands extends Command.Any>(
   game: Game<Component.Any, Action.Any, Event.Any, Commands>,
@@ -353,6 +431,7 @@ export const step = <Commands extends Command.Any>(
   }
   const draft = State.draft(state);
   draft.tick += 1;
+  const drawing = drawingFor(game, draft.random, draft.tick);
   // A demand only reaches an entity spawned to accept it; anything else a client sends is ignored, not added.
   for (const demand of input.demands) {
     if (Option.isSome(State.get(draft, demand.entity, demand.component))) {
@@ -374,6 +453,7 @@ export const step = <Commands extends Command.Any>(
     cause: Option.Option<Event.Tagged>,
     run: () => void,
   ) => {
+    drawing.as(part);
     if (Option.isNone(parts)) {
       run();
       return;
@@ -411,11 +491,7 @@ export const step = <Commands extends Command.Any>(
   const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> &
     Rule.Context<Component.Any, Component.Any, Event.Any, Component.Any, true, Commands> = {
     time: { tick: draft.tick, secondsPerStep: 1 / game.stepRate },
-    random: () => {
-      const [value, counter] = Random.next(draft.random);
-      draft.random = counter;
-      return value;
-    },
+    random: drawing.random,
     get: <Value>(
       entity: State.Entity,
       component: Component.Component<string, Value, Component.Owner>,
@@ -469,7 +545,7 @@ export const step = <Commands extends Command.Any>(
 export const schema = (game: Game) => State.schema(game.components);
 
 /**
- * `state` after a client's own step at `tick`: every local system run in order, over the state the server sent and what the client keeps for itself. Nothing the server sends changes. What they spawn is given ids of the client's own, and the numbers they draw come of the tick and the state's random counter there, so every client draws the same at the same tick and the state's own counter is left as it was.
+ * `state` after a client's own step at `tick`: every local system run in order, over the state the server sent and what the client keeps for itself. Nothing the server sends changes. What they spawn is given ids of the client's own, and each draws from a stream of its own, of the tick and the state's seed, so every client draws the same at the same tick.
  */
 export const stepLocal = (
   game: Game,
@@ -477,14 +553,10 @@ export const stepLocal = (
   options: { readonly tick: number },
 ): State.State => {
   const draft = State.draft(state);
-  const drawn = { counter: (state.random ^ Math.imul(options.tick, 0x9e3779b1)) >>> 0 };
+  const drawing = drawingFor(game, state.random, options.tick);
   const context: System.Context<Component.Any, Component.Any, Event.Any, Component.Any, true> = {
     time: { tick: options.tick, secondsPerStep: 1 / game.stepRate },
-    random: () => {
-      const [value, counter] = Random.next(drawn.counter);
-      drawn.counter = counter;
-      return value;
-    },
+    random: drawing.random,
     get: <Value>(
       entity: State.Entity,
       component: Component.Component<string, Value, Component.Owner>,
@@ -498,6 +570,7 @@ export const stepLocal = (
     despawn: (entity) => State.despawnFrom(draft, entity),
   };
   for (const system of game.localSystems) {
+    drawing.as(system);
     system.run(context);
   }
   return State.finish(draft);

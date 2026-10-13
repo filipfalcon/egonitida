@@ -2,7 +2,7 @@ import { Effect, Option, Schema, SchemaGetter, SchemaIssue } from 'effect';
 import type * as Component from '#src/Component.ts';
 
 /**
- * A state is an immutable value that records one tick: the entities that exist, the components they hold, and the counters for the next entity ids and for randomness.
+ * A state is an immutable value that records one tick: the entities that exist, the components they hold, and the counter for the next entity id, and the seed its randomness is drawn from.
  *
  * The host holds a state with every component, private ones included; a client holds the last state it received from the host, plus its own local components and, with prediction, its player's predicted components; a snapshot carries the part of the host's state that travels.
  *
@@ -21,7 +21,7 @@ export interface State {
   readonly nextEntity: Entity;
   /** The id the next entity a client spawns for itself gets: they count down from -1, so they never meet the server's, which count up from 0. */
   readonly nextLocal: Entity;
-  /** The counter the next random number is drawn from. */
+  /** The seed every part of a step draws its own stream of numbers from, with the tick; no step changes it. */
   readonly random: number;
   readonly stores: Stores;
 }
