@@ -21,6 +21,6 @@
   "devDependencies": {
     "@lightocean/core": "*",
     "@lightocean/vite-plugin": "*",
-    "@types/ws": "8.18.1"
+    "@types/ws": "8.18.2"
   }
 }
