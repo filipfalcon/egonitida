@@ -41,6 +41,7 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 - A domain writes only its own components. It changes another domain's components only by emitting an event that domain declares, which that domain's rules decide on. It shares a component (`shares`) only for values many domains change every step, such as where a body is.
 - Systems change what the simulation owns, every step; rules change what the rules own, when an action or event happens; players change only demand components, through their demands.
 - What only a client keeps, such as a ragdoll or a fire, is a local component, changed by a domain's `localSystems`.
+- Where a player's value lives depends on what it changes. One that changes what the game does is in the state: a choice the player makes once, such as a camera mode that changes how she aims, is a rules-owned component set by an action; one that changes every step, such as where she heads or aims, is a demand. One that changes only how the game is drawn for that player, such as where the camera looks from, is the drawing's input, y = h(x, v): the page keeps it, as it keeps its Model, and hands it to the rigs. What the drawing must remember of the state over time, such as how far a camera trails, is a local component.
 - Requiring is one way: two domains never require each other, so what both need belongs in a domain beneath them.
 
 **Messages.** Actions and events are facts in the past tense. An action happened once outside the state: what a player did, whatever device did it (`PulledTrigger`, `ChoseRestart`), or what a command came to (`ScoreSaved`); an event arose within a step, what the game made of it (`Shot`, `LevelRestarted`). Every action is handled by a rule; an event that nothing emits and nothing handles is unused, and is removed.
@@ -61,7 +62,7 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 | A value outside the drawing follows the state, time and all   | `View.follow`: `of` works it out every frame, `to` puts it out as it changes, such as a pad's lightbar                        |
 | The player looks at the game                                  | `View.rig`: the camera, drawn for the player after every other view, from what they drew                                      |
 
-A view's `draw` changes only the object its view built, from the frame, and keeps nothing between frames: what must be remembered is a local component. Event listeners, timers, animation frames, and sockets live only inside these. A domain's own module imports no Three.js; its views live in its `.view` module.
+A view's `draw` changes only the object its view built, from the frame and the page's input to the drawing, and keeps nothing between frames: what must be remembered is a local component. Event listeners, timers, animation frames, and sockets live only inside these. A domain's own module imports no Three.js; its views live in its `.view` module.
 
 **Wiring.** Nothing is wired implicitly: no automatic registration, decorators, wiring by file name, or global registries. All wiring is in `Game.make` and domains' `requires`.
 
