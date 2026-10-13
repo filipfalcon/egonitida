@@ -97,7 +97,7 @@ describe('the keyboard and mouse, as a page asks', () => {
       Effect.gen(function* () {
         const canvas = document.createElement('canvas');
         document.body.append(canvas);
-        const source = yield* KeyboardAndMouse.make(window, { buttonsFrom: canvas });
+        const source = yield* KeyboardAndMouse.make(window, { area: canvas });
 
         pointer('pointerdown', { button: 0 });
         const elsewhere = source.read().mouse.buttons;
@@ -109,6 +109,52 @@ describe('the keyboard and mouse, as a page asks', () => {
         canvas.remove();
         expect([[...elsewhere], [...onCanvas], [...letGo]]).toEqual([[], [2], []]);
       }),
+  );
+
+  it.effect('tell where the mouse is only while it is over the element the page says', () =>
+    Effect.gen(function* () {
+      const canvas = document.createElement('canvas');
+      const panel = document.createElement('div');
+      document.body.append(canvas, panel);
+      const source = yield* KeyboardAndMouse.make(window, { area: canvas });
+      const move = (on: Element, clientX: number) =>
+        on.dispatchEvent(new PointerEvent('pointermove', { clientX, clientY: 5, bubbles: true }));
+
+      move(canvas, 10);
+      const over = source.read().mouse.at;
+      move(panel, 20);
+      const onPanel = source.read().mouse.at;
+      move(canvas, 30);
+      canvas.dispatchEvent(new PointerEvent('pointerleave'));
+      const left = source.read().mouse.at;
+
+      canvas.remove();
+      panel.remove();
+      expect([over, onPanel, left]).toEqual([
+        Option.some({ x: 10, y: 5 }),
+        Option.none(),
+        Option.none(),
+      ]);
+    }),
+  );
+
+  it.effect('keep the page from scrolling or zooming by the wheel, when the page says', () =>
+    Effect.gen(function* () {
+      const turn = () => new WheelEvent('wheel', { deltaY: 100, cancelable: true });
+      const scrolling = turn();
+      yield* Effect.scoped(
+        Effect.andThen(
+          KeyboardAndMouse.make(window),
+          Effect.sync(() => window.dispatchEvent(scrolling)),
+        ),
+      );
+      const kept = turn();
+      const source = yield* KeyboardAndMouse.make(window, { scroll: false });
+      window.dispatchEvent(kept);
+
+      expect([scrolling.defaultPrevented, kept.defaultPrevented]).toEqual([false, true]);
+      expect(source.read().mouse.wheel).toBe(100);
+    }),
   );
 
   it.effect('hear no key typed into a field, unless the page says so of it', () =>
@@ -138,7 +184,7 @@ describe('the keyboard and mouse, as a page asks', () => {
         const canvas = document.createElement('canvas');
         document.body.append(canvas);
         yield* KeyboardAndMouse.make(window, {
-          buttonsFrom: canvas,
+          area: canvas,
           preventDefault: ['Tab'],
           contextMenu: false,
         });

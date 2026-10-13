@@ -26,10 +26,11 @@ const listen = <K extends keyof WindowEventMap>(
   target: Window,
   type: K,
   listener: (event: WindowEventMap[K]) => void,
+  options: AddEventListenerOptions = {},
 ) =>
   Effect.acquireRelease(
-    Effect.sync(() => target.addEventListener(type, listener)),
-    () => Effect.sync(() => target.removeEventListener(type, listener)),
+    Effect.sync(() => target.addEventListener(type, listener, options)),
+    () => Effect.sync(() => target.removeEventListener(type, listener, options)),
   );
 
 /** Listens to `type` on `target`, an element, until the scope closes. */
@@ -50,12 +51,13 @@ export const typing = (event: KeyboardEvent): boolean => {
   );
 };
 
-/** How a page has the keyboard and mouse heard: mouse presses only from `buttonsFrom`, so a click on a menu over the game is the menu's; keys it `ignore`s, typing into a field unless it says; keys it keeps the browser from doing what it does with, such as Tab moving focus; and the menu a right click opens, kept shut by `contextMenu: false`. */
+/** How a page has the keyboard and mouse heard: the mouse on `area` alone, its presses there and where it is while it is over it, so a click on a menu over the game is the menu's and the game sees no pointer there; keys it `ignore`s, typing into a field unless it says; keys it keeps the browser from doing what it does with, such as Tab moving focus; the menu a right click opens, kept shut by `contextMenu: false`; and the page scrolled or zoomed by the wheel, kept still by `scroll: false`. */
 export interface Options {
-  readonly buttonsFrom?: Element;
+  readonly area?: Element;
   readonly ignore?: (event: KeyboardEvent) => boolean;
   readonly preventDefault?: ReadonlyArray<string>;
   readonly contextMenu?: boolean;
+  readonly scroll?: boolean;
 }
 
 /** The keyboard and mouse of `target`, a window, as `options` say, until the scope closes. */
@@ -86,7 +88,11 @@ export const make = (
       keys.held.clear();
       buttons.held.clear();
     });
-    yield* listenOn(options.buttonsFrom ?? target, 'pointerdown', (event) => {
+    const area = options.area;
+    // Where the mouse is, if it is over the area: an element the area holds, or the area itself while it holds the pointer captured.
+    const overArea = (event: Event) =>
+      area === undefined || (event.target instanceof Node && area.contains(event.target));
+    yield* listenOn(area ?? target, 'pointerdown', (event) => {
       if (!(event instanceof MouseEvent)) {
         return;
       }
@@ -96,20 +102,34 @@ export const make = (
       pointer.at = Option.some({ x: event.clientX, y: event.clientY });
     });
     if (options.contextMenu === false) {
-      yield* listenOn(options.buttonsFrom ?? target, 'contextmenu', (event) =>
-        event.preventDefault(),
-      );
+      yield* listenOn(area ?? target, 'contextmenu', (event) => event.preventDefault());
     }
     yield* listen(target, 'pointerup', (event) => buttons.held.delete(event.button));
     yield* listen(target, 'pointermove', (event) => {
       moved.dx += event.movementX;
       moved.dy += event.movementY;
-      pointer.at = Option.some({ x: event.clientX, y: event.clientY });
+      pointer.at = overArea(event)
+        ? Option.some({ x: event.clientX, y: event.clientY })
+        : Option.none();
     });
-    yield* listen(target, 'wheel', (event) => {
-      moved.wheel += event.deltaY;
-      moved.notches += Math.sign(event.deltaY);
-    });
+    if (area !== undefined) {
+      yield* listenOn(area, 'pointerleave', () => {
+        pointer.at = Option.none();
+      });
+    }
+    // Kept from scrolling the page, the wheel is heard actively, which a page's scrolling waits for.
+    yield* listen(
+      target,
+      'wheel',
+      (event) => {
+        if (options.scroll === false) {
+          event.preventDefault();
+        }
+        moved.wheel += event.deltaY;
+        moved.notches += Math.sign(event.deltaY);
+      },
+      { passive: options.scroll !== false },
+    );
 
     return {
       read: () => {
