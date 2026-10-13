@@ -30,7 +30,7 @@ export type Told = typeof Told.Type;
 
 /** How the round in `state` goes, as the page says it, if the state holds one: the seconds left are whole, so the page is told again only once a second while it plays. */
 export const told = (state: State.State): Option.Option<Told> =>
-  Option.fromNullishOr(State.holding(state, [Score.Round])[0]).pipe(
+  Option.fromNullishOr(State.entitiesHolding(state, [Score.Round])[0]).pipe(
     Option.flatMap((round) => State.get(state, round, Score.Round)),
     Option.map((mode): Told => {
       switch (mode._tag) {

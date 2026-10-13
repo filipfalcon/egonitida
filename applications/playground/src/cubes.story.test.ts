@@ -7,7 +7,7 @@ const given = Story.given(Cubes.state, { viewer: Cubes.viewer });
 
 /** Every cube in `state`: where it stands in the grid, how it is painted, and what it is read out as. */
 const cubesIn = (state: State.State) =>
-  State.holding(state, [Cubes.Cube]).map((cube) => ({
+  State.entitiesHolding(state, [Cubes.Cube]).map((cube) => ({
     slot: Option.map(State.get(state, cube, Cubes.Cube), ({ slot }) => slot),
     shade: Option.map(State.get(state, cube, Cubes.Paint), ({ shade }) => shade),
     label: Option.map(State.get(state, cube, Pointing.Label), ({ text }) => text),

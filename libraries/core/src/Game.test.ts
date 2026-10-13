@@ -433,7 +433,7 @@ describe('spawning and despawning within a step', () => {
       Story.spawn('runner', runner(10, 30)),
       Story.step(),
       Story.expectNone('runner', Health),
-      Story.state((after, named) =>
+      Story.expectState((after, named) =>
         expect(State.get(after, named('runner') + 1, Health)).toEqual(
           Option.some({ current: 100 }),
         ),
@@ -1463,7 +1463,7 @@ describe('local systems', () => {
       bleeding,
       Story.spawn('runner', runner(4, 60)),
       Story.steps(3),
-      Story.state((after) => expect(drops(after)).toHaveLength(3)),
+      Story.expectState((after) => expect(drops(after)).toHaveLength(3)),
     );
   });
 

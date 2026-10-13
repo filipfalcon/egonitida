@@ -180,7 +180,7 @@ export const view = (timeline: Timeline): Option.Option<View> => {
   return Option.some({
     tick: later === undefined ? earlier.tick : earlier.tick + t * (later.tick - earlier.tick),
     get,
-    query: State.queryBy((components) => State.holding(drawn, components), get),
+    query: State.queryBy((components) => State.entitiesHolding(drawn, components), get),
     entities: State.entities(drawn),
     drawn,
   });

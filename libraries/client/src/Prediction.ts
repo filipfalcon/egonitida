@@ -106,7 +106,7 @@ export const make = (
         return {
           ...frame,
           get,
-          query: State.queryBy((components) => State.holding(frame.drawn, components), get),
+          query: State.queryBy((components) => State.entitiesHolding(frame.drawn, components), get),
         };
       },
     };

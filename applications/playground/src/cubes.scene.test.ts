@@ -14,7 +14,7 @@ const askedAndClicked = () => {
     Story.act('viewer', Cubes.AskedForCube, {}),
     Story.step(),
   );
-  const [first, second] = State.holding(asked.state, [Cubes.Cube]);
+  const [first, second] = State.entitiesHolding(asked.state, [Cubes.Cube]);
   return { asked, first, second };
 };
 

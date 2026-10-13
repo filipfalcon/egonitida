@@ -101,7 +101,7 @@ const setUp = ({
 
 /** Every object in the document, as the outliner lists it, in the order they were made. */
 const outlineOf = (state: State.State): ReadonlyArray<OutlineEntry> =>
-  State.holding(state, [Objects.Shape]).flatMap((entity) =>
+  State.entitiesHolding(state, [Objects.Shape]).flatMap((entity) =>
     Option.toArray(
       Option.all({
         shape: State.get(state, entity, Objects.Shape),

@@ -292,8 +292,8 @@ export const expectNoEvent =
     return simulation;
   };
 
-/** Hands the whole state to `assert`, with a way to find a named entity, for what the other expectations cannot say. */
-export const state =
+/** Expects of the whole state what `assert` says of it, given the state and a way to find a named entity: for what the other expectations cannot say. It returns a line of the story, as every expectation does; where a story ended, its state is the `state` of what `story` returns. */
+export const expectState =
   (assert: (state: State.State, named: (name: string) => State.Entity) => void): Line =>
   (simulation) => {
     assert(simulation.state, (name) => entityOf(simulation, name));

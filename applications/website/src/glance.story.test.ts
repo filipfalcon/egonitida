@@ -38,8 +38,8 @@ const into = (beat: Glance.Moment, seconds = 0.5) =>
 
 const beatOf = (simulation: Story.Simulation) => Glance.momentOf(simulation.state);
 
-const ideasOf = (state: State.State) => State.holding(state, [Glance.Idea]);
-const bangsOf = (state: State.State) => State.holding(state, [Glance.Bang]);
+const ideasOf = (state: State.State) => State.entitiesHolding(state, [Glance.Idea]);
+const bangsOf = (state: State.State) => State.entitiesHolding(state, [Glance.Bang]);
 const entitiesOf = (state: State.State) => State.query(state, Glance.Body);
 const looksOf = (state: State.State) => State.query(state, Glance.Look);
 const anglesOf = (state: State.State) =>
@@ -132,7 +132,7 @@ it('begins the state at its first tick as time starts stepping, holding all it h
   expect(Glance.isAboutToBegin(state)).toBe(false);
   expect(State.entities(state)).toEqual(State.entities(stepped));
   expect(sinceOf(state)).toEqual(sinceOf(stepped).map((since) => since - stepped.tick));
-  expect(State.holding(state, [Glance.Eye])).toEqual([viewer]);
+  expect(State.entitiesHolding(state, [Glance.Eye])).toEqual([viewer]);
 });
 
 it('goes back a beat when the viewer chooses it, letting go of what came with the beat it leaves', () => {

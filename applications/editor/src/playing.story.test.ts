@@ -46,7 +46,7 @@ describe('a document playing', () => {
       Story.act('player', Pointing.Clicked, { entity: box }),
       Story.step(),
       Story.expectEqual('box', Objects.Colour, { hex: 0x00ff00 }),
-      Story.state((after) => {
+      Story.expectState((after) => {
         expect(State.entities(after)).not.toContain(sphere);
       }),
     );

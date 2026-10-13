@@ -40,8 +40,10 @@ const at = (beat: Glance.Moment, seconds: number) => {
   return on(beat === 'Step' ? Glance.begun(reached) : reached, Story.seconds(seconds));
 };
 
-const first = (state: State.State, component: Parameters<typeof State.holding>[1][number]) =>
-  Option.fromNullishOr(State.holding(state, [component])[0]);
+const first = (
+  state: State.State,
+  component: Parameters<typeof State.entitiesHolding>[1][number],
+) => Option.fromNullishOr(State.entitiesHolding(state, [component])[0]);
 
 it.effect('draws each idea drifting in from beyond the edges', () =>
   Effect.gen(function* () {
@@ -71,7 +73,7 @@ it.effect(
       const scene = yield* Scene.make(GlanceView.views);
       const late = ideasFor(20);
       yield* scene.show(late);
-      const sizes = State.holding(late, [Glance.Idea]).map((idea) =>
+      const sizes = State.entitiesHolding(late, [Glance.Idea]).map((idea) =>
         Option.map(scene.find(GlanceView.ideas, idea), ({ scale }) => scale.x),
       );
 
@@ -112,7 +114,7 @@ it.effect(
       const scene = yield* Scene.make(GlanceView.views);
       const emerging = at('Entities', 5);
       yield* scene.show(emerging);
-      const drawn = State.holding(emerging, [Glance.Body]).map((entity) =>
+      const drawn = State.entitiesHolding(emerging, [Glance.Body]).map((entity) =>
         scene.find(GlanceView.bare, entity),
       );
       const sizes = drawn.map((object) => Option.map(object, ({ scale }) => scale.x));
@@ -126,7 +128,7 @@ it.effect(
       expect(drawn).toHaveLength(Glance.PLANETS);
       expect(new Set(sizes.map((size) => Option.getOrElse(size, () => Number.NaN))).size).toBe(1);
       expect(new Set(across).size).toBe(Glance.PLANETS);
-      expect(State.holding(emerging, [Glance.Look])).toEqual([]);
+      expect(State.entitiesHolding(emerging, [Glance.Look])).toEqual([]);
     }),
 );
 
@@ -200,7 +202,7 @@ it.effect('lines the entities up as an array, each in a slot of its own between 
     const emerging = at('Entities', 5);
     yield* scene.show(emerging);
 
-    const across = State.holding(emerging, [Glance.Body]).map((entity) =>
+    const across = State.entitiesHolding(emerging, [Glance.Body]).map((entity) =>
       Option.getOrElse(
         Option.map(scene.find(GlanceView.entityArray, entity), ({ position }) => position.x),
         () => Number.NaN,

@@ -14,7 +14,7 @@ it.effect('draws every light at its place in the square, as high as it swells', 
 
     yield* scene.show(swelling);
 
-    for (const light of State.holding(swelling, [Ocean.Light])) {
+    for (const light of State.entitiesHolding(swelling, [Ocean.Light])) {
       const drawn = scene.find(OceanView.lights, light);
       const expected = Option.all([
         State.get(swelling, light, Ocean.Light),
@@ -36,7 +36,7 @@ it.effect('draws a light the brighter the higher it stands', () =>
     const scene = yield* Scene.make(OceanView.views);
     yield* scene.show(swelling);
 
-    const lights = State.holding(swelling, [Ocean.Light]).flatMap((light) =>
+    const lights = State.entitiesHolding(swelling, [Ocean.Light]).flatMap((light) =>
       Option.toArray(
         Option.all([
           State.get(swelling, light, Ocean.Swell),

@@ -152,7 +152,7 @@ export { viewer };
 /** The light at its place in the square, if one stands there. */
 export const lightAt = (across: number, back: number): Option.Option<State.Entity> =>
   Option.fromNullishOr(
-    State.holding(state, [Light]).find((light) =>
+    State.entitiesHolding(state, [Light]).find((light) =>
       Option.exists(
         State.get(state, light, Light),
         (place) => place.across === across && place.back === back,

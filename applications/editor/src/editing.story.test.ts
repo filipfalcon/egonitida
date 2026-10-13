@@ -13,7 +13,7 @@ const given = Story.given(Editing.joined.state, {
 
 /** Every object in `state`, by its label, in the order they were made. */
 const labels = (state: State.State) =>
-  State.holding(state, [Objects.Shape]).map((object) =>
+  State.entitiesHolding(state, [Objects.Shape]).map((object) =>
     Option.map(State.get(state, object, Pointing.Label), ({ text }) => text),
   );
 
@@ -30,7 +30,7 @@ describe('editing a document', () => {
     );
 
     expect(labels(told.state)).toEqual(['Box 1', 'Sphere 2', 'Sphere 3'].map(Option.some));
-    const added = State.holding(told.state, [Objects.Shape]).at(-1);
+    const added = State.entitiesHolding(told.state, [Objects.Shape]).at(-1);
     expect(Story.valueOf(told, 'editor', Editing.Selection)).toEqual({
       selected: Option.fromNullishOr(added),
     });

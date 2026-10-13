@@ -335,7 +335,7 @@ export const make = <R = never>(
       Effect.gen(function* () {
         const keeping = kept.get(view) ?? new Map<State.Entity, Kept>();
         kept.set(view, keeping);
-        const now = new Set(State.holding(frame.drawn, view.components));
+        const now = new Set(State.entitiesHolding(frame.drawn, view.components));
         for (const [entity, gone] of keeping) {
           if (!now.has(entity)) {
             keeping.delete(entity);

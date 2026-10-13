@@ -45,8 +45,8 @@ describe('a game stepped by hand', () => {
         yield* Stepping.show(client);
         yield* pass(100);
 
-        expect(State.holding(yield* client.state, [Press.Position])).toHaveLength(
-          State.holding(Press.state, [Press.Position]).length,
+        expect(State.entitiesHolding(yield* client.state, [Press.Position])).toHaveLength(
+          State.entitiesHolding(Press.state, [Press.Position]).length,
         );
       }),
   );

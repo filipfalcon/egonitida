@@ -26,7 +26,7 @@ describe('the horde', () => {
       Game.game,
       Story.given(state, { survivor }),
       Story.until((now) => zombies(now).length > 0),
-      Story.state((now) => {
+      Story.expectState((now) => {
         expect(now.tick).toBeGreaterThanOrEqual(Horde.GRACE_SECONDS * Game.game.stepRate);
         expect(zombies(now).map(([, , { x, z }]) => Math.hypot(x, z))).toEqual([
           expect.closeTo(Body.ARENA_RADIUS, 1),
@@ -40,7 +40,7 @@ describe('the horde', () => {
     const risenAt: Array<number> = [];
     const rising = (count: number) => [
       Story.until((now) => zombies(now).length === count),
-      Story.state((now) => {
+      Story.expectState((now) => {
         risenAt.push(now.tick);
       }),
     ];
@@ -61,7 +61,7 @@ describe('the horde', () => {
       Game.game,
       Story.given(state, { survivor }),
       Story.seconds(10),
-      Story.state((now) => expect(zombies(now)).toEqual([])),
+      Story.expectState((now) => expect(zombies(now)).toEqual([])),
     );
   });
 

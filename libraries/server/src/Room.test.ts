@@ -63,7 +63,7 @@ const entered = (room: Room.Room) =>
 
 /** Who is in the state `client` sees now. */
 const someone = (client: Client.Client) =>
-  Effect.map(client.state, (state) => State.holding(state, [Someone]));
+  Effect.map(client.state, (state) => State.entitiesHolding(state, [Someone]));
 
 describe('a room', () => {
   // Real time: a room steps its game as time passes, as a Durable Object does.

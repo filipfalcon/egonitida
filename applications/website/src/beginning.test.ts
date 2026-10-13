@@ -42,8 +42,8 @@ describe('a state begun by its host', () => {
         expect(Glance.momentOf(state)).toBe('Step');
         expect(Glance.isAboutToBegin(state)).toBe(false);
         expect(state.tick).toBeLessThan(atPoint.tick);
-        expect(State.holding(state, [Glance.Idea])).toEqual([]);
-        expect(State.holding(state, [Glance.Eye])).toEqual([viewer]);
+        expect(State.entitiesHolding(state, [Glance.Idea])).toEqual([]);
+        expect(State.entitiesHolding(state, [Glance.Eye])).toEqual([viewer]);
       }),
   );
 

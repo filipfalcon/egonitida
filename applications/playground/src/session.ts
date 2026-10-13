@@ -104,7 +104,7 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
           ? Projection.stream({
               resource: CubesSession,
               schema: Schema.Int,
-              project: (state) => State.holding(state, [Cubes.Cube]).length,
+              project: (state) => State.entitiesHolding(state, [Cubes.Cube]).length,
               onProjected: (count) => Message.CountedCubes({ count }),
               onNotJoined: (): Message => Message.LeftGame(),
             })

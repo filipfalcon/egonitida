@@ -136,7 +136,7 @@ describe('Story', () => {
     Story.story(
       game,
       Story.given(state),
-      Story.state((current) =>
+      Story.expectState((current) =>
         expect(State.get(current, runner, Position)).toEqual(Option.some({ x: 7 })),
       ),
     );

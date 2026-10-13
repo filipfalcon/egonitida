@@ -47,8 +47,8 @@ export const get = <Value>(
   component: Of<Value>,
 ): Option.Option<Value> => component.read(state.stores.get(component.name), entity);
 
-/** Every entity holding all of `components`, in the order the entities were spawned. */
-export const holding = (
+/** Every entity holding all of `components`, in the order the entities were spawned: the entities alone, where `query` gives each with its values. */
+export const entitiesHolding = (
   state: Readable,
   components: ReadonlyArray<Component.Any>,
 ): ReadonlyArray<Entity> => {
@@ -150,7 +150,7 @@ export const queryBy = (
 /** The query over everything in `state`. */
 export const queryIn = (state: Readable): Query<Component.Any> =>
   queryBy(
-    (components) => holding(state, components),
+    (components) => entitiesHolding(state, components),
     (entity, component) => get(state, entity, component),
   );
 
@@ -195,7 +195,7 @@ export function query(
   state: Readable,
   ...components: ReadonlyArray<Component.Any>
 ): ReadonlyArray<ReadonlyArray<unknown>> {
-  return holding(state, components).map((entity) => [
+  return entitiesHolding(state, components).map((entity) => [
     entity,
     ...components.map((component) => Option.getOrUndefined(get(state, entity, component))),
   ]);
