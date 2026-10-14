@@ -1,4 +1,4 @@
-import { Data, Effect, type Scope } from 'effect';
+import { Data, Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 
 /**
@@ -20,11 +20,14 @@ export interface Opposed {
 
 /**
  * A dial that lengthens bones, such as a figure's shins: each bone's offset from its parent bone is drawn out by `by` for every whole of the value, and in as far below nothing, and the skin each holds goes with it. Only where the model rests is lengthened, so animations that turn its bones, never moving them, play on it as before; a bone with no parent bone has no offset to draw out, and is left as it is.
+ *
+ * A dial that `raises` a bone, such as legs raising the pelvis, draws that bone's offset out too, by as much as the longest way down through the bones it lengthens beneath it grew, so a figure standing on the ground as made stands on it with her legs longer or shorter.
  */
 export interface Lengthen {
   readonly _tag: 'Lengthen';
   readonly bones: ReadonlyArray<string>;
   readonly by: number;
+  readonly raises: Option.Option<string>;
 }
 
 /** What a dial turns in a model. */
@@ -57,11 +60,16 @@ export function morph(
     : { _tag: 'Opposed', less: targets.less, more: targets.more };
 }
 
-/** A dial lengthening `bones`, each by `by` of its offset from its parent for every whole of the value. */
+/** A dial lengthening `bones`, each by `by` of its offset from its parent for every whole of the value, and raising the bone `raises`, if given, by as much as they grew beneath it. */
 export const lengthen = (
   bones: ReadonlyArray<string>,
-  options: { readonly by: number },
-): Lengthen => ({ _tag: 'Lengthen', bones, by: options.by });
+  options: { readonly by: number; readonly raises?: string | undefined },
+): Lengthen => ({
+  _tag: 'Lengthen',
+  bones,
+  by: options.by,
+  raises: Option.fromNullishOr(options.raises),
+});
 
 /** How a model is shaped by `dials`. */
 export const make = <const D extends Dials>(dials: D): Shaping<D> => ({ dials });
@@ -119,11 +127,19 @@ interface Skin {
   readonly fromSkeleton: Three.Matrix4;
 }
 
-/** A dial lengthening `joints`, and the value it was last lengthened by: nothing, as the model is made. */
+/** A bone a dial raises: its joint, how long its offset from its parent was made, and how long the longest way down through the bones the dial lengthens beneath it was made. */
+interface Raised {
+  readonly joint: Joint;
+  readonly made: number;
+  readonly beneath: number;
+}
+
+/** A dial lengthening `joints`, raising the bone `raised`, if it raises one, and the value it was last lengthened by: nothing, as the model is made. */
 interface Length {
   readonly dial: string;
   readonly by: number;
   readonly joints: ReadonlyArray<Joint>;
+  readonly raised: Option.Option<Raised>;
   applied: number;
 }
 
@@ -151,6 +167,10 @@ const restJoints = (lengths: Lengths) => {
   for (const length of lengths.dials) {
     for (const joint of length.joints) {
       joint.stretch *= 1 + length.applied * length.by;
+    }
+    if (Option.isSome(length.raised) && length.raised.value.made > 0) {
+      const { joint, made, beneath } = length.raised.value;
+      joint.stretch *= 1 + (length.applied * length.by * beneath) / made;
     }
   }
   for (const joint of lengths.joints) {
@@ -245,13 +265,38 @@ export class Shaped<D extends Dials> extends Three.Group {
   readonly model: Three.Object3D;
   readonly #turns: ReadonlyArray<Turn>;
   readonly #lengths: Lengths;
+  readonly #joints: ReadonlyMap<Three.Object3D, Joint>;
 
   constructor(model: Three.Object3D, turns: ReadonlyArray<Turn>, lengths: Lengths) {
     super();
     this.model = model;
     this.#turns = turns;
     this.#lengths = lengths;
+    this.#joints = new Map(lengths.joints.map((joint) => [joint.bone, joint]));
     this.add(model);
+  }
+
+  /** What `run` gives, run with every bone of the model where it was made, then put back where the dials put it: as a mixer binding the model must see it, so it blends a clip with the model as made, however it is shaped. */
+  asMade<A>(run: () => A): A {
+    const shaped = this.#lengths.joints.map((joint) => joint.bone.position.clone());
+    for (const joint of this.#lengths.joints) {
+      joint.bone.position.copy(joint.madePosition);
+    }
+    try {
+      return run();
+    } finally {
+      this.#lengths.joints.forEach((joint, index) => {
+        const position = shaped[index];
+        if (position !== undefined) {
+          joint.bone.position.copy(position);
+        }
+      });
+    }
+  }
+
+  /** How far the dials draw `bone`'s offset from its parent out as the model is shaped now: 1 as it was made, and for any bone they never lengthen nor raise. An animation that moves the bone moves it as far, as `Animating` poses a shaped model. */
+  stretchOf(bone: Three.Object3D): number {
+    return this.#joints.get(bone)?.stretch ?? 1;
   }
 
   /**
@@ -363,6 +408,23 @@ const lengthsOf = (model: Three.Object3D, meshes: ReadonlyArray<Three.SkinnedMes
   return { joints, skeletons, skins: [...skins.values()] };
 };
 
+/** How long the longest way down from `raised` through `lengthened` was made: along each way, every bone of them its offset from its parent long, and every other nothing. */
+const beneath = (raised: Joint, lengthened: ReadonlyArray<Joint>) => {
+  let longest = 0;
+  for (const from of lengthened) {
+    let along = 0;
+    let at: Joint | undefined = from;
+    while (at !== undefined && at !== raised) {
+      along += lengthened.includes(at) ? at.madePosition.length() : 0;
+      at = at.parent;
+    }
+    if (at === raised) {
+      longest = Math.max(longest, along);
+    }
+  }
+  return longest;
+};
+
 /** Gives `meshes` skin and skeletons of their own, copies of those they hold, which lengthening may rewrite without reaching any other copy of the model they share them with; a buffer or skeleton several of them share, they go on sharing. Lets go of the copied skin once the scope closes. */
 const ownSkin = (meshes: ReadonlyArray<Three.SkinnedMesh>) =>
   Effect.acquireRelease(
@@ -439,7 +501,19 @@ export const fit = <D extends Dials>(
           }
           return [joint];
         });
-        lengths.push({ dial, by: turned.by, joints, applied: 0 });
+        const raised = Option.flatMap(turned.raises, (name) => {
+          const joint = bones.get(name);
+          if (joint === undefined) {
+            absent.push(name);
+            return Option.none();
+          }
+          return Option.some({
+            joint,
+            made: joint.madePosition.length(),
+            beneath: beneath(joint, joints),
+          });
+        });
+        lengths.push({ dial, by: turned.by, joints, raised, applied: 0 });
       }
     }
     if (absent.length > 0) {

@@ -375,3 +375,105 @@ describe('Shaping.lengthen', () => {
     }),
   );
 });
+
+/** A leg standing on the ground, as a figure stands: a root on the ground, a hip two metres over it, a knee a metre below the hip, and a foot a metre below that, on the ground, with its skin a point at each. */
+const standing = () => {
+  const root = new Three.Bone();
+  root.name = 'root';
+  const hip = new Three.Bone();
+  hip.name = 'hip';
+  hip.position.set(0, 2, 0);
+  const knee = new Three.Bone();
+  knee.name = 'knee';
+  knee.position.set(0, -1, 0);
+  const foot = new Three.Bone();
+  foot.name = 'foot';
+  foot.position.set(0, -1, 0);
+  root.add(hip);
+  hip.add(knee);
+  knee.add(foot);
+  const geometry = new Three.BufferGeometry();
+  geometry.setAttribute(
+    'position',
+    new Three.Float32BufferAttribute([0, 2, 0, 0, 1, 0, 0, 0, 0], 3),
+  );
+  geometry.setAttribute(
+    'skinIndex',
+    new Three.Uint16BufferAttribute([1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0], 4),
+  );
+  geometry.setAttribute(
+    'skinWeight',
+    new Three.Float32BufferAttribute([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], 4),
+  );
+  const mesh = new Three.SkinnedMesh(geometry, new Three.MeshBasicNodeMaterial());
+  mesh.name = 'leg';
+  mesh.add(root);
+  const model = new Three.Group();
+  model.add(mesh);
+  mesh.bind(new Three.Skeleton([root, hip, knee, foot]));
+  return model;
+};
+
+/** The standing leg's skin: its points at the hip, the knee, and the foot. */
+const STANDING_HIP = 0;
+const STANDING_FOOT = 2;
+
+describe('a lengthening that raises', () => {
+  const raising = Shaping.make({
+    legs: Shaping.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
+  });
+
+  it.effect('refuses a model that has no bone a dial raises, naming it', () =>
+    Effect.gen(function* () {
+      const unfitted = yield* Effect.flip(
+        Shaping.fit(
+          standing(),
+          Shaping.make({ legs: Shaping.lengthen(['foot'], { by: 1, raises: 'pelvis' }) }),
+        ),
+      );
+
+      expect(unfitted.absent).toEqual(['pelvis']);
+    }),
+  );
+
+  it.effect(
+    'raises the bone as much as the bones beneath it grew, so the foot stays on the ground',
+    () =>
+      Effect.gen(function* () {
+        const shaped = yield* Shaping.fit(standing(), raising);
+
+        shaped.shape({ legs: 1 });
+
+        expect(distanceFrom(drawnAt(shaped, STANDING_HIP), 0, 3, 0)).toBeLessThan(1e-6);
+        expect(distanceFrom(drawnAt(shaped, STANDING_FOOT), 0, 0, 0)).toBeLessThan(1e-6);
+        expect(shaped.getObjectByName('hip')?.position.y).toBeCloseTo(3);
+      }),
+  );
+
+  it.effect('lowers it as much as they shrank', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(standing(), raising);
+
+      shaped.shape({ legs: -1 });
+
+      expect(distanceFrom(drawnAt(shaped, STANDING_HIP), 0, 1, 0)).toBeLessThan(1e-6);
+      expect(distanceFrom(drawnAt(shaped, STANDING_FOOT), 0, 0, 0)).toBeLessThan(1e-6);
+    }),
+  );
+
+  it.effect('says how far it draws each bone out from its parent, nothing changed as made', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(standing(), raising);
+      const bone = (name: string) =>
+        Option.getOrThrow(Option.fromNullishOr(shaped.getObjectByName(name)));
+      const made = shaped.stretchOf(bone('hip'));
+
+      shaped.shape({ legs: 1 });
+
+      expect(made).toBeCloseTo(1);
+      expect(shaped.stretchOf(bone('hip'))).toBeCloseTo(1.5);
+      expect(shaped.stretchOf(bone('foot'))).toBeCloseTo(1.5);
+      expect(shaped.stretchOf(bone('root'))).toBeCloseTo(1);
+    }),
+  );
+});

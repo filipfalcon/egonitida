@@ -1,5 +1,6 @@
 import { Data, Effect, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
+import * as Shaping from '#src/Shaping.ts';
 
 /**
  * A model posed by its animation clips as a game's values say, such as a figure walking, as far through her stride as the state says, and reloading, as long as she has been: every frame, as a view draws it, each clip is set to where it is and how much it weighs, y = h(x), never played on by the time between frames, so the same values give the same pose, however it was posed before, and going back in a game, or replaying it, poses it as it was. The game names its clips and how each is taken, since only it knows its model and its clips; `fit` finds them in the clips delivered with a model, and the bones they move in the model, or refuses it, naming what it lacks.
@@ -72,6 +73,12 @@ interface Fitted {
   readonly duration: number;
 }
 
+/** A bone of a shaped model a clip moves, and where the mixer last put it, before the shaping drew it out. */
+interface Moved {
+  readonly bone: Three.Object3D;
+  readonly posed: Three.Vector3;
+}
+
 /** The names of the bones `bones` gives of `model`, or the absent bones it names. */
 const bonesOf = (model: Three.Object3D, bones: Bones) => {
   const absent = [...(bones.from ?? []), ...(bones.without ?? [])].filter(
@@ -117,17 +124,24 @@ export class Animated<C extends Clips> extends Three.Group {
   readonly model: Three.Object3D;
   readonly #mixer: Three.AnimationMixer;
   readonly #fitted: ReadonlyArray<Fitted>;
+  readonly #moved: ReadonlyArray<Moved>;
 
-  constructor(model: Three.Object3D, mixer: Three.AnimationMixer, fitted: ReadonlyArray<Fitted>) {
+  constructor(
+    model: Three.Object3D,
+    mixer: Three.AnimationMixer,
+    fitted: ReadonlyArray<Fitted>,
+    moved: ReadonlyArray<Moved>,
+  ) {
     super();
     this.model = model;
     this.#mixer = mixer;
     this.#fitted = fitted;
+    this.#moved = moved;
     this.add(model);
   }
 
   /**
-   * Poses the model as `values` say: each clip where its value puts it, a cycle as far through it as its share, round past its end, and what happens once as many seconds into it as given, held at its start and its end, each weighing as much as its value says. Where the clips weigh less than a whole, the model stands as it was made for the rest.
+   * Poses the model as `values` say: each clip where its value puts it, a cycle as far through it as its share, round past its end, and what happens once as many seconds into it as given, held at its start and its end, each weighing as much as its value says. Where the clips weigh less than a whole, the model stands as it was made for the rest. A model `Shaping` shaped has each bone a clip moves moved as far as the shaping draws it out, so a figure whose legs are longer crouches and walks with her feet on the ground; shape it before posing it.
    */
   pose(values: Values<C>): void {
     const read: Readonly<Record<string, At>> = values;
@@ -142,13 +156,24 @@ export class Animated<C extends Clips> extends Three.Group {
           : Math.min(Math.max(at.at, 0), duration);
       action.setEffectiveWeight(Math.min(Math.max(at.weight, 0), 1));
     }
+    const { model } = this;
+    // The mixer puts a bone only where it did not last put it, so each starts where it last put it.
+    for (const { bone, posed } of this.#moved) {
+      bone.position.copy(posed);
+    }
     // No time passes: every clip is posed where it was just put.
     this.#mixer.update(0);
+    if (model instanceof Shaping.Shaped) {
+      for (const { bone, posed } of this.#moved) {
+        posed.copy(bone.position);
+        bone.position.multiplyScalar(model.stretchOf(bone));
+      }
+    }
   }
 }
 
 /**
- * `model` fitted to `animating`: every clip the game names found among `clips`, delivered with the model, as a glTF file delivers them beside its scene, and every bone those clips move, and every bone a clip is given, found in the model. Fails with `Unfitted` if a clip is not among `clips`, or a bone not in the model. The model is posed by a mixer of its own, so copies of one loaded model, sharing its clips, are each posed on their own; the scope lets go of it once it closes.
+ * `model` fitted to `animating`: every clip the game names found among `clips`, delivered with the model, as a glTF file delivers them beside its scene, and every bone those clips move, and every bone a clip is given, found in the model. Fails with `Unfitted` if a clip is not among `clips`, or a bone not in the model. The model is posed by a mixer of its own, so copies of one loaded model, sharing its clips, are each posed on their own; the scope lets go of it once it closes. A model `Shaping` shaped is fitted as its `Shaped`, and posed as it is shaped.
  */
 export const fit = <C extends Clips>(
   model: Three.Object3D,
@@ -189,14 +214,33 @@ export const fit = <C extends Clips>(
           released.uncacheRoot(model);
         }),
     );
-    const fitted = taken.map(({ name, clip, taken: posing }) => {
-      const action = mixer.clipAction(posing);
-      if (clip.taken.additive === true) {
-        action.blendMode = Three.AdditiveAnimationBlendMode;
+    const bind = () =>
+      taken.map(({ name, clip, taken: posing }) => {
+        const action = mixer.clipAction(posing);
+        if (clip.taken.additive === true) {
+          action.blendMode = Three.AdditiveAnimationBlendMode;
+        }
+        action.setEffectiveWeight(0);
+        action.play();
+        return { name, clip, action, duration: posing.duration };
+      });
+    if (!(model instanceof Shaping.Shaped)) {
+      return new Animated<C>(model, mixer, bind(), []);
+    }
+    const bones = new Set<Three.Object3D>();
+    for (const { taken: posing } of taken) {
+      for (const track of posing.tracks) {
+        const { nodeName, propertyName } = Three.PropertyBinding.parseTrackName(track.name);
+        const bone = model.getObjectByName(nodeName);
+        if (propertyName === 'position' && bone !== undefined) {
+          bones.add(bone);
+        }
       }
-      action.setEffectiveWeight(0);
-      action.play();
-      return { name, clip, action, duration: posing.duration };
-    });
-    return new Animated<C>(model, mixer, fitted);
+    }
+    // A mixer blends a clip with what it binds to as it finds it, and starts there: the model as it was made.
+    const [fitted, moved] = model.asMade(() => [
+      bind(),
+      [...bones].map((bone) => ({ bone, posed: bone.position.clone() })),
+    ]);
+    return new Animated<C>(model, mixer, fitted, moved);
   });

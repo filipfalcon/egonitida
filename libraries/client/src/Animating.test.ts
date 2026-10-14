@@ -4,6 +4,7 @@ import { Effect, Option, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Animating from '#src/Animating.ts';
 import * as Scene from '#src/Scene.ts';
+import * as Shaping from '#src/Shaping.ts';
 import * as View from '#src/View.ts';
 
 /** A leg as a model is delivered: a hip, a knee a metre below it, and a foot a metre below that, standing straight. */
@@ -267,3 +268,109 @@ it.effect('draws a figure posed as far through her stride as the state holds', (
     ).toBeCloseTo(Math.PI / 4);
   }),
 );
+
+/** A figure's leg standing on the ground: a root on the ground, a hip two metres over it, a knee a metre below the hip, and a foot a metre below that, its skin a point at each. */
+const standing = () => {
+  const bone = (name: string, y: number) => {
+    const made = new Three.Bone();
+    made.name = name;
+    made.position.set(0, y, 0);
+    return made;
+  };
+  const root = bone('root', 0);
+  const hip = bone('hip', 2);
+  const knee = bone('knee', -1);
+  const foot = bone('foot', -1);
+  root.add(hip);
+  hip.add(knee);
+  knee.add(foot);
+  const geometry = new Three.BufferGeometry();
+  geometry.setAttribute(
+    'position',
+    new Three.Float32BufferAttribute([0, 2, 0, 0, 1, 0, 0, 0, 0], 3),
+  );
+  geometry.setAttribute(
+    'skinIndex',
+    new Three.Uint16BufferAttribute([1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0], 4),
+  );
+  geometry.setAttribute(
+    'skinWeight',
+    new Three.Float32BufferAttribute([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], 4),
+  );
+  const mesh = new Three.SkinnedMesh(geometry, new Three.MeshBasicNodeMaterial());
+  mesh.add(root);
+  mesh.bind(new Three.Skeleton([root, hip, knee, foot]));
+  const model = new Three.Group();
+  model.add(mesh);
+  return model;
+};
+
+/** A clip, a second long, crouching: the hip lowered from two metres to 1.8. */
+const crouching = new Three.AnimationClip('Crouch', 1, [
+  new Three.VectorKeyframeTrack('hip.position', [0, 1], [0, 2, 0, 0, 1.8, 0]),
+]);
+
+/** Legs half as long again at a whole, raising the hip as much. */
+const longer = Shaping.make({
+  legs: Shaping.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
+});
+
+describe('a shaped model posed', () => {
+  it.effect(
+    'moves a bone a clip moves as far as the shaping drew it out, so the feet stay down',
+    () =>
+      Effect.gen(function* () {
+        const shaped = yield* Shaping.fit(standing(), longer);
+        const posed = yield* Animating.fit(
+          shaped,
+          [crouching],
+          Animating.make({ crouch: Animating.once('Crouch') }),
+        );
+
+        shaped.shape({ legs: 1 });
+        posed.pose({ crouch: { at: 0, weight: 1 } });
+        const standingUp = heightOf(posed, 'hip');
+        posed.pose({ crouch: { at: 1, weight: 1 } });
+        posed.pose({ crouch: { at: 1, weight: 1 } });
+
+        expect(standingUp).toBeCloseTo(3);
+        expect(heightOf(posed, 'hip')).toBeCloseTo(2.7);
+      }),
+  );
+
+  it.effect('leaves a bone no clip moves where the shaping rests it', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(standing(), longer);
+      const posed = yield* Animating.fit(
+        shaped,
+        [bending('Bend', ['knee'])],
+        Animating.make({ bend: Animating.once('Bend') }),
+      );
+
+      shaped.shape({ legs: 1 });
+      posed.pose({ bend: { at: 1, weight: 1 } });
+      posed.pose({ bend: { at: 0.5, weight: 1 } });
+
+      expect(heightOf(posed, 'hip')).toBeCloseTo(3);
+      expect(heightOf(posed, 'knee')).toBeCloseTo(-1.5);
+      expect(angleOf(posed, 'knee')).toBeCloseTo(Math.PI / 4);
+    }),
+  );
+
+  it.effect('blends a clip with the model as it was made, however it was shaped when fitted', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(standing(), longer);
+      shaped.shape({ legs: 1 });
+      const posed = yield* Animating.fit(
+        shaped,
+        [crouching],
+        Animating.make({ crouch: Animating.once('Crouch') }),
+      );
+
+      posed.pose({ crouch: { at: 1, weight: 0.5 } });
+
+      // Halfway between the hip crouched and standing as made, drawn out half as long again.
+      expect(heightOf(posed, 'hip')).toBeCloseTo(((1.8 + 2) / 2) * 1.5);
+    }),
+  );
+});
