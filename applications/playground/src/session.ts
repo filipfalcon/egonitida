@@ -7,6 +7,7 @@ import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';
 import * as Cubes from '#src/cubes.ts';
 import * as CubesView from '#src/cubes.view.ts';
+import * as Look from '#src/look.ts';
 import { CubesSession, Message, type Model, type Services } from '#src/main.ts';
 
 // Where the game meets the page: joined in a worker while the playground is open, shown on the canvas once Foldkit has it in the page, and counted for the page to show.
@@ -64,7 +65,7 @@ const setUp = ({ scene }: { readonly scene: Three.Scene }) => {
   scene.add(new Three.AmbientLight(0xffffff, 0.4), sun);
 };
 
-/** The canvas showing the game, from where the player looks, and the count of cubes its state holds. */
+/** The canvas showing the game, from where the player looks and as far as they look around, and the count of cubes its state holds. */
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
   // Shown while the canvas is in the page; where the player looks from is read every frame, and never shows the stage anew.
   stage: Stage.entry({
@@ -76,6 +77,14 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
     alongside: capturedAs(host),
     shows: (model: Model) => model.session._tag === 'Joined' && model.session.canvas === 'Mounted',
     input: { schema: CubesView.Viewpoint, of: (model: Model) => model.viewpoint },
+    // Looking around changes every frame, which the Model never holds: the stage plays it on from the stick each frame it draws.
+    played: {
+      start: (viewpoint) => ({ viewpoint, look: Look.start }),
+      next: (viewpoint, before, devices, seconds) => ({
+        viewpoint,
+        look: Look.look(devices, before.look, seconds),
+      }),
+    },
     onNotJoined: (): Message => Message.LeftGame(),
     onFailed: (reason) => Message.FailedShowGame({ reason }),
   }),

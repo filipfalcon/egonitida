@@ -5,6 +5,13 @@ import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Cubes from '#src/cubes.ts';
 import * as CubesView from '#src/cubes.view.ts';
+import * as Look from '#src/look.ts';
+
+/** The cubes seen from `viewpoint`, looked around as `look` turned the player. */
+const seen = (viewpoint: CubesView.Viewpoint, look: Look.Look = Look.start): CubesView.Seen => ({
+  viewpoint,
+  look,
+});
 
 /** Two cubes asked for, the second clicked once. */
 const askedAndClicked = () => {
@@ -27,10 +34,8 @@ it.effect('draws every cube where its place in the grid is, in the colour it is 
       onSome: (cube) =>
         Story.step()(Story.act('viewer', Pointing.Clicked, { entity: cube })(asked)),
     });
-    const scene = yield* Scene.make(
-      CubesView.views,
-      Option.some(Cubes.viewer),
-      () => 'Ahead' as const,
+    const scene = yield* Scene.make(CubesView.views, Option.some(Cubes.viewer), () =>
+      seen('Ahead'),
     );
 
     yield* scene.show(clicked.state);
@@ -56,10 +61,8 @@ it.effect('turns every cube as time goes on', () =>
   Effect.gen(function* () {
     const { asked, first } = askedAndClicked();
     const later = Story.seconds(1)(asked);
-    const scene = yield* Scene.make(
-      CubesView.views,
-      Option.some(Cubes.viewer),
-      () => 'Ahead' as const,
+    const scene = yield* Scene.make(CubesView.views, Option.some(Cubes.viewer), () =>
+      seen('Ahead'),
     );
     const turn = () =>
       Option.flatMap(Option.fromNullishOr(first), (cube) =>
@@ -83,10 +86,8 @@ it.effect(
     Effect.gen(function* () {
       const { asked } = askedAndClicked();
       const viewpoint: { current: CubesView.Viewpoint } = { current: 'Ahead' };
-      const scene = yield* Scene.make(
-        CubesView.views,
-        Option.some(Cubes.viewer),
-        () => viewpoint.current,
+      const scene = yield* Scene.make(CubesView.views, Option.some(Cubes.viewer), () =>
+        seen(viewpoint.current),
       );
       const forward = new Three.Vector3();
 
@@ -99,5 +100,24 @@ it.effect(
       // Ahead, the camera looks mostly forward, into the grid; overhead, straight down onto it.
       expect(ahead.dot(new Three.Vector3(0, 0, -1))).toBeGreaterThan(0.9);
       expect(overhead.dot(new Three.Vector3(0, -1, 0))).toBeCloseTo(1);
+    }),
+);
+
+it.effect(
+  'looks around from where the player looks from, as far as their devices turned them',
+  () =>
+    Effect.gen(function* () {
+      const { asked } = askedAndClicked();
+      const turned: Look.Look = { ...Look.start, yaw: Math.PI / 2 };
+      const scene = yield* Scene.make(CubesView.views, Option.some(Cubes.viewer), () =>
+        seen('Ahead', turned),
+      );
+
+      yield* scene.show(asked.state);
+      const facing = scene.camera.getWorldDirection(new Three.Vector3());
+
+      // Turned a quarter to the left, the camera looks along -x, still a little down onto the grid.
+      expect(facing.dot(new Three.Vector3(-1, 0, 0))).toBeGreaterThan(0.9);
+      expect(facing.y).toBeLessThan(0);
     }),
 );
