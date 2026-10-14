@@ -10,6 +10,7 @@ export * as Host from '#src/Host.ts';
 export * as Input from '#src/Input.ts';
 export * as Pointing from '#src/Pointing.ts';
 export * as Random from '#src/Random.ts';
+export * as Ray from '#src/Ray.ts';
 export * as Rule from '#src/Rule.ts';
 export * as State from '#src/State.ts';
 export * as Story from '#src/Story.ts';
