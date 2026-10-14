@@ -2,7 +2,7 @@ import { Schema } from 'effect';
 import type * as Ray from '#src/Ray.ts';
 
 /**
- * A body falling limp, as plain data: points at its joints, each as round and as heavy as the flesh about it, held at the distances they started at, some held together as one, some joints bending only one way, falling under gravity onto the floor and against the walls until it lies still. The game names its points and how they hold together, since only it knows its bodies; the distances come from the pose it starts in, so a body shaped longer falls longer. It is stepped as a system steps anything, the same start falling the same way every time, so a replay falls as the game did; a client keeps it as a local component, stepped by a local system, as only it draws it.
+ * A body falling limp, as plain data: points at its joints, each as round and as heavy as the flesh about it, held at the distances they started at, some held together as one, some joints bending only one way, falling under gravity onto the floor and against the walls, soft, so what lands soaks up its tumbling, until it lies still. The game names its points and how they hold together, since only it knows its bodies; the distances come from the pose it starts in, so a body shaped longer falls longer. It is stepped as a system steps anything, the same start falling the same way every time, so a replay falls as the game did; a client keeps it as a local component, stepped by a local system, as only it draws it.
  */
 
 /** A point, or a direction, in metres. */
@@ -41,6 +41,8 @@ export interface Plan<P extends string> {
   readonly lightness: ReadonlyArray<number>;
   /** Every pair held at the distance it started at: the links, then every pair of each rigid group. */
   readonly pairs: ReadonlyArray<readonly [number, number]>;
+  /** The points of each group held together as one. */
+  readonly rigid: ReadonlyArray<ReadonlyArray<number>>;
   readonly hinges: ReadonlyArray<readonly [number, number, number, number, number]>;
   readonly place: ReadonlyMap<P, number>;
 }
@@ -74,6 +76,7 @@ export const plan = <const P extends string>(spec: Spec<P>): Plan<P> => {
     radius: names.map((name) => spec.points[name].radius),
     lightness: names.map((name) => 1 / spec.points[name].mass),
     pairs: [...spec.links.map(([a, b]) => [of(a), of(b)] as const), ...rigidPairs],
+    rigid: spec.rigid.map((group) => group.map(of)),
     hinges: spec.hinges.map(
       ({ from, joint, to, toward }) =>
         [of(from), of(joint), of(to), of(toward[0]), of(toward[1])] as const,
@@ -89,6 +92,8 @@ const ITERATIONS = 10;
 const AIR_DAMPING = 0.998;
 /** How much of a point's slide along the floor is left each step it touches it. */
 const FLOOR_GRIP = 0.8;
+/** A body is soft: once part of a group held together as one touches the floor, how much of the whole group's tumbling each step soaks up, so it does not roll on like a box. */
+const SOAK = 0.15;
 /** What lies within this of the floor touches it. */
 const ON_FLOOR = 0.01;
 /** It lies still once nothing has moved faster than this, in metres a second, for this long. */
@@ -304,6 +309,19 @@ export const step = <P extends string>(
         keepOut(now, index, plan.radius[index] ?? 0, around);
       }
     }
+    for (const group of plan.rigid) {
+      const down = group.some(
+        (index) => (now[index * 3 + 1] ?? 0) <= around.floor + (plan.radius[index] ?? 0) + ON_FLOOR,
+      );
+      if (down) {
+        for (const index of group) {
+          for (let axis = 0; axis < 3; axis++) {
+            const at = index * 3 + axis;
+            before[at] = (now[at] ?? 0) - ((now[at] ?? 0) - (before[at] ?? 0)) * (1 - SOAK);
+          }
+        }
+      }
+    }
     let fastest = 0;
     for (let index = 0; index < points; index++) {
       // What touches the floor slides on it little.
@@ -326,3 +344,61 @@ export const step = <P extends string>(
   const still = quiet >= REST_SECONDS;
   return { now, before: still ? [...now] : before, lengths: body.lengths, quiet, still };
 };
+
+/** The flesh about a limb's joints, left and right alike. */
+const limb = (thigh: Flesh, calf: Flesh, foot: Flesh, ball: Flesh) => ({ thigh, calf, foot, ball });
+const LEG = limb(
+  { radius: 0.07, mass: 7 },
+  { radius: 0.05, mass: 3.5 },
+  { radius: 0.04, mass: 1 },
+  { radius: 0.03, mass: 0.3 },
+);
+const ARM = {
+  upper: { radius: 0.045, mass: 2 },
+  lower: { radius: 0.04, mass: 1.3 },
+  hand: { radius: 0.04, mass: 0.5 },
+};
+
+/**
+ * How a figure made with MPFB, MakeHuman's Blender add-on, falls, on the `game_engine` rig it makes: a point at each of her bones that bears her weight, by the bone's name, as heavy as a person of sixty kilograms; her trunk, from her hips to her shoulders and neck, held together as one; her head on her neck, her limbs from joint to joint; and her knees bending only forward, the way her feet point. `Ragdolling.mpfb` poses her model by it.
+ */
+export const mpfb = plan({
+  points: {
+    pelvis: { radius: 0.12, mass: 12 },
+    spine_03: { radius: 0.13, mass: 15 },
+    neck_01: { radius: 0.05, mass: 2 },
+    head: { radius: 0.1, mass: 5 },
+    thigh_l: LEG.thigh,
+    calf_l: LEG.calf,
+    foot_l: LEG.foot,
+    ball_l: LEG.ball,
+    thigh_r: LEG.thigh,
+    calf_r: LEG.calf,
+    foot_r: LEG.foot,
+    ball_r: LEG.ball,
+    upperarm_l: ARM.upper,
+    lowerarm_l: ARM.lower,
+    hand_l: ARM.hand,
+    upperarm_r: ARM.upper,
+    lowerarm_r: ARM.lower,
+    hand_r: ARM.hand,
+  },
+  links: [
+    ['neck_01', 'head'],
+    ['thigh_l', 'calf_l'],
+    ['calf_l', 'foot_l'],
+    ['foot_l', 'ball_l'],
+    ['thigh_r', 'calf_r'],
+    ['calf_r', 'foot_r'],
+    ['foot_r', 'ball_r'],
+    ['upperarm_l', 'lowerarm_l'],
+    ['lowerarm_l', 'hand_l'],
+    ['upperarm_r', 'lowerarm_r'],
+    ['lowerarm_r', 'hand_r'],
+  ],
+  rigid: [['pelvis', 'thigh_l', 'thigh_r', 'spine_03', 'upperarm_l', 'upperarm_r', 'neck_01']],
+  hinges: [
+    { from: 'thigh_l', joint: 'calf_l', to: 'foot_l', toward: ['foot_l', 'ball_l'] },
+    { from: 'thigh_r', joint: 'calf_r', to: 'foot_r', toward: ['foot_r', 'ball_r'] },
+  ],
+});

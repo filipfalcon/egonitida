@@ -160,3 +160,43 @@ describe('a ragdoll', () => {
     expect(fallen(rod, tipped(), 1.5)).toEqual(fallen(rod, tipped(), 1.5));
   });
 });
+
+describe('Ragdoll.mpfb', () => {
+  /** A figure made with MPFB standing at the origin facing +z, as its game_engine rig stands, a metre and a half tall. */
+  const standing: { readonly [Name in (typeof Ragdoll.mpfb.names)[number]]: Ragdoll.Point } = {
+    pelvis: { x: 0, y: 0.94, z: 0 },
+    spine_03: { x: 0, y: 1.17, z: 0 },
+    neck_01: { x: 0, y: 1.49, z: 0 },
+    head: { x: 0, y: 1.6, z: 0.04 },
+    thigh_l: { x: 0.09, y: 0.9, z: 0 },
+    calf_l: { x: 0.1, y: 0.5, z: 0.02 },
+    foot_l: { x: 0.1, y: 0.08, z: -0.02 },
+    ball_l: { x: 0.1, y: 0.02, z: 0.12 },
+    thigh_r: { x: -0.09, y: 0.9, z: 0 },
+    calf_r: { x: -0.1, y: 0.5, z: 0.02 },
+    foot_r: { x: -0.1, y: 0.08, z: -0.02 },
+    ball_r: { x: -0.1, y: 0.02, z: 0.12 },
+    upperarm_l: { x: 0.18, y: 1.4, z: 0 },
+    lowerarm_l: { x: 0.3, y: 1.15, z: 0 },
+    hand_l: { x: 0.4, y: 0.92, z: 0.02 },
+    upperarm_r: { x: -0.18, y: 1.4, z: 0 },
+    lowerarm_r: { x: -0.3, y: 1.15, z: 0 },
+    hand_r: { x: -0.4, y: 0.92, z: 0.02 },
+  };
+
+  it('stands at the bones of the rig MPFB makes for game engines, by their names', () => {
+    expect([...Ragdoll.mpfb.names].sort()).toEqual(Object.keys(standing).sort());
+  });
+
+  it('falls, sent back by a blow, and comes to lie still on the floor, every point of her above it', () => {
+    const struck = Ragdoll.start(Ragdoll.mpfb, standing, { x: 0, y: 0, z: -2 });
+
+    const lain = fallen(Ragdoll.mpfb, struck, 6);
+
+    expect(Ragdoll.isStill(lain)).toBe(true);
+    for (const name of Ragdoll.mpfb.names) {
+      expect(Ragdoll.at(Ragdoll.mpfb, lain, name).y).toBeGreaterThan(0);
+      expect(Ragdoll.at(Ragdoll.mpfb, lain, name).y).toBeLessThan(0.4);
+    }
+  });
+});

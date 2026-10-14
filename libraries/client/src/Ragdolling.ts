@@ -28,6 +28,25 @@ export class Unfitted extends Data.TaggedError('Unfitted')<{
 /** How a model is posed by a ragdoll aiming its bones as `aims` says. */
 export const make = (aims: Readonly<Record<string, Aim>>): Ragdolling => ({ aims });
 
+/**
+ * How a figure made with MPFB, MakeHuman's Blender add-on, is posed as `Ragdoll.mpfb` falls, on the `game_engine` rig it makes: her pelvis aimed up at her chest and her chest at her neck, each turned about the way across her, from right to left; her neck at her head; each limb from joint to joint, down to her toes and her hands.
+ */
+export const mpfb = make({
+  pelvis: { toward: 'spine_03', side: ['thigh_r', 'thigh_l'] },
+  spine_03: { toward: 'neck_01', side: ['upperarm_r', 'upperarm_l'] },
+  neck_01: { toward: 'head' },
+  thigh_l: { toward: 'calf_l' },
+  calf_l: { toward: 'foot_l' },
+  foot_l: { toward: 'ball_l' },
+  thigh_r: { toward: 'calf_r' },
+  calf_r: { toward: 'foot_r' },
+  foot_r: { toward: 'ball_r' },
+  upperarm_l: { toward: 'lowerarm_l' },
+  lowerarm_l: { toward: 'hand_l' },
+  upperarm_r: { toward: 'lowerarm_r' },
+  lowerarm_r: { toward: 'hand_r' },
+});
+
 /** One bone the ragdoll aims, as fitted: the bones it aims at, where they lie from it as the model was made, and whether nothing above it is aimed. */
 interface Aimed {
   readonly bone: Three.Object3D;

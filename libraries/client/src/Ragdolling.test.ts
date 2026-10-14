@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
+import { Ragdoll } from '@lightocean/core';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Ragdolling from '#src/Ragdolling.ts';
@@ -140,4 +141,24 @@ describe('Ragdolled.pose', () => {
         expect(off(worldOf(model, 'hip_l'), 0, 0.1, 0.2)).toBeLessThan(1e-6);
       }),
   );
+});
+
+describe('Ragdolling.mpfb', () => {
+  it('aims only at the points the ragdoll MPFB figures fall as has, every one of them aimed or aimed at', () => {
+    const named = new Set(
+      Object.entries(Ragdolling.mpfb.aims).flatMap(([bone, { toward, side }]) => [
+        bone,
+        toward,
+        ...(side ?? []),
+      ]),
+    );
+
+    expect([...named].sort()).toEqual([...Ragdoll.mpfb.names].sort());
+  });
+
+  it('turns her trunk about its sides, her limbs and her head the shortest way', () => {
+    expect(Ragdolling.mpfb.aims['pelvis']?.side).toEqual(['thigh_r', 'thigh_l']);
+    expect(Ragdolling.mpfb.aims['spine_03']?.side).toEqual(['upperarm_r', 'upperarm_l']);
+    expect(Ragdolling.mpfb.aims['calf_l']).toEqual({ toward: 'foot_l' });
+  });
 });
