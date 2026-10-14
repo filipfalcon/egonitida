@@ -1,13 +1,12 @@
 import { BrowserWorker } from '@effect/platform-browser';
 import {
   Chroma,
-  type Devices,
   Drawing,
   DualSense,
   Gamepads,
   Haptics,
+  Hearing,
   Hid,
-  KeyboardAndMouse,
   Lighting,
   Tab,
   View,
@@ -93,9 +92,9 @@ const main = Effect.gen(function* () {
   viewport.camera.position.set(0, 18, 13);
   viewport.camera.lookAt(0, 0, 0);
 
-  const keyboardAndMouse = yield* KeyboardAndMouse.make(window);
-  // Pads through WebHID: those the player gave leave for before, one plugged in since, and more at H, a key being the gesture a browser asks for; one pulled out is let go of.
-  const hid = yield* Hid.pool([DualSense.driver]);
+  // Every device the player holds, read once a frame. Pads through WebHID: those the player gave leave for before, one plugged in since, and more at H, a key being the gesture a browser asks for; one pulled out is let go of.
+  const hearing = yield* Hearing.make(window, { drivers: [DualSense.driver] });
+  const { hid } = hearing;
   // The survivor's player feels it on every pad that can be felt: through WebHID where it is read through it, else through the Gamepad API.
   const haptics = Haptics.make({
     player: client.entity,
@@ -208,17 +207,7 @@ const main = Effect.gen(function* () {
       onNone: () => Effect.void,
       onSome: (frame) =>
         Effect.gen(function* () {
-          // A pad read through WebHID is left out of the Gamepad API's, so it does not count twice.
-          const devices: Devices.Reading = {
-            pads: [
-              ...hid.connections().flatMap((connection) => Option.toArray(connection.pad())),
-              ...Gamepads.poll(
-                [],
-                hid.connections().map(({ model }) => model),
-              ),
-            ],
-            ...keyboardAndMouse.read(),
-          };
+          const devices = hearing.read();
           const at = Option.getOrElse(frame.get(client.entity, Body.Position), () => ({
             x: 0,
             z: 0,
