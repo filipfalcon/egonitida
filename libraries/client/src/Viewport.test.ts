@@ -20,6 +20,20 @@ describe('Viewport.secondsBetween', () => {
   });
 });
 
+describe('Viewport.framesPerSecond', () => {
+  it('counts the frames drawn within the last second', () => {
+    const drawn = [0, 400, 1016.7, 1033.3, 1050, 1900];
+
+    expect(Viewport.framesPerSecond(drawn, 2000)).toBe(4);
+    expect(Viewport.framesPerSecond(drawn, 2051)).toBe(1);
+  });
+
+  it('is none once nothing is drawn, as in a tab in the background', () => {
+    expect(Viewport.framesPerSecond([0, 16.7, 33.3], 5000)).toBe(0);
+    expect(Viewport.framesPerSecond([], 5000)).toBe(0);
+  });
+});
+
 describe('Viewport.pointOf', () => {
   const canvas = { left: 100, top: 50, width: 400, height: 200 };
 

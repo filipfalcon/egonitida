@@ -59,6 +59,8 @@ export interface Viewport {
     { readonly png: string; readonly width: number; readonly height: number },
     ViewportError
   >;
+  /** How many frames `loop` drew within the last second: as many as the display shows while every frame is drawn in time, fewer as frames are skipped, and none while nothing is drawn, as in a tab in the background. */
+  readonly framesPerSecond: Effect.Effect<number>;
   /** Runs `frame` with the seconds since the frame before, at every frame the display shows, until the scope closes. A frame draws with `render` when there is something to draw, as a frame of bare Three.js's draws itself: one paused can leave the picture as it was. */
   readonly loop: <R>(
     frame: (seconds: number) => Effect.Effect<void, never, R>,
@@ -78,6 +80,10 @@ export const secondsBetween = (previous: Option.Option<number>, now: number): nu
     onNone: () => 0,
     onSome: (then) => Math.min(Math.max((now - then) / 1000, 0), LONGEST_FRAME),
   });
+
+/** How many of the frames drawn at the display's moments `drawn`, in milliseconds, were drawn within the second before `now`. */
+export const framesPerSecond = (drawn: ReadonlyArray<number>, now: number): number =>
+  drawn.filter((at) => at > now - 1000 && at <= now).length;
 
 /** The longest a page is waited on to show what it was told, where no frame comes, as for a tab in the background. */
 const PAINTED_AT_LATEST = 200;
@@ -608,6 +614,9 @@ export const make = (
 
     const render = Effect.sync(drawNow);
 
+    // The display's moments of the frames the loop drew lately, as `requestAnimationFrame` and `performance.now` tell time.
+    const recent: { times: ReadonlyArray<number> } = { times: [] };
+
     const loop = <R>(frame: (seconds: number) => Effect.Effect<void, never, R>) =>
       Effect.gen(function* () {
         // The display's moment for each frame, newest only: a frame not yet drawn when the next comes is skipped.
@@ -626,6 +635,8 @@ export const make = (
           const seconds = secondsBetween(clock.previous, now);
           clock.previous = Option.some(now);
           yield* frame(seconds);
+          // Kept for the last second only.
+          recent.times = [...recent.times.filter((at) => at > now - 1000), now];
         }).pipe(Effect.forever, Effect.forkScoped);
       });
 
@@ -673,5 +684,6 @@ export const make = (
       lost: Deferred.await(lost),
       capture,
       loop,
+      framesPerSecond: Effect.sync(() => framesPerSecond(recent.times, performance.now())),
     };
   });
