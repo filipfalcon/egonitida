@@ -151,3 +151,171 @@ it.effect('draws a figure shaped as the state holds it', () =>
     );
   }),
 );
+
+/** A leg as a model is delivered: a hip, a knee a metre below it, and a foot `shin` below that, a metre unless told, with its skin a point at each, and one halfway down the shin, held by the knee and the foot alike. */
+const leg = (shin = 1) => {
+  const hip = new Three.Bone();
+  hip.name = 'hip';
+  const knee = new Three.Bone();
+  knee.name = 'knee';
+  knee.position.set(0, -1, 0);
+  const foot = new Three.Bone();
+  foot.name = 'foot';
+  foot.position.set(0, -shin, 0);
+  hip.add(knee);
+  knee.add(foot);
+  const geometry = new Three.BufferGeometry();
+  geometry.setAttribute(
+    'position',
+    new Three.Float32BufferAttribute([0, 0, 0, 0, -1, 0, 0, -1 - shin / 2, 0, 0, -1 - shin, 0], 3),
+  );
+  geometry.setAttribute(
+    'skinIndex',
+    new Three.Uint16BufferAttribute([0, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0, 2, 0, 0, 0], 4),
+  );
+  geometry.setAttribute(
+    'skinWeight',
+    new Three.Float32BufferAttribute([1, 0, 0, 0, 1, 0, 0, 0, 0.5, 0.5, 0, 0, 1, 0, 0, 0], 4),
+  );
+  const mesh = new Three.SkinnedMesh(geometry, new Three.MeshBasicNodeMaterial());
+  mesh.name = 'leg';
+  mesh.add(hip);
+  const model = new Three.Group();
+  model.add(mesh);
+  mesh.bind(new Three.Skeleton([hip, knee, foot]));
+  return model;
+};
+
+/** The leg's skin, its points as made: at the hip, the knee, halfway down the shin, and the foot. */
+const HIP = 0;
+const KNEE = 1;
+const SHIN = 2;
+const FOOT = 3;
+
+const legs = Shaping.make({ legs: Shaping.lengthen(['foot'], { by: 0.5 }) });
+
+/** The skinned mesh of `model` named `name`, if it has one. */
+const skinnedIn = (model: Three.Object3D, name: string) =>
+  Option.flatMap(Option.fromNullishOr(model.getObjectByName(name)), (found) =>
+    found instanceof Three.SkinnedMesh ? Option.some(found) : Option.none(),
+  );
+
+/** Where the leg's point `at` is drawn, as its bones hold it now. */
+const drawnAt = (model: Three.Object3D, at: number) => {
+  model.updateMatrixWorld(true);
+  return Option.map(skinnedIn(model, 'leg'), (mesh) =>
+    mesh.getVertexPosition(at, new Three.Vector3()),
+  );
+};
+
+/** How far `drawn` is from `x`, `y`, `z`, or Infinity if nothing was drawn. */
+const distanceFrom = (drawn: Option.Option<Three.Vector3>, x: number, y: number, z: number) =>
+  Option.match(drawn, {
+    onNone: () => Infinity,
+    onSome: (point) => point.distanceTo(new Three.Vector3(x, y, z)),
+  });
+
+describe('Shaping.lengthen', () => {
+  it.effect('refuses a model that has no bone a dial lengthens, naming each', () =>
+    Effect.gen(function* () {
+      const unfitted = yield* Effect.flip(
+        Shaping.fit(
+          leg(),
+          Shaping.make({ legs: Shaping.lengthen(['shin', 'foot', 'toe'], { by: 1 }) }),
+        ),
+      );
+
+      expect(unfitted.absent).toEqual(['shin', 'toe']);
+    }),
+  );
+
+  it.effect("draws a bone's offset from its parent out, and the skin it holds with it", () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(leg(), legs);
+
+      shaped.shape({ legs: 1 });
+
+      expect(distanceFrom(drawnAt(shaped, HIP), 0, 0, 0)).toBeLessThan(1e-6);
+      expect(distanceFrom(drawnAt(shaped, KNEE), 0, -1, 0)).toBeLessThan(1e-6);
+      expect(distanceFrom(drawnAt(shaped, SHIN), 0, -1.75, 0)).toBeLessThan(1e-6);
+      expect(distanceFrom(drawnAt(shaped, FOOT), 0, -2.5, 0)).toBeLessThan(1e-6);
+    }),
+  );
+
+  it.effect('draws a bone in as far as a value below nothing', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(leg(), legs);
+
+      shaped.shape({ legs: -1 });
+
+      expect(distanceFrom(drawnAt(shaped, FOOT), 0, -1.5, 0)).toBeLessThan(1e-6);
+    }),
+  );
+
+  it.effect('bends a lengthened model as one made that long bends', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(leg(), legs);
+      const madeLong = leg(1.5);
+
+      shaped.shape({ legs: 1 });
+      for (const model of [shaped, madeLong]) {
+        model.getObjectByName('knee')?.rotation.set(0, 0, Math.PI / 2);
+        model.getObjectByName('foot')?.rotation.set(0, 0, Math.PI / 2);
+      }
+
+      for (const at of [HIP, KNEE, SHIN, FOOT]) {
+        const expected = Option.getOrThrow(drawnAt(madeLong, at));
+        expect(distanceFrom(drawnAt(shaped, at), expected.x, expected.y, expected.z)).toBeLessThan(
+          1e-6,
+        );
+      }
+    }),
+  );
+
+  it.effect('leaves the model exactly as it was made at nothing', () =>
+    Effect.gen(function* () {
+      const made = leg();
+      const positions = Option.map(skinnedIn(made, 'leg'), (mesh) => [
+        ...mesh.geometry.getAttribute('position').array,
+      ]);
+      const inverses = Option.map(skinnedIn(made, 'leg'), (mesh) =>
+        mesh.skeleton.boneInverses.map((inverse) => [...inverse.elements]),
+      );
+      const shaped = yield* Shaping.fit(made, legs);
+
+      shaped.shape({ legs: 1 });
+      shaped.shape({ legs: 0 });
+
+      expect(
+        Option.map(skinnedIn(shaped, 'leg'), (mesh) => [
+          ...mesh.geometry.getAttribute('position').array,
+        ]),
+      ).toEqual(positions);
+      expect(
+        Option.map(skinnedIn(shaped, 'leg'), (mesh) =>
+          mesh.skeleton.boneInverses.map((inverse) => [...inverse.elements]),
+        ),
+      ).toEqual(inverses);
+      expect(shaped.getObjectByName('foot')?.position.toArray()).toEqual([0, -1, 0]);
+    }),
+  );
+
+  it.effect('lengthens the model as the values say, whatever it was lengthened before', () =>
+    Effect.gen(function* () {
+      const once = yield* Shaping.fit(leg(), legs);
+      const often = yield* Shaping.fit(leg(), legs);
+
+      once.shape({ legs: 0.5 });
+      often.shape({ legs: -1 });
+      often.shape({ legs: 1 });
+      often.shape({ legs: 0.5 });
+
+      for (const at of [HIP, KNEE, SHIN, FOOT]) {
+        const expected = Option.getOrThrow(drawnAt(once, at));
+        expect(distanceFrom(drawnAt(often, at), expected.x, expected.y, expected.z)).toBeLessThan(
+          1e-6,
+        );
+      }
+    }),
+  );
+});
