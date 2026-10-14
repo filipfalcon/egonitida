@@ -450,6 +450,45 @@ describe('a stage', () => {
       }).pipe(Effect.scoped),
   );
 
+  it.live(
+    "tells the page what the player's presses come to, as its Messages, from what it keeps and what the stage played on",
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        const told = yield* Queue.unbounded<string>();
+        const page = { menu: 'Shut' };
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps],
+          mirror: document.createElement('div'),
+          input: () => page.menu,
+          played: {
+            bindings: { next: Controls.button({ key: 'ArrowDown' }) },
+            start: () => 0,
+            next: (_menu, presses, controls) =>
+              controls.values.button('next').pressed ? presses + 1 : presses,
+            drawing: () => undefined,
+            // Each press, once, said as the page's Message, with how the menu stood and how many there were.
+            messages: (menu, presses, controls) =>
+              controls.values.button('next').pressed ? [`pressed ${presses} in ${menu}`] : [],
+          },
+          tell: (message: string) => Queue.offer(told, message),
+        });
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }));
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown' }));
+        yield* Effect.sleep('150 millis');
+        page.menu = 'Open';
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }));
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown' }));
+
+        expect(yield* Queue.takeAll(told)).toEqual(['pressed 1 in Shut', 'pressed 2 in Open']);
+      }).pipe(Effect.scoped),
+  );
+
   describe('as a Foldkit Subscription entry', () => {
     /** A page's Model: whether its canvas is there to show the game on, and through whose eyes its player looks. */
     interface Model {
