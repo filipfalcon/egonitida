@@ -518,6 +518,23 @@ describe('View.rig', () => {
   const [state, player] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 4 })]);
   const [withOther, other] = State.spawn(state, [Position.of({ x: 9 })]);
 
+  it.effect('is told whose entity it draws the camera for, to find what was drawn of them', () =>
+    Effect.gen(function* () {
+      const camera = new Three.PerspectiveCamera();
+      /** Eyes in whatever body the player is drawn as, found by the entity the rig is drawn for. */
+      const behind = View.rig([Position], (seen, _held, _frame, drawn, _input, looker) => {
+        Option.map(drawn(bodies, looker), (body) => {
+          seen.position.x = body.position.x;
+        });
+      });
+      const views = yield* View.make([behind, bodies], Option.some({ camera, player: other }));
+
+      yield* play(views, [withOther]);
+
+      expect(camera.position.x).toEqual(9);
+    }),
+  );
+
   it.effect('draws the camera for the player after every view has drawn, from what they drew', () =>
     Effect.gen(function* () {
       const camera = new Three.PerspectiveCamera();

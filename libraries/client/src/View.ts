@@ -250,7 +250,7 @@ export const during = <R = never, V = unknown>(
 ): During<R, V> => ({ _tag: 'During', when, acquire });
 
 /**
- * The camera, drawn for the player whose entity holds all of `components`: after every other view has drawn the frame, so `drawn` gives what they drew this frame, such as the body whose eyes it looks out of. Rigs draw one after another in the order they are given, so one can move the camera on from where another put it, as a shake does. `draw` changes only the camera, in place, and allocates nothing; what it must remember, such as where the player looks or how far behind the camera trails, is a local component.
+ * The camera, drawn for the player whose entity holds all of `components`, which `draw` is given last: after every other view has drawn the frame, so `drawn` gives what they drew this frame, such as the player's own body, whose eyes it looks out of. Rigs draw one after another in the order they are given, so one can move the camera on from where another put it, as a shake does. `draw` changes only the camera, in place, and allocates nothing; what it must remember, such as where the player looks or how far behind the camera trails, is a local component.
  */
 export const rig = <const Components extends ReadonlyArray<Component.Any>, V = unknown>(
   components: Components,
@@ -260,12 +260,13 @@ export const rig = <const Components extends ReadonlyArray<Component.Any>, V = u
     frame: Drawing.Frame,
     drawn: Drawn,
     input: V,
+    player: State.Entity,
   ) => void,
 ): Rig<V> => ({
   _tag: 'Rig',
   components,
   draw: (camera, entity, frame, drawn, input) =>
-    draw(camera, heldIn<Components[number]>(frame, entity), frame, drawn, input),
+    draw(camera, heldIn<Components[number]>(frame, entity), frame, drawn, input, entity),
 });
 
 /** What is under a point of the screen: the entity whose object is nearest there, the view that drew it, and where it was hit, in the scene. */
