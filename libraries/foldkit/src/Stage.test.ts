@@ -248,6 +248,52 @@ describe('a stage', () => {
       }).pipe(Effect.scoped),
   );
 
+  it.live(
+    "plays the drawing's input on with what the player's devices do, once each frame it draws, before its views draw",
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        /** Through whose eyes the player looks, as the page keeps it, and how far they turned to the left, as their devices turn them every frame. */
+        interface Looked {
+          readonly through: 'Eyes' | 'Shoulder';
+          readonly yaw: number;
+        }
+        const looking = View.rig([], (camera, _held, _frame, _drawn, looked: Looked) => {
+          camera.position.set(0, 0, looked.through === 'Eyes' ? 0 : 5);
+          camera.rotation.set(0, looked.yaw, 0);
+        });
+        const page: { through: 'Eyes' | 'Shoulder' } = { through: 'Shoulder' };
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps, looking],
+          mirror: document.createElement('div'),
+          input: () => page.through,
+          played: {
+            start: (through) => ({ through, yaw: 0 }),
+            // Turned left at a radian a second while the left arrow is held.
+            next: (through, before, devices, seconds) => ({
+              through,
+              yaw: before.yaw + (devices.keys.has('ArrowLeft') ? seconds : 0),
+            }),
+          },
+        });
+        yield* Effect.sleep('200 millis');
+        const before = viewport.camera.rotation.y;
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
+        yield* Effect.sleep('300 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowLeft' }));
+        yield* Effect.sleep('100 millis');
+        const turned = viewport.camera.rotation.y;
+        yield* Effect.sleep('200 millis');
+
+        expect(before).toBeCloseTo(0);
+        expect(turned).toBeGreaterThan(0.15);
+        expect(viewport.camera.rotation.y).toBeCloseTo(turned);
+        expect(viewport.camera.position.z).toBeCloseTo(5);
+      }).pipe(Effect.scoped),
+  );
+
   describe('as a Foldkit Subscription entry', () => {
     /** A page's Model: whether its canvas is there to show the game on, and through whose eyes its player looks. */
     interface Model {
