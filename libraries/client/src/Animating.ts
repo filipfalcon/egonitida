@@ -120,14 +120,16 @@ const takenOf = (
 /**
  * A model posed by its clips, made by `fit`: the model within it, and `pose`, which poses it by where each clip is and how much it weighs. It stands for the model in the scene, so a view places it as it would the model; a model `Shaping` shaped is animated as its `Shaped`.
  */
-export class Animated<C extends Clips> extends Three.Group {
-  readonly model: Three.Object3D;
+export class Animated<C extends Clips, M extends Three.Object3D = Three.Object3D>
+  extends Three.Group
+{
+  readonly model: M;
   readonly #mixer: Three.AnimationMixer;
   readonly #fitted: ReadonlyArray<Fitted>;
   readonly #moved: ReadonlyArray<Moved>;
 
   constructor(
-    model: Three.Object3D,
+    model: M,
     mixer: Three.AnimationMixer,
     fitted: ReadonlyArray<Fitted>,
     moved: ReadonlyArray<Moved>,
@@ -138,6 +140,11 @@ export class Animated<C extends Clips> extends Three.Group {
     this.#fitted = fitted;
     this.#moved = moved;
     this.add(model);
+  }
+
+  /** How long the clip the game names `name` lasts, in seconds: for a cycle the game runs on its own time, such as an idle, posed as far through it as the time drawn is through its length. */
+  durationOf(name: keyof C & string): number {
+    return this.#fitted.find((fitted) => fitted.name === name)?.duration ?? 0;
   }
 
   /**
@@ -175,11 +182,11 @@ export class Animated<C extends Clips> extends Three.Group {
 /**
  * `model` fitted to `animating`: every clip the game names found among `clips`, delivered with the model, as a glTF file delivers them beside its scene, and every bone those clips move, and every bone a clip is given, found in the model. Fails with `Unfitted` if a clip is not among `clips`, or a bone not in the model. The model is posed by a mixer of its own, so copies of one loaded model, sharing its clips, are each posed on their own; the scope lets go of it once it closes. A model `Shaping` shaped is fitted as its `Shaped`, and posed as it is shaped.
  */
-export const fit = <C extends Clips>(
-  model: Three.Object3D,
+export const fit = <C extends Clips, M extends Three.Object3D>(
+  model: M,
   clips: ReadonlyArray<Three.AnimationClip>,
   animating: Animating<C>,
-): Effect.Effect<Animated<C>, Unfitted, Scope.Scope> =>
+): Effect.Effect<Animated<C, M>, Unfitted, Scope.Scope> =>
   Effect.gen(function* () {
     const absent: Array<string> = [];
     const taken: Array<{ name: string; clip: Clip; taken: Three.AnimationClip }> = [];
@@ -225,7 +232,7 @@ export const fit = <C extends Clips>(
         return { name, clip, action, duration: posing.duration };
       });
     if (!(model instanceof Shaping.Shaped)) {
-      return new Animated<C>(model, mixer, bind(), []);
+      return new Animated<C, M>(model, mixer, bind(), []);
     }
     const bones = new Set<Three.Object3D>();
     for (const { taken: posing } of taken) {
@@ -242,5 +249,5 @@ export const fit = <C extends Clips>(
       bind(),
       [...bones].map((bone) => ({ bone, posed: bone.position.clone() })),
     ]);
-    return new Animated<C>(model, mixer, fitted, moved);
+    return new Animated<C, M>(model, mixer, fitted, moved);
   });

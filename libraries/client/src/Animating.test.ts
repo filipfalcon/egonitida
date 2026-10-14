@@ -315,6 +315,35 @@ const longer = Shaping.make({
   legs: Shaping.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
 });
 
+describe('Animated', () => {
+  it.effect('says how long each clip lasts, for a cycle the game runs on its own time', () =>
+    Effect.gen(function* () {
+      const posed = yield* Animating.fit(
+        leg(),
+        [new Three.AnimationClip('Breathe', 2.5, bending('Bend', ['knee']).tracks)],
+        Animating.make({ breathe: Animating.cycle('Breathe') }),
+      );
+
+      expect(posed.durationOf('breathe')).toBeCloseTo(2.5);
+    }),
+  );
+
+  it.effect('holds the model it was given, as it was given, a shaped one to shape', () =>
+    Effect.gen(function* () {
+      const posed = yield* Animating.fit(
+        yield* Shaping.fit(standing(), longer),
+        [crouching],
+        Animating.make({ crouch: Animating.once('Crouch') }),
+      );
+
+      posed.model.shape({ legs: 1 });
+      posed.pose({ crouch: { at: 0, weight: 1 } });
+
+      expect(heightOf(posed, 'hip')).toBeCloseTo(3);
+    }),
+  );
+});
+
 describe('a shaped model posed', () => {
   it.effect(
     'moves a bone a clip moves as far as the shaping drew it out, so the feet stay down',
