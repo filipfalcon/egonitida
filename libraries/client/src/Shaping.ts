@@ -30,8 +30,17 @@ export interface Lengthen {
   readonly raises: Option.Option<string>;
 }
 
+/**
+ * A dial that grows bones whole, such as a figure's head: each bone, and everything below it, is made bigger by `by` for every whole of the value, and smaller below nothing, from where it stands, and the skin each holds goes with it. Only where the model rests is grown, so animations that turn its bones play on it as before; a bone with no parent bone is left as it is.
+ */
+export interface Grow {
+  readonly _tag: 'Grow';
+  readonly bones: ReadonlyArray<string>;
+  readonly by: number;
+}
+
 /** What a dial turns in a model. */
-export type Dial = Morph | Opposed | Lengthen;
+export type Dial = Morph | Opposed | Lengthen | Grow;
 
 /** A game's dials, each by the name the game gives it. */
 export type Dials = Readonly<Record<string, Dial>>;
@@ -71,8 +80,44 @@ export const lengthen = (
   raises: Option.fromNullishOr(options.raises),
 });
 
+/** A dial growing `bones` whole, each by `by` of itself for every whole of the value. */
+export const grow = (bones: ReadonlyArray<string>, options: { readonly by: number }): Grow => ({
+  _tag: 'Grow',
+  bones,
+  by: options.by,
+});
+
 /** How a model is shaped by `dials`. */
 export const make = <const D extends Dials>(dials: D): Shaping<D> => ({ dials });
+
+/** A dial turning one part of an MPFB figure slimmer below nothing and fuller above it, by its two shape keys, as MakeHuman names them. */
+const fuller = <const Part extends string>(part: Part) =>
+  morph({ less: `${part}-decr`, more: `${part}-incr` });
+
+/**
+ * The dials of a figure made with MPFB, MakeHuman's Blender add-on, exported with its shape keys and its `game_engine` rig: her hips, bust, waist, stomach, buttocks, thighs, calves, arms, cheeks, chin, jaw, and nose each slimmer or fuller by its `-decr` and `-incr` keys; her legs, arms, and torso each lengthened by `by` of themselves for every whole of the value, her legs raising her pelvis, so she stands on the ground. A game shapes such a figure by them, its component's fields named as they are, and adds its own beside them, such as a head that grows.
+ */
+export const mpfb = (options: { readonly by: number }) =>
+  make({
+    hips: fuller('hips'),
+    bust: fuller('bust'),
+    waist: fuller('waist'),
+    stomach: fuller('stomach'),
+    buttocks: fuller('buttocks'),
+    thighs: fuller('thighs'),
+    calves: fuller('calves'),
+    arms: fuller('arms'),
+    cheeks: fuller('cheeks'),
+    chin: fuller('chin'),
+    jaw: fuller('jaw'),
+    nose: fuller('nose'),
+    legLength: lengthen(['calf_l', 'foot_l', 'calf_r', 'foot_r'], {
+      by: options.by,
+      raises: 'pelvis',
+    }),
+    armLength: lengthen(['lowerarm_l', 'hand_l', 'lowerarm_r', 'hand_r'], { by: options.by }),
+    torsoLength: lengthen(['spine_02', 'spine_03', 'neck_01'], { by: options.by }),
+  });
 
 /** Which part of a dial's value a morph target is weighted by: all of it, only above nothing, or only below. */
 type Side = 'Whole' | 'More' | 'Less';
@@ -101,11 +146,14 @@ interface Joint {
   /** Its rest as made, from its parent's. */
   readonly madeLocal: Three.Matrix4;
   readonly madePosition: Three.Vector3;
+  readonly madeScale: Three.Vector3;
   readonly rest: Three.Matrix4;
   /** From its rest as made to its rest now, and back. */
   readonly move: Three.Matrix4;
   readonly unmove: Three.Matrix4;
   stretch: number;
+  /** How much bigger the dials grow it, whole: 1 as made. */
+  growth: number;
   moved: boolean;
 }
 
@@ -134,9 +182,10 @@ interface Raised {
   readonly beneath: number;
 }
 
-/** A dial lengthening `joints`, raising the bone `raised`, if it raises one, and the value it was last lengthened by: nothing, as the model is made. */
+/** A dial lengthening `joints`, or growing them whole, raising the bone `raised`, if it raises one, and the value it was last applied at: nothing, as the model is made. */
 interface Length {
   readonly dial: string;
+  readonly grows: boolean;
   readonly by: number;
   readonly joints: ReadonlyArray<Joint>;
   readonly raised: Option.Option<Raised>;
@@ -163,10 +212,15 @@ const sum = new Three.Vector3();
 const restJoints = (lengths: Lengths) => {
   for (const joint of lengths.joints) {
     joint.stretch = 1;
+    joint.growth = 1;
   }
   for (const length of lengths.dials) {
     for (const joint of length.joints) {
-      joint.stretch *= 1 + length.applied * length.by;
+      if (length.grows) {
+        joint.growth *= 1 + length.applied * length.by;
+      } else {
+        joint.stretch *= 1 + length.applied * length.by;
+      }
     }
     if (Option.isSome(length.raised) && length.raised.value.made > 0) {
       const { joint, made, beneath } = length.raised.value;
@@ -175,20 +229,24 @@ const restJoints = (lengths: Lengths) => {
   }
   for (const joint of lengths.joints) {
     const parent = joint.parent;
-    joint.moved = parent !== undefined && (joint.stretch !== 1 || parent.moved);
+    joint.moved =
+      parent !== undefined && (joint.stretch !== 1 || joint.growth !== 1 || parent.moved);
     if (parent === undefined || !joint.moved) {
       joint.rest.copy(joint.madeRest);
       joint.move.identity();
       joint.unmove.identity();
       joint.bone.position.copy(joint.madePosition);
+      joint.bone.scale.copy(joint.madeScale);
       continue;
     }
     joint.madeLocal.decompose(translation, turn, scale);
     translation.multiplyScalar(joint.stretch);
+    scale.multiplyScalar(joint.growth);
     joint.rest.compose(translation, turn, scale).premultiply(parent.rest);
     joint.move.multiplyMatrices(joint.rest, joint.madeInverse);
     joint.unmove.copy(joint.move).invert();
     joint.bone.position.copy(joint.madePosition).multiplyScalar(joint.stretch);
+    joint.bone.scale.copy(joint.madeScale).multiplyScalar(joint.growth);
   }
 };
 
@@ -367,10 +425,12 @@ const lengthsOf = (model: Three.Object3D, meshes: ReadonlyArray<Three.SkinnedMes
           ? madeRest.clone()
           : parent.madeRest.clone().invert().multiply(madeRest),
       madePosition: child.position.clone(),
+      madeScale: child.scale.clone(),
       rest: madeRest.clone(),
       move: new Three.Matrix4(),
       unmove: new Three.Matrix4(),
       stretch: 1,
+      growth: 1,
       moved: false,
     });
   });
@@ -470,7 +530,9 @@ export const fit = <D extends Dials>(
         skinned.push(child);
       }
     });
-    if (Object.values(shaping.dials).some((dial) => dial._tag === 'Lengthen')) {
+    if (
+      Object.values(shaping.dials).some((dial) => dial._tag === 'Lengthen' || dial._tag === 'Grow')
+    ) {
       yield* ownSkin(skinned);
     }
     const rig = lengthsOf(model, skinned);
@@ -492,7 +554,7 @@ export const fit = <D extends Dials>(
         }
         turns.push(...found);
       }
-      if (turned._tag === 'Lengthen') {
+      if (turned._tag === 'Lengthen' || turned._tag === 'Grow') {
         const joints = turned.bones.flatMap((name) => {
           const joint = bones.get(name);
           if (joint === undefined) {
@@ -501,7 +563,8 @@ export const fit = <D extends Dials>(
           }
           return [joint];
         });
-        const raised = Option.flatMap(turned.raises, (name) => {
+        const raises = turned._tag === 'Lengthen' ? turned.raises : Option.none<string>();
+        const raised = Option.flatMap(raises, (name) => {
           const joint = bones.get(name);
           if (joint === undefined) {
             absent.push(name);
@@ -513,7 +576,14 @@ export const fit = <D extends Dials>(
             beneath: beneath(joint, joints),
           });
         });
-        lengths.push({ dial, by: turned.by, joints, raised, applied: 0 });
+        lengths.push({
+          dial,
+          grows: turned._tag === 'Grow',
+          by: turned.by,
+          joints,
+          raised,
+          applied: 0,
+        });
       }
     }
     if (absent.length > 0) {

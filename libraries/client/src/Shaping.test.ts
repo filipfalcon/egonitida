@@ -477,3 +477,107 @@ describe('a lengthening that raises', () => {
     }),
   );
 });
+
+describe('Shaping.grow', () => {
+  const knee = Shaping.make({ knee: Shaping.grow(['knee'], { by: 0.5 }) });
+
+  it.effect('refuses a model that has no bone a dial grows, naming each', () =>
+    Effect.gen(function* () {
+      const unfitted = yield* Effect.flip(
+        Shaping.fit(leg(), Shaping.make({ head: Shaping.grow(['head'], { by: 1 }) })),
+      );
+
+      expect(unfitted.absent).toEqual(['head']);
+    }),
+  );
+
+  it.effect('grows a bone whole, and everything below it with its skin, from where it stands', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(leg(), knee);
+
+      shaped.shape({ knee: 1 });
+
+      expect(distanceFrom(drawnAt(shaped, HIP), 0, 0, 0)).toBeLessThan(1e-6);
+      expect(distanceFrom(drawnAt(shaped, KNEE), 0, -1, 0)).toBeLessThan(1e-6);
+      expect(distanceFrom(drawnAt(shaped, SHIN), 0, -1.75, 0)).toBeLessThan(1e-6);
+      expect(distanceFrom(drawnAt(shaped, FOOT), 0, -2.5, 0)).toBeLessThan(1e-6);
+    }),
+  );
+
+  it.effect('bends a grown model as one made that big bends', () =>
+    Effect.gen(function* () {
+      const shaped = yield* Shaping.fit(leg(), knee);
+      const madeLong = leg(1.5);
+
+      shaped.shape({ knee: 1 });
+      for (const model of [shaped, madeLong]) {
+        model.getObjectByName('knee')?.rotation.set(0, 0, Math.PI / 2);
+      }
+
+      for (const at of [HIP, KNEE, FOOT]) {
+        const expected = Option.getOrThrow(drawnAt(madeLong, at));
+        expect(distanceFrom(drawnAt(shaped, at), expected.x, expected.y, expected.z)).toBeLessThan(
+          1e-6,
+        );
+      }
+    }),
+  );
+
+  it.effect('leaves the model exactly as it was made at nothing', () =>
+    Effect.gen(function* () {
+      const made = leg();
+      const positions = Option.map(skinnedIn(made, 'leg'), (mesh) => [
+        ...mesh.geometry.getAttribute('position').array,
+      ]);
+      const shaped = yield* Shaping.fit(made, knee);
+
+      shaped.shape({ knee: 1 });
+      shaped.shape({ knee: 0 });
+
+      expect(
+        Option.map(skinnedIn(shaped, 'leg'), (mesh) => [
+          ...mesh.geometry.getAttribute('position').array,
+        ]),
+      ).toEqual(positions);
+      expect(shaped.getObjectByName('knee')?.scale.toArray()).toEqual([1, 1, 1]);
+    }),
+  );
+});
+
+describe('Shaping.mpfb', () => {
+  const mpfb = Shaping.mpfb({ by: 0.1 });
+
+  it('turns each part of an MPFB figure by its two shape keys, as MakeHuman names them', () => {
+    expect(mpfb.dials.hips).toEqual(Shaping.morph({ less: 'hips-decr', more: 'hips-incr' }));
+    expect(mpfb.dials.nose).toEqual(Shaping.morph({ less: 'nose-decr', more: 'nose-incr' }));
+    expect(Object.keys(mpfb.dials)).toEqual([
+      'hips',
+      'bust',
+      'waist',
+      'stomach',
+      'buttocks',
+      'thighs',
+      'calves',
+      'arms',
+      'cheeks',
+      'chin',
+      'jaw',
+      'nose',
+      'legLength',
+      'armLength',
+      'torsoLength',
+    ]);
+  });
+
+  it('lengthens her legs, raising her pelvis, and her arms and torso, by the bones of her rig', () => {
+    expect(mpfb.dials.legLength).toEqual(
+      Shaping.lengthen(['calf_l', 'foot_l', 'calf_r', 'foot_r'], { by: 0.1, raises: 'pelvis' }),
+    );
+    expect(mpfb.dials.armLength).toEqual(
+      Shaping.lengthen(['lowerarm_l', 'hand_l', 'lowerarm_r', 'hand_r'], { by: 0.1 }),
+    );
+    expect(mpfb.dials.torsoLength).toEqual(
+      Shaping.lengthen(['spine_02', 'spine_03', 'neck_01'], { by: 0.1 }),
+    );
+  });
+});
