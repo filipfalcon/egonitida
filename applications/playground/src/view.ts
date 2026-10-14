@@ -41,7 +41,7 @@ const styles = stylex.create({
   error: { color: colours.danger },
 });
 
-/** The playground's page: the canvas, and over it the button that asks for a cube and the count of them. */
+/** The playground's page: the canvas, and over it the button that asks for a cube, the one that changes where the player looks from, and the count of cubes. */
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Playground',
   body: h.main(Styled.attributes(h, styles.playground), [
@@ -63,6 +63,18 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
           h.OnClick(Message.ClickedSpawnCube()),
         ],
         ['Spawn cube'],
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          ...Styled.attributes(h, styles.button),
+          h.OnClick(
+            Message.ChoseViewpoint({
+              viewpoint: model.viewpoint === 'Ahead' ? 'Overhead' : 'Ahead',
+            }),
+          ),
+        ],
+        [model.viewpoint === 'Ahead' ? 'Look from overhead' : 'Look from ahead'],
       ),
       h.p(Styled.attributes(h, styles.text), [
         `${model.cubeCount} ${model.cubeCount === 1 ? 'cube' : 'cubes'}`,

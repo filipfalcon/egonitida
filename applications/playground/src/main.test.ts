@@ -8,8 +8,21 @@ describe('the playground', () => {
     expect(initialModel).toEqual({
       session: { _tag: 'Joining' },
       cubeCount: 0,
+      viewpoint: 'Ahead',
       maybeError: Option.none(),
     });
+  });
+
+  it('keeps where the player looks from, as the page does, and asks nothing of the game for it', () => {
+    Story.story(
+      update,
+      Story.given({ ...initialModel, session: { _tag: 'Joined', canvas: 'Mounted' } }),
+      Story.message(Message.ChoseViewpoint({ viewpoint: 'Overhead' })),
+      Story.Command.expectNone(),
+      Story.model((model) => {
+        expect(model.viewpoint).toBe('Overhead');
+      }),
+    );
   });
 
   it('shows the game once it is joined and its canvas is in the page, and lets go of the canvas when the game is left', () => {

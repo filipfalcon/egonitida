@@ -20,7 +20,7 @@ LightOcean is an engine for real-time web applications and games. A game's **sta
 - **Actions** say what a player did, **events** what the game made of it; both are facts in the past tense. Every action is handled by a rule; an event that nothing emits and nothing handles is unused.
 - **Systems** change what the simulation owns every step; **rules** change what the rules own when an event or action happens; players change only demand components.
 - **Commands** are how a rule gets something done outside the game, such as saving a score; their results come back as actions, which rules must handle. Systems issue none.
-- **Views** draw: `View.each` for an entity in the drawing, `View.on` for a moment such as a hit, `View.during` for a resource held while a condition holds, `View.whole` for one object drawn from the whole frame, `View.follow` for a value outside the drawing that follows the state, such as a lightbar, `View.rig` for the camera the player looks through.
+- **Views** draw: `View.each` for an entity in the drawing, `View.on` for a moment such as a hit, `View.during` for a resource held while a condition holds, `View.whole` for one object drawn from the whole frame, `View.follow` for a value outside the drawing that follows the state, such as a lightbar, `View.rig` for the camera the player looks through. What changes only how the game is drawn for one player, such as where they look from, is the drawing's input: the page keeps it and gives it to `View.make`, or to `Stage.entry` from its Model, and every view's per-frame function receives it.
 - A game is wired in `Game.make`, and nowhere else.
 
 ## How a change is made

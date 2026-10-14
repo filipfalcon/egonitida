@@ -1,5 +1,5 @@
 import { View } from '@lightocean/client';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Cubes from '#src/cubes.ts';
 
@@ -30,5 +30,20 @@ export const cubes = View.each([Cubes.Cube, Cubes.Paint], {
   },
 });
 
-/** The views of the cubes. */
-export const views = [cubes];
+/** Where the player looks at the cubes from: ahead of the grid, or straight down onto it. It changes only how the cubes are drawn for them, so the page keeps it, and gives it to the views as the drawing's input. */
+export const Viewpoint = Schema.Literals(['Ahead', 'Overhead']);
+export type Viewpoint = typeof Viewpoint.Type;
+
+/** The camera, where the player looks from. */
+export const looking = View.rig([], (camera, _held, _frame, _drawn, viewpoint: Viewpoint) => {
+  if (viewpoint === 'Ahead') {
+    camera.position.set(0, 3, 10);
+    camera.rotation.set(-0.25, 0, 0);
+  } else {
+    camera.position.set(0, 14, -2);
+    camera.rotation.set(-Math.PI / 2, 0, 0);
+  }
+});
+
+/** The views of the cubes, and the camera they are seen through. */
+export const views = [cubes, looking];

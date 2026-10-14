@@ -57,44 +57,28 @@ export const MountCanvas = Mount.define('MountCanvas', {
   execute: () => Effect.succeed(Message.MountedCanvas()),
 });
 
-/** A camera looking down over the grid, and the light the cubes are seen by. */
-const setUp = ({
-  scene,
-  camera,
-}: {
-  readonly scene: Three.Scene;
-  readonly camera: Three.Camera;
-}) => {
+/** The light the cubes are seen by. */
+const setUp = ({ scene }: { readonly scene: Three.Scene }) => {
   const sun = new Three.DirectionalLight(0xffffff, 2.5);
   sun.position.set(5, 8, 6);
   scene.add(new Three.AmbientLight(0xffffff, 0.4), sun);
-  camera.position.set(0, 3, 10);
-  camera.rotation.set(-0.25, 0, 0);
 };
 
-/** The canvas showing the game, and the count of cubes its state holds. */
+/** The canvas showing the game, from where the player looks, and the count of cubes its state holds. */
 export const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
-  stage: entry(
-    { isShown: Schema.Boolean },
-    {
-      modelToDependencies: (model) => ({
-        isShown: model.session._tag === 'Joined' && model.session.canvas === 'Mounted',
-      }),
-      dependenciesToStream: ({ isShown }) =>
-        isShown
-          ? Stage.stream({
-              resource: CubesSession,
-              canvasId: CANVAS_ID,
-              views: CubesView.views,
-              viewport: Viewport.sharp,
-              setup: setUp,
-              alongside: capturedAs(host),
-              onNotJoined: (): Message => Message.LeftGame(),
-              onFailed: (reason) => Message.FailedShowGame({ reason }),
-            })
-          : Stream.empty,
-    },
-  ),
+  // Shown while the canvas is in the page; where the player looks from is read every frame, and never shows the stage anew.
+  stage: Stage.entry({
+    resource: CubesSession,
+    canvasId: CANVAS_ID,
+    views: CubesView.views,
+    viewport: Viewport.sharp,
+    setup: setUp,
+    alongside: capturedAs(host),
+    shows: (model: Model) => model.session._tag === 'Joined' && model.session.canvas === 'Mounted',
+    input: { schema: CubesView.Viewpoint, of: (model: Model) => model.viewpoint },
+    onNotJoined: (): Message => Message.LeftGame(),
+    onFailed: (reason) => Message.FailedShowGame({ reason }),
+  }),
   cubes: entry(
     { isJoined: Schema.Boolean },
     {

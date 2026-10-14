@@ -4,6 +4,7 @@ import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';
 import { modifyFields } from 'foldkit/struct';
 import * as Cubes from '#src/cubes.ts';
+import { Viewpoint } from '#src/cubes.view.ts';
 
 /**
  * The playground: the first proof that a game and Foldkit make one application. The cubes are a game, hosted in a worker and drawn on a canvas; the page around them is Foldkit's, and holds no more of the game's state than it shows, the count of cubes. A click on Spawn cube asks the game for one, as a player's action; the game decides.
@@ -18,10 +19,11 @@ export const PageSession = Schema.Union([
 ]);
 export type PageSession = typeof PageSession.Type;
 
-/** The playground's page: the session as far as it has it, how many cubes the game holds, and what last went wrong. */
+/** The playground's page: the session as far as it has it, how many cubes the game holds, where the player looks at them from, and what last went wrong. */
 export const Model = Schema.Struct({
   session: PageSession,
   cubeCount: Schema.Int,
+  viewpoint: Viewpoint,
   maybeError: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
@@ -38,6 +40,7 @@ export const Message = defineMessageUnion({
   FailedShowGame: { reason: Schema.String },
   CountedCubes: { count: Schema.Int },
   ClickedSpawnCube: {},
+  ChoseViewpoint: { viewpoint: Viewpoint },
   AskedGameForCube: {},
   FailedAskGameForCube: { reason: Schema.String },
 });
@@ -106,16 +109,21 @@ export const update = (model: Model, message: Message) =>
     FailedShowGame: ({ reason }) => ({ model: failed(model, reason) }),
     CountedCubes: ({ count }) => ({ model: modifyFields(model, { cubeCount: () => count }) }),
     ClickedSpawnCube: () => ({ model, commands: [AskForCube()] }),
+    // Where the player looks from is the page's, not the game's: the stage reads it every frame.
+    ChoseViewpoint: ({ viewpoint }) => ({
+      model: modifyFields(model, { viewpoint: () => viewpoint }),
+    }),
     AskedGameForCube: () => ({ model }),
     FailedAskGameForCube: ({ reason }) => ({ model: failed(model, reason) }),
   });
 
 // INIT
 
-/** The page as it opens: joining the game, no cubes counted. */
+/** The page as it opens: joining the game, no cubes counted, looking at the grid from ahead. */
 export const initialModel: Model = {
   session: { _tag: 'Joining' },
   cubeCount: 0,
+  viewpoint: 'Ahead',
   maybeError: Option.none(),
 };
 

@@ -62,7 +62,7 @@ A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) wher
 | A value outside the drawing follows the state, time and all   | `View.follow`: `of` works it out every frame, `to` puts it out as it changes, such as a pad's lightbar                        |
 | The player looks at the game                                  | `View.rig`: the camera, drawn for the player after every other view, from what they drew                                      |
 
-A view's `draw` changes only the object its view built, from the frame and the page's input to the drawing, and keeps nothing between frames: what must be remembered is a local component. Event listeners, timers, animation frames, and sockets live only inside these. A domain's own module imports no Three.js; its views live in its `.view` module.
+A view's `draw` changes only the object its view built, from the frame and the page's input to the drawing, and keeps nothing between frames: what must be remembered is a local component. A rig reads the player's own view preferences, such as where they look from, from the drawing's input, never from the state; a Foldkit page follows it from its Model with `Stage.entry`, which never shows the stage anew when it changes. Event listeners, timers, animation frames, and sockets live only inside these. A domain's own module imports no Three.js; its views live in its `.view` module.
 
 **Wiring.** Nothing is wired implicitly: no automatic registration, decorators, wiring by file name, or global registries. All wiring is in `Game.make` and domains' `requires`.
 
@@ -100,7 +100,7 @@ A view's `draw` changes only the object its view built, from the frame and the p
 - A scene: `examples/spinning-cube/src/cube.scene.test.ts`
 - A local server and a page drawing from it: `examples/spinning-cube/src/simulation.worker.ts`, `examples/spinning-cube/src/entry.ts`
 - A local server with the devtools beside it in development, and the Vite config that serves them: `examples/horde/src/simulation.worker.ts`, `examples/horde/vite.config.ts`
-- An application built of a game and Foldkit: its page's Model, Messages, and Commands in `applications/playground/src/main.ts`, told in `main.test.ts`; the game's session joined, shown, and projected in `applications/playground/src/session.ts`
+- An application built of a game and Foldkit: its page's Model, Messages, and Commands in `applications/playground/src/main.ts`, told in `main.test.ts`; the game's session joined, shown, and projected in `applications/playground/src/session.ts`; where the player looks from kept in the Model and read by a rig as the drawing's input, its `viewpoint` in `main.ts`, the rig `looking` in `cubes.view.ts`, told in `cubes.scene.test.ts`
 - A rule that issues a command, the service the command needs, and the Worker behind it: `examples/save-score/src/score.ts`, `scores.ts`, and `server.ts`
 - A document that is a state, edited by its editors' actions and played in a worker the page opens with it: `applications/editor/src/editing.ts`, `playing.ts`, and `play.worker.ts`
 - The engine's own tests: `libraries/core/src/Game.test.ts`, `libraries/client/src/View.test.ts`

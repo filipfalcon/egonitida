@@ -2,6 +2,7 @@ import { expect, it } from '@effect/vitest';
 import { Scene } from '@lightocean/client';
 import { Pointing, Story, State } from '@lightocean/core';
 import { Effect, Option } from 'effect';
+import * as Three from 'three/webgpu';
 import * as Cubes from '#src/cubes.ts';
 import * as CubesView from '#src/cubes.view.ts';
 
@@ -26,7 +27,11 @@ it.effect('draws every cube where its place in the grid is, in the colour it is 
       onSome: (cube) =>
         Story.step()(Story.act('viewer', Pointing.Clicked, { entity: cube })(asked)),
     });
-    const scene = yield* Scene.make(CubesView.views);
+    const scene = yield* Scene.make(
+      CubesView.views,
+      Option.some(Cubes.viewer),
+      () => 'Ahead' as const,
+    );
 
     yield* scene.show(clicked.state);
 
@@ -51,7 +56,11 @@ it.effect('turns every cube as time goes on', () =>
   Effect.gen(function* () {
     const { asked, first } = askedAndClicked();
     const later = Story.seconds(1)(asked);
-    const scene = yield* Scene.make(CubesView.views);
+    const scene = yield* Scene.make(
+      CubesView.views,
+      Option.some(Cubes.viewer),
+      () => 'Ahead' as const,
+    );
     const turn = () =>
       Option.flatMap(Option.fromNullishOr(first), (cube) =>
         Option.map(scene.find(CubesView.cubes, cube), ({ quaternion }) => quaternion.clone()),
@@ -66,4 +75,29 @@ it.effect('turns every cube as time goes on', () =>
       Option.map(Option.all([before, after]), ([one, other]) => one.angleTo(other) > 0.5),
     ).toEqual(Option.some(true));
   }),
+);
+
+it.effect(
+  'looks at the cubes from where the page says the player looks from, with nothing of it in the state',
+  () =>
+    Effect.gen(function* () {
+      const { asked } = askedAndClicked();
+      const viewpoint: { current: CubesView.Viewpoint } = { current: 'Ahead' };
+      const scene = yield* Scene.make(
+        CubesView.views,
+        Option.some(Cubes.viewer),
+        () => viewpoint.current,
+      );
+      const forward = new Three.Vector3();
+
+      yield* scene.show(asked.state);
+      const ahead = scene.camera.getWorldDirection(forward).clone();
+      viewpoint.current = 'Overhead';
+      yield* scene.show(asked.state);
+      const overhead = scene.camera.getWorldDirection(forward).clone();
+
+      // Ahead, the camera looks mostly forward, into the grid; overhead, straight down onto it.
+      expect(ahead.dot(new Three.Vector3(0, 0, -1))).toBeGreaterThan(0.9);
+      expect(overhead.dot(new Three.Vector3(0, -1, 0))).toBeCloseTo(1);
+    }),
 );
