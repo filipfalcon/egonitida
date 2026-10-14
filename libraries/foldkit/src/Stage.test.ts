@@ -3,7 +3,7 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
 import { View, type Viewport } from '@lightocean/client';
 import { Component, Domain, Game, Pointing, Rule, WorkerTransport, State } from '@lightocean/core';
-import { Effect, Option, Queue, Ref, Schema, Stream } from 'effect';
+import { Context, Effect, Option, Queue, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Three from 'three/webgpu';
 import * as Held from '#src/Held.ts';
@@ -173,6 +173,41 @@ describe('a stage', () => {
       expect(viewport.camera.position.z).toBe(7);
     }).pipe(Effect.scoped),
   );
+
+  it.live('needs all that its views need, and what runs beside it, with nothing named', () => {
+    const Bell = Context.Service<{ readonly rung: Array<string> }>('Bell');
+    const Horn = Context.Service<{ readonly blown: Array<string> }>('Horn');
+    const bell = { rung: new Array<string>() };
+    const horn = { blown: new Array<string>() };
+    const rings = View.on(Lamp, ({ on }) =>
+      Effect.gen(function* () {
+        (yield* Bell).rung.push(on ? 'on' : 'off');
+      }),
+    );
+    return Effect.gen(function* () {
+      const { joined } = yield* joinedLamp;
+      const { viewport, click } = yield* played;
+
+      yield* Stage.show(viewport, joined, {
+        views: [lamps, rings],
+        mirror: document.createElement('div'),
+        setup: ({ camera }) => {
+          camera.position.set(0, 0, 5);
+          camera.lookAt(0, 0, 0);
+        },
+        alongside: () =>
+          Effect.gen(function* () {
+            (yield* Horn).blown.push('shown');
+          }),
+      });
+      yield* Effect.sleep('300 millis');
+      yield* click({ x: 0, y: 0 });
+      yield* Effect.sleep('300 millis');
+
+      expect(bell.rung).toContain('on');
+      expect(horn.blown).toEqual(['shown']);
+    }).pipe(Effect.scoped, Effect.provideService(Bell, bell), Effect.provideService(Horn, horn));
+  });
 
   it.live(
     "draws through the drawing's input, read again every frame, and never builds its views anew for it",
