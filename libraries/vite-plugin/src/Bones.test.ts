@@ -158,4 +158,18 @@ describe('Bones.plugin', () => {
     expect(source).toContain('"knee": { parent: Option.some("hip_bone")');
     expect(watched).toEqual([file]);
   });
+
+  it('reads it with the queries the development server adds to an import beside its own', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'bones-')), 'leg.glb');
+    writeFileSync(file, leg);
+    const watched: Array<string> = [];
+
+    const source = Bones.plugin().load.call(
+      { addWatchFile: (watching) => watched.push(watching) },
+      `${file}?bones&import`,
+    );
+
+    expect(source).toContain('"knee": { parent: Option.some("hip_bone")');
+    expect(watched).toEqual([file]);
+  });
 });

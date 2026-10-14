@@ -6,8 +6,8 @@ import { Option, Result, Schema } from 'effect';
  * A model's bones as it was made, read from its file as the game is built: a module importing `./figure.glb?bones` is given them as `Shape.Bones`, each bone by its name, the bone above it, and where it stands, so the simulation stands a figure as long as her model is drawn, read from the model itself and never copied out of it. A binary glTF, as Blender exports one, is read; each bone stands where its skin was bound to it, as `Shaping` finds it, and is named as Three.js names it on loading.
  */
 
-/** What an import asks of a model's file to be given its bones. */
-export const QUERY = '?bones';
+/** What an import asks of a model's file to be given its bones: `?bones`, among whatever other queries the development server adds to it. */
+export const QUERY = 'bones';
 
 /** A bone as read: its name, the name of the bone above it, if any, and where it stands. */
 export interface Bone {
@@ -245,10 +245,11 @@ export const plugin = (): Plugin => ({
   name: 'lightocean:bones',
   enforce: 'pre',
   load(id) {
-    if (!id.endsWith(QUERY)) {
+    const at = id.indexOf('?');
+    if (at === -1 || !new URLSearchParams(id.slice(at + 1)).has(QUERY)) {
       return undefined;
     }
-    const file = id.slice(0, -QUERY.length);
+    const file = id.slice(0, at);
     this.addWatchFile(file);
     const bones = Result.getOrThrowWith(
       read(readFileSync(file)),
