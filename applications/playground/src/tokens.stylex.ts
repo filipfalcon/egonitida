@@ -7,4 +7,5 @@ export const colours = stylex.defineVars({
   accent: '#4f8cff',
   onAccent: '#ffffff',
   danger: '#ff6b6b',
+  panel: 'rgba(11, 16, 32, 0.7)',
 });

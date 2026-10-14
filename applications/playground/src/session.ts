@@ -84,6 +84,8 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
       next: (_viewpoint, before, controls, seconds) => Look.look(controls, before, seconds),
       drawing: (viewpoint, look) => ({ viewpoint, look }),
     },
+    // How it plays, measured twice a second, for the page to show over the canvas.
+    measured: { onMeasured: (measured) => Message.MeasuredStage({ measured }) },
     onNotJoined: (): Message => Message.LeftGame(),
     onFailed: (reason) => Message.FailedShowGame({ reason }),
   }),

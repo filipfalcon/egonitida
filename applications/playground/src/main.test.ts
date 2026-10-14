@@ -9,8 +9,27 @@ describe('the playground', () => {
       session: { _tag: 'Joining' },
       cubeCount: 0,
       viewpoint: 'Ahead',
+      maybeMeasured: Option.none(),
       maybeError: Option.none(),
     });
+  });
+
+  it('keeps how the stage plays as it measures it, asking nothing for it, and forgets it when the game is left', () => {
+    const measured = { framesPerSecond: 60, latencyMillis: Option.some(0.4) };
+
+    Story.story(
+      update,
+      Story.given({ ...initialModel, session: { _tag: 'Joined', canvas: 'Mounted' } }),
+      Story.message(Message.MeasuredStage({ measured })),
+      Story.Command.expectNone(),
+      Story.model((model) => {
+        expect(model.maybeMeasured).toEqual(Option.some(measured));
+      }),
+      Story.message(Message.LeftGame()),
+      Story.model((model) => {
+        expect(model.maybeMeasured).toEqual(Option.none());
+      }),
+    );
   });
 
   it('keeps where the player looks from, as the page does, and asks nothing of the game for it', () => {

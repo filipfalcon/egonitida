@@ -1,4 +1,4 @@
-import { Styled } from '@lightocean/foldkit';
+import { type Stage, Styled } from '@lightocean/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Option } from 'effect';
 import type { Document, HtmlBuilder } from 'foldkit/html';
@@ -39,9 +39,29 @@ const styles = stylex.create({
   },
   text: { margin: 0 },
   error: { color: colours.danger },
+  measured: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    margin: 0,
+    paddingBlock: 4,
+    paddingInline: 8,
+    borderRadius: 6,
+    backgroundColor: colours.panel,
+    fontFamily: 'ui-monospace, monospace',
+    fontSize: 12,
+    fontVariantNumeric: 'tabular-nums',
+  },
 });
 
-/** The playground's page: the canvas, and over it the button that asks for a cube, the one that changes where the player looks from, and the count of cubes. */
+/** How the stage plays, as the page shows it: frames a second, and the way to the host and back, in milliseconds, finer below ten, or a dash while the host has not answered. */
+export const measuredText = ({ framesPerSecond, latencyMillis }: Stage.Measured): string =>
+  `${framesPerSecond} fps · ${Option.match(latencyMillis, {
+    onNone: () => '–',
+    onSome: (millis) => (millis < 10 ? millis.toFixed(1) : Math.round(millis).toString()),
+  })} ms`;
+
+/** The playground's page: the canvas, and over it the button that asks for a cube, the one that changes where the player looks from, and the count of cubes; and in its corner, how the stage plays. */
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'LightOcean Playground',
   body: h.main(Styled.attributes(h, styles.playground), [
@@ -84,5 +104,14 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
         onSome: (reason) => [h.p(Styled.attributes(h, styles.text, styles.error), [reason])],
       }),
     ]),
+    ...Option.match(model.maybeMeasured, {
+      onNone: () => [],
+      onSome: (measured) => [
+        h.p(
+          [h.AriaLabel('How the game plays'), ...Styled.attributes(h, styles.measured)],
+          [measuredText(measured)],
+        ),
+      ],
+    }),
   ]),
 });

@@ -1,4 +1,4 @@
-import { Session } from '@lightocean/foldkit';
+import { Session, Stage } from '@lightocean/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';
@@ -19,11 +19,12 @@ export const PageSession = Schema.Union([
 ]);
 export type PageSession = typeof PageSession.Type;
 
-/** The playground's page: the session as far as it has it, how many cubes the game holds, where the player looks at them from, and what last went wrong. */
+/** The playground's page: the session as far as it has it, how many cubes the game holds, where the player looks at them from, how the stage plays as it last measured it, and what last went wrong. */
 export const Model = Schema.Struct({
   session: PageSession,
   cubeCount: Schema.Int,
   viewpoint: Viewpoint,
+  maybeMeasured: Schema.Option(Stage.Measured),
   maybeError: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
@@ -38,6 +39,7 @@ export const Message = defineMessageUnion({
   FailedJoinGame: { reason: Schema.String },
   MountedCanvas: {},
   FailedShowGame: { reason: Schema.String },
+  MeasuredStage: { measured: Stage.Measured },
   CountedCubes: { count: Schema.Int },
   ClickedSpawnCube: {},
   ChoseViewpoint: { viewpoint: Viewpoint },
@@ -95,9 +97,12 @@ export const update = (model: Model, message: Message) =>
             })
           : model,
     }),
-    // The canvas goes with the session, so a session joined again waits for its own canvas.
+    // The canvas goes with the session, so a session joined again waits for its own canvas; how the stage played goes with it.
     LeftGame: () => ({
-      model: modifyFields(model, { session: () => ({ _tag: 'Joining' }) }),
+      model: modifyFields(model, {
+        session: () => ({ _tag: 'Joining' }),
+        maybeMeasured: () => Option.none(),
+      }),
     }),
     FailedJoinGame: ({ reason }) => ({ model: failed(model, reason) }),
     MountedCanvas: () => ({
@@ -107,6 +112,10 @@ export const update = (model: Model, message: Message) =>
           : model,
     }),
     FailedShowGame: ({ reason }) => ({ model: failed(model, reason) }),
+    // How the stage plays is the page's to show, and asks nothing of the game.
+    MeasuredStage: ({ measured }) => ({
+      model: modifyFields(model, { maybeMeasured: () => Option.some(measured) }),
+    }),
     CountedCubes: ({ count }) => ({ model: modifyFields(model, { cubeCount: () => count }) }),
     ClickedSpawnCube: () => ({ model, commands: [AskForCube()] }),
     // Where the player looks from is the page's, not the game's: the stage reads it every frame.
@@ -119,11 +128,12 @@ export const update = (model: Model, message: Message) =>
 
 // INIT
 
-/** The page as it opens: joining the game, no cubes counted, looking at the grid from ahead. */
+/** The page as it opens: joining the game, no cubes counted, looking at the grid from ahead, nothing measured yet. */
 export const initialModel: Model = {
   session: { _tag: 'Joining' },
   cubeCount: 0,
   viewpoint: 'Ahead',
+  maybeMeasured: Option.none(),
   maybeError: Option.none(),
 };
 
