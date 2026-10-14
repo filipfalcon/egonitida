@@ -102,6 +102,7 @@ A view's `draw` changes only the object its view built, from the frame and the p
 - A local server with the devtools beside it in development, and the Vite config that serves them: `examples/horde/src/simulation.worker.ts`, `examples/horde/vite.config.ts`
 - An application built of a game and Foldkit: its page's Model, Messages, and Commands in `applications/playground/src/main.ts`, told in `main.test.ts`; the game's session joined, shown, and projected in `applications/playground/src/session.ts`; where the player looks from kept in the Model and read by a rig as the drawing's input, its `viewpoint` in `main.ts`, the rig `looking` in `cubes.view.ts`, told in `cubes.scene.test.ts`; looking around by a stick every frame, played by the stage beside it, in `look.ts` and `session.ts`, told in `look.test.ts`
 - A rule that issues a command, the service the command needs, and the Worker behind it: `examples/save-score/src/score.ts`, `scores.ts`, and `server.ts`
+- A delivered model reshaped by a game's dials, its morph targets turned and its bones lengthened as the state holds them: `examples/figure/src/figure.view.ts`, told in `figure.scene.test.ts`
 - A document that is a state, edited by its editors' actions and played in a worker the page opens with it: `applications/editor/src/editing.ts`, `playing.ts`, and `play.worker.ts`
 - The engine's own tests: `libraries/core/src/Game.test.ts`, `libraries/client/src/View.test.ts`
 - A lint rule and its test: `libraries/oxlint-plugin/src/rules/pureSteps.ts`, `pureSteps.test.ts`

@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The example runs in the browser; its game also runs in a worker and in tests.
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["vite/client"]
+  }
+}
