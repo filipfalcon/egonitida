@@ -548,3 +548,32 @@ describe('what views need', () => {
     },
   );
 });
+
+describe('the input views read', () => {
+  /** A rig that reads where the player looks, and a view that reads how bright the page draws. */
+  const turned = View.rig(
+    [],
+    (camera, _held, _frame, _drawn, { yaw }: { readonly yaw: number }) => {
+      camera.rotation.y = yaw;
+    },
+  );
+  const lit = View.each([Crate], {
+    acquire: () => Effect.succeed(new Three.Mesh()),
+    draw: (mesh, _held, _frame, { bright }: { readonly bright: boolean }) => {
+      mesh.visible = bright;
+    },
+  });
+  const plain = View.each([Crate], {
+    acquire: () => Effect.succeed(new Three.Mesh()),
+    draw: () => {},
+  });
+
+  it('is what every one of them reads, met in one value, and anything where none reads one', () => {
+    const both: View.InputOf<[typeof turned, typeof lit, typeof plain]> = { yaw: 1, bright: true };
+    const none: View.InputOf<[typeof plain]> = 'anything';
+    // @ts-expect-error The rig reads where the player looks, which this lacks.
+    const lacking: View.InputOf<[typeof turned, typeof lit]> = { bright: true };
+
+    expect([both, none, lacking]).toHaveLength(3);
+  });
+});

@@ -328,6 +328,16 @@ export function make<R, V>(
   return working(views, looking, input);
 }
 
+/** What one view reads as the drawing's input, as a function that takes it, so the inputs of many views meet in one. */
+type ReaderOf<One> = One extends View<unknown, infer V> ? (input: V) => void : never;
+
+/** The drawing's input `views` read together: what every one of them reads, met in one value, such as where the player looks for a rig and how bright the page draws for another view; anything, where none reads one. A page that works the input out, such as a stage playing it on with its devices every frame, gives a value of it, typed by the views rather than by what it works it out with. */
+export type InputOf<Given extends ReadonlyArray<View<unknown, never>>> = [
+  ReaderOf<Given[number]>,
+] extends [(input: infer V) => void]
+  ? V
+  : never;
+
 /** What one view needs to draw: what it names, and nothing for a rig, which names nothing. */
 type NeedOf<One> = One extends Rig<never> ? never : One extends View<infer R, never> ? R : never;
 
