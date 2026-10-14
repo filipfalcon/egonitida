@@ -112,6 +112,7 @@ const played = Effect.gen(function* () {
     render,
     lost: Effect.never,
     capture: () => Effect.die('A played viewport takes no shots.'),
+    framesPerSecond: Effect.succeed(20),
     loop: (frame) =>
       Effect.sleep('50 millis').pipe(
         Effect.andThen(Effect.suspend(() => frame(0.05))),
@@ -592,6 +593,41 @@ describe('a stage', () => {
         expect(told).toEqual(['not joined']);
       }),
   );
+
+  describe('measuring how it plays', () => {
+    it.live(
+      'says every while how many frames it drew in the last second and how long the way to the host and back took',
+      () =>
+        Effect.gen(function* () {
+          const { joined } = yield* joinedLamp;
+          const { viewport } = yield* played;
+
+          const measured = yield* Stage.measuring(viewport, joined.client, '100 millis').pipe(
+            Stream.take(2),
+            Stream.runCollect,
+          );
+
+          expect(measured.map(({ framesPerSecond }) => framesPerSecond)).toEqual([20, 20]);
+          for (const { latencyMillis } of measured) {
+            expect(Option.isSome(latencyMillis)).toBe(true);
+            expect(Option.getOrElse(latencyMillis, () => Infinity)).toBeLessThan(100);
+          }
+        }).pipe(Effect.scoped),
+    );
+
+    it.live('says no latency for a ping the host never answered within the while', () =>
+      Effect.gen(function* () {
+        const { viewport } = yield* played;
+
+        const measured = yield* Stage.measuring(viewport, { ping: Effect.never }, '50 millis').pipe(
+          Stream.take(1),
+          Stream.runCollect,
+        );
+
+        expect(measured).toEqual([{ framesPerSecond: 20, latencyMillis: Option.none() }]);
+      }).pipe(Effect.scoped),
+    );
+  });
 
   describe('run by a page that draws it itself', () => {
     it.live('gives the page the session and its element, and passes on what the page says', () =>

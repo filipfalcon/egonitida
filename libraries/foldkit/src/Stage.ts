@@ -7,7 +7,7 @@ import {
   View,
   Viewport,
 } from '@lightocean/client';
-import { Data, Effect, Option, Queue, Schema, type Scope, Stream } from 'effect';
+import { Data, type Duration, Effect, Option, Queue, Schema, type Scope, Stream } from 'effect';
 import type { Action, Client, Component, Input } from '@lightocean/core';
 import type { ManagedResource } from 'foldkit';
 import type * as Session from '#src/Session.ts';
@@ -307,6 +307,34 @@ const shown = <R, V, T>(
     );
   });
 
+/** How a stage plays, as it measures it: how many frames it drew in the last second, and how many milliseconds the way to the host and back took, if the host answered in time. A page keeps it in its Model and shows it as it likes, such as in a corner over the canvas while debugging. */
+export const Measured = Schema.Struct({
+  framesPerSecond: Schema.Finite,
+  latencyMillis: Schema.Option(Schema.Finite),
+});
+export type Measured = typeof Measured.Type;
+
+/** How often a stage measures how it plays, unless told otherwise. */
+const MEASURED_EVERY: Duration.Input = '500 millis';
+
+/**
+ * How a stage on `viewport` showing the game `client` joined plays, measured once `every` while, from then on: the frames the viewport drew in the last second, and the client's ping, given up on if the host has not answered it within the while, as one lost on the way never is.
+ */
+export const measuring = (
+  viewport: Pick<Viewport.Viewport, 'framesPerSecond'>,
+  client: Pick<Client.Client, 'ping'>,
+  every: Duration.Input = MEASURED_EVERY,
+): Stream.Stream<Measured> =>
+  Stream.fromEffectRepeat(
+    Effect.gen(function* () {
+      const [latencyMillis] = yield* Effect.all(
+        [Effect.timeoutOption(client.ping, every), Effect.sleep(every)],
+        { concurrency: 'unbounded' },
+      );
+      return { framesPerSecond: yield* viewport.framesPerSecond, latencyMillis };
+    }),
+  );
+
 /** Why a stage could not be shown. */
 export class Unshown extends Data.TaggedError('Unshown')<{ readonly reason: string }> {}
 
@@ -398,12 +426,18 @@ export function stream<Message, Service, R, M, P, V, B extends Controls.Bindings
   return streamed(options);
 }
 
-/** Where a stage is shown, and what it says of being shown, in Messages of the application's. */
+/** Where a stage is shown, and what it says of being shown, in Messages of the application's: and, if the page asks, how it plays, measured once `every` while, half a second unless told otherwise, as `onMeasured` says. */
 export interface Showing<Message, Service> {
   readonly resource: ManagedResource.ManagedResource<Session.Joined, Service>;
   readonly canvasId: string;
   readonly onNotJoined: () => Message;
   readonly onFailed: (reason: string) => Message;
+  readonly measured?:
+    | {
+        readonly onMeasured: (measured: Measured) => Message;
+        readonly every?: Duration.Input | undefined;
+      }
+    | undefined;
 }
 
 /** A stage's Stream, needing what its views and what runs beside it need, together as `R`. */
@@ -433,7 +467,15 @@ const streamed = <Message, Service, R, M, P, V, B extends Controls.Bindings>(
             { ...options, mirror: element.parentElement ?? document.body },
             (messages) => Queue.offerAll(told, messages).pipe(Effect.asVoid),
           );
-          return Stream.fromQueue(told);
+          const { measured } = options;
+          return measured === undefined
+            ? Stream.fromQueue(told)
+            : Stream.merge(
+                Stream.fromQueue(told),
+                measuring(viewport, joined.client, measured.every).pipe(
+                  Stream.map(measured.onMeasured),
+                ),
+              );
         }),
       ),
   });
