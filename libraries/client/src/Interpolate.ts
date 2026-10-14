@@ -1,3 +1,4 @@
+import { Angle } from '@lightocean/core';
 import { Option, Schema, SchemaAST } from 'effect';
 
 /**
@@ -17,10 +18,6 @@ declare module 'effect/Schema' {
   }
 }
 
-/** The signed turn from one angle to another, the short way round. */
-const turnBetween = (from: number, to: number): number =>
-  Math.atan2(Math.sin(to - from), Math.cos(to - from));
-
 const howOf = (ast: SchemaAST.AST | undefined) =>
   ast === undefined ? undefined : SchemaAST.resolve(ast)?.interpolate;
 
@@ -31,7 +28,7 @@ const move = (ast: SchemaAST.AST | undefined, a: unknown, b: unknown, t: number)
     return a;
   }
   if (typeof a === 'number' && typeof b === 'number') {
-    return how === 'angle' ? a + turnBetween(a, b) * t : a + (b - a) * t;
+    return how === 'angle' ? a + Angle.turn(a, b) * t : a + (b - a) * t;
   }
   if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
     const earlier: ReadonlyArray<unknown> = a;

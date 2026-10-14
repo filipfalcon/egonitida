@@ -1,4 +1,5 @@
 export * as Action from '#src/Action.ts';
+export * as Angle from '#src/Angle.ts';
 export * as Client from '#src/Client.ts';
 export * as Command from '#src/Command.ts';
 export * as Component from '#src/Component.ts';
