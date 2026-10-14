@@ -10,8 +10,25 @@ describe('the playground', () => {
       cubeCount: 0,
       viewpoint: 'Ahead',
       maybeMeasured: Option.none(),
+      maybeInHand: Option.none(),
       maybeError: Option.none(),
     });
+  });
+
+  it('keeps the kind of device the player took up, asking nothing of the game for it', () => {
+    Story.story(
+      update,
+      Story.given({ ...initialModel, session: { _tag: 'Joined', canvas: 'Mounted' } }),
+      Story.message(Message.TookUpDevice({ kind: 'Pad' })),
+      Story.Command.expectNone(),
+      Story.model((model) => {
+        expect(model.maybeInHand).toEqual(Option.some('Pad'));
+      }),
+      Story.message(Message.TookUpDevice({ kind: 'KeyboardAndMouse' })),
+      Story.model((model) => {
+        expect(model.maybeInHand).toEqual(Option.some('KeyboardAndMouse'));
+      }),
+    );
   });
 
   it('keeps how the stage plays as it measures it, asking nothing for it, and forgets it when the game is left', () => {

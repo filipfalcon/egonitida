@@ -83,6 +83,8 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
       start: () => Look.start,
       next: (_viewpoint, before, controls, seconds) => Look.look(controls, before, seconds),
       drawing: (viewpoint, look) => ({ viewpoint, look }),
+      // The page hides the cursor while the player plays with a pad.
+      inHand: (kind) => Message.TookUpDevice({ kind }),
     },
     // How it plays, measured twice a second, for the page to show over the canvas.
     measured: { onMeasured: (measured) => Message.MeasuredStage({ measured }) },
