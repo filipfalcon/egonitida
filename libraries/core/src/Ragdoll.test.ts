@@ -188,6 +188,14 @@ describe('Ragdoll.mpfb', () => {
     expect([...Ragdoll.mpfb.names].sort()).toEqual(Object.keys(standing).sort());
   });
 
+  it('comes to lie still sent forward too, her feet settling as her ankles hold them, never thrashing', () => {
+    const struck = Ragdoll.start(Ragdoll.mpfb, standing, { x: 0.2, y: 0, z: 2.5 });
+
+    const lain = fallen(Ragdoll.mpfb, struck, 3.5);
+
+    expect(Ragdoll.isStill(lain)).toBe(true);
+  });
+
   it('falls, sent back by a blow, and comes to lie still on the floor, every point of her above it', () => {
     const struck = Ragdoll.start(Ragdoll.mpfb, standing, { x: 0, y: 0, z: -2 });
 

@@ -18,12 +18,17 @@ export interface Flesh {
   readonly mass: number;
 }
 
-/** A joint that bends only one way, such as a knee: `joint` stays on the side of the line from `from` to `to` that `toward` points, from its first point to its second. */
+/** Which way a hinge bends: from the first of two points to the second; or ahead of a part held together as one, such as a trunk, the way from across it, its first point to its second, turned about the way up it, such as the way from her right hip to her left about her spine, which no bending of the hinge turns. */
+export type Toward<P extends string> =
+  | readonly [P, P]
+  | { readonly across: readonly [P, P]; readonly up: readonly [P, P] };
+
+/** A joint that bends only one way, such as a knee: `joint` stays on the side of the line from `from` to `to` that `toward` points. */
 export interface Hinge<P extends string> {
   readonly from: P;
   readonly joint: P;
   readonly to: P;
-  readonly toward: readonly [P, P];
+  readonly toward: Toward<P>;
 }
 
 /** How a game's bodies fall: their points, by the names the game gives them, how each pair of `links` holds together, which groups of `rigid` hold together as one, and which `hinges` bend only one way. */
@@ -43,7 +48,13 @@ export interface Plan<P extends string> {
   readonly pairs: ReadonlyArray<readonly [number, number]>;
   /** The points of each group held together as one. */
   readonly rigid: ReadonlyArray<ReadonlyArray<number>>;
-  readonly hinges: ReadonlyArray<readonly [number, number, number, number, number]>;
+  readonly hinges: ReadonlyArray<{
+    readonly from: number;
+    readonly joint: number;
+    readonly to: number;
+    readonly across: readonly [number, number];
+    readonly up: readonly [number, number] | undefined;
+  }>;
   readonly place: ReadonlyMap<P, number>;
 }
 
@@ -77,10 +88,16 @@ export const plan = <const P extends string>(spec: Spec<P>): Plan<P> => {
     lightness: names.map((name) => 1 / spec.points[name].mass),
     pairs: [...spec.links.map(([a, b]) => [of(a), of(b)] as const), ...rigidPairs],
     rigid: spec.rigid.map((group) => group.map(of)),
-    hinges: spec.hinges.map(
-      ({ from, joint, to, toward }) =>
-        [of(from), of(joint), of(to), of(toward[0]), of(toward[1])] as const,
-    ),
+    hinges: spec.hinges.map(({ from, joint, to, toward }) => ({
+      from: of(from),
+      joint: of(joint),
+      to: of(to),
+      across:
+        'across' in toward
+          ? [of(toward.across[0]), of(toward.across[1])]
+          : [of(toward[0]), of(toward[1])],
+      up: 'up' in toward ? [of(toward.up[0]), of(toward.up[1])] : undefined,
+    })),
     place,
   };
 };
@@ -190,7 +207,7 @@ const hold = (
 const bend = (
   p: Array<number>,
   light: ReadonlyArray<number>,
-  [from, joint, to, back, front]: readonly [number, number, number, number, number],
+  { from, joint, to, across, up }: Plan<string>['hinges'][number],
 ) => {
   const get = (index: number, axis: number) => p[index * 3 + axis] ?? 0;
   const ux = get(to, 0) - get(from, 0);
@@ -201,10 +218,21 @@ const bend = (
     return;
   }
   const [ax, ay, az] = [ux / u, uy / u, uz / u];
-  // The way the joint bends, square to the line.
-  let fx = get(front, 0) - get(back, 0);
-  let fy = get(front, 1) - get(back, 1);
-  let fz = get(front, 2) - get(back, 2);
+  // The way the joint bends, square to the line: from one point to another, or ahead of a part, across it turned about up it.
+  const cx = get(across[1], 0) - get(across[0], 0);
+  const cy = get(across[1], 1) - get(across[0], 1);
+  const cz = get(across[1], 2) - get(across[0], 2);
+  const [ux2, uy2, uz2] =
+    up === undefined
+      ? [0, 0, 0]
+      : [
+          get(up[1], 0) - get(up[0], 0),
+          get(up[1], 1) - get(up[0], 1),
+          get(up[1], 2) - get(up[0], 2),
+        ];
+  let fx = up === undefined ? cx : cy * uz2 - cz * uy2;
+  let fy = up === undefined ? cy : cz * ux2 - cx * uz2;
+  let fz = up === undefined ? cz : cx * uy2 - cy * ux2;
   const along = fx * ax + fy * ay + fz * az;
   fx -= ax * along;
   fy -= ay * along;
@@ -235,10 +263,10 @@ const bend = (
     p[index * 3 + 1] = get(index, 1) + fy * share;
     p[index * 3 + 2] = get(index, 2) + fz * share;
   };
-  const across = -side / weights;
-  move(joint, across * wj);
-  move(from, (-across * wf) / 2);
-  move(to, (-across * wt) / 2);
+  const push = -side / weights;
+  move(joint, push * wj);
+  move(from, (-push * wf) / 2);
+  move(to, (-push * wt) / 2);
 };
 
 /** Keeps point `index` of `p`, `radius` round, above the floor and out of the walls. */
@@ -360,7 +388,7 @@ const ARM = {
 };
 
 /**
- * How a figure made with MPFB, MakeHuman's Blender add-on, falls, on the `game_engine` rig it makes: a point at each of her bones that bears her weight, by the bone's name, as heavy as a person of sixty kilograms; her trunk, from her hips to her shoulders and neck, held together as one; her head on her neck, her limbs from joint to joint; and her knees bending only forward, the way her feet point. `Ragdolling.mpfb` poses her model by it.
+ * How a figure made with MPFB, MakeHuman's Blender add-on, falls, on the `game_engine` rig it makes: a point at each of her bones that bears her weight, by the bone's name, as heavy as a person of sixty kilograms; her trunk, from her hips to her shoulders and neck, held together as one, and each shin with its foot, her ankles holding; her head on her neck, her limbs from joint to joint; and her knees bending only forward, ahead of her hips. `Ragdolling.mpfb` poses her model by it.
  */
 export const mpfb = plan({
   points: {
@@ -386,19 +414,30 @@ export const mpfb = plan({
   links: [
     ['neck_01', 'head'],
     ['thigh_l', 'calf_l'],
-    ['calf_l', 'foot_l'],
-    ['foot_l', 'ball_l'],
     ['thigh_r', 'calf_r'],
-    ['calf_r', 'foot_r'],
-    ['foot_r', 'ball_r'],
     ['upperarm_l', 'lowerarm_l'],
     ['lowerarm_l', 'hand_l'],
     ['upperarm_r', 'lowerarm_r'],
     ['lowerarm_r', 'hand_r'],
   ],
-  rigid: [['pelvis', 'thigh_l', 'thigh_r', 'spine_03', 'upperarm_l', 'upperarm_r', 'neck_01']],
+  rigid: [
+    ['pelvis', 'thigh_l', 'thigh_r', 'spine_03', 'upperarm_l', 'upperarm_r', 'neck_01'],
+    // Her ankles hold: shin, ankle, and toes as one, so her feet point where her shins do.
+    ['calf_l', 'foot_l', 'ball_l'],
+    ['calf_r', 'foot_r', 'ball_r'],
+  ],
   hinges: [
-    { from: 'thigh_l', joint: 'calf_l', to: 'foot_l', toward: ['foot_l', 'ball_l'] },
-    { from: 'thigh_r', joint: 'calf_r', to: 'foot_r', toward: ['foot_r', 'ball_r'] },
+    {
+      from: 'thigh_l',
+      joint: 'calf_l',
+      to: 'foot_l',
+      toward: { across: ['thigh_r', 'thigh_l'], up: ['pelvis', 'spine_03'] },
+    },
+    {
+      from: 'thigh_r',
+      joint: 'calf_r',
+      to: 'foot_r',
+      toward: { across: ['thigh_r', 'thigh_l'], up: ['pelvis', 'spine_03'] },
+    },
   ],
 });
