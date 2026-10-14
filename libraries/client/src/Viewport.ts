@@ -268,10 +268,11 @@ const pipelineOf = (
         resolution: antialiasing._tag === 'Temporal' ? antialiasing.resolution : 1,
         temporal: antialiasing._tag === 'Temporal',
       };
+      // Multisampled, the scene is drawn four times along the edges of geometry into the picture, as the renderer would draw it onto the screen.
       const drawn = hold(
         antialiasing._tag === 'Supersample'
           ? supersampled(scene, camera, antialiasing.samples)
-          : pass(scene, camera),
+          : pass(scene, camera, { samples: Antialiasing.multisampled(antialiasing) ? 4 : 0 }),
       );
       drawn.setResolutionScale(drawing.resolution);
       // Blending a frame into the ones before follows where each pixel moved since.
