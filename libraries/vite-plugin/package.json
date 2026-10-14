@@ -8,6 +8,9 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./bones": {
+      "types": "./types/bones.d.ts"
+    },
     "./build": {
       "types": "./types/build.d.ts"
     }
