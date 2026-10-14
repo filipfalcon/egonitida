@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, State } from '@lightocean/core';
+import { Component, Shape, State } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as Three from 'three/webgpu';
@@ -45,9 +45,9 @@ const weightOf = (model: Three.Object3D, mesh: string, target: string) =>
       : Option.none(),
   );
 
-const shaping = Shaping.make({
-  hips: Shaping.morph({ less: 'hips-decr', more: 'hips-incr' }),
-  bust: Shaping.morph('breast-size'),
+const shaping = Shape.make({
+  hips: Shape.morph({ less: 'hips-decr', more: 'hips-incr' }),
+  bust: Shape.morph('breast-size'),
 });
 
 describe('Shaping.fit', () => {
@@ -56,10 +56,10 @@ describe('Shaping.fit', () => {
       const unfitted = yield* Effect.flip(
         Shaping.fit(
           figure(),
-          Shaping.make({
-            bust: Shaping.morph('breast-size'),
-            cheeks: Shaping.morph('cheeks-full'),
-            waist: Shaping.morph({ less: 'waist-decr', more: 'waist-incr' }),
+          Shape.make({
+            bust: Shape.morph('breast-size'),
+            cheeks: Shape.morph('cheeks-full'),
+            waist: Shape.morph({ less: 'waist-decr', more: 'waist-incr' }),
           }),
         ),
       );
@@ -122,22 +122,26 @@ describe('Shaped.shape', () => {
 });
 
 /** How a figure is shaped, as a player chose it. */
-const Shape = Component.make('Shape', Schema.Struct({ hips: Schema.Finite, bust: Schema.Finite }), {
-  owner: 'rules',
-  network: 'server',
-});
+const Shaped = Component.make(
+  'Shaped',
+  Schema.Struct({ hips: Schema.Finite, bust: Schema.Finite }),
+  {
+    owner: 'rules',
+    network: 'server',
+  },
+);
 
-const figures = View.each([Shape], {
+const figures = View.each([Shaped], {
   acquire: () => Effect.orDie(Shaping.fit(figure(), shaping)),
   draw: (shaped, held) => {
-    shaped.shape(held(Shape));
+    shaped.shape(held(Shaped));
   },
 });
 
 it.effect('draws a figure shaped as the state holds it', () =>
   Effect.gen(function* () {
     const [state, her] = State.spawn(State.empty({ seed: 1 }), [
-      Shape.of({ hips: 0.2, bust: 0.7 }),
+      Shaped.of({ hips: 0.2, bust: 0.7 }),
     ]);
     const scene = yield* Scene.make([figures]);
 
@@ -193,7 +197,7 @@ const KNEE = 1;
 const SHIN = 2;
 const FOOT = 3;
 
-const legs = Shaping.make({ legs: Shaping.lengthen(['foot'], { by: 0.5 }) });
+const legs = Shape.make({ legs: Shape.lengthen(['foot'], { by: 0.5 }) });
 
 /** The skinned mesh of `model` named `name`, if it has one. */
 const skinnedIn = (model: Three.Object3D, name: string) =>
@@ -216,13 +220,13 @@ const distanceFrom = (drawn: Option.Option<Three.Vector3>, x: number, y: number,
     onSome: (point) => point.distanceTo(new Three.Vector3(x, y, z)),
   });
 
-describe('Shaping.lengthen', () => {
+describe('a dial that lengthens', () => {
   it.effect('refuses a model that has no bone a dial lengthens, naming each', () =>
     Effect.gen(function* () {
       const unfitted = yield* Effect.flip(
         Shaping.fit(
           leg(),
-          Shaping.make({ legs: Shaping.lengthen(['shin', 'foot', 'toe'], { by: 1 }) }),
+          Shape.make({ legs: Shape.lengthen(['shin', 'foot', 'toe'], { by: 1 }) }),
         ),
       );
 
@@ -419,8 +423,8 @@ const STANDING_HIP = 0;
 const STANDING_FOOT = 2;
 
 describe('a lengthening that raises', () => {
-  const raising = Shaping.make({
-    legs: Shaping.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
+  const raising = Shape.make({
+    legs: Shape.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
   });
 
   it.effect('refuses a model that has no bone a dial raises, naming it', () =>
@@ -428,7 +432,7 @@ describe('a lengthening that raises', () => {
       const unfitted = yield* Effect.flip(
         Shaping.fit(
           standing(),
-          Shaping.make({ legs: Shaping.lengthen(['foot'], { by: 1, raises: 'pelvis' }) }),
+          Shape.make({ legs: Shape.lengthen(['foot'], { by: 1, raises: 'pelvis' }) }),
         ),
       );
 
@@ -478,13 +482,13 @@ describe('a lengthening that raises', () => {
   );
 });
 
-describe('Shaping.grow', () => {
-  const knee = Shaping.make({ knee: Shaping.grow(['knee'], { by: 0.5 }) });
+describe('a dial that grows', () => {
+  const knee = Shape.make({ knee: Shape.grow(['knee'], { by: 0.5 }) });
 
   it.effect('refuses a model that has no bone a dial grows, naming each', () =>
     Effect.gen(function* () {
       const unfitted = yield* Effect.flip(
-        Shaping.fit(leg(), Shaping.make({ head: Shaping.grow(['head'], { by: 1 }) })),
+        Shaping.fit(leg(), Shape.make({ head: Shape.grow(['head'], { by: 1 }) })),
       );
 
       expect(unfitted.absent).toEqual(['head']);
@@ -544,40 +548,48 @@ describe('Shaping.grow', () => {
   );
 });
 
-describe('Shaping.mpfb', () => {
-  const mpfb = Shaping.mpfb({ by: 0.1 });
+describe('Shape.standing', () => {
+  /** The bones of `model` as it stands now, by name, as `Shape.Bones` holds a model's bones as made. */
+  const bonesOf = (model: Three.Object3D): Shape.Bones => {
+    model.updateMatrixWorld(true);
+    const bones: Record<string, Shape.Bone> = {};
+    model.traverse((child) => {
+      if (child instanceof Three.Bone) {
+        const at = child.getWorldPosition(new Three.Vector3());
+        bones[child.name] = {
+          parent:
+            child.parent instanceof Three.Bone ? Option.some(child.parent.name) : Option.none(),
+          at: { x: at.x, y: at.y, z: at.z },
+        };
+      }
+    });
+    return bones;
+  };
 
-  it('turns each part of an MPFB figure by its two shape keys, as MakeHuman names them', () => {
-    expect(mpfb.dials.hips).toEqual(Shaping.morph({ less: 'hips-decr', more: 'hips-incr' }));
-    expect(mpfb.dials.nose).toEqual(Shaping.morph({ less: 'nose-decr', more: 'nose-incr' }));
-    expect(Object.keys(mpfb.dials)).toEqual([
-      'hips',
-      'bust',
-      'waist',
-      'stomach',
-      'buttocks',
-      'thighs',
-      'calves',
-      'arms',
-      'cheeks',
-      'chin',
-      'jaw',
-      'nose',
-      'legLength',
-      'armLength',
-      'torsoLength',
-    ]);
-  });
+  it.effect('stands every bone where the model shaped by the same dials rests it', () =>
+    Effect.gen(function* () {
+      const model = standing();
+      const made = bonesOf(model);
+      const shape = Shape.make({
+        legs: Shape.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
+        shin: Shape.lengthen(['foot'], { by: 0.25 }),
+        knee: Shape.grow(['knee'], { by: 0.5 }),
+      });
+      const values = { legs: 0.6, shin: -0.8, knee: 0.4 };
+      const shaped = yield* Shaping.fit(model, shape);
 
-  it('lengthens her legs, raising her pelvis, and her arms and torso, by the bones of her rig', () => {
-    expect(mpfb.dials.legLength).toEqual(
-      Shaping.lengthen(['calf_l', 'foot_l', 'calf_r', 'foot_r'], { by: 0.1, raises: 'pelvis' }),
-    );
-    expect(mpfb.dials.armLength).toEqual(
-      Shaping.lengthen(['lowerarm_l', 'hand_l', 'lowerarm_r', 'hand_r'], { by: 0.1 }),
-    );
-    expect(mpfb.dials.torsoLength).toEqual(
-      Shaping.lengthen(['spine_02', 'spine_03', 'neck_01'], { by: 0.1 }),
-    );
-  });
+      shaped.shape(values);
+      const rested = bonesOf(shaped);
+      const placed = Shape.standing(shape, made, values);
+
+      for (const name of ['root', 'hip', 'knee', 'foot']) {
+        const at = placed[name];
+        const rest = Option.map(
+          Option.fromNullishOr(rested[name]),
+          ({ at }) => new Three.Vector3(at.x, at.y, at.z),
+        );
+        expect(distanceFrom(rest, at?.x ?? NaN, at?.y ?? NaN, at?.z ?? NaN)).toBeLessThan(1e-6);
+      }
+    }),
+  );
 });

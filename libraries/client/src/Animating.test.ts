@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, State } from '@lightocean/core';
+import { Component, Shape, State } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Animating from '#src/Animating.ts';
@@ -311,8 +311,8 @@ const crouching = new Three.AnimationClip('Crouch', 1, [
 ]);
 
 /** Legs half as long again at a whole, raising the hip as much. */
-const longer = Shaping.make({
-  legs: Shaping.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
+const longer = Shape.make({
+  legs: Shape.lengthen(['knee', 'foot'], { by: 0.5, raises: 'hip' }),
 });
 
 describe('Animated', () => {

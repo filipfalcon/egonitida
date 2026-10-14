@@ -1,4 +1,5 @@
 import { Shaping, View } from '@lightocean/client';
+import { Shape } from '@lightocean/core';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Figure from '#src/figure.ts';
@@ -8,10 +9,10 @@ import * as Model from '#src/model.ts';
 export const LEGS_BY = 0.15;
 
 /** What each of the figure's dials turns in her model: her chest's morph target, her hips' two, and the bones of her legs. */
-export const shaping = Shaping.make({
-  chest: Shaping.morph('chest-fuller'),
-  hips: Shaping.morph({ less: 'hips-narrower', more: 'hips-wider' }),
-  legs: Shaping.lengthen(['knee', 'hips'], { by: LEGS_BY }),
+export const shape = Shape.make({
+  chest: Shape.morph('chest-fuller'),
+  hips: Shape.morph({ less: 'hips-narrower', more: 'hips-wider' }),
+  legs: Shape.lengthen(['knee', 'hips'], { by: LEGS_BY }),
 });
 
 /** Lets go of everything `object` holds that the renderer keeps. */
@@ -26,7 +27,7 @@ const dispose = (object: Three.Object3D) =>
 /** Every figure, as her model shaped by her dials. */
 export const figures = View.each([Figure.Shape], {
   acquire: () =>
-    Effect.acquireRelease(Effect.orDie(Shaping.fit(Model.figure(), shaping)), (shaped) =>
+    Effect.acquireRelease(Effect.orDie(Shaping.fit(Model.figure(), shape)), (shaped) =>
       Effect.sync(() => dispose(shaped)),
     ),
   draw: (shaped, held) => {

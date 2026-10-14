@@ -1,123 +1,15 @@
+import { Shape } from '@lightocean/core';
 import { Data, Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 
 /**
- * A model reshaped as a game's dials say, such as a figure's hips made wider, her cheeks fuller, or her legs longer: by the morph targets whoever made the model put in it, and by drawing its bones out. The game names its dials and what each turns in the model, since only it knows the model; `fit` finds them in a model as it is delivered, or refuses it, naming what it lacks; and the model is then shaped from the dials' values alone, every frame, as a view draws it, y = h(x): the same values give the same shape, however it was shaped before.
+ * A model reshaped as a game's dials say, as its `Shape` has them, such as a figure's hips made wider, her cheeks fuller, or her legs longer: by the morph targets whoever made the model put in it, and by drawing its bones out. `fit` finds them in a model as it is delivered, or refuses it, naming what it lacks; and the model is then shaped from the dials' values alone, every frame, as a view draws it, y = h(x): the same values give the same shape, however it was shaped before.
  */
-
-/** A dial that turns one morph target, as far as its value: the target's weight is the value. */
-export interface Morph {
-  readonly _tag: 'Morph';
-  readonly target: string;
-}
-
-/** A dial that turns one of two opposed morph targets, such as narrower hips and wider ones: `more` as far as a value above nothing, `less` as far as one below it, and neither at nothing. */
-export interface Opposed {
-  readonly _tag: 'Opposed';
-  readonly less: string;
-  readonly more: string;
-}
-
-/**
- * A dial that lengthens bones, such as a figure's shins: each bone's offset from its parent bone is drawn out by `by` for every whole of the value, and in as far below nothing, and the skin each holds goes with it. Only where the model rests is lengthened, so animations that turn its bones, never moving them, play on it as before; a bone with no parent bone has no offset to draw out, and is left as it is.
- *
- * A dial that `raises` a bone, such as legs raising the pelvis, draws that bone's offset out too, by as much as the longest way down through the bones it lengthens beneath it grew, so a figure standing on the ground as made stands on it with her legs longer or shorter.
- */
-export interface Lengthen {
-  readonly _tag: 'Lengthen';
-  readonly bones: ReadonlyArray<string>;
-  readonly by: number;
-  readonly raises: Option.Option<string>;
-}
-
-/**
- * A dial that grows bones whole, such as a figure's head: each bone, and everything below it, is made bigger by `by` for every whole of the value, and smaller below nothing, from where it stands, and the skin each holds goes with it. Only where the model rests is grown, so animations that turn its bones play on it as before; a bone with no parent bone is left as it is.
- */
-export interface Grow {
-  readonly _tag: 'Grow';
-  readonly bones: ReadonlyArray<string>;
-  readonly by: number;
-}
-
-/** What a dial turns in a model. */
-export type Dial = Morph | Opposed | Lengthen | Grow;
-
-/** A game's dials, each by the name the game gives it. */
-export type Dials = Readonly<Record<string, Dial>>;
-
-/** How a model is shaped: a game's dials, made by `make`. */
-export interface Shaping<D extends Dials> {
-  readonly dials: D;
-}
-
-/** A value for each of the dials `D`, such as a component of the game holds them. */
-export type Values<D extends Dials> = { readonly [Name in keyof D]: number };
 
 /** The model has no morph target or bone a dial turns: each one absent, by name, in the order of the dials. */
 export class Unfitted extends Data.TaggedError('Unfitted')<{
   readonly absent: ReadonlyArray<string>;
 }> {}
-
-/** A dial turning the morph target `target`, or one of the two opposed targets `less` and `more`. */
-export function morph(target: string): Morph;
-export function morph(targets: { readonly less: string; readonly more: string }): Opposed;
-export function morph(
-  targets: string | { readonly less: string; readonly more: string },
-): Morph | Opposed {
-  return typeof targets === 'string'
-    ? { _tag: 'Morph', target: targets }
-    : { _tag: 'Opposed', less: targets.less, more: targets.more };
-}
-
-/** A dial lengthening `bones`, each by `by` of its offset from its parent for every whole of the value, and raising the bone `raises`, if given, by as much as they grew beneath it. */
-export const lengthen = (
-  bones: ReadonlyArray<string>,
-  options: { readonly by: number; readonly raises?: string | undefined },
-): Lengthen => ({
-  _tag: 'Lengthen',
-  bones,
-  by: options.by,
-  raises: Option.fromNullishOr(options.raises),
-});
-
-/** A dial growing `bones` whole, each by `by` of itself for every whole of the value. */
-export const grow = (bones: ReadonlyArray<string>, options: { readonly by: number }): Grow => ({
-  _tag: 'Grow',
-  bones,
-  by: options.by,
-});
-
-/** How a model is shaped by `dials`. */
-export const make = <const D extends Dials>(dials: D): Shaping<D> => ({ dials });
-
-/** A dial turning one part of an MPFB figure slimmer below nothing and fuller above it, by its two shape keys, as MakeHuman names them. */
-const fuller = <const Part extends string>(part: Part) =>
-  morph({ less: `${part}-decr`, more: `${part}-incr` });
-
-/**
- * The dials of a figure made with MPFB, MakeHuman's Blender add-on, exported with its shape keys and its `game_engine` rig: her hips, bust, waist, stomach, buttocks, thighs, calves, arms, cheeks, chin, jaw, and nose each slimmer or fuller by its `-decr` and `-incr` keys; her legs, arms, and torso each lengthened by `by` of themselves for every whole of the value, her legs raising her pelvis, so she stands on the ground. A game shapes such a figure by them, its component's fields named as they are, and adds its own beside them, such as a head that grows.
- */
-export const mpfb = (options: { readonly by: number }) =>
-  make({
-    hips: fuller('hips'),
-    bust: fuller('bust'),
-    waist: fuller('waist'),
-    stomach: fuller('stomach'),
-    buttocks: fuller('buttocks'),
-    thighs: fuller('thighs'),
-    calves: fuller('calves'),
-    arms: fuller('arms'),
-    cheeks: fuller('cheeks'),
-    chin: fuller('chin'),
-    jaw: fuller('jaw'),
-    nose: fuller('nose'),
-    legLength: lengthen(['calf_l', 'foot_l', 'calf_r', 'foot_r'], {
-      by: options.by,
-      raises: 'pelvis',
-    }),
-    armLength: lengthen(['lowerarm_l', 'hand_l', 'lowerarm_r', 'hand_r'], { by: options.by }),
-    torsoLength: lengthen(['spine_02', 'spine_03', 'neck_01'], { by: options.by }),
-  });
 
 /** Which part of a dial's value a morph target is weighted by: all of it, only above nothing, or only below. */
 type Side = 'Whole' | 'More' | 'Less';
@@ -319,7 +211,7 @@ const lengthenModel = (lengths: Lengths) => {
 /**
  * A model fitted to a game's dials, made by `fit`: the model within it, and `shape`, which shapes it by the dials' values. It stands for the model in the scene, so a view places it as it would the model.
  */
-export class Shaped<D extends Dials> extends Three.Group {
+export class Shaped<D extends Shape.Dials> extends Three.Group {
   readonly model: Three.Object3D;
   readonly #turns: ReadonlyArray<Turn>;
   readonly #lengths: Lengths;
@@ -360,7 +252,7 @@ export class Shaped<D extends Dials> extends Three.Group {
   /**
    * Shapes the model as `values` say: every morph target a dial turns, on every mesh that carries it, weighted by the dial's value alone; and every bone a dial lengthens, lengthened from the model as it was made, with its skin, whenever a value lengthening it is another than last. Allocates nothing while no length changes.
    */
-  shape(values: Values<D>): void {
+  shape(values: Shape.Values<D>): void {
     const read: Readonly<Record<string, number>> = values;
     for (const turned of this.#turns) {
       const value = read[turned.dial];
@@ -383,7 +275,7 @@ export class Shaped<D extends Dials> extends Three.Group {
 }
 
 /** The targets a morph dial turns, each with the part of its value it is weighted by; none for a dial that turns no morph target. */
-const targetsOf = (dial: Dial): ReadonlyArray<readonly [string, Side]> =>
+const targetsOf = (dial: Shape.Dial): ReadonlyArray<readonly [string, Side]> =>
   dial._tag === 'Morph'
     ? [[dial.target, 'Whole']]
     : dial._tag === 'Opposed'
@@ -511,13 +403,13 @@ const ownSkin = (meshes: ReadonlyArray<Three.SkinnedMesh>) =>
   );
 
 /**
- * `model` fitted to `shaping`: every morph target a dial turns, found on every mesh of the model that carries it, and every bone a dial lengthens, found in its skeletons, as the model holds its meshes now and rests as it was made. Fails with `Unfitted` if no mesh carries one of the targets, or no skeleton one of the bones.
+ * `model` fitted to `shape`: every morph target a dial turns, found on every mesh of the model that carries it, and every bone a dial lengthens, found in its skeletons, as the model holds its meshes now and rests as it was made. Fails with `Unfitted` if no mesh carries one of the targets, or no skeleton one of the bones.
  *
  * Lengthening rewrites the skin, so a model with a dial that lengthens is given a copy of its skin and its skeletons' rests of its own, which the scope lets go of once it closes: copies of one loaded model, which share them, as `SkeletonUtils.clone` copies one, are each shaped on their own. Everything else the model holds stays the caller's to let go of.
  */
-export const fit = <D extends Dials>(
+export const fit = <D extends Shape.Dials>(
   model: Three.Object3D,
-  shaping: Shaping<D>,
+  shape: Shape.Shape<D>,
 ): Effect.Effect<Shaped<D>, Unfitted, Scope.Scope> =>
   Effect.gen(function* () {
     const meshes: Array<Three.Mesh> = [];
@@ -531,7 +423,7 @@ export const fit = <D extends Dials>(
       }
     });
     if (
-      Object.values(shaping.dials).some((dial) => dial._tag === 'Lengthen' || dial._tag === 'Grow')
+      Object.values(shape.dials).some((dial) => dial._tag === 'Lengthen' || dial._tag === 'Grow')
     ) {
       yield* ownSkin(skinned);
     }
@@ -540,7 +432,7 @@ export const fit = <D extends Dials>(
     const turns: Array<Turn> = [];
     const lengths: Array<Length> = [];
     const absent: Array<string> = [];
-    for (const [dial, turned] of Object.entries(shaping.dials)) {
+    for (const [dial, turned] of Object.entries(shape.dials)) {
       for (const [target, side] of targetsOf(turned)) {
         const found = meshes.flatMap((mesh) => {
           const index = mesh.morphTargetDictionary?.[target];
