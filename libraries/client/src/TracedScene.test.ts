@@ -1,0 +1,278 @@
+import { describe, expect, it } from '@effect/vitest';
+import { Option } from 'effect';
+import * as Three from 'three/webgpu';
+import * as TracedScene from '#src/TracedScene.ts';
+
+/** A stream of numbers from 0 to 1 that is the same for the same seed. */
+const numbers = (seed: number) => {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+};
+
+/** `count` small triangles scattered through a cube two units across about the middle. */
+const scatteredTriangles = (count: number, next: () => number) =>
+  new Float32Array(
+    Array.from({ length: count }, () => {
+      const at = [next() * 2 - 1, next() * 2 - 1, next() * 2 - 1];
+      return Array.from({ length: 3 }, () => at.map((part) => part + (next() - 0.5) * 0.4)).flat();
+    }).flat(),
+  );
+
+/** Where the ray from `origin` going `direction` meets the triangle `a`, `b`, `c` in the scene, by Three's own test, if it does. */
+const meetsByThree = (
+  origin: Three.Vector3,
+  direction: Three.Vector3,
+  a: Three.Vector3,
+  b: Three.Vector3,
+  c: Three.Vector3,
+) => {
+  const at = new Three.Ray(origin, direction).intersectTriangle(
+    a,
+    b,
+    c,
+    false,
+    new Three.Vector3(),
+  );
+  return at === null ? Infinity : at.sub(origin).length() / direction.length();
+};
+
+/** What the ray meets first among every placed shape's every triangle, each tried in turn. */
+const bruteForce = (
+  shapes: ReadonlyArray<Float32Array>,
+  placed: ReadonlyArray<TracedScene.Placed>,
+  origin: Three.Vector3,
+  direction: Three.Vector3,
+  far: number,
+) => {
+  let best = { distance: far, shape: -1, matrix: -1 };
+  placed.forEach(({ shape, matrix }, index) => {
+    const positions = shapes[shape] ?? new Float32Array(0);
+    for (let triangle = 0; triangle < positions.length / 9; triangle += 1) {
+      const [a, b, c] = [0, 1, 2].map((corner) =>
+        new Three.Vector3().fromArray(positions, triangle * 9 + corner * 3).applyMatrix4(matrix),
+      );
+      if (a === undefined || b === undefined || c === undefined) {
+        continue;
+      }
+      const distance = meetsByThree(origin, direction, a, b, c);
+      if (distance > TracedScene.NEAREST && distance < best.distance) {
+        best = { distance, shape, matrix: index };
+      }
+    }
+  });
+  return best;
+};
+
+/** A matrix turning, stretching, and moving a shape somewhere in a cube ten units across. */
+const placement = (next: () => number) =>
+  new Three.Matrix4().compose(
+    new Three.Vector3(next() * 10 - 5, next() * 10 - 5, next() * 10 - 5),
+    new Three.Quaternion().setFromEuler(new Three.Euler(next() * 6, next() * 6, next() * 6)),
+    new Three.Vector3(0.5 + next(), 0.5 + next(), 0.5 + next()),
+  );
+
+describe('a scene as rays are traced through it', () => {
+  it('meets first what every triangle tried in turn meets first, however the shapes are placed', () => {
+    const next = numbers(3);
+    const shapes = [scatteredTriangles(60, next), scatteredTriangles(25, next)];
+    const placed = Array.from({ length: 12 }, (_, index) => ({
+      shape: index % 2,
+      matrix: placement(next),
+      colour: [index / 12, 0.5, 1] as const,
+      emissive: [0, 0, 0] as const,
+    }));
+    const flat = TracedScene.flatten(shapes.map(TracedScene.shapeOf), placed);
+
+    for (let ray = 0; ray < 400; ray += 1) {
+      const origin = new Three.Vector3(next() * 16 - 8, next() * 16 - 8, next() * 16 - 8);
+      const direction = new Three.Vector3(next() - 0.5, next() - 0.5, next() - 0.5).normalize();
+      const expected = bruteForce(shapes, placed, origin, direction, 30);
+      const traced = TracedScene.trace(
+        flat,
+        [origin.x, origin.y, origin.z],
+        [direction.x, direction.y, direction.z],
+        30,
+      );
+
+      expect(Option.isSome(traced)).toBe(expected.shape !== -1);
+      if (Option.isSome(traced)) {
+        expect(traced.value.distance).toBeCloseTo(expected.distance, 3);
+        const colour = flat.placed[traced.value.placed * TracedScene.PLACED + 12];
+        expect(colour).toBeCloseTo(placed[expected.matrix]?.colour[0] ?? -1, 5);
+      }
+    }
+  });
+
+  it('meets nothing past how far it looks, nor the surface it starts on', () => {
+    const square = new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]);
+    const flat = TracedScene.flatten(
+      [TracedScene.shapeOf(square)],
+      [{ shape: 0, matrix: new Three.Matrix4(), colour: [1, 1, 1], emissive: [0, 0, 0] }],
+    );
+
+    const ahead = TracedScene.trace(flat, [0, 0, 5], [0, 0, -1], 10);
+    const tooFar = TracedScene.trace(flat, [0, 0, 5], [0, 0, -1], 4);
+    const leaving = TracedScene.trace(flat, [0, 0, 0], [0, 0, 1], 10);
+    const along = TracedScene.trace(flat, [-5, 0, 1], [1, 0, 0], 10);
+
+    expect(Option.map(ahead, ({ distance }) => distance)).toEqual(Option.some(5));
+    expect(tooFar).toEqual(Option.none());
+    expect(leaving).toEqual(Option.none());
+    expect(along).toEqual(Option.none());
+  });
+
+  it('meets nothing in a scene with nothing placed, or nothing but shapes with no triangles', () => {
+    const empty = TracedScene.flatten([TracedScene.shapeOf(new Float32Array(0))], []);
+    const hollow = TracedScene.flatten(
+      [TracedScene.shapeOf(new Float32Array(0))],
+      [{ shape: 0, matrix: new Three.Matrix4(), colour: [1, 1, 1], emissive: [0, 0, 0] }],
+    );
+
+    expect(TracedScene.trace(empty, [0, 0, 0], [0, 0, 1], 10)).toEqual(Option.none());
+    expect(hollow.placedCount).toBe(0);
+    expect(TracedScene.trace(hollow, [0, 0, 0], [0, 0, 1], 10)).toEqual(Option.none());
+  });
+
+  it('follows a shape whose triangles moved, its hierarchy refitted', () => {
+    const square = new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]);
+    const shape = TracedScene.shapeOf(square);
+    const lifted = TracedScene.moved(
+      shape,
+      square.map((value, index) => (index % 3 === 2 ? value + 3 : value)),
+    );
+    const flat = TracedScene.flatten(
+      [lifted],
+      [{ shape: 0, matrix: new Three.Matrix4(), colour: [1, 1, 1], emissive: [0, 0, 0] }],
+    );
+
+    const traced = TracedScene.trace(flat, [0, 0, 5], [0, 0, -1], 10);
+
+    expect(Option.map(traced, ({ distance }) => distance)).toEqual(Option.some(2));
+  });
+});
+
+describe('a scene gathered from what Three.js draws', () => {
+  /** A box a unit across, coloured `colour`, standing at `at`. */
+  const box = (colour: number, at: readonly [number, number, number]) => {
+    const mesh = new Three.Mesh(
+      new Three.BoxGeometry(1, 1, 1),
+      new Three.MeshStandardMaterial({ color: colour, emissive: 0x000000 }),
+    );
+    mesh.position.set(...at);
+    return mesh;
+  };
+  const camera = new Three.PerspectiveCamera();
+
+  /** How far the ray from `origin` going `direction` meets something in `flat`, if it does. */
+  const distanceIn = (
+    flat: TracedScene.Flat,
+    origin: readonly [number, number, number],
+    direction: readonly [number, number, number],
+  ) => Option.map(TracedScene.trace(flat, origin, direction, 100), ({ distance }) => distance);
+
+  it('holds every mesh that is drawn, where it stands now, in its colour', () => {
+    const scene = new Three.Scene();
+    const red = box(0xff0000, [0, 0, -5]);
+    scene.add(red);
+    const gathering = TracedScene.gathering();
+
+    const first = gathering.gather(scene, camera);
+    red.position.z = -8;
+    const moved = gathering.gather(scene, camera);
+
+    expect(Option.getOrThrow(distanceIn(first, [0, 0, 0], [0, 0, -1]))).toBeCloseTo(4.5);
+    expect(Option.getOrThrow(distanceIn(moved, [0, 0, 0], [0, 0, -1]))).toBeCloseTo(7.5);
+    const hit = Option.getOrThrow(TracedScene.trace(moved, [0, 0, 0], [0, 0, -1], 100));
+    expect(moved.placed[hit.placed * TracedScene.PLACED + 12]).toBeCloseTo(1);
+    expect(moved.placed[hit.placed * TracedScene.PLACED + 13]).toBeCloseTo(0);
+  });
+
+  it('leaves out what is not drawn: hidden, see-through, or on a layer the camera does not see', () => {
+    const scene = new Three.Scene();
+    const hidden = box(0xffffff, [0, 0, -3]);
+    hidden.visible = false;
+    const glass = box(0xffffff, [0, 0, -4]);
+    glass.material.transparent = true;
+    const elsewhere = box(0xffffff, [0, 0, -5]);
+    elsewhere.layers.set(3);
+    const shown = box(0xffffff, [0, 0, -6]);
+    scene.add(hidden, glass, elsewhere, shown);
+
+    const flat = TracedScene.gathering().gather(scene, camera);
+
+    expect(flat.placedCount).toBe(1);
+    expect(Option.getOrThrow(distanceIn(flat, [0, 0, 0], [0, 0, -1]))).toBeCloseTo(5.5);
+  });
+
+  it('holds each instance of an instanced mesh where its matrix places it', () => {
+    const scene = new Three.Scene();
+    const boxes = new Three.InstancedMesh(
+      new Three.BoxGeometry(1, 1, 1),
+      new Three.MeshStandardMaterial(),
+      2,
+    );
+    boxes.setMatrixAt(0, new Three.Matrix4().makeTranslation(0, 0, -5));
+    boxes.setMatrixAt(1, new Three.Matrix4().makeTranslation(3, 0, -5));
+    scene.add(boxes);
+
+    const flat = TracedScene.gathering().gather(scene, camera);
+
+    expect(flat.placedCount).toBe(2);
+    expect(Option.getOrThrow(distanceIn(flat, [3, 0, 0], [0, 0, -1]))).toBeCloseTo(4.5);
+  });
+
+  it('holds a skinned mesh as its bones bend it now', () => {
+    const scene = new Three.Scene();
+    const geometry = new Three.BoxGeometry(1, 1, 1);
+    const count = geometry.getAttribute('position').count;
+    geometry.setAttribute(
+      'skinIndex',
+      new Three.Uint16BufferAttribute(new Uint16Array(count * 4), 4),
+    );
+    geometry.setAttribute(
+      'skinWeight',
+      new Three.Float32BufferAttribute(
+        new Float32Array(Array.from({ length: count }, () => [1, 0, 0, 0]).flat()),
+        4,
+      ),
+    );
+    const bone = new Three.Bone();
+    const body = new Three.SkinnedMesh(geometry, new Three.MeshStandardMaterial());
+    body.add(bone);
+    body.bind(new Three.Skeleton([bone]));
+    body.position.z = -5;
+    scene.add(body);
+    const gathering = TracedScene.gathering();
+
+    const still = gathering.gather(scene, camera);
+    bone.position.z = -2;
+    const bent = gathering.gather(scene, camera);
+
+    expect(Option.getOrThrow(distanceIn(still, [0, 0, 0], [0, 0, -1]))).toBeCloseTo(4.5);
+    expect(Option.getOrThrow(distanceIn(bent, [0, 0, 0], [0, 0, -1]))).toBeCloseTo(6.5);
+  });
+
+  it('builds a shape once for a geometry however many meshes draw it, and again once it changes', () => {
+    const scene = new Three.Scene();
+    const shared = new Three.BoxGeometry(1, 1, 1);
+    const left = new Three.Mesh(shared, new Three.MeshStandardMaterial());
+    const right = new Three.Mesh(shared, new Three.MeshStandardMaterial());
+    left.position.set(-2, 0, -5);
+    right.position.set(2, 0, -5);
+    scene.add(left, right);
+    const gathering = TracedScene.gathering();
+
+    const first = gathering.gather(scene, camera);
+    const again = gathering.gather(scene, camera);
+    shared.getAttribute('position').setZ(0, 9);
+    shared.getAttribute('position').needsUpdate = true;
+    const changed = gathering.gather(scene, camera);
+
+    expect(first.triangles.length / TracedScene.TRIANGLE).toBe(12);
+    expect(again.shapeNodes).toBe(first.shapeNodes);
+    expect(changed.shapeNodes).not.toBe(first.shapeNodes);
+  });
+});

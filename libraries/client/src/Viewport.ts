@@ -3,10 +3,16 @@ import { denoise } from 'three/addons/tsl/display/DenoiseNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import SSAAPassNode from 'three/addons/tsl/display/SSAAPassNode.js';
+import { ssgi } from 'three/addons/tsl/display/SSGINode.js';
+import { ssr } from 'three/addons/tsl/display/SSRNode.js';
 import { taau } from 'three/addons/tsl/display/TAAUNode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import {
   builtinAOContext,
+  diffuseColor,
+  int,
+  metalness,
+  roughness,
   unpackRGBToNormal,
   packNormalToRGB,
   mrt,
@@ -16,10 +22,13 @@ import {
   rtt,
   sample,
   screenUV,
+  vec4,
   velocity,
 } from 'three/tsl';
 import * as Three from 'three/webgpu';
 import * as Antialiasing from '#src/Antialiasing.ts';
+import type * as RayTracing from '#src/RayTracing.ts';
+import * as SceneTracer from '#src/SceneTracer.ts';
 
 /**
  * A game's state drawn onto a canvas by a `WebGPURenderer`: a scene to put views' objects in, a camera, and a loop that runs at every frame the display shows. It lives in the browser only.
@@ -135,10 +144,11 @@ export const occlusion = (told: Partial<Occlusion> = {}): Occlusion => ({
   resolution: Math.min(Math.max(told.resolution ?? 0.5, 0.1), 1),
 });
 
-/** A viewport drawing into a picture, from which the screen's is made at the end: with ambient occlusion, if given, and antialiased as told, not at all unless told otherwise. What blends over what is behind it blends in the picture's linear colours. */
+/** A viewport drawing into a picture, from which the screen's is made at the end: with ambient occlusion and ray tracing, if given, and antialiased as told, not at all unless told otherwise. What blends over what is behind it blends in the picture's linear colours. */
 export interface Pictured {
   readonly output?: 'Picture';
   readonly occlusion?: Option.Option<Occlusion>;
+  readonly rayTracing?: Option.Option<RayTracing.RayTracing>;
   readonly antialiasing?: Antialiasing.Antialiasing;
 }
 
@@ -160,21 +170,24 @@ export type Drawing =
   | {
       readonly _tag: 'Passes';
       readonly occlusion: Option.Option<Occlusion>;
+      readonly rayTracing: Option.Option<RayTracing.RayTracing>;
       readonly antialiasing: Antialiasing.Antialiasing;
     };
 
-/** How a viewport told `options` draws: the renderer draws alone unless ambient occlusion or antialiasing needs a pass. */
+/** How a viewport told `options` draws: the renderer draws alone unless ambient occlusion, ray tracing, or antialiasing needs a pass. */
 export const drawingOf = (options: Options): Drawing => {
   if (options.output === 'Direct') {
     const antialiasing = options.antialiasing ?? Antialiasing.none;
     return { _tag: 'Direct', multisampled: Antialiasing.multisampled(antialiasing) };
   }
   const occlusion = options.occlusion ?? Option.none();
+  const rayTracing = options.rayTracing ?? Option.none();
   const antialiasing = options.antialiasing ?? Antialiasing.none;
   return Option.isNone(occlusion) &&
+    Option.isNone(rayTracing) &&
     (antialiasing._tag === 'None' || antialiasing._tag === 'Multisample')
     ? { _tag: 'Alone', multisampled: Antialiasing.multisampled(antialiasing) }
-    : { _tag: 'Passes', occlusion, antialiasing };
+    : { _tag: 'Passes', occlusion, rayTracing, antialiasing };
 };
 
 /** How many pixels a viewport told `options` draws for each of a screen of `screen` pixels a point. */
@@ -249,12 +262,88 @@ const supersampled = (scene: Three.Scene, camera: Three.PerspectiveCamera, sampl
   return drawn;
 };
 
-/** The passes `scene` is drawn through from `camera`, with ambient occlusion if given, and antialiased as `antialiasing` asks; let go of with the scope. */
+/** How far Three's screen-space indirect light, which sums what each of its steps finds, is scaled for a strength of 1: as bright as the scene's own tracing finds it. */
+const SCREEN_LIGHT = 4;
+
+/** The indirect light and reflections of `scene` from `camera`, traced as `told`, from what `drawn` drew, and what is done each frame before the passes draw. Everything it is drawn with is given to `hold`. */
+const tracedOf = (
+  scene: Three.Scene,
+  camera: Three.PerspectiveCamera,
+  told: RayTracing.RayTracing,
+  drawn: Three.PassNode,
+  temporal: boolean,
+  hold: <A extends Held>(held: A) => A,
+): {
+  readonly light: Option.Option<{
+    readonly gi: Three.Node<'vec3'>;
+    readonly reaching: Three.Node<'float'>;
+  }>;
+  readonly reflections: Option.Option<Three.Node<'vec4'>>;
+  readonly before: () => void;
+} => {
+  const picture = drawn.getTextureNode('output');
+  const depth = drawn.getTextureNode('depth');
+  const normals = drawn.getTextureNode('normal');
+  const normal = (at: Three.Node<'vec2'>) =>
+    unpackRGBToNormal(normals.sample(at).level(int(0)).rgb);
+  const surfaces = sample((at) => unpackRGBToNormal(normals.sample(at).rgb));
+  const diffuse = drawn.getTextureNode('diffuse');
+  if (told._tag === 'Screen') {
+    return {
+      light: Option.map(told.light, ({ strength, occlusion, radius }) => {
+        const traced = hold(ssgi(picture, depth, surfaces, camera));
+        // The radius in the scene's units, as the scene's tracing takes it, rather than a share of the screen.
+        traced.useScreenSpaceSampling.value = false;
+        traced.radius.value = radius;
+        traced.giIntensity.value = strength * SCREEN_LIGHT;
+        traced.aoIntensity.value = occlusion;
+        traced.useTemporalFiltering = temporal;
+        return { gi: traced.getGINode().rgb, reaching: traced.getAONode().r };
+      }),
+      reflections: Option.map(told.reflections, ({ strength, distance }) => {
+        const traced = hold(
+          ssr(picture, depth, surfaces, {
+            metalnessNode: diffuse.a,
+            roughnessNode: normals.a,
+            camera,
+          }),
+        );
+        traced.maxDistance.value = distance;
+        traced.intensity.value = strength;
+        traced.resolutionScale = told.resolution;
+        return traced;
+      }),
+      before: () => {},
+    };
+  }
+  const tracing = SceneTracer.tracing(
+    scene,
+    camera,
+    { picture, depth, normal, surfaces: normals, diffuse },
+    told,
+  );
+  hold(tracing);
+  return {
+    // Traced from a ray or two a pixel, the light is noisy: it is smoothed along the surfaces it lies on, never across an edge between them, its colour and how much reaches each surface alike.
+    light: Option.map(tracing.light, (traced) => {
+      const gi = hold(rtt(hold(denoise(traced, depth, surfaces, camera)))).sample(screenUV);
+      const reaching = hold(rtt(hold(denoise(vec4(traced.a), depth, surfaces, camera)))).sample(
+        screenUV,
+      );
+      return { gi: gi.rgb, reaching: reaching.r };
+    }),
+    reflections: tracing.reflections,
+    before: tracing.sync,
+  };
+};
+
+/** The passes `scene` is drawn through from `camera`, with ambient occlusion and ray tracing if given, and antialiased as `antialiasing` asks; let go of with the scope. */
 const pipelineOf = (
   renderer: Three.WebGPURenderer,
   scene: Three.Scene,
   camera: Three.PerspectiveCamera,
   occlusion: Option.Option<Occlusion>,
+  rayTracing: Option.Option<RayTracing.RayTracing>,
   antialiasing: Antialiasing.Antialiasing,
 ) =>
   Effect.acquireRelease(
@@ -275,38 +364,82 @@ const pipelineOf = (
           : pass(scene, camera, { samples: Antialiasing.multisampled(antialiasing) ? 4 : 0 }),
       );
       drawn.setResolutionScale(drawing.resolution);
-      // Blending a frame into the ones before follows where each pixel moved since.
-      if (drawing.temporal) {
-        drawn.setMRT(mrt({ output, velocity }));
+      // Ray tracing reads which way each surface faces, its colour, and how metal and rough it is; blending a frame into the ones before follows where each pixel moved since.
+      drawn.setMRT(
+        mrt({
+          output,
+          ...(drawing.temporal ? { velocity } : {}),
+          // Two pictures a byte a part: which way each surface faces and how rough it is, and its colour and how metal it is, within what every device lets a pixel write.
+          ...(Option.isSome(rayTracing)
+            ? {
+                normal: vec4(packNormalToRGB(normalView), roughness),
+                diffuse: vec4(diffuseColor.rgb, metalness),
+              }
+            : {}),
+        }),
+      );
+      if (Option.isSome(rayTracing)) {
+        for (const name of ['normal', 'diffuse']) {
+          drawn.getTexture(name).type = Three.UnsignedByteType;
+        }
       }
       if (Option.isSome(occlusion)) {
         drawn.contextNode = builtinAOContext(
           occlusionOf(scene, camera, occlusion.value, drawing, hold),
         );
       }
+      const traced = Option.map(rayTracing, (told) =>
+        tracedOf(scene, camera, told, drawn, drawing.temporal, hold),
+      );
+      const picture = drawn.getTextureNode('output');
+      // Lit by what the surfaces cast on one another, the ambient light kept from where it does not reach, and then what they reflect laid over it.
+      const lit: Three.TextureNode = Option.match(traced, {
+        onNone: () => picture,
+        onSome: ({ light, reflections }) => {
+          const withLight = Option.match(light, {
+            onNone: () => picture,
+            onSome: ({ gi, reaching }) =>
+              vec4(
+                picture.rgb.mul(reaching).add(drawn.getTextureNode('diffuse').rgb.mul(gi)),
+                picture.a,
+              ),
+          });
+          // What a surface reflects comes already weighed by how strongly it does, and is added to what it shows.
+          return hold(
+            rtt(
+              Option.match(reflections, {
+                onNone: () => withLight,
+                onSome: (reflected) => vec4(withLight.rgb.add(reflected.rgb), withLight.a),
+              }),
+            ),
+          );
+        },
+      });
       const shown = (() => {
         switch (antialiasing._tag) {
           case 'None':
           case 'Multisample':
           case 'Supersample':
-            return drawn;
+            return lit;
           case 'Morphological':
-            return hold(smaa(drawn.getTextureNode()));
+            return hold(smaa(lit));
           case 'Temporal': {
             const resolve = antialiasing.resolution < 1 ? taau : traa;
             return hold(
-              resolve(
-                drawn.getTextureNode('output'),
-                drawn.getTextureNode('depth'),
-                drawn.getTextureNode('velocity'),
-                camera,
-              ),
+              resolve(lit, drawn.getTextureNode('depth'), drawn.getTextureNode('velocity'), camera),
             );
           }
         }
       })();
       const pipeline = hold(new Three.RenderPipeline(renderer, shown));
-      return { render: () => pipeline.render(), held };
+      const before = Option.match(traced, { onNone: () => () => {}, onSome: (it) => it.before });
+      return {
+        render: () => {
+          before();
+          pipeline.render();
+        },
+        held,
+      };
     }),
     ({ held }) =>
       Effect.sync(() => {
@@ -371,7 +504,14 @@ export const make = (
           );
         case 'Passes':
           return Effect.map(
-            pipelineOf(renderer, scene, camera, drawing.occlusion, drawing.antialiasing),
+            pipelineOf(
+              renderer,
+              scene,
+              camera,
+              drawing.occlusion,
+              drawing.rayTracing,
+              drawing.antialiasing,
+            ),
             (pipeline) => pipeline.render,
           );
       }

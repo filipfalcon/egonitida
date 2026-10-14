@@ -2,6 +2,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect, Option } from 'effect';
 import * as Antialiasing from '#src/Antialiasing.ts';
+import * as RayTracing from '#src/RayTracing.ts';
 import * as Viewport from '#src/Viewport.ts';
 
 describe('Viewport.secondsBetween', () => {
@@ -68,9 +69,22 @@ describe('Viewport.drawingOf', () => {
     expect(Viewport.drawingOf({ antialiasing: Antialiasing.morphological })).toEqual({
       _tag: 'Passes',
       occlusion: Option.none(),
+      rayTracing: Option.none(),
       antialiasing: Antialiasing.morphological,
     });
     expect(Viewport.drawingOf({ occlusion: Option.some(Viewport.occlusion()) })._tag).toBe(
+      'Passes',
+    );
+  });
+
+  it('draws through passes for ray tracing, through the screen or the scene', () => {
+    expect(Viewport.drawingOf({ rayTracing: Option.some(RayTracing.scene()) })).toEqual({
+      _tag: 'Passes',
+      occlusion: Option.none(),
+      rayTracing: Option.some(RayTracing.scene()),
+      antialiasing: Antialiasing.none,
+    });
+    expect(Viewport.drawingOf({ rayTracing: Option.some(RayTracing.screen()) })._tag).toBe(
       'Passes',
     );
   });
