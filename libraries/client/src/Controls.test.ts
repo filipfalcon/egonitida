@@ -70,6 +70,21 @@ describe('controls', () => {
     expect(read(idle).active).toEqual(Option.none());
   });
 
+  it('say the kind of device taken up, only when it is another than before', () => {
+    const keyboard = read({ ...idle, keys: new Set(['KeyR']) });
+    const pad = read(onPad({ buttons: { ...Devices.idlePad.buttons, South: 1 } }), keyboard);
+    const stillPad = read(idle, pad);
+    const mouse = read({ ...idle, mouse: { ...idle.mouse, dx: 3 } }, stillPad);
+
+    expect(Controls.takenUp(Controls.start(bindings), keyboard)).toEqual(
+      Option.some('KeyboardAndMouse'),
+    );
+    expect(Controls.takenUp(keyboard, pad)).toEqual(Option.some('Pad'));
+    expect(Controls.takenUp(pad, stillPad)).toEqual(Option.none());
+    expect(Controls.takenUp(stillPad, mouse)).toEqual(Option.some('KeyboardAndMouse'));
+    expect(Controls.takenUp(Controls.start(bindings), read(idle))).toEqual(Option.none());
+  });
+
   it('read a control bound to several keys, buttons, and pads alike', () => {
     const many = {
       move: Controls.stick({

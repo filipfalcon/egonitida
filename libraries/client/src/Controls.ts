@@ -1,4 +1,4 @@
-import { Option } from 'effect';
+import { Option, Schema } from 'effect';
 import type * as Devices from '#src/Devices.ts';
 
 /**
@@ -82,8 +82,9 @@ export const button = (bound: {
   heldAt: bound.heldAt ?? PRESSED,
 });
 
-/** The kind of device a player uses. */
-export type Kind = 'Pad' | 'KeyboardAndMouse';
+/** The kind of device a player uses, as a page keeps it in its Model. */
+export const Kind = Schema.Literals(['Pad', 'KeyboardAndMouse']);
+export type Kind = typeof Kind.Type;
 
 /** A stick's direction, up and right as positive, never longer than 1. */
 export interface Direction {
@@ -226,6 +227,13 @@ export const read = <Bindings extends Readonly<Record<string, Binding>>>(
     held,
   };
 };
+
+/** The kind of device the player took up between `before` and `now`, if they took up another than they used before, such as a pad after the mouse: for a page to hide the cursor, or show the buttons of the device in their hands. */
+export const takenUp = <Bindings extends Readonly<Record<string, Binding>>>(
+  before: Read<Bindings>,
+  now: Read<Bindings>,
+): Option.Option<Kind> =>
+  Option.filter(now.active, (kind) => !Option.contains(before.active, kind));
 
 /** Whether a trigger is ready to fire: let back far enough since it last fired. */
 export interface Latch {
