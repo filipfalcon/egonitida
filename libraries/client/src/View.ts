@@ -24,7 +24,7 @@ type Of<Value> = Component.Component<string, Value, Component.Owner>;
 export type Held<C extends Component.Any> = <Value>(component: Of<Value> & C) => Value;
 
 /**
- * What a view for every entity holding all of `Components` is written as, given to `each`: `acquire` builds what stands for an entity as it comes into the drawing, given what the entity holds, the frame, and the entity, in that order; and `draw` draws it every frame, given what it built, what the entity holds, the frame, and the drawing's input.
+ * What a view for every entity holding all of `Components` is written as, given to `each`: `acquire` builds what stands for an entity as it comes into the drawing, given what the entity holds, the frame, and the entity, in that order; and `draw` draws it every frame, given what it built, what the entity holds, the frame, and the drawing's input. A view of what stands as it was laid, such as a level's walls, has nothing to draw, and leaves `draw` out: what it built stays as it was built.
  */
 export interface EachSpec<
   Components extends ReadonlyArray<Component.Any>,
@@ -37,12 +37,9 @@ export interface EachSpec<
     frame: Drawing.Frame,
     entity: State.Entity,
   ) => Effect.Effect<Built, never, R | Scope.Scope>;
-  readonly draw: (
-    object: Built,
-    held: Held<Components[number]>,
-    frame: Drawing.Frame,
-    input: V,
-  ) => void;
+  readonly draw?:
+    | ((object: Built, held: Held<Components[number]>, frame: Drawing.Frame, input: V) => void)
+    | undefined;
 }
 
 /**
@@ -166,7 +163,7 @@ export const each = <
       ),
     draw: (object, entity, frame, input) =>
       Option.map(own(object), (mine) =>
-        spec.draw(mine, heldIn<Components[number]>(frame, entity), frame, input),
+        spec.draw?.(mine, heldIn<Components[number]>(frame, entity), frame, input),
       ),
     own,
   };

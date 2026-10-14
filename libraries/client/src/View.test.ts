@@ -126,6 +126,41 @@ describe('what View.each is given', () => {
   );
 });
 
+describe('View.each with nothing to draw', () => {
+  it.effect(
+    'builds an object for each entity, and leaves it as it was built, for what stands as it is laid',
+    () =>
+      Effect.gen(function* () {
+        const laid = View.each([Crate, Position], {
+          acquire: (held) =>
+            Effect.sync(() => {
+              const crate = new Three.Mesh();
+              crate.position.x = held(Position).x;
+              return crate;
+            }),
+        });
+        const views = yield* View.make([laid]);
+        const [first] = State.spawn(State.empty({ seed: 1 }), crateAt(2));
+        const moved = State.finish(
+          (() => {
+            const draft = State.draft(first);
+            for (const [crate] of State.queryIn(first)(Crate)) {
+              State.write(draft, crate, Position, { x: 9 });
+            }
+            return draft;
+          })(),
+        );
+
+        const shown = yield* play(views, [first, moved]);
+
+        expect(shown.map((objects) => objects.map(({ position }) => position.x))).toEqual([
+          [2],
+          [2],
+        ]);
+      }),
+  );
+});
+
 describe('View.on', () => {
   it.effect('reacts when an entity gains a component, and when it holds another value of it', () =>
     Effect.gen(function* () {
