@@ -83,6 +83,7 @@ describe('a scene as rays are traced through it', () => {
       matrix: placement(next),
       colour: [index / 12, 0.5, 1] as const,
       emissive: [0, 0, 0] as const,
+      casts: true,
     }));
     const flat = TracedScene.flatten(shapes.map(TracedScene.shapeOf), placed);
 
@@ -110,7 +111,15 @@ describe('a scene as rays are traced through it', () => {
     const square = new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]);
     const flat = TracedScene.flatten(
       [TracedScene.shapeOf(square)],
-      [{ shape: 0, matrix: new Three.Matrix4(), colour: [1, 1, 1], emissive: [0, 0, 0] }],
+      [
+        {
+          shape: 0,
+          matrix: new Three.Matrix4(),
+          colour: [1, 1, 1],
+          emissive: [0, 0, 0],
+          casts: true,
+        },
+      ],
     );
 
     const ahead = TracedScene.trace(flat, [0, 0, 5], [0, 0, -1], 10);
@@ -128,7 +137,15 @@ describe('a scene as rays are traced through it', () => {
     const empty = TracedScene.flatten([TracedScene.shapeOf(new Float32Array(0))], []);
     const hollow = TracedScene.flatten(
       [TracedScene.shapeOf(new Float32Array(0))],
-      [{ shape: 0, matrix: new Three.Matrix4(), colour: [1, 1, 1], emissive: [0, 0, 0] }],
+      [
+        {
+          shape: 0,
+          matrix: new Three.Matrix4(),
+          colour: [1, 1, 1],
+          emissive: [0, 0, 0],
+          casts: true,
+        },
+      ],
     );
 
     expect(TracedScene.trace(empty, [0, 0, 0], [0, 0, 1], 10)).toEqual(Option.none());
@@ -145,7 +162,15 @@ describe('a scene as rays are traced through it', () => {
     );
     const flat = TracedScene.flatten(
       [lifted],
-      [{ shape: 0, matrix: new Three.Matrix4(), colour: [1, 1, 1], emissive: [0, 0, 0] }],
+      [
+        {
+          shape: 0,
+          matrix: new Three.Matrix4(),
+          colour: [1, 1, 1],
+          emissive: [0, 0, 0],
+          casts: true,
+        },
+      ],
     );
 
     const traced = TracedScene.trace(flat, [0, 0, 5], [0, 0, -1], 10);
@@ -274,5 +299,52 @@ describe('a scene gathered from what Three.js draws', () => {
     expect(first.triangles.length / TracedScene.TRIANGLE).toBe(12);
     expect(again.shapeNodes).toBe(first.shapeNodes);
     expect(changed.shapeNodes).not.toBe(first.shapeNodes);
+  });
+});
+
+describe('a scene traced for its shadows', () => {
+  const square = new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0]);
+
+  it('meets only what casts a shadow, when it traces for one, and everything otherwise', () => {
+    const flat = TracedScene.flatten(
+      [TracedScene.shapeOf(square)],
+      [
+        {
+          shape: 0,
+          matrix: new Three.Matrix4().makeTranslation(0, 0, -2),
+          colour: [1, 1, 1],
+          emissive: [0, 0, 0],
+          casts: false,
+        },
+        {
+          shape: 0,
+          matrix: new Three.Matrix4().makeTranslation(0, 0, -5),
+          colour: [1, 1, 1],
+          emissive: [0, 0, 0],
+          casts: true,
+        },
+      ],
+    );
+
+    const anything = TracedScene.trace(flat, [0, 0, 0], [0, 0, -1], 10);
+    const casting = TracedScene.trace(flat, [0, 0, 0], [0, 0, -1], 10, 'Casting');
+
+    expect(Option.map(anything, ({ distance }) => distance)).toEqual(Option.some(2));
+    expect(Option.map(casting, ({ distance }) => distance)).toEqual(Option.some(5));
+  });
+
+  it('gathers whether each mesh casts a shadow, as Three.js marks it', () => {
+    const scene = new Three.Scene();
+    const glow = new Three.Mesh(new Three.BoxGeometry(1, 1, 1), new Three.MeshBasicMaterial());
+    glow.position.z = -2;
+    const wall = new Three.Mesh(new Three.BoxGeometry(1, 1, 1), new Three.MeshStandardMaterial());
+    wall.position.z = -5;
+    wall.castShadow = true;
+    scene.add(glow, wall);
+
+    const flat = TracedScene.gathering().gather(scene, new Three.PerspectiveCamera());
+    const casting = TracedScene.trace(flat, [0, 0, 0], [0, 0, -1], 10, 'Casting');
+
+    expect(Option.map(casting, ({ distance }) => distance)).toEqual(Option.some(4.5));
   });
 });

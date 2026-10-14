@@ -23,6 +23,7 @@ import {
   screenCoordinate,
   select,
   sin,
+  smoothstep,
   sqrt,
   storage,
   uint,
@@ -148,13 +149,14 @@ const PLACED_GROUPS = TracedScene.PLACED / 4;
 const TRIANGLE_GROUPS = TracedScene.TRIANGLE / 4;
 
 /**
- * The walk a shader takes through `device` for the ray from `origin` going `direction`, before `far`: what it meets first, as how far along it in `x` and which placed shape in `y`, -1 where it meets nothing. Built where it is called, into the shader calling it: the same walk as `TracedScene.trace`, the top hierarchy threaded to each shape whose box the ray meets, and that shape's, in its own space, to the triangles.
+ * The walk a shader takes through `device` for the ray from `origin` going `direction`, before `far`: what it meets first of what it is `seeking`, as how far along it in `x` and which placed shape in `y`, -1 where it meets nothing. Built where it is called, into the shader calling it: the same walk as `TracedScene.trace`, the top hierarchy threaded to each shape whose box the ray meets, and that shape's, in its own space, to the triangles.
  */
 export const trace = (
   device: OnDevice,
   origin: Three.Node<'vec3'>,
   direction: Three.Node<'vec3'>,
   far: Three.Node<'float'>,
+  seeking: TracedScene.Meets = 'Anything',
 ): Three.Node<'vec2'> => {
   const best = float(far).toVar();
   const hit = int(-1).toVar();
@@ -196,7 +198,13 @@ export const trace = (
             dot(row2.xyz, direction),
           ).toVar();
           const localInvert = inverseOf(localDirection).toVar();
-          const shapeNode = int(device.placed.node.element(base.add(3)).w).toVar();
+          const root = int(device.placed.node.element(base.add(3)).w);
+          // Traced for a shadow, a shape that casts none is passed by: its walk ends before it begins.
+          const shapeNode = (
+            seeking === 'Casting'
+              ? select(device.placed.node.element(base.add(4)).w.greaterThan(0.5), root, int(-1))
+              : root
+          ).toVar();
           Loop(() => {
             If(shapeNode.equal(-1), () => {
               Break();
@@ -312,6 +320,69 @@ const cosineAbout = (
   );
 };
 
+/** How many numbers each direct light takes: where it shines from and its kind, its colour as bright as it shines and how far it reaches, the way toward it and how it falls off, and its cone. */
+export const LIGHT = 16;
+
+/** The kinds of direct light, as a shader tells them apart. */
+const POINT = 0;
+const SPOT = 1;
+const DIRECTIONAL = 2;
+
+const lightPosition = new Three.Vector3();
+const lightTarget = new Three.Vector3();
+const lightToward = new Three.Vector3();
+
+/**
+ * The direct lights of `scene` that ray tracing shadows, laid flat for a shader: every point, spot, and directional light drawn and shining, but those Three.js shadows with a shadow map, which are left to their maps. Each is where it shines from, its kind, its colour times its intensity, how far it reaches, the way toward it from where it points, for a spot or the sun, how its light falls off, and a spot's cone, as the cosines of its edge and of where its penumbra begins.
+ */
+export const directLights = (scene: Three.Scene): Float32Array => {
+  const laid: Array<number> = [];
+  scene.traverseVisible((object) => {
+    if (
+      !(
+        object instanceof Three.PointLight ||
+        object instanceof Three.SpotLight ||
+        object instanceof Three.DirectionalLight
+      ) ||
+      object.castShadow ||
+      object.intensity <= 0
+    ) {
+      return;
+    }
+    object.getWorldPosition(lightPosition);
+    const pointed =
+      object instanceof Three.PointLight
+        ? lightToward.set(0, 0, 0)
+        : lightToward
+            .copy(lightPosition)
+            .sub(object.target.getWorldPosition(lightTarget))
+            .normalize();
+    laid.push(
+      lightPosition.x,
+      lightPosition.y,
+      lightPosition.z,
+      object instanceof Three.PointLight
+        ? POINT
+        : object instanceof Three.SpotLight
+          ? SPOT
+          : DIRECTIONAL,
+      object.color.r * object.intensity,
+      object.color.g * object.intensity,
+      object.color.b * object.intensity,
+      object instanceof Three.DirectionalLight ? 0 : object.distance,
+      pointed.x,
+      pointed.y,
+      pointed.z,
+      object instanceof Three.DirectionalLight ? 0 : object.decay,
+      object instanceof Three.SpotLight ? Math.cos(object.angle) : 0,
+      object instanceof Three.SpotLight ? Math.cos(object.angle * (1 - object.penumbra)) : 0,
+      0,
+      0,
+    );
+  });
+  return new Float32Array(laid);
+};
+
 /** How the scene is traced each frame: gathered and written to the device, and the passes that trace it, light and reflections as told. */
 export interface Tracing {
   /** Gathers the scene as it is now and writes it to the device: once a frame, before the passes draw. */
@@ -320,6 +391,8 @@ export interface Tracing {
   readonly light: Option.Option<Three.PassNode>;
   /** What a surface reflects in `rgb`, weighed by how strongly it does, to be added to what it shows. */
   readonly reflections: Option.Option<Three.PassNode>;
+  /** The direct light kept from each surface by what casts a shadow between it and a light, in `rgb`, to be taken from what it shows. */
+  readonly shadows: Option.Option<Three.PassNode>;
   readonly dispose: () => void;
 }
 
@@ -351,6 +424,9 @@ export const tracing = (
   const frame = uniform(0, 'uint');
   // How many pixels the frame drawn is across and up, as it was drawn last.
   const drawnSize = uniform(new Three.Vector2(1, 1));
+  // The direct lights it shadows, and how many there are.
+  const directs = held(16);
+  const directCount = uniform(0, 'int');
   const view = cameraOf(camera);
   const lights = new Three.Color();
 
@@ -458,14 +534,76 @@ export const tracing = (
     return fullScreen(shade, told.resolution);
   });
 
-  const passes = [...Option.toArray(light), ...Option.toArray(reflections)];
+  const shadows = Option.map(told.shadows, ({ strength }) => {
+    const shade = Fn(() => {
+      const at = drawnPixelAt(uv()).toVar();
+      const depth = drawn.depth.sample(at).r.toVar();
+      const kept = vec3(0).toVar();
+      If(depth.lessThan(1), () => {
+        const { origin, normal, position } = surfaceAt(at, depth);
+        const coloured = drawn.diffuse.sample(at).level(int(0)).toVar();
+        // What the surface scatters of the light falling on it, as Three.js lights it: its colour, less as it is metal.
+        const scattered = coloured.rgb.mul(float(1).sub(coloured.a)).div(PI).toVar();
+        Loop(directCount, ({ i }) => {
+          const base = i.mul(LIGHT / 4).toVar();
+          const where = directs.node.element(base).toVar();
+          const shine = directs.node.element(base.add(1)).toVar();
+          const pointed = directs.node.element(base.add(2)).toVar();
+          const cone = directs.node.element(base.add(3)).toVar();
+          const kind = int(where.w).toVar();
+          const toward = where.xyz.sub(position).toVar();
+          const away = toward.length().toVar();
+          const direction = select(kind.equal(DIRECTIONAL), pointed.xyz, toward.div(away)).toVar();
+          // How it falls off with distance, as Three.js has it fall off, and none for the sun.
+          const falloff = float(1)
+            .div(max(away.pow(pointed.w), 0.01))
+            .toVar();
+          const cutoff = select(
+            shine.w.greaterThan(0),
+            falloff.mul(float(1).sub(away.div(shine.w).pow(4)).clamp(0, 1).pow(2)),
+            falloff,
+          );
+          const spot = select(
+            kind.equal(SPOT),
+            smoothstep(cone.x, cone.y, dot(direction, pointed.xyz)),
+            float(1),
+          );
+          const reaching = select(kind.equal(DIRECTIONAL), float(1), cutoff.mul(spot));
+          const falling = shine.xyz
+            .mul(reaching)
+            .mul(max(dot(normal, direction), 0))
+            .mul(scattered)
+            .toVar();
+          If(max(falling.x, max(falling.y, falling.z)).greaterThan(1e-4), () => {
+            const far = select(kind.equal(DIRECTIONAL), float(1e4), away.sub(0.05));
+            const met = trace(device, origin, direction, far, 'Casting');
+            If(met.y.greaterThanEqual(0), () => {
+              kept.addAssign(falling);
+            });
+          });
+        });
+      });
+      return vec4(kept.mul(strength), 1);
+    })();
+    // A shadow's edge is sharp: it is traced at the whole resolution.
+    return fullScreen(shade, 1);
+  });
+
+  const passes = [
+    ...Option.toArray(light),
+    ...Option.toArray(reflections),
+    ...Option.toArray(shadows),
+  ];
   return {
     sync: () => {
       const flat = gathering.gather(scene, camera);
-      if (device.write(flat)) {
+      const shining = directLights(scene);
+      const grew = [device.write(flat), directs.write(shining)].some(Boolean);
+      if (grew) {
         // A grown buffer is a new one: the passes reading it are built again for it.
         for (const { material } of passes) material.needsUpdate = true;
       }
+      directCount.value = shining.length / LIGHT;
       // What lights a surface off the screen: the scene's ambient and hemisphere lights, the hemisphere's sky and ground alike.
       lights.setRGB(0, 0, 0);
       scene.traverseVisible((object) => {
@@ -485,6 +623,7 @@ export const tracing = (
     },
     light: Option.map(light, ({ drawn: traced }) => traced),
     reflections: Option.map(reflections, ({ drawn: traced }) => traced),
+    shadows: Option.map(shadows, ({ drawn: traced }) => traced),
     dispose: () => {
       for (const { drawn: traced, material } of passes) {
         traced.dispose();

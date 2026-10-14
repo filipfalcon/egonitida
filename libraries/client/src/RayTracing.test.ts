@@ -19,6 +19,7 @@ describe('ray tracing', () => {
       reflections: Option.some(RayTracing.reflections()),
       resolution: 0.5,
       rays: 2,
+      shadows: Option.some(RayTracing.shadows()),
     });
   });
 
@@ -44,5 +45,12 @@ describe('ray tracing', () => {
       resolution: 0.1,
       rays: 16,
     });
+  });
+
+  it('shadows the direct light fully unless told otherwise, from none of it to all of it', () => {
+    expect(RayTracing.shadows()).toEqual({ strength: 1 });
+    expect(RayTracing.shadows({ strength: -1 })).toEqual({ strength: 0 });
+    expect(RayTracing.shadows({ strength: 2 })).toEqual({ strength: 1 });
+    expect(RayTracing.scene({ shadows: Option.none() }).shadows).toEqual(Option.none());
   });
 });

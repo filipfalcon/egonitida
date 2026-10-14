@@ -297,6 +297,7 @@ const tracedOf = (
     readonly reaching: Three.Node<'float'>;
   }>;
   readonly reflections: Option.Option<Three.Node<'vec4'>>;
+  readonly shadows: Option.Option<Three.Node<'vec4'>>;
   readonly before: () => void;
 } => {
   const picture = drawn.getTextureNode('output');
@@ -331,6 +332,7 @@ const tracedOf = (
         traced.resolutionScale = told.resolution;
         return traced;
       }),
+      shadows: Option.none(),
       before: () => {},
     };
   }
@@ -351,6 +353,7 @@ const tracedOf = (
       return { gi: gi.rgb, reaching: reaching.r };
     }),
     reflections: tracing.reflections,
+    shadows: tracing.shadows,
     before: tracing.sync,
   };
 };
@@ -411,16 +414,21 @@ const pipelineOf = (
         tracedOf(scene, camera, told, drawn, drawing.temporal, hold),
       );
       const picture = drawn.getTextureNode('output');
-      // Lit by what the surfaces cast on one another, the ambient light kept from where it does not reach, and then what they reflect laid over it.
+      // Shadowed from the direct light, lit by what the surfaces cast on one another, the ambient light kept from where it does not reach, and then what they reflect laid over it.
       const lit: Three.TextureNode = Option.match(traced, {
         onNone: () => picture,
-        onSome: ({ light, reflections }) => {
-          const withLight = Option.match(light, {
+        onSome: ({ light, reflections, shadows }) => {
+          // The direct light a shadow keeps from a surface is taken from what it shows, first.
+          const shaded = Option.match(shadows, {
             onNone: () => picture,
+            onSome: (kept) => vec4(picture.rgb.sub(kept.rgb).max(0), picture.a),
+          });
+          const withLight = Option.match(light, {
+            onNone: () => shaded,
             onSome: ({ gi, reaching }) =>
               vec4(
-                picture.rgb.mul(reaching).add(drawn.getTextureNode('diffuse').rgb.mul(gi)),
-                picture.a,
+                shaded.rgb.mul(reaching).add(drawn.getTextureNode('diffuse').rgb.mul(gi)),
+                shaded.a,
               ),
           });
           // What a surface reflects comes already weighed by how strongly it does, and is added to what it shows.

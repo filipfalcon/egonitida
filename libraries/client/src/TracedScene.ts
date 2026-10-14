@@ -9,7 +9,7 @@ import * as Bvh from '#src/Bvh.ts';
 /** How many numbers each triangle takes: its three corners, four numbers each, the fourth unused. */
 export const TRIANGLE = 12;
 
-/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, and the light it gives off. */
+/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, and the light it gives off and whether it casts a shadow, 1 or 0. */
 export const PLACED = 20;
 
 /** A shape's triangles, in its own space, and their hierarchy. */
@@ -31,12 +31,13 @@ export const moved = (shape: Shape, positions: Float32Array): Shape => {
   return { positions, hierarchy };
 };
 
-/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, and its colour and the light it gives off, in linear colours. */
+/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, and whether it casts a shadow. */
 export interface Placed {
   readonly shape: number;
   readonly matrix: Three.Matrix4;
   readonly colour: readonly [number, number, number];
   readonly emissive: readonly [number, number, number];
+  readonly casts: boolean;
 }
 
 /** The scene laid flat: every shape's hierarchy one after another, their triangles in the order their leaves name them, the placed shapes in the order the top hierarchy's leaves name them, and that hierarchy. */
@@ -148,7 +149,7 @@ export const flattenPlaced = (
     flat.set([e[1] ?? 0, e[5] ?? 0, e[9] ?? 0, e[13] ?? 0], base + 4);
     flat.set([e[2] ?? 0, e[6] ?? 0, e[10] ?? 0, e[14] ?? 0], base + 8);
     flat.set([...one.colour, roots[one.shape] ?? 0], base + 12);
-    flat.set([...one.emissive, 0], base + 16);
+    flat.set([...one.emissive, one.casts ? 1 : 0], base + 16);
   });
   return { placed: flat, placedNodes: Bvh.threaded(hierarchy), count: kept.length };
 };
@@ -248,14 +249,18 @@ export interface Hit {
   readonly placed: number;
 }
 
+/** What a ray meets: anything placed, or, traced for a shadow, only what casts one. */
+export type Meets = 'Anything' | 'Casting';
+
 /**
- * What the ray from `origin` going `direction` meets first in `flat` before `far`, if anything, as far along it as `direction` is long: the top hierarchy walked to the shapes whose boxes the ray meets, the ray turned into each shape's own space, and the shape's hierarchy walked to the triangles in the boxes it meets, each walk threaded, with no stack. Boxes the ray meets only past what it already met are passed by.
+ * What the ray from `origin` going `direction` meets first in `flat` before `far`, if anything, of what it is `seeking`, as far along it as `direction` is long: the top hierarchy walked to the shapes whose boxes the ray meets, the ray turned into each shape's own space, and the shape's hierarchy walked to the triangles in the boxes it meets, each walk threaded, with no stack. Boxes the ray meets only past what it already met are passed by.
  */
 export const trace = (
   flat: Flat,
   origin: readonly [number, number, number],
   direction: readonly [number, number, number],
   far: number,
+  seeking: Meets = 'Anything',
 ): Option.Option<Hit> => {
   if (flat.placedCount === 0) {
     return Option.none();
@@ -278,6 +283,9 @@ export const trace = (
     const first = flat.placedNodes[at + 8] ?? 0;
     for (let placed = first; placed < first + count; placed += 1) {
       const base = placed * PLACED;
+      if (seeking === 'Casting' && (flat.placed[base + 19] ?? 0) === 0) {
+        continue;
+      }
       const row = (offset: number, point: readonly [number, number, number], w: number) =>
         (flat.placed[base + offset] ?? 0) * point[0] +
         (flat.placed[base + offset + 1] ?? 0) * point[1] +
@@ -459,11 +467,18 @@ export const gathering = (): Gathering => {
               matrix: new Three.Matrix4().multiplyMatrices(object.matrixWorld, instance),
               colour,
               emissive,
+              casts: object.castShadow,
             });
           }
           return;
         }
-        placed.push({ shape: index, matrix: object.matrixWorld.clone(), colour, emissive });
+        placed.push({
+          shape: index,
+          matrix: object.matrixWorld.clone(),
+          colour,
+          emissive,
+          casts: object.castShadow,
+        });
       });
       // The shapes are laid flat again only when they changed: a moving scene of shapes that stay as they are lays only what is placed.
       const same =

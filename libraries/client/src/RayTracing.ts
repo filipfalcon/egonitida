@@ -8,7 +8,9 @@ import { Option } from 'effect';
  * - `Screen` traces them through the picture just drawn, its depth and its surfaces, as software ray tracing does: cheap, and running wherever WebGPU does, but it knows only what is on the screen, so what lies behind the camera, off its edges, or behind something else casts nothing.
  * - `Scene` traces them through the scene's own triangles, held in two levels of bounding volume hierarchy, a hierarchy for each shape and one over where the shapes stand, as ray-tracing hardware holds a scene: it meets what is off the screen and behind as well, so occlusion and reflections hold wherever the camera turns, and what moves costs only the top level, built again each frame. It traces on the graphics device's shader cores, as no browser yet lets a page reach the cores made for rays; what a ray meets that is on the screen is lit as drawn, and what is not, by its colour in the scene's ambient light.
  *
- * Either is noisy from a few rays a pixel, and steadiest with temporal antialiasing, which blends the frames together.
+ * Tracing through the scene, it shadows the direct light too: from every surface drawn, a ray to every light that Three.js does not shadow with a shadow map, and what casts a shadow in its way, as Three.js marks a mesh that casts one, keeps that light from the surface. A level's torches stay on their side of the rock this way, with no map drawn for them.
+ *
+ * The light and the reflections are noisy from a few rays a pixel, and steadiest with temporal antialiasing, which blends the frames together.
  */
 export type RayTracing = Screen | Scene;
 
@@ -24,11 +26,22 @@ export interface Screen extends Traced {
   readonly _tag: 'Screen';
 }
 
-/** Ray tracing through the scene's own triangles, `rays` rays a pixel each frame for its light. */
+/** Ray tracing through the scene's own triangles, `rays` rays a pixel each frame for its light, and its direct light shadowed as `shadows` says. */
 export interface Scene extends Traced {
   readonly _tag: 'Scene';
   readonly rays: number;
+  readonly shadows: Option.Option<Shadows>;
 }
+
+/** The direct light's shadows: as dark as `strength` makes them, from none of the light kept from a surface to all of it. */
+export interface Shadows {
+  readonly strength: number;
+}
+
+/** Shadows as told: all of the light kept from what is in shadow, unless told otherwise. */
+export const shadows = (told: Partial<Shadows> = {}): Shadows => ({
+  strength: Math.min(Math.max(told.strength ?? 1, 0), 1),
+});
 
 /** The light surfaces cast on one another: as bright as `strength` makes it, 0 none and 1 as it works out; occlusion as dark as `occlusion` makes it, alike; and found as far as `radius`, in the scene's units. */
 export interface Light {
@@ -73,9 +86,12 @@ const tracedOf = (told: Told): Traced => ({
 /** Ray tracing through the picture just drawn, as told. */
 export const screen = (told: Told = {}): Screen => ({ _tag: 'Screen', ...tracedOf(told) });
 
-/** Ray tracing through the scene's own triangles, as told: two rays a pixel each frame for the light unless told otherwise, from one to sixteen. */
-export const scene = (told: Told & { readonly rays?: number } = {}): Scene => ({
+/** Ray tracing through the scene's own triangles, as told: two rays a pixel each frame for the light unless told otherwise, from one to sixteen, and the direct light shadowed unless told none. */
+export const scene = (
+  told: Told & { readonly rays?: number; readonly shadows?: Option.Option<Shadows> } = {},
+): Scene => ({
   _tag: 'Scene',
   ...tracedOf(told),
   rays: Math.min(Math.max(Math.round(told.rays ?? 2), 1), 16),
+  shadows: told.shadows ?? Option.some(shadows()),
 });
