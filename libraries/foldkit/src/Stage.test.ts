@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
-import { View, type Viewport } from '@lightocean/client';
+import { Controls, View, type Viewport } from '@lightocean/client';
 import { Component, Domain, Game, Pointing, Rule, WorkerTransport, State } from '@lightocean/core';
 import { Context, Effect, Option, Queue, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
@@ -270,11 +270,12 @@ describe('a stage', () => {
           mirror: document.createElement('div'),
           input: () => page.through,
           played: {
+            bindings: { turn: Controls.button({ key: 'ArrowLeft' }) },
             start: (through) => ({ through, yaw: 0 }),
             // Turned left at a radian a second while the left arrow is held.
-            next: (through, before, devices, seconds) => ({
+            next: (through, before, controls, seconds) => ({
               through,
-              yaw: before.yaw + (devices.keys.has('ArrowLeft') ? seconds : 0),
+              yaw: before.yaw + (controls.values.button('turn').held ? seconds : 0),
             }),
           },
         });
@@ -291,6 +292,54 @@ describe('a stage', () => {
         expect(turned).toBeGreaterThan(0.15);
         expect(viewport.camera.rotation.y).toBeCloseTo(turned);
         expect(viewport.camera.position.z).toBeCloseTo(5);
+      }).pipe(Effect.scoped),
+  );
+
+  it.live(
+    'reads the controls every frame it draws, so a press is one only when it is new, whatever the page made of the frames before',
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        /** Whether the page heeds the player yet, and how often they jumped since it did. */
+        interface Jumping {
+          readonly heeding: boolean;
+          readonly jumps: number;
+        }
+        const counted = View.rig([], (camera, _held, _frame, _drawn, { jumps }: Jumping) => {
+          camera.position.y = jumps;
+        });
+        const page = { heeding: false };
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps, counted],
+          mirror: document.createElement('div'),
+          input: () => page.heeding,
+          played: {
+            bindings: { jump: Controls.button({ key: 'Space' }) },
+            start: (heeding) => ({ heeding, jumps: 0 }),
+            // Not heeding the player, the page makes nothing of the controls.
+            next: (heeding, before, controls) => ({
+              heeding,
+              jumps:
+                heeding && controls.values.button('jump').pressed ? before.jumps + 1 : before.jumps,
+            }),
+          },
+        });
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+        yield* Effect.sleep('150 millis');
+        page.heeding = true;
+        yield* Effect.sleep('150 millis');
+        const heldSinceBefore = viewport.camera.position.y;
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+
+        expect(heldSinceBefore).toBeCloseTo(0);
+        expect(viewport.camera.position.y).toBeCloseTo(1);
       }).pipe(Effect.scoped),
   );
 

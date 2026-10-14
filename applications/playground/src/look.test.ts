@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Devices } from '@lightocean/client';
+import { Controls, Devices } from '@lightocean/client';
 import * as Look from '#src/look.ts';
 
 /** The devices with nothing held but `keys`. */
@@ -8,12 +8,15 @@ const holding = (...keys: ReadonlyArray<string>): Devices.Reading => ({
   keys: new Set(keys),
 });
 
-/** `look` played on for `frames` frames of `seconds` each, `devices` held throughout. */
+/** `look` played on for `frames` frames of `seconds` each, the controls read from `devices` every frame, as a stage reads them. */
 const playedFor = (devices: Devices.Reading, frames: number, seconds: number, from = Look.start) =>
-  Array.from({ length: frames }).reduce<Look.Look>(
-    (before) => Look.look(devices, before, seconds),
-    from,
-  );
+  Array.from({ length: frames }).reduce(
+    ({ controls, look }) => {
+      const read = Controls.read(Look.bindings, devices, controls);
+      return { controls: read, look: Look.look(read, look, seconds) };
+    },
+    { controls: Controls.start(Look.bindings), look: from },
+  ).look;
 
 describe('looking around', () => {
   it('turns left while the stick is held left, as fast as it turns a second, whatever the frames', () => {

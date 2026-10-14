@@ -41,6 +41,9 @@ export interface Button {
 
 export type Binding = Stick | Button;
 
+/** A game's controls, each bound by the name the game gives it. */
+export type Bindings = Readonly<Record<string, Binding>>;
+
 /** One of something, or several. */
 type Some<A> = A | ReadonlyArray<A>;
 

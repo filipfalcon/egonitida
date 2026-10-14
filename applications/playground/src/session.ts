@@ -79,10 +79,11 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
     input: { schema: CubesView.Viewpoint, of: (model: Model) => model.viewpoint },
     // Looking around changes every frame, which the Model never holds: the stage plays it on from the stick each frame it draws.
     played: {
+      bindings: Look.bindings,
       start: (viewpoint) => ({ viewpoint, look: Look.start }),
-      next: (viewpoint, before, devices, seconds) => ({
+      next: (viewpoint, before, controls, seconds) => ({
         viewpoint,
-        look: Look.look(devices, before.look, seconds),
+        look: Look.look(controls, before.look, seconds),
       }),
     },
     onNotJoined: (): Message => Message.LeftGame(),
