@@ -53,6 +53,18 @@ describe('Viewport.occlusion', () => {
   });
 });
 
+describe('Viewport.motionBlur', () => {
+  it('keeps the shutter open half a frame, sampled twelve times along the way, unless told otherwise', () => {
+    expect(Viewport.motionBlur()).toEqual({ shutter: 0.5, samples: 12 });
+  });
+
+  it('keeps the shutter open from none of a frame to all of it, and samples from two to thirty-two times', () => {
+    expect(Viewport.motionBlur({ shutter: -1, samples: 0 })).toEqual({ shutter: 0, samples: 2 });
+    expect(Viewport.motionBlur({ shutter: 3, samples: 100 })).toEqual({ shutter: 1, samples: 32 });
+    expect(Viewport.motionBlur({ samples: 7.6 }).samples).toBe(8);
+  });
+});
+
 describe('Viewport.drawingOf', () => {
   it('has the renderer draw alone, one sample a pixel, unless told otherwise, as bare Three.js does', () => {
     expect(Viewport.drawingOf({})).toEqual({ _tag: 'Alone', multisampled: false });
@@ -70,6 +82,7 @@ describe('Viewport.drawingOf', () => {
       _tag: 'Passes',
       occlusion: Option.none(),
       rayTracing: Option.none(),
+      motionBlur: Option.none(),
       antialiasing: Antialiasing.morphological,
     });
     expect(Viewport.drawingOf({ occlusion: Option.some(Viewport.occlusion()) })._tag).toBe(
@@ -82,11 +95,22 @@ describe('Viewport.drawingOf', () => {
       _tag: 'Passes',
       occlusion: Option.none(),
       rayTracing: Option.some(RayTracing.scene()),
+      motionBlur: Option.none(),
       antialiasing: Antialiasing.none,
     });
     expect(Viewport.drawingOf({ rayTracing: Option.some(RayTracing.screen()) })._tag).toBe(
       'Passes',
     );
+  });
+
+  it('draws through passes for motion blur', () => {
+    expect(Viewport.drawingOf({ motionBlur: Option.some(Viewport.motionBlur()) })).toEqual({
+      _tag: 'Passes',
+      occlusion: Option.none(),
+      rayTracing: Option.none(),
+      motionBlur: Option.some(Viewport.motionBlur()),
+      antialiasing: Antialiasing.none,
+    });
   });
 
   it('draws straight to the screen when told, one sample a pixel unless told otherwise', () => {

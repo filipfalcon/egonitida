@@ -1,6 +1,7 @@
 import { Data, Deferred, Effect, Option, PubSub, Queue, type Scope, Stream } from 'effect';
 import { denoise } from 'three/addons/tsl/display/DenoiseNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
+import { motionBlur as blurredBy } from 'three/addons/tsl/display/MotionBlur.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import SSAAPassNode from 'three/addons/tsl/display/SSAAPassNode.js';
 import { ssgi } from 'three/addons/tsl/display/SSGINode.js';
@@ -23,6 +24,7 @@ import {
   sample,
   screenUV,
   vec4,
+  vec2,
   velocity,
 } from 'three/tsl';
 import * as Three from 'three/webgpu';
@@ -144,11 +146,24 @@ export const occlusion = (told: Partial<Occlusion> = {}): Occlusion => ({
   resolution: Math.min(Math.max(told.resolution ?? 0.5, 0.1), 1),
 });
 
-/** A viewport drawing into a picture, from which the screen's is made at the end: with ambient occlusion and ray tracing, if given, and antialiased as told, not at all unless told otherwise. What blends over what is behind it blends in the picture's linear colours. */
+/** Motion blur: what moves across the screen while a frame is shown is smeared along its way, as a camera's shutter smears it, so motion reads smooth at any rate of frames: the shutter open for `shutter` of a frame's time, from none of it to all of it, and the smear sampled `samples` times along the way. */
+export interface MotionBlur {
+  readonly shutter: number;
+  readonly samples: number;
+}
+
+/** Motion blur as told, the rest as most scenes want it: the shutter open half a frame, as a film camera's at its usual angle, sampled twelve times along the way, from two to thirty-two. */
+export const motionBlur = (told: Partial<MotionBlur> = {}): MotionBlur => ({
+  shutter: Math.min(Math.max(told.shutter ?? 0.5, 0), 1),
+  samples: Math.min(Math.max(Math.round(told.samples ?? 12), 2), 32),
+});
+
+/** A viewport drawing into a picture, from which the screen's is made at the end: with ambient occlusion, ray tracing, and motion blur, if given, and antialiased as told, not at all unless told otherwise. What blends over what is behind it blends in the picture's linear colours. */
 export interface Pictured {
   readonly output?: 'Picture';
   readonly occlusion?: Option.Option<Occlusion>;
   readonly rayTracing?: Option.Option<RayTracing.RayTracing>;
+  readonly motionBlur?: Option.Option<MotionBlur>;
   readonly antialiasing?: Antialiasing.Antialiasing;
 }
 
@@ -171,10 +186,11 @@ export type Drawing =
       readonly _tag: 'Passes';
       readonly occlusion: Option.Option<Occlusion>;
       readonly rayTracing: Option.Option<RayTracing.RayTracing>;
+      readonly motionBlur: Option.Option<MotionBlur>;
       readonly antialiasing: Antialiasing.Antialiasing;
     };
 
-/** How a viewport told `options` draws: the renderer draws alone unless ambient occlusion, ray tracing, or antialiasing needs a pass. */
+/** How a viewport told `options` draws: the renderer draws alone unless ambient occlusion, ray tracing, motion blur, or antialiasing needs a pass. */
 export const drawingOf = (options: Options): Drawing => {
   if (options.output === 'Direct') {
     const antialiasing = options.antialiasing ?? Antialiasing.none;
@@ -182,12 +198,14 @@ export const drawingOf = (options: Options): Drawing => {
   }
   const occlusion = options.occlusion ?? Option.none();
   const rayTracing = options.rayTracing ?? Option.none();
+  const motionBlur = options.motionBlur ?? Option.none();
   const antialiasing = options.antialiasing ?? Antialiasing.none;
   return Option.isNone(occlusion) &&
     Option.isNone(rayTracing) &&
+    Option.isNone(motionBlur) &&
     (antialiasing._tag === 'None' || antialiasing._tag === 'Multisample')
     ? { _tag: 'Alone', multisampled: Antialiasing.multisampled(antialiasing) }
-    : { _tag: 'Passes', occlusion, rayTracing, antialiasing };
+    : { _tag: 'Passes', occlusion, rayTracing, motionBlur, antialiasing };
 };
 
 /** How many pixels a viewport told `options` draws for each of a screen of `screen` pixels a point. */
@@ -337,13 +355,14 @@ const tracedOf = (
   };
 };
 
-/** The passes `scene` is drawn through from `camera`, with ambient occlusion and ray tracing if given, and antialiased as `antialiasing` asks; let go of with the scope. */
+/** The passes `scene` is drawn through from `camera`, with ambient occlusion, ray tracing, and motion blur if given, and antialiased as `antialiasing` asks; let go of with the scope. */
 const pipelineOf = (
   renderer: Three.WebGPURenderer,
   scene: Three.Scene,
   camera: Three.PerspectiveCamera,
   occlusion: Option.Option<Occlusion>,
   rayTracing: Option.Option<RayTracing.RayTracing>,
+  motionBlur: Option.Option<MotionBlur>,
   antialiasing: Antialiasing.Antialiasing,
 ) =>
   Effect.acquireRelease(
@@ -364,11 +383,11 @@ const pipelineOf = (
           : pass(scene, camera, { samples: Antialiasing.multisampled(antialiasing) ? 4 : 0 }),
       );
       drawn.setResolutionScale(drawing.resolution);
-      // Ray tracing reads which way each surface faces, its colour, and how metal and rough it is; blending a frame into the ones before follows where each pixel moved since.
+      // Ray tracing reads which way each surface faces, its colour, and how metal and rough it is; blending a frame into the ones before, and smearing what moves, follow where each pixel moved since.
       drawn.setMRT(
         mrt({
           output,
-          ...(drawing.temporal ? { velocity } : {}),
+          ...(drawing.temporal || Option.isSome(motionBlur) ? { velocity } : {}),
           // Two pictures a byte a part: which way each surface faces and how rough it is, and its colour and how metal it is, within what every device lets a pixel write.
           ...(Option.isSome(rayTracing)
             ? {
@@ -431,7 +450,17 @@ const pipelineOf = (
           }
         }
       })();
-      const pipeline = hold(new Three.RenderPipeline(renderer, shown));
+      // Smeared last, once the picture is whole and smooth, along where each pixel moved while the shutter was open: half of how far it moved across the screen, as the screen runs two units across, sampled about where it is now.
+      const blurred = Option.match(motionBlur, {
+        onNone: () => shown,
+        onSome: ({ shutter, samples }) =>
+          blurredBy(
+            shown === lit ? lit : hold(rtt(shown)),
+            drawn.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5).mul(shutter)),
+            int(samples),
+          ),
+      });
+      const pipeline = hold(new Three.RenderPipeline(renderer, blurred));
       const before = Option.match(traced, { onNone: () => () => {}, onSome: (it) => it.before });
       return {
         render: () => {
@@ -510,6 +539,7 @@ export const make = (
               camera,
               drawing.occlusion,
               drawing.rayTracing,
+              drawing.motionBlur,
               drawing.antialiasing,
             ),
             (pipeline) => pipeline.render,
