@@ -451,6 +451,41 @@ describe('a stage', () => {
   );
 
   it.live(
+    'sends the game what the player did in each frame it draws, as their actions, from what the page keeps, what the stage played on, and the controls',
+    () =>
+      Effect.gen(function* () {
+        const { joined, lamp } = yield* joinedLamp;
+        const { viewport } = yield* played;
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps],
+          mirror: document.createElement('div'),
+          input: () => lamp,
+          played: {
+            bindings: { flick: Controls.button({ key: 'Space' }) },
+            start: () => undefined,
+            next: () => undefined,
+            drawing: () => undefined,
+            // A press of Space clicks the lamp the page says, once.
+            actions: (switched, _played, controls) =>
+              controls.values.button('flick').pressed
+                ? [Stage.acted(Pointing.Clicked, { entity: switched })]
+                : [],
+          },
+        });
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+        yield* Effect.sleep('300 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+        yield* Effect.sleep('200 millis');
+
+        expect(State.get(yield* joined.client.state, lamp, Lamp)).toEqual(
+          Option.some({ on: true }),
+        );
+      }).pipe(Effect.scoped),
+  );
+
+  it.live(
     "tells the page what the player's presses come to, as its Messages, from what it keeps and what the stage played on",
     () =>
       Effect.gen(function* () {

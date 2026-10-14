@@ -8,7 +8,7 @@ import {
   Viewport,
 } from '@lightocean/client';
 import { Data, Effect, Option, Queue, Schema, type Scope, Stream } from 'effect';
-import type { Component } from '@lightocean/core';
+import type { Action, Client, Component, Input } from '@lightocean/core';
 import type { ManagedResource } from 'foldkit';
 import type * as Session from '#src/Session.ts';
 
@@ -66,11 +66,26 @@ export interface Played<M, P, V, B extends Controls.Bindings, T = never> {
   readonly demands?:
     | ((fromPage: M, played: P, controls: Controls.Read<B>) => ReadonlyArray<Component.Instance>)
     | undefined;
+  /** What the player did in each frame drawn, as their actions, from what the page keeps, what the stage played on in it, and the controls: such as a press of a button throwing a punch, each made by `acted`. The stage sends them, after the frame's demands, before its views draw. */
+  readonly actions?:
+    | ((fromPage: M, played: P, controls: Controls.Read<B>) => ReadonlyArray<Acted>)
+    | undefined;
   /** What the player's presses come to on the page in each frame drawn, as Messages of the application's, from what the page keeps, what the stage played on in it, and the controls: such as a press of the directional pad choosing the next item of a menu the page shows. The stage tells them to the page, which decides what they change, as it decides a click. */
   readonly messages?:
     | ((fromPage: M, played: P, controls: Controls.Read<B>) => ReadonlyArray<T>)
     | undefined;
 }
+
+/** Something the player did, as a stage sends it to the game: an action and what it carries, made by `acted`. */
+export interface Acted {
+  readonly sendBy: (client: Client.Client) => Effect.Effect<void>;
+}
+
+/** That the player did `action`, carrying `value`, for a stage to send the game as their action. */
+export const acted = <Sent>(
+  action: Action.Action<string, Sent, Input.Action>,
+  value: Sent,
+): Acted => ({ sendBy: (client) => client.act(action, value) });
 
 /** What else a stage's scene holds and runs beside it, apart from its views. */
 export interface Setting<R> {
@@ -186,11 +201,12 @@ const shownAs = <R, M, P, V, B extends Controls.Bindings, T>(
 };
 
 /** A frame in which the player played nothing: no demands, and nothing to tell the page. */
-const nothingPlayed: Advanced<never> = { demanded: [], told: [] };
+const nothingPlayed: Advanced<never> = { demanded: [], done: [], told: [] };
 
-/** What a frame drawn came to: what the player demands in it, and what their presses tell the page. */
+/** What a frame drawn came to: what the player demands in it, what they did, and what their presses tell the page. */
 interface Advanced<T> {
   readonly demanded: ReadonlyArray<Component.Instance>;
+  readonly done: ReadonlyArray<Acted>;
   readonly told: ReadonlyArray<T>;
 }
 
@@ -228,6 +244,7 @@ const playedOn =
           kept.played = played.next(fromPage, kept.played, kept.controls, seconds, devices);
           return {
             demanded: played.demands?.(fromPage, kept.played, kept.controls) ?? [],
+            done: played.actions?.(fromPage, kept.played, kept.controls) ?? [],
             told: played.messages?.(fromPage, kept.played, kept.controls) ?? [],
           };
         },
@@ -272,12 +289,16 @@ const shown = <R, V, T>(
         onNone: () => Effect.void,
         onSome: (frame) =>
           Effect.suspend(() => {
-            // The input goes on once a frame drawn, what the player demands in it is sent, and what their presses come to is told the page, before the views draw it.
-            const { demanded, told } = input.advance(seconds);
+            // The input goes on once a frame drawn, what the player demands in it and what they did are sent, and what their presses come to is told the page, before the views draw it.
+            const { demanded, done, told } = input.advance(seconds);
             return Effect.andThen(
-              Effect.andThen(
-                demanded.length === 0 ? Effect.void : joined.client.send(demanded),
-                told.length === 0 ? Effect.void : tell(told),
+              Effect.all(
+                [
+                  demanded.length === 0 ? Effect.void : joined.client.send(demanded),
+                  Effect.forEach(done, ({ sendBy }) => sendBy(joined.client), { discard: true }),
+                  told.length === 0 ? Effect.void : tell(told),
+                ],
+                { discard: true },
               ),
               Effect.andThen(views.frame(frame), mirror.frame(frame)),
             );
