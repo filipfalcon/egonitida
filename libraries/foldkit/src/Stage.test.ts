@@ -525,6 +525,39 @@ describe('a stage', () => {
       }).pipe(Effect.scoped),
   );
 
+  it.live(
+    'tells the page the kind of device the player took up, only when they take up another',
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        const told = yield* Queue.unbounded<string>();
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps],
+          mirror: document.createElement('div'),
+          input: () => undefined,
+          played: {
+            bindings: { jump: Controls.button({ pad: 'South', key: 'Space' }) },
+            start: () => undefined,
+            next: () => undefined,
+            drawing: () => undefined,
+            inHand: (kind) => `took up ${kind}`,
+          },
+          tell: (message: string) => Queue.offer(told, message),
+        });
+        yield* Effect.sleep('100 millis');
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ' }));
+        yield* Effect.sleep('150 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyQ' }));
+
+        expect(yield* Queue.takeAll(told)).toEqual(['took up KeyboardAndMouse']);
+      }).pipe(Effect.scoped),
+  );
+
   describe('as a Foldkit Subscription entry', () => {
     /** A page's Model: whether its canvas is there to show the game on, and through whose eyes its player looks. */
     interface Model {

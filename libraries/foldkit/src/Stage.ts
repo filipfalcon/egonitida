@@ -74,6 +74,8 @@ export interface Played<M, P, V, B extends Controls.Bindings, T = never> {
   readonly messages?:
     | ((fromPage: M, played: P, controls: Controls.Read<B>) => ReadonlyArray<T>)
     | undefined;
+  /** What the page is told when the player takes up another kind of device than they used before, a pad after the keyboard and mouse or back, as a Message of the application's: for the page to hide the cursor while they play with a pad, or show the buttons of the device in their hands. The first device they use is told too. */
+  readonly inHand?: ((kind: Controls.Kind) => T) | undefined;
 }
 
 /** Something the player did, as a stage sends it to the game: an action and what it carries, made by `acted`. */
@@ -240,12 +242,21 @@ const playedOn =
         advance: (seconds) => {
           const devices = hearing.read();
           const fromPage = input();
-          kept.controls = Controls.read(played.bindings, devices, kept.controls);
+          const before = kept.controls;
+          kept.controls = Controls.read(played.bindings, devices, before);
           kept.played = played.next(fromPage, kept.played, kept.controls, seconds, devices);
+          const { inHand } = played;
+          const takenUp =
+            inHand === undefined
+              ? []
+              : Option.match(Controls.takenUp(before, kept.controls), {
+                  onNone: () => [],
+                  onSome: (kind) => [inHand(kind)],
+                });
           return {
             demanded: played.demands?.(fromPage, kept.played, kept.controls) ?? [],
             done: played.actions?.(fromPage, kept.played, kept.controls) ?? [],
-            told: played.messages?.(fromPage, kept.played, kept.controls) ?? [],
+            told: [...takenUp, ...(played.messages?.(fromPage, kept.played, kept.controls) ?? [])],
           };
         },
       };
