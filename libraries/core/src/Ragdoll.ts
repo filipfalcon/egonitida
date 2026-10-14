@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import type * as Ray from '#src/Ray.ts';
 
 /**
@@ -172,6 +172,28 @@ export const pushed = <P extends string>(
 export const at = <P extends string>(plan: Plan<P>, body: Body, name: P): Point => {
   const index = plan.place.get(name) ?? 0;
   return { x: read(body.now, index, 0), y: read(body.now, index, 1), z: read(body.now, index, 2) };
+};
+
+/** Whether `points` holds a point for every point of `plan`. */
+const holdsAll = <P extends string>(
+  plan: Plan<P>,
+  points: Readonly<Record<string, Point>>,
+): points is { readonly [Name in P]: Point } =>
+  plan.names.every((name) => points[name] !== undefined);
+
+/** The points of `plan` found among `points` by name, such as where `Shape.standing` stands a figure's bones, to start a body at: none if one of them is missing. */
+export const among = <P extends string>(
+  plan: Plan<P>,
+  points: Readonly<Record<string, Point>>,
+): Option.Option<{ readonly [Name in P]: Point }> => {
+  const found: Record<string, Point> = {};
+  for (const name of plan.names) {
+    const point = points[name];
+    if (point !== undefined) {
+      found[name] = point;
+    }
+  }
+  return holdsAll(plan, found) ? Option.some(found) : Option.none();
 };
 
 /** Whether `body` lies still, never to move again unless pushed. */

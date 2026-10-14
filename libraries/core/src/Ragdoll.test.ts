@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
+import { Option } from 'effect';
 import * as Ragdoll from '#src/Ragdoll.ts';
 
 /** How far apart two points are. */
@@ -158,6 +159,24 @@ describe('a ragdoll', () => {
       );
 
     expect(fallen(rod, tipped(), 1.5)).toEqual(fallen(rod, tipped(), 1.5));
+  });
+});
+
+describe('Ragdoll.among', () => {
+  it("finds each point of a plan among points by name, such as where a figure's bones stand", () => {
+    const bones = {
+      top: { x: 0, y: 1, z: 0 },
+      bottom: { x: 0, y: 0, z: 0 },
+      hand: { x: 1, y: 1, z: 0 },
+    };
+
+    expect(Ragdoll.among(rod, bones)).toEqual(
+      Option.some({ top: { x: 0, y: 1, z: 0 }, bottom: { x: 0, y: 0, z: 0 } }),
+    );
+  });
+
+  it('finds none if one is missing', () => {
+    expect(Ragdoll.among(rod, { top: { x: 0, y: 1, z: 0 } })).toEqual(Option.none());
   });
 });
 
