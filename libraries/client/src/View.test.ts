@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Component, State } from '@lightocean/core';
-import { Effect, Exit, Option, Schema, Scope } from 'effect';
+import { Context, Effect, Exit, Option, Schema, Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Drawing from '#src/Drawing.ts';
 import * as Timeline from '#src/Timeline.ts';
@@ -431,9 +431,9 @@ describe("the drawing's input", () => {
   );
 
   it('is asked for by the views that read it', () => {
-    // @ts-expect-error A rig that reads the drawing's input is drawn only where it is given.
-    const views = View.make([camera], Option.none());
-    expect(views).toBeDefined();
+    // @ts-expect-error A rig that reads the drawing's input is not among the views that are given none.
+    const views: ReadonlyArray<View.View<unknown, undefined>> = [camera];
+    expect(views).toHaveLength(1);
   });
 });
 
@@ -504,5 +504,47 @@ describe('View.rig', () => {
 
       expect(drawn).toHaveLength(1);
     }),
+  );
+});
+
+describe('what views need', () => {
+  /** Two services views put out through: a bell and a horn, each a list a test reads. */
+  const Bell = Context.Service<{ readonly rung: Array<string> }>('Bell');
+  const Horn = Context.Service<{ readonly blown: Array<string> }>('Horn');
+  const rings = View.on(Struck, () =>
+    Effect.gen(function* () {
+      (yield* Bell).rung.push('ring');
+    }),
+  );
+  const blows = View.on(Struck, () =>
+    Effect.gen(function* () {
+      (yield* Horn).blown.push('blow');
+    }),
+  );
+  const behind = View.rig([Position], (camera, _held, _frame, _drawn, back: number) => {
+    camera.position.z = back;
+  });
+  const [bare] = State.spawn(State.empty({ seed: 1 }), [Crate.of({})]);
+  const [struck] = State.spawn(State.empty({ seed: 1 }), [Crate.of({}), Struck.of({ at: 1 })]);
+
+  it.effect(
+    'is all that each of them needs, worked out with nothing named, with an input or without',
+    () => {
+      const bell = { rung: new Array<string>() };
+      const horn = { blown: new Array<string>() };
+      return Effect.gen(function* () {
+        const plain = yield* View.make([rings, blows]);
+        const looked = yield* View.make([rings, blows, behind], Option.none(), () => 4);
+
+        yield* play(plain, [bare, struck]);
+        yield* play(looked, [bare, struck]);
+        yield* Effect.yieldNow;
+
+        expect([bell.rung, horn.blown]).toEqual([
+          ['ring', 'ring'],
+          ['blow', 'blow'],
+        ]);
+      }).pipe(Effect.scoped, Effect.provideService(Bell, bell), Effect.provideService(Horn, horn));
+    },
   );
 });

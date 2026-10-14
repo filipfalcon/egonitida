@@ -26,15 +26,23 @@ export interface Scene<R = never> {
 }
 
 /** A scene drawn through `views`, until the scope closes, with its camera drawn by their rigs for `player`, if there is one, and the drawing's input as `input` gives it, if they read one: such as through whose eyes the player looks, which a test says without putting anything in the state. */
-export function make<R = never>(
-  views: ReadonlyArray<View.View<R, undefined>>,
+export function make<const Given extends ReadonlyArray<View.View<unknown, undefined>>>(
+  views: Given,
   player?: Option.Option<State.Entity>,
-): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope>;
-export function make<R = never, V = unknown>(
-  views: ReadonlyArray<View.View<R, V>>,
+): Effect.Effect<
+  Scene<Exclude<View.NeedsOf<Given>, Scope.Scope>>,
+  never,
+  View.NeedsOf<Given> | Scope.Scope
+>;
+export function make<const Given extends ReadonlyArray<View.View<unknown, V>>, V>(
+  views: Given,
   player: Option.Option<State.Entity>,
   input: () => V,
-): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope>;
+): Effect.Effect<
+  Scene<Exclude<View.NeedsOf<Given>, Scope.Scope>>,
+  never,
+  View.NeedsOf<Given> | Scope.Scope
+>;
 export function make<R, V>(
   views: ReadonlyArray<View.View<R, V | undefined>>,
   player: Option.Option<State.Entity> = Option.none(),

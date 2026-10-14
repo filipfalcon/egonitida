@@ -311,15 +311,15 @@ export interface Looking {
  *
  * At every frame they are given the drawing's input, as `input` gives it then: what the page keeps of how the game is drawn for its player, such as through whose eyes the camera looks. Views that read none need none given.
  */
-export function make<R = never>(
-  views: ReadonlyArray<View<R, undefined>>,
+export function make<const Given extends ReadonlyArray<View<unknown, undefined>>>(
+  views: Given,
   looking?: Option.Option<Looking>,
-): Effect.Effect<Views<Exclude<R, Scope.Scope>>, never, R | Scope.Scope>;
-export function make<R = never, V = unknown>(
-  views: ReadonlyArray<View<R, V>>,
+): Effect.Effect<Views<Exclude<NeedsOf<Given>, Scope.Scope>>, never, NeedsOf<Given> | Scope.Scope>;
+export function make<const Given extends ReadonlyArray<View<unknown, V>>, V>(
+  views: Given,
   looking: Option.Option<Looking>,
   input: () => V,
-): Effect.Effect<Views<Exclude<R, Scope.Scope>>, never, R | Scope.Scope>;
+): Effect.Effect<Views<Exclude<NeedsOf<Given>, Scope.Scope>>, never, NeedsOf<Given> | Scope.Scope>;
 export function make<R, V>(
   views: ReadonlyArray<View<R, V | undefined>>,
   looking: Option.Option<Looking> = Option.none(),
@@ -327,6 +327,12 @@ export function make<R, V>(
 ): Effect.Effect<Views<Exclude<R, Scope.Scope>>, never, R | Scope.Scope> {
   return working(views, looking, input);
 }
+
+/** What one view needs to draw: what it names, and nothing for a rig, which names nothing. */
+type NeedOf<One> = One extends Rig<never> ? never : One extends View<infer R, never> ? R : never;
+
+/** What `views` need to draw, together: all that each of them needs, so views that need different services are drawn together with nothing named. */
+export type NeedsOf<Given extends ReadonlyArray<View<unknown, never>>> = NeedOf<Given[number]>;
 
 /** `views` at work, given the drawing's input as `asked` gives it at every frame. */
 const working = <R, V>(
