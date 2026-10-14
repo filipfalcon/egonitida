@@ -37,8 +37,15 @@ export interface EachSpec<
     frame: Drawing.Frame,
     entity: State.Entity,
   ) => Effect.Effect<Built, never, R | Scope.Scope>;
+  /** Draws what `acquire` built, every frame, from what the entity holds in `frame`, the drawing's `input`, and whether the entity is the `viewer`: the player the views are drawn for, through whose eyes their rigs draw the camera, such as a body leaving its own head out when looked out of. */
   readonly draw?:
-    | ((object: Built, held: Held<Components[number]>, frame: Drawing.Frame, input: V) => void)
+    | ((
+        object: Built,
+        held: Held<Components[number]>,
+        frame: Drawing.Frame,
+        input: V,
+        viewer: boolean,
+      ) => void)
     | undefined;
 }
 
@@ -53,12 +60,13 @@ export interface Each<R, Built extends Three.Object3D = Three.Object3D, V = unkn
     entity: State.Entity,
     frame: Drawing.Frame,
   ) => Effect.Effect<Built, never, R | Scope.Scope>;
-  /** Draws what this view built, as `frame` has the entity, with the drawing's `input`, by the spec's `draw`; any other object it leaves alone. */
+  /** Draws what this view built, as `frame` has the entity, with the drawing's `input`, and whether the entity is the player the views are drawn for, by the spec's `draw`; any other object it leaves alone. */
   readonly draw: (
     object: Three.Object3D,
     entity: State.Entity,
     frame: Drawing.Frame,
     input: V,
+    viewer: boolean,
   ) => void;
   /** `object`, as the type this view built it, if this view built it. */
   own(object: Three.Object3D): Option.Option<Built>;
@@ -161,9 +169,9 @@ export const each = <
           return object;
         },
       ),
-    draw: (object, entity, frame, input) =>
+    draw: (object, entity, frame, input, viewer) =>
       Option.map(own(object), (mine) =>
-        spec.draw?.(mine, heldIn<Components[number]>(frame, entity), frame, input),
+        spec.draw?.(mine, heldIn<Components[number]>(frame, entity), frame, input, viewer),
       ),
     own,
   };
@@ -405,7 +413,13 @@ const working = <R, V>(
           }
         }
         for (const [entity, { object }] of keeping) {
-          view.draw(object, entity, frame, given);
+          view.draw(
+            object,
+            entity,
+            frame,
+            given,
+            Option.exists(looking, ({ player }) => player === entity),
+          );
         }
       });
 

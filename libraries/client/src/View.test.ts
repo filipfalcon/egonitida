@@ -126,6 +126,34 @@ describe('what View.each is given', () => {
   );
 });
 
+describe('whose entity View.each draws', () => {
+  it.effect(
+    'tells draw whether the entity is the player the views are drawn for, whose eyes the camera looks through, so a body may leave its own head out',
+    () =>
+      Effect.gen(function* () {
+        const told: Array<string> = [];
+        const crates = View.each([Crate, Position], {
+          acquire: () => Effect.succeed(new Three.Group()),
+          draw: (_group, held, _frame, _input, viewer) => {
+            told.push(`${held(Position).x} ${viewer}`);
+          },
+        });
+        const [one, mine] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+        const [both] = State.spawn(one, crateAt(2));
+        const views = yield* View.make(
+          [crates],
+          Option.some({ camera: new Three.PerspectiveCamera(), player: mine }),
+        );
+        const unlooked = yield* View.make([crates]);
+
+        yield* play(views, [both]);
+        yield* play(unlooked, [both]);
+
+        expect(told).toEqual(['1 true', '2 false', '1 false', '2 false']);
+      }),
+  );
+});
+
 describe('View.each with nothing to draw', () => {
   it.effect(
     'builds an object for each entity, and leaves it as it was built, for what stands as it is laid',
