@@ -2,7 +2,16 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
 import { Controls, View, type Viewport } from '@lightocean/client';
-import { Component, Domain, Game, Pointing, Rule, WorkerTransport, State } from '@lightocean/core';
+import {
+  Component,
+  Domain,
+  Game,
+  Pointing,
+  Rule,
+  System,
+  WorkerTransport,
+  State,
+} from '@lightocean/core';
 import { Context, Effect, Option, Queue, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Three from 'three/webgpu';
@@ -14,6 +23,27 @@ import * as Session from '#src/Session.ts';
 const Lamp = Component.make('Lamp', Schema.Struct({ on: Schema.Boolean }), {
   owner: 'rules',
   network: 'server',
+});
+/** Where a player heads, which the player demands every frame. */
+const Heading = Component.make('Heading', Schema.Struct({ angle: Schema.Finite }), {
+  owner: 'demand',
+  network: 'server',
+});
+/** Where a player heads, as the game took it: what a step made of their demand. */
+const Headed = Component.make('Headed', Schema.Struct({ angle: Schema.Finite }), {
+  owner: 'simulation',
+  network: 'server',
+});
+const head = System.make({
+  name: 'head',
+  reads: [Heading],
+  writes: [Headed],
+  emits: [],
+  run: (context) => {
+    for (const [player, heading] of context.query(Heading)) {
+      context.set(player, Headed, heading);
+    }
+  },
 });
 const toggle = Rule.on(Pointing.Clicked, {
   reads: [],
@@ -30,10 +60,10 @@ const game = Game.make({
     Domain.make({
       name: 'Lamps',
       requires: [Pointing.domain],
-      components: [Lamp],
+      components: [Lamp, Heading, Headed],
       actions: [],
       events: [],
-      systems: [],
+      systems: [head],
       rules: [toggle],
     }),
   ],
@@ -55,7 +85,7 @@ const joinedLamp = Effect.gen(function* () {
   yield* WorkerTransport.serve({
     game,
     state,
-    join: (joining: State.State) => State.spawn(joining, []),
+    join: (joining: State.State) => State.spawn(joining, [Heading.of({ angle: 0 })]),
     leave: State.despawn,
     maySuspend: false,
   }).pipe(Effect.provide(BrowserWorkerRunner.layerMessagePort(channel.port2)), Effect.forkScoped);
@@ -340,6 +370,41 @@ describe('a stage', () => {
 
         expect(heldSinceBefore).toBeCloseTo(0);
         expect(viewport.camera.position.y).toBeCloseTo(1);
+      }).pipe(Effect.scoped),
+  );
+
+  it.live(
+    "sends the game the demands of each frame it draws, from the drawing's input and the controls, such as where the player heads",
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        const facing = View.rig(
+          [],
+          (camera, _held, _frame, _drawn, { yaw }: { readonly yaw: number }) => {
+            camera.rotation.y = yaw;
+          },
+        );
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps, facing],
+          mirror: document.createElement('div'),
+          input: () => 0.5,
+          played: {
+            bindings: { ahead: Controls.button({ key: 'KeyW' }) },
+            start: (yaw) => ({ yaw }),
+            next: (yaw) => ({ yaw }),
+            // Heading where the camera faces while the player walks ahead, and nowhere else.
+            demands: ({ yaw }, controls) =>
+              controls.values.button('ahead').held ? [Heading.of({ angle: yaw })] : [],
+          },
+        });
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+        yield* Effect.sleep('400 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+        const headed = State.get(yield* joined.client.state, joined.client.entity, Headed);
+
+        expect(Option.map(headed, ({ angle }) => angle)).toEqual(Option.some(0.5));
       }).pipe(Effect.scoped),
   );
 

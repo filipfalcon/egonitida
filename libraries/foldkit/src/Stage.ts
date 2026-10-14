@@ -8,6 +8,7 @@ import {
   Viewport,
 } from '@lightocean/client';
 import { Data, Effect, Option, Schema, type Scope, Stream } from 'effect';
+import type { Component } from '@lightocean/core';
 import type { ManagedResource } from 'foldkit';
 import type * as Session from '#src/Session.ts';
 
@@ -57,6 +58,10 @@ export interface Played<M, V, B extends Controls.Bindings> {
     seconds: number,
     devices: Devices.Reading,
   ) => V;
+  /** What the player demands of the game in each frame drawn, from the input after it and the controls: such as where they head, the stick turned by where the camera faces. The stage sends them, before its views draw. */
+  readonly demands?:
+    | ((input: V, controls: Controls.Read<B>) => ReadonlyArray<Component.Instance>)
+    | undefined;
 }
 
 /** What else a stage's scene holds and runs beside it, apart from its views. */
@@ -128,18 +133,18 @@ const shownAs = <R, M, V, B extends Controls.Bindings>(
   if (options.input !== undefined) {
     const { input } = options;
     return shown(viewport, joined, options, options.views, () =>
-      Effect.succeed({ now: input, advance: () => {} }),
+      Effect.succeed({ now: input, advance: () => [] }),
     );
   }
   return shown(viewport, joined, options, options.views, () =>
-    Effect.succeed({ now: () => undefined, advance: () => {} }),
+    Effect.succeed({ now: () => undefined, advance: () => [] }),
   );
 };
 
-/** The drawing's input as a stage keeps it: what it is `now`, and going on by a frame drawn, given the seconds the frame covers. */
+/** The drawing's input as a stage keeps it: what it is `now`, and going on by a frame drawn, given the seconds the frame covers, which gives what the player demands in it. */
 interface Kept<V> {
   readonly now: () => V;
-  readonly advance: (seconds: number) => void;
+  readonly advance: (seconds: number) => ReadonlyArray<Component.Instance>;
 }
 
 /** How a stage keeps the drawing's input, heard through what its viewport holds, until the scope closes. */
@@ -164,6 +169,7 @@ const playedOn =
           const devices = hearing.read();
           kept.controls = Controls.read(played.bindings, devices, kept.controls);
           kept.input = played.next(input(), kept.input, kept.controls, seconds, devices);
+          return played.demands?.(kept.input, kept.controls) ?? [];
         },
       };
     });
@@ -205,9 +211,12 @@ const shown = <R, V>(
         onNone: () => Effect.void,
         onSome: (frame) =>
           Effect.suspend(() => {
-            // The input goes on once a frame drawn, before the views draw it.
-            input.advance(seconds);
-            return Effect.andThen(views.frame(frame), mirror.frame(frame));
+            // The input goes on once a frame drawn, and what the player demands in it is sent, before the views draw it.
+            const demanded = input.advance(seconds);
+            return Effect.andThen(
+              demanded.length === 0 ? Effect.void : joined.client.send(demanded),
+              Effect.andThen(views.frame(frame), mirror.frame(frame)),
+            );
           }),
       }).pipe(Effect.andThen(viewport.render)),
     );
