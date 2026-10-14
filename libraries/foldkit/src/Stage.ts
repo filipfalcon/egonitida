@@ -152,7 +152,10 @@ const playedOn =
     Effect.gen(function* () {
       const hearing = yield* Hearing.make(window, {
         ...played.hearing,
-        keyboardAndMouse: { area: viewport.canvas, ...played.hearing?.keyboardAndMouse },
+        keyboardAndMouse: Option.map(
+          played.hearing?.keyboardAndMouse ?? Option.some({}),
+          (heard) => ({ area: viewport.canvas, ...heard }),
+        ),
       });
       const kept = { input: played.start(input()), controls: Controls.start(played.bindings) };
       return {

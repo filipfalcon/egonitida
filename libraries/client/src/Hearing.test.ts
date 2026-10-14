@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from '@effect/vitest';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import * as Hearing from '#src/Hearing.ts';
 
 const key = (type: 'keydown' | 'keyup', code: string) =>
@@ -33,5 +33,18 @@ describe('hearing the devices a player holds', () => {
       expect([...hearing.read().keys]).toEqual([]);
       key('keyup', 'KeyQ');
     }),
+  );
+
+  it.effect('hears no keyboard and mouse where the page plays by pads alone', () =>
+    Effect.gen(function* () {
+      const hearing = yield* Hearing.make(window, { keyboardAndMouse: Option.none() });
+
+      key('keydown', 'KeyE');
+      const reading = hearing.read();
+      key('keyup', 'KeyE');
+
+      expect([...reading.keys]).toEqual([]);
+      expect(reading.mouse.buttons.size).toBe(0);
+    }).pipe(Effect.scoped),
   );
 });
