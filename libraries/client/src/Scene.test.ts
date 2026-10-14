@@ -96,6 +96,26 @@ describe('Scene', () => {
     }),
   );
 
+  it.effect("draws its camera from the drawing's input, with nothing put in the state", () =>
+    Effect.gen(function* () {
+      const [state, crate] = State.spawn(State.empty({ seed: 1 }), [
+        Crate.of({}),
+        Position.of({ x: 3 }),
+      ]);
+      const looking = View.rig(
+        [Position],
+        (camera, held, _frame, _drawn, looked: 'Eyes' | 'Shoulder') => {
+          camera.position.set(held(Position).x, 0, looked === 'Eyes' ? 0 : 5);
+        },
+      );
+      const scene = yield* Scene.make([looking], Option.some(crate), () => 'Eyes' as const);
+
+      yield* scene.show(state);
+
+      expect(scene.camera.position.z).toBeCloseTo(0);
+    }),
+  );
+
   it.effect('finds the entity under a point of the screen, as a click would', () =>
     Effect.gen(function* () {
       const told = Story.story(

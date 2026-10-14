@@ -25,16 +25,27 @@ export interface Scene<R = never> {
   readonly pick: View.Views<R>['pick'];
 }
 
-/** A scene drawn through `views`, until the scope closes, with its camera drawn by their rigs for `player`, if there is one. */
-export const make = <R = never>(
-  views: ReadonlyArray<View.View<R>>,
+/** A scene drawn through `views`, until the scope closes, with its camera drawn by their rigs for `player`, if there is one, and the drawing's input as `input` gives it, if they read one: such as through whose eyes the player looks, which a test says without putting anything in the state. */
+export function make<R = never>(
+  views: ReadonlyArray<View.View<R, undefined>>,
+  player?: Option.Option<State.Entity>,
+): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope>;
+export function make<R = never, V = unknown>(
+  views: ReadonlyArray<View.View<R, V>>,
+  player: Option.Option<State.Entity>,
+  input: () => V,
+): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope>;
+export function make<R, V>(
+  views: ReadonlyArray<View.View<R, V | undefined>>,
   player: Option.Option<State.Entity> = Option.none(),
-): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
-  Effect.gen(function* () {
+  input: () => V | undefined = () => undefined,
+): Effect.Effect<Scene<Exclude<R, Scope.Scope>>, never, R | Scope.Scope> {
+  return Effect.gen(function* () {
     const camera = new Three.PerspectiveCamera();
     const working = yield* View.make(
       views,
       Option.map(player, (entity) => ({ camera, player: entity })),
+      input,
     );
     const seen = { previous: Option.none<Timeline.View>() };
     return {
@@ -52,3 +63,4 @@ export const make = <R = never>(
       pick: working.pick,
     };
   });
+}

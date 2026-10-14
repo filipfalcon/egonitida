@@ -381,6 +381,62 @@ describe('objects of an entity', () => {
   );
 });
 
+describe("the drawing's input", () => {
+  /** Whose eyes the camera looks through, as the page keeps it. */
+  type Looked = 'Eyes' | 'Shoulder';
+  const [state, player] = State.spawn(State.empty({ seed: 1 }), [Position.of({ x: 2 })]);
+  /** The camera through the player's eyes, or behind them, as the page says. */
+  const camera = View.rig([Position], (camera, held, _frame, _drawn, looked: Looked) => {
+    camera.position.set(held(Position).x, 1.6, looked === 'Eyes' ? 0 : 3);
+  });
+
+  it.effect('reaches the rigs as the page has it at each frame, nothing in the state', () =>
+    Effect.gen(function* () {
+      const page: { looked: Looked } = { looked: 'Shoulder' };
+      const eye = new Three.PerspectiveCamera();
+      const views = yield* View.make(
+        [camera],
+        Option.some({ camera: eye, player }),
+        () => page.looked,
+      );
+
+      yield* play(views, [state]);
+      const behind = eye.position.z;
+      page.looked = 'Eyes';
+      yield* play(views, [state]);
+
+      expect([behind, eye.position.z]).toEqual([3, 0]);
+    }),
+  );
+
+  it.effect('reaches every view drawn each frame, and a view that reads none takes any', () =>
+    Effect.gen(function* () {
+      const crates = View.each([Crate, Position], {
+        acquire: () => Effect.succeed(new Three.Group()),
+        draw: (group, _held, _frame, looked: Looked) => {
+          group.visible = looked === 'Shoulder';
+        },
+      });
+      const plain = View.each([Crate], {
+        acquire: () => Effect.succeed(new Three.Group()),
+        draw: () => {},
+      });
+      const views = yield* View.make([crates, plain], Option.none(), (): Looked => 'Eyes');
+      const [crated] = State.spawn(State.empty({ seed: 1 }), crateAt(1));
+
+      const [shown] = yield* play(views, [crated]);
+
+      expect(shown?.map(({ visible }) => visible)).toEqual([false, true]);
+    }),
+  );
+
+  it('is asked for by the views that read it', () => {
+    // @ts-expect-error A rig that reads the drawing's input is drawn only where it is given.
+    const views = View.make([camera], Option.none());
+    expect(views).toBeDefined();
+  });
+});
+
 describe('View.rig', () => {
   /** A player's body, drawn as a group where it stands. */
   const bodies = View.each([Position], {
