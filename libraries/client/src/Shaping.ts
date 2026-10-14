@@ -1,4 +1,4 @@
-import { Data, Effect } from 'effect';
+import { Data, Effect, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 
 /**
@@ -363,14 +363,41 @@ const lengthsOf = (model: Three.Object3D, meshes: ReadonlyArray<Three.SkinnedMes
   return { joints, skeletons, skins: [...skins.values()] };
 };
 
+/** Gives `meshes` skin and skeletons of their own, copies of those they hold, which lengthening may rewrite without reaching any other copy of the model they share them with; a buffer or skeleton several of them share, they go on sharing. Lets go of the copied skin once the scope closes. */
+const ownSkin = (meshes: ReadonlyArray<Three.SkinnedMesh>) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const geometries = new Map<Three.BufferGeometry, Three.BufferGeometry>();
+      const skeletons = new Set<Three.Skeleton>();
+      for (const mesh of meshes) {
+        const owned = geometries.get(mesh.geometry) ?? mesh.geometry.clone();
+        geometries.set(mesh.geometry, owned);
+        mesh.geometry = owned;
+        skeletons.add(mesh.skeleton);
+      }
+      for (const skeleton of skeletons) {
+        skeleton.boneInverses = skeleton.boneInverses.map((boneInverse) => boneInverse.clone());
+      }
+      return [...geometries.values()];
+    }),
+    (owned) =>
+      Effect.sync(() => {
+        for (const geometry of owned) {
+          geometry.dispose();
+        }
+      }),
+  );
+
 /**
  * `model` fitted to `shaping`: every morph target a dial turns, found on every mesh of the model that carries it, and every bone a dial lengthens, found in its skeletons, as the model holds its meshes now and rests as it was made. Fails with `Unfitted` if no mesh carries one of the targets, or no skeleton one of the bones.
+ *
+ * Lengthening rewrites the skin, so a model with a dial that lengthens is given a copy of its skin and its skeletons' rests of its own, which the scope lets go of once it closes: copies of one loaded model, which share them, as `SkeletonUtils.clone` copies one, are each shaped on their own. Everything else the model holds stays the caller's to let go of.
  */
 export const fit = <D extends Dials>(
   model: Three.Object3D,
   shaping: Shaping<D>,
-): Effect.Effect<Shaped<D>, Unfitted> =>
-  Effect.suspend(() => {
+): Effect.Effect<Shaped<D>, Unfitted, Scope.Scope> =>
+  Effect.gen(function* () {
     const meshes: Array<Three.Mesh> = [];
     const skinned: Array<Three.SkinnedMesh> = [];
     model.traverse((child) => {
@@ -381,6 +408,9 @@ export const fit = <D extends Dials>(
         skinned.push(child);
       }
     });
+    if (Object.values(shaping.dials).some((dial) => dial._tag === 'Lengthen')) {
+      yield* ownSkin(skinned);
+    }
     const rig = lengthsOf(model, skinned);
     const bones = new Map([...rig.joints.values()].map((joint) => [joint.bone.name, joint]));
     const turns: Array<Turn> = [];
@@ -412,15 +442,14 @@ export const fit = <D extends Dials>(
         lengths.push({ dial, by: turned.by, joints, applied: 0 });
       }
     }
-    return absent.length > 0
-      ? Effect.fail(new Unfitted({ absent }))
-      : Effect.succeed(
-          new Shaped<D>(model, turns, {
-            dials: lengths,
-            joints: [...rig.joints.values()],
-            skeletons: rig.skeletons,
-            skins: rig.skins,
-            meshes: skinned,
-          }),
-        );
+    if (absent.length > 0) {
+      return yield* new Unfitted({ absent });
+    }
+    return new Shaped<D>(model, turns, {
+      dials: lengths,
+      joints: [...rig.joints.values()],
+      skeletons: rig.skeletons,
+      skins: rig.skins,
+      meshes: skinned,
+    });
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Component, State } from '@lightocean/core';
 import { Effect, Option, Schema } from 'effect';
+import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as Three from 'three/webgpu';
 import * as Scene from '#src/Scene.ts';
 import * as Shaping from '#src/Shaping.ts';
@@ -298,6 +299,61 @@ describe('Shaping.lengthen', () => {
       ).toEqual(inverses);
       expect(shaped.getObjectByName('foot')?.position.toArray()).toEqual([0, -1, 0]);
     }),
+  );
+
+  it.effect(
+    'lengthens each copy of one model on its own, as a game copies a model it loaded once for each of many',
+    () =>
+      Effect.gen(function* () {
+        const loaded = leg();
+        const short = yield* Shaping.fit(clone(loaded), legs);
+        const long = yield* Shaping.fit(clone(loaded), legs);
+
+        long.shape({ legs: 1 });
+        short.shape({ legs: -1 });
+        const later = yield* Shaping.fit(clone(loaded), legs);
+        later.shape({ legs: 1 });
+
+        // Each bent at the knee and the ankle, as one made as long as it was shaped bends.
+        for (const [shaped, madeAs] of [
+          [short, leg(0.5)],
+          [long, leg(1.5)],
+          [later, leg(1.5)],
+        ] as const) {
+          for (const model of [shaped, madeAs]) {
+            model.getObjectByName('knee')?.rotation.set(0, 0, Math.PI / 2);
+            model.getObjectByName('foot')?.rotation.set(0, 0, Math.PI / 2);
+          }
+          for (const at of [HIP, KNEE, SHIN, FOOT]) {
+            const expected = Option.getOrThrow(drawnAt(madeAs, at));
+            expect(
+              distanceFrom(drawnAt(shaped, at), expected.x, expected.y, expected.z),
+            ).toBeLessThan(1e-6);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    'lets go of the skin it copied to lengthen once its scope closes, and of nothing it was given',
+    () =>
+      Effect.gen(function* () {
+        const loaded = leg();
+        const given = Option.getOrThrow(skinnedIn(loaded, 'leg')).geometry;
+        const released: Array<Three.BufferGeometry> = [];
+        given.addEventListener('dispose', () => released.push(given));
+
+        const copied = yield* Effect.scoped(
+          Effect.map(Shaping.fit(clone(loaded), legs), (shaped) => {
+            const geometry = Option.getOrThrow(skinnedIn(shaped, 'leg')).geometry;
+            geometry.addEventListener('dispose', () => released.push(geometry));
+            return geometry;
+          }),
+        );
+
+        expect(copied).not.toBe(given);
+        expect(released).toEqual([copied]);
+      }),
   );
 
   it.effect('lengthens the model as the values say, whatever it was lengthened before', () =>
