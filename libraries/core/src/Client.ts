@@ -1,4 +1,4 @@
-import { Data, Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
+import { Clock, Data, Deferred, Effect, Option, PubSub, type Scope, Stream } from 'effect';
 import type * as Action from '#src/Action.ts';
 import type * as Component from '#src/Component.ts';
 import type * as Input from '#src/Input.ts';
@@ -38,6 +38,8 @@ export interface Client {
   readonly control: (payload: unknown) => Effect.Effect<void>;
   /** Asks whatever answers beside the host a question, such as a debugger's, and waits for its answer; the game never sees it. */
   readonly ask: (question: unknown) => Effect.Effect<unknown, Unanswered>;
+  /** Times the way to the host and back, in milliseconds: a ping the host answers as soon as it hears it, between its steps, so it is the connection's alone. Sent unreliably, a ping lost on the way is never answered, so whoever pings often gives up on one after a while. */
+  readonly ping: Effect.Effect<number>;
   /** Takes an action, which the host hands to the rules at its next step, as from this client's player. */
   readonly act: <Sent>(
     action: Action.Action<string, Sent, Input.Action>,
@@ -123,6 +125,15 @@ export const connect = (
             : Deferred.fail(waiting, new Unanswered({ reason: message.reason }));
       });
 
+    // The pings sent and not yet answered, by their ids.
+    const pinged = { next: 0, waiting: new Map<number, Deferred.Deferred<void>>() };
+    const ponged = ({ id }: Protocol.Pong) =>
+      Effect.suspend(() => {
+        const waiting = pinged.waiting.get(id);
+        pinged.waiting.delete(id);
+        return waiting === undefined ? Effect.void : Deferred.succeed(waiting, undefined);
+      });
+
     const receive = (frame: Transport.Frame) =>
       frame.channel === 'reliable'
         ? Option.match(Protocol.decodeHostReliable(frame.payload), {
@@ -133,46 +144,52 @@ export const connect = (
                 onSome: (received) => Deferred.succeed(welcome, received).pipe(Effect.asVoid),
               }),
           })
-        : Option.match(Protocol.decodeAcked(frame.payload), {
-            onSome: ({ tick, seq }) =>
-              Effect.sync(() => {
-                receiving.acked.set(tick, seq);
-                // As many as the states kept, the oldest let go first.
-                for (const old of receiving.acked.keys()) {
-                  if (receiving.acked.size <= KEPT_STATES) {
-                    break;
-                  }
-                  receiving.acked.delete(old);
-                }
-              }),
-            onNone: () =>
-              Option.match(Snapshot.apply(receiving.state, frame.payload, options.game), {
-                onNone: () => Effect.void,
-                onSome: ({ era, state }) =>
-                  Effect.suspend(() => {
-                    // A snapshot of an earlier era, or older than the state already held in this one, arrived out of order, and is of no use.
-                    if (
-                      era < receiving.era ||
-                      (era === receiving.era && state.tick <= receiving.state.tick)
-                    ) {
-                      return Effect.void;
-                    }
-                    const next =
-                      era > receiving.era
-                        ? backTo(frame.payload, state.tick)
-                        : Option.some(keepUp(state, receiving.state.tick));
-                    return Option.match(next, {
-                      onNone: () => Effect.void,
-                      onSome: (arrived) => {
-                        receiving.era = era;
-                        receiving.state = arrived;
-                        receiving.kept = [...receiving.kept, arrived].slice(-KEPT_STATES);
-                        return PubSub.publish(received, arrived).pipe(Effect.asVoid);
-                      },
-                    });
-                  }),
-              }),
+        : Option.match(Protocol.decodePong(frame.payload), {
+            onSome: (pong) => Effect.asVoid(ponged(pong)),
+            onNone: () => receiveUnreliable(frame),
           });
+
+    const receiveUnreliable = (frame: Transport.Frame) =>
+      Option.match(Protocol.decodeAcked(frame.payload), {
+        onSome: ({ tick, seq }) =>
+          Effect.sync(() => {
+            receiving.acked.set(tick, seq);
+            // As many as the states kept, the oldest let go first.
+            for (const old of receiving.acked.keys()) {
+              if (receiving.acked.size <= KEPT_STATES) {
+                break;
+              }
+              receiving.acked.delete(old);
+            }
+          }),
+        onNone: () =>
+          Option.match(Snapshot.apply(receiving.state, frame.payload, options.game), {
+            onNone: () => Effect.void,
+            onSome: ({ era, state }) =>
+              Effect.suspend(() => {
+                // A snapshot of an earlier era, or older than the state already held in this one, arrived out of order, and is of no use.
+                if (
+                  era < receiving.era ||
+                  (era === receiving.era && state.tick <= receiving.state.tick)
+                ) {
+                  return Effect.void;
+                }
+                const next =
+                  era > receiving.era
+                    ? backTo(frame.payload, state.tick)
+                    : Option.some(keepUp(state, receiving.state.tick));
+                return Option.match(next, {
+                  onNone: () => Effect.void,
+                  onSome: (arrived) => {
+                    receiving.era = era;
+                    receiving.state = arrived;
+                    receiving.kept = [...receiving.kept, arrived].slice(-KEPT_STATES);
+                    return PubSub.publish(received, arrived).pipe(Effect.asVoid);
+                  },
+                });
+              }),
+          }),
+      });
 
     yield* connection.frames.pipe(Stream.runForEach(receive), Effect.forkScoped);
     const { entity, stepRate } = yield* Deferred.await(welcome);
@@ -205,6 +222,26 @@ export const connect = (
         return yield* Deferred.await(waiting);
       });
 
+    /** Now, in milliseconds, finer than a millisecond where the clock is. */
+    const now = Effect.map(Clock.currentTimeNanos, (nanos) => Number(nanos) / 1_000_000);
+
+    const ping = Effect.gen(function* () {
+      const waiting = yield* Deferred.make<void>();
+      const id = pinged.next;
+      pinged.next += 1;
+      pinged.waiting.set(id, waiting);
+      const sent = yield* now;
+      yield* connection.send({
+        channel: 'unreliable',
+        payload: Protocol.encodePing({ _tag: 'Ping', id }),
+      });
+      yield* Deferred.await(waiting).pipe(
+        // One given up on is no longer waited for.
+        Effect.onInterrupt(() => Effect.sync(() => pinged.waiting.delete(id))),
+      );
+      return (yield* now) - sent;
+    });
+
     return {
       entity,
       stepRate,
@@ -217,5 +254,6 @@ export const connect = (
       act: (action, value) => tell({ _tag: 'Act', action: action.encode(value) }),
       control: (payload) => tell({ _tag: 'Control', payload }),
       ask,
+      ping,
     };
   });

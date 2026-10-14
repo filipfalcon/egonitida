@@ -393,7 +393,15 @@ export const make = <Services = never>(
           Stream.runForEach((frame) =>
             frame.channel === 'reliable'
               ? receiveReliable(entity, frame, connection, scope)
-              : Effect.sync(() => receive(entity, frame)),
+              : Option.match(Protocol.decodePing(frame.payload), {
+                  // Answered as soon as it is heard, between steps, so the client times only the way there and back.
+                  onSome: ({ id }) =>
+                    connection.send({
+                      channel: 'unreliable',
+                      payload: Protocol.encodePong({ _tag: 'Pong', id }),
+                    }),
+                  onNone: () => Effect.sync(() => receive(entity, frame)),
+                }),
           ),
           Effect.forkScoped,
         );

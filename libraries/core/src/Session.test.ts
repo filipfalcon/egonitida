@@ -779,6 +779,65 @@ describe('questions', () => {
   );
 });
 
+describe('the round trip to the host', () => {
+  /** `millis` passing a millisecond at a time, so what one delivery sets off is delivered in its own time. */
+  const passing = (millis: number) =>
+    Effect.repeat(TestClock.adjust('1 millis'), { times: millis - 1 });
+
+  /** A host and one client joined to it, every frame taking `latencyMillis` each way. */
+  const distant = (latencyMillis: number, maySuspend = true) =>
+    Effect.gen(function* () {
+      const host = yield* Host.make(hostOptions(maySuspend));
+      const [clientEnd, hostEnd] = yield* Transport.memoryPair;
+      const conditions = { latencyMillis, loss: 0, random: () => 1 };
+      yield* host.connect(yield* Transport.withConditions(hostEnd, conditions));
+      const client = yield* Client.connect(yield* Transport.withConditions(clientEnd, conditions), {
+        game,
+      });
+      return client;
+    });
+
+  it.effect('takes as long as a frame takes there and back, the host answering at once', () =>
+    Effect.gen(function* () {
+      const client = yield* Effect.forkChild(distant(40));
+      yield* passing(40);
+      const joined = yield* Fiber.join(client);
+
+      const pinging = yield* Effect.forkChild(joined.ping);
+      yield* passing(80);
+      const millis = yield* Fiber.join(pinging);
+
+      expect(millis).toBeCloseTo(80);
+    }),
+  );
+
+  it.effect('is answered by a host that lets no client suspend time, as a room is', () =>
+    Effect.gen(function* () {
+      const client = yield* distant(0, false);
+
+      const millis = yield* client.ping;
+
+      expect(millis).toBeCloseTo(0);
+    }),
+  );
+
+  it.effect('is told apart for each of several asked at once', () =>
+    Effect.gen(function* () {
+      const client = yield* Effect.forkChild(distant(10));
+      yield* passing(10);
+      const joined = yield* Fiber.join(client);
+
+      const first = yield* Effect.forkChild(joined.ping);
+      yield* passing(5);
+      const second = yield* Effect.forkChild(joined.ping);
+      yield* passing(20);
+
+      expect(yield* Fiber.join(first)).toBeCloseTo(20);
+      expect(yield* Fiber.join(second)).toBeCloseTo(20);
+    }),
+  );
+});
+
 describe('commands', () => {
   /** Where health is kept outside the state: it says whether it kept an amount, or breaks. */
   const Vault = Context.Service<{ readonly keep: (amount: number) => Effect.Effect<boolean> }>(
