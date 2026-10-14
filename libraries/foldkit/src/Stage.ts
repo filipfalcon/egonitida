@@ -1,5 +1,5 @@
 import { Clicking, Mirror, View, Viewport } from '@lightocean/client';
-import { Data, Effect, Option, type Scope, Stream } from 'effect';
+import { Data, Effect, Option, Schema, type Scope, Stream } from 'effect';
 import type { ManagedResource } from 'foldkit';
 import type * as Session from '#src/Session.ts';
 
@@ -7,9 +7,18 @@ import type * as Session from '#src/Session.ts';
  * A game shown on a canvas in an application built on Foldkit: drawn through the game's views at every frame the display shows, played by a click on what is drawn, and mirrored as buttons for the keyboard and a screen reader. Foldkit keeps the canvas in its DOM, and says through a Mount when it is there; a Subscription shows the game on it while the application's Model has both the canvas and the session.
  */
 
-/** How a stage is set: the game's views, and what else the scene holds, such as its camera and its lights. */
-export interface Options<R> {
-  readonly views: ReadonlyArray<View.View<R>>;
+/** How a stage is set: the game's views, the drawing's input they read, if they read one, and what else the scene holds, such as its camera and its lights. */
+export type Options<R, V = undefined> = Setting<R> & Drawn<R, V>;
+
+/**
+ * The views a stage draws, and the drawing's input, if they read one: what changes only how the game is drawn for this player, such as through whose eyes they look, which the page keeps, as it keeps its Model, and the views read every frame.
+ */
+export type Drawn<R, V> =
+  | { readonly views: ReadonlyArray<View.View<R, undefined>>; readonly input?: undefined }
+  | { readonly views: ReadonlyArray<View.View<R, V>>; readonly input: () => V };
+
+/** What else a stage's scene holds and runs beside it, apart from its views. */
+export interface Setting<R> {
   /** How the viewport draws, as bare Three.js does unless told otherwise, such as through a preset like `Viewport.sharp`. */
   readonly viewport?: Viewport.Options | undefined;
   /** Sets the scene up before the first frame, such as where the camera looks from and what lights it. */
@@ -20,17 +29,17 @@ export interface Options<R> {
     | undefined;
 }
 
-/** Shows `joined` on `viewport` through `options.views` until the scope closes, their rigs drawing its camera for the player who joined: every click on the canvas acts on what is under it, and every labelled entity stands as a button in `mirror`. */
-export const show = <R>(
+/** Shows `joined` on `viewport` through `options.views` until the scope closes, their rigs drawing its camera for the player who joined, from the drawing's input `options.input` gives each frame, if they read one: every click on the canvas acts on what is under it, and every labelled entity stands as a button in `mirror`. */
+export const show = <R, V = undefined>(
   viewport: Viewport.Viewport,
   joined: Session.Joined,
-  options: Options<R> & { readonly mirror: HTMLElement },
+  options: Options<R, V> & { readonly mirror: HTMLElement },
 ): Effect.Effect<void, never, R | Scope.Scope> =>
   Effect.gen(function* () {
-    const views = yield* View.make(
-      options.views,
-      Option.some({ camera: viewport.camera, player: joined.client.entity }),
-    );
+    const looking = Option.some({ camera: viewport.camera, player: joined.client.entity });
+    const views = yield* options.input === undefined
+      ? View.make(options.views, looking)
+      : View.make(options.views, looking, options.input);
     viewport.scene.add(views.root);
     options.setup?.(viewport);
     yield* Clicking.serve({
@@ -98,8 +107,8 @@ export const run = <Message, Service, R>(options: {
 /**
  * A stage as a Foldkit Subscription's Stream: the game of the session `resource` holds, shown on the canvas whose id is `canvasId`, its mirror beside the canvas, for as long as the Stream runs. If the session is not joined, though the Model says it is, as a Model restored after a reload does, `onNotJoined` says so in a Message of the application's, which puts the Model right so the stage is shown again once the session is joined; if it cannot be shown otherwise, `onFailed` says why.
  */
-export const stream = <Message, Service, R>(
-  options: Options<R> & {
+export const stream = <Message, Service, R, V = undefined>(
+  options: Options<R, V> & {
     readonly resource: ManagedResource.ManagedResource<Session.Joined, Service>;
     readonly canvasId: string;
     readonly onNotJoined: () => Message;
@@ -130,3 +139,37 @@ export const stream = <Message, Service, R>(
         }),
       ),
   });
+
+/** What a stage's Subscription entry follows of the Model: whether the stage is shown, and the drawing's input. */
+export interface Dependencies<V> {
+  readonly isShown: boolean;
+  readonly input: V;
+}
+
+/**
+ * A stage as a Foldkit Subscription entry, which follows the drawing's input from the Model: shown while `shows` says so of the Model, its views reading every frame what `input.of` gives of the latest Model, such as through whose eyes the player looks. A change of the input never shows the stage anew, so nothing its views built is built again; `input.schema` is what Foldkit tells the input's values apart by. Put in a record of `Subscription.make` as it is.
+ */
+export const entry = <Model, Message, Service, R, V>(
+  options: Setting<R> & {
+    readonly views: ReadonlyArray<View.View<R, V>>;
+    readonly input: { readonly schema: Schema.Codec<V>; readonly of: (model: Model) => V };
+    readonly shows: (model: Model) => boolean;
+    readonly resource: ManagedResource.ManagedResource<Session.Joined, Service>;
+    readonly canvasId: string;
+    readonly onNotJoined: () => Message;
+    readonly onFailed: (reason: string) => Message;
+  },
+) => ({
+  dependenciesSchema: Schema.Struct({ isShown: Schema.Boolean, input: options.input.schema }),
+  modelToDependencies: (model: Model): Dependencies<V> => ({
+    isShown: options.shows(model),
+    input: options.input.of(model),
+  }),
+  keepAliveEquivalence: (before: Dependencies<V>, after: Dependencies<V>) =>
+    before.isShown === after.isShown,
+  dependenciesToStream: (
+    { isShown }: Dependencies<V>,
+    latest: () => Dependencies<V>,
+  ): Stream.Stream<Message, never, Service | Exclude<R, Scope.Scope>> =>
+    isShown ? stream({ ...options, input: () => latest().input }) : Stream.empty,
+});

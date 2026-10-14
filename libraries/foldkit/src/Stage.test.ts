@@ -174,6 +174,93 @@ describe('a stage', () => {
     }).pipe(Effect.scoped),
   );
 
+  it.live(
+    "draws through the drawing's input, read again every frame, and never builds its views anew for it",
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        const looked: { through: 'Eyes' | 'Shoulder' } = { through: 'Eyes' };
+        const built: Array<string> = [];
+        const counted = View.each([Lamp], {
+          acquire: () =>
+            Effect.sync(() => {
+              built.push('lamp');
+              return new Three.Mesh();
+            }),
+          draw: () => {},
+        });
+        const looking = View.rig(
+          [],
+          (camera, _held, _frame, _drawn, through: 'Eyes' | 'Shoulder') => {
+            camera.position.set(0, 0, through === 'Eyes' ? 0 : 5);
+          },
+        );
+
+        yield* Stage.show(viewport, joined, {
+          views: [counted, looking],
+          mirror: document.createElement('div'),
+          input: () => looked.through,
+        });
+        yield* Effect.sleep('300 millis');
+        const throughEyes = viewport.camera.position.z;
+        looked.through = 'Shoulder';
+        yield* Effect.sleep('300 millis');
+
+        expect(throughEyes).toBeCloseTo(0);
+        expect(viewport.camera.position.z).toBeCloseTo(5);
+        expect(built).toEqual(['lamp']);
+      }).pipe(Effect.scoped),
+  );
+
+  describe('as a Foldkit Subscription entry', () => {
+    /** A page's Model: whether its canvas is there to show the game on, and through whose eyes its player looks. */
+    interface Model {
+      readonly isShown: boolean;
+      readonly looking: 'Eyes' | 'Shoulder';
+    }
+    const Looking = Schema.Literals(['Eyes', 'Shoulder']);
+    const looking = View.rig([], (camera, _held, _frame, _drawn, through: 'Eyes' | 'Shoulder') => {
+      camera.position.set(0, 0, through === 'Eyes' ? 0 : 5);
+    });
+    const resource = ManagedResource.tag<Session.Joined>()('Looked');
+    const entry = Stage.entry({
+      resource,
+      canvasId: 'nowhere',
+      views: [lamps, looking],
+      shows: (model: Model) => model.isShown,
+      input: { schema: Looking, of: (model: Model) => model.looking },
+      onNotJoined: () => 'not joined',
+      onFailed: (reason) => `failed: ${reason}`,
+    });
+
+    it('follows the input from the Model, keeping the stage while it is shown however the input changes', () => {
+      const throughEyes = entry.modelToDependencies({ isShown: true, looking: 'Eyes' });
+      const overShoulder = entry.modelToDependencies({ isShown: true, looking: 'Shoulder' });
+      const hidden = entry.modelToDependencies({ isShown: false, looking: 'Eyes' });
+
+      expect(overShoulder).toEqual({ isShown: true, input: 'Shoulder' });
+      expect(Schema.is(entry.dependenciesSchema)(overShoulder)).toBe(true);
+      expect(entry.keepAliveEquivalence(throughEyes, overShoulder)).toBe(true);
+      expect(entry.keepAliveEquivalence(throughEyes, hidden)).toBe(false);
+    });
+
+    it.effect('shows nothing while the Model says the stage is not shown', () =>
+      Effect.gen(function* () {
+        const hidden = entry.modelToDependencies({ isShown: false, looking: 'Eyes' });
+
+        const told = yield* entry
+          .dependenciesToStream(hidden, () => hidden)
+          .pipe(
+            Stream.runCollect,
+            Held.holding(resource, yield* Ref.make(Option.none<Session.Joined>())),
+          );
+
+        expect(told).toEqual([]);
+      }),
+    );
+  });
+
   it.effect(
     'says the session is not joined, rather than failing, when the Model believes it is but it is not',
     () =>
