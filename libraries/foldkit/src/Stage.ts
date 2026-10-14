@@ -20,14 +20,15 @@ import type * as Session from '#src/Session.ts';
 export type Options<
   R,
   M = undefined,
+  P = M,
   V = M,
   B extends Controls.Bindings = Controls.Bindings,
-> = Setting<R> & Drawn<R, M, V, B>;
+> = Setting<R> & Drawn<R, M, P, V, B>;
 
 /**
- * The views a stage draws, and the drawing's input, if they read one: what changes only how the game is drawn for this player. What the page keeps, as it keeps its Model, such as through whose eyes they look, `input` gives; what the player's devices change every frame, such as where they look, `played` plays on from it, once each frame the stage draws.
+ * The views a stage draws, and the drawing's input, if they read one: what changes only how the game is drawn for this player. What the page keeps, as it keeps its Model, such as through whose eyes they look, `input` gives; what the player's devices change every frame, such as where they look, `played` plays on, once each frame the stage draws, and gives the views with what the page keeps.
  */
-export type Drawn<R, M, V, B extends Controls.Bindings> =
+export type Drawn<R, M, P, V, B extends Controls.Bindings> =
   | {
       readonly views: ReadonlyArray<View.View<R, undefined>>;
       readonly input?: undefined;
@@ -41,26 +42,28 @@ export type Drawn<R, M, V, B extends Controls.Bindings> =
   | {
       readonly views: ReadonlyArray<View.View<R, V>>;
       readonly input: () => M;
-      readonly played: Played<M, V, B>;
+      readonly played: Played<M, P, V, B>;
     };
 
 /**
- * The drawing's input played on from frame to frame with what the player does, which the page cannot keep in its Model as it changes every frame, such as where a stick turns them to look: from what `start` makes of what the page keeps when the stage is shown, each frame the stage draws, before its views draw, `next` gives the input after `before`, given what the page keeps, the controls `bindings` bind, the seconds the frame covers, and the devices as they are read then, for what no control says, such as where the mouse points. The stage hears the devices as `hearing` says, the mouse over its canvas unless told otherwise, and reads the controls every frame, whatever `next` makes of them, so a press is one only when it is new; `next` is a plain function, and the input holds only what the views read.
+ * What the stage plays on from frame to frame with what the player does, which the page cannot keep in its Model as it changes every frame, such as where a stick turns them to look: from what `start` makes of what the page keeps when the stage is shown, each frame the stage draws, before its views draw, `next` plays it on from `before`, given what the page keeps, the controls `bindings` bind, the seconds the frame covers, and the devices as they are read then, for what no control says, such as where the mouse points. The stage keeps what it plays on, what the controls must remember with it, such as how long since a stick was last touched; `drawing` gives the views only what they read of it, with what the page keeps, as the drawing's input. The stage hears the devices as `hearing` says, the mouse over its canvas unless told otherwise, and reads the controls every frame, whatever `next` makes of them, so a press is one only when it is new; `next` and `drawing` are plain functions.
  */
-export interface Played<M, V, B extends Controls.Bindings> {
+export interface Played<M, P, V, B extends Controls.Bindings> {
   readonly hearing?: Hearing.Options | undefined;
   readonly bindings: B;
-  readonly start: (fromPage: M) => V;
+  readonly start: (fromPage: M) => P;
   readonly next: (
     fromPage: M,
-    before: V,
+    before: P,
     controls: Controls.Read<B>,
     seconds: number,
     devices: Devices.Reading,
-  ) => V;
-  /** What the player demands of the game in each frame drawn, from the input after it and the controls: such as where they head, the stick turned by where the camera faces. The stage sends them, before its views draw. */
+  ) => P;
+  /** The drawing's input of a frame: what the views read of what the page keeps and what the stage played on. */
+  readonly drawing: (fromPage: M, played: P) => V;
+  /** What the player demands of the game in each frame drawn, from what the page keeps, what the stage played on in it, and the controls: such as where they head, the stick turned by where the camera faces. The stage sends them, before its views draw. */
   readonly demands?:
-    | ((input: V, controls: Controls.Read<B>) => ReadonlyArray<Component.Instance>)
+    | ((fromPage: M, played: P, controls: Controls.Read<B>) => ReadonlyArray<Component.Instance>)
     | undefined;
 }
 
@@ -100,6 +103,7 @@ export function show<const Given extends ReadonlyArray<View.View<unknown, M>>, M
 export function show<
   const Given extends ReadonlyArray<View.View<unknown, never>>,
   M,
+  P,
   B extends Controls.Bindings,
   A = never,
 >(
@@ -108,23 +112,23 @@ export function show<
   options: Setting<A> & {
     readonly views: Given;
     readonly input: () => M;
-    readonly played: Played<M, View.InputOf<Given>, B>;
+    readonly played: Played<M, P, View.InputOf<Given>, B>;
     readonly mirror: HTMLElement;
   },
 ): Effect.Effect<void, never, View.NeedsOf<Given> | A | Scope.Scope>;
-export function show<R, M, V, B extends Controls.Bindings>(
+export function show<R, M, P, V, B extends Controls.Bindings>(
   viewport: Viewport.Viewport,
   joined: Session.Joined,
-  options: Options<R, M, V, B> & { readonly mirror: HTMLElement },
+  options: Options<R, M, P, V, B> & { readonly mirror: HTMLElement },
 ): Effect.Effect<void, never, R | Scope.Scope> {
   return shownAs(viewport, joined, options);
 }
 
 /** `joined` shown on `viewport` as `options` draw it, needing what its views and what runs beside it need, together as `R`. */
-const shownAs = <R, M, V, B extends Controls.Bindings>(
+const shownAs = <R, M, P, V, B extends Controls.Bindings>(
   viewport: Viewport.Viewport,
   joined: Session.Joined,
-  options: Options<R, M, V, B> & { readonly mirror: HTMLElement },
+  options: Options<R, M, P, V, B> & { readonly mirror: HTMLElement },
 ): Effect.Effect<void, never, R | Scope.Scope> => {
   if (options.played !== undefined) {
     const { input, played } = options;
@@ -150,9 +154,9 @@ interface Kept<V> {
 /** How a stage keeps the drawing's input, heard through what its viewport holds, until the scope closes. */
 type Frames<V> = (viewport: Viewport.Viewport) => Effect.Effect<Kept<V>, never, Scope.Scope>;
 
-/** The drawing's input `played` plays on from what `input` gives, with the controls read every frame from the devices heard on the window, the mouse over the viewport's canvas. */
+/** The drawing's input of each frame, from what `input` gives and what `played` plays on, with the controls read every frame from the devices heard on the window, the mouse over the viewport's canvas. */
 const playedOn =
-  <M, V, B extends Controls.Bindings>(input: () => M, played: Played<M, V, B>): Frames<V> =>
+  <M, P, V, B extends Controls.Bindings>(input: () => M, played: Played<M, P, V, B>): Frames<V> =>
   (viewport) =>
     Effect.gen(function* () {
       const hearing = yield* Hearing.make(window, {
@@ -162,14 +166,15 @@ const playedOn =
           (heard) => ({ area: viewport.canvas, ...heard }),
         ),
       });
-      const kept = { input: played.start(input()), controls: Controls.start(played.bindings) };
+      const kept = { played: played.start(input()), controls: Controls.start(played.bindings) };
       return {
-        now: () => kept.input,
+        now: () => played.drawing(input(), kept.played),
         advance: (seconds) => {
           const devices = hearing.read();
+          const fromPage = input();
           kept.controls = Controls.read(played.bindings, devices, kept.controls);
-          kept.input = played.next(input(), kept.input, kept.controls, seconds, devices);
-          return played.demands?.(kept.input, kept.controls) ?? [];
+          kept.played = played.next(fromPage, kept.played, kept.controls, seconds, devices);
+          return played.demands?.(fromPage, kept.played, kept.controls) ?? [];
         },
       };
     });
@@ -296,6 +301,7 @@ export function stream<
   Service,
   const Given extends ReadonlyArray<View.View<unknown, never>>,
   M,
+  P,
   B extends Controls.Bindings,
   A = never,
 >(
@@ -303,11 +309,11 @@ export function stream<
     Showing<Message, Service> & {
       readonly views: Given;
       readonly input: () => M;
-      readonly played: Played<M, View.InputOf<Given>, B>;
+      readonly played: Played<M, P, View.InputOf<Given>, B>;
     },
 ): Stream.Stream<Message, never, Service | Exclude<View.NeedsOf<Given> | A, Scope.Scope>>;
-export function stream<Message, Service, R, M, V, B extends Controls.Bindings>(
-  options: Options<R, M, V, B> & Showing<Message, Service>,
+export function stream<Message, Service, R, M, P, V, B extends Controls.Bindings>(
+  options: Options<R, M, P, V, B> & Showing<Message, Service>,
 ): Stream.Stream<Message, never, Service | Exclude<R, Scope.Scope>> {
   return streamed(options);
 }
@@ -321,8 +327,8 @@ export interface Showing<Message, Service> {
 }
 
 /** A stage's Stream, needing what its views and what runs beside it need, together as `R`. */
-const streamed = <Message, Service, R, M, V, B extends Controls.Bindings>(
-  options: Options<R, M, V, B> & Showing<Message, Service>,
+const streamed = <Message, Service, R, M, P, V, B extends Controls.Bindings>(
+  options: Options<R, M, P, V, B> & Showing<Message, Service>,
 ): Stream.Stream<Message, never, Service | Exclude<R, Scope.Scope>> =>
   run({
     resource: options.resource,
@@ -380,6 +386,7 @@ export function entry<
   Service,
   const Given extends ReadonlyArray<View.View<unknown, never>>,
   M,
+  P,
   B extends Controls.Bindings,
   A = never,
 >(
@@ -387,18 +394,18 @@ export function entry<
     Showing<Message, Service> & {
       readonly views: Given;
       readonly input: Followed<Model, M>;
-      readonly played: Played<M, View.InputOf<Given>, B>;
+      readonly played: Played<M, P, View.InputOf<Given>, B>;
       readonly shows: (model: Model) => boolean;
     },
 ): Entry<Model, Message, Service | Exclude<View.NeedsOf<Given> | A, Scope.Scope>, M>;
-export function entry<Model, Message, Service, R, M, V, B extends Controls.Bindings>(
+export function entry<Model, Message, Service, R, M, P, V, B extends Controls.Bindings>(
   options: Setting<R> &
     Showing<Message, Service> & {
       readonly input: Followed<Model, M>;
       readonly shows: (model: Model) => boolean;
     } & (
       | { readonly views: ReadonlyArray<View.View<R, M>>; readonly played?: undefined }
-      | { readonly views: ReadonlyArray<View.View<R, V>>; readonly played: Played<M, V, B> }
+      | { readonly views: ReadonlyArray<View.View<R, V>>; readonly played: Played<M, P, V, B> }
     ),
 ): Entry<Model, Message, Service | Exclude<R, Scope.Scope>, M> {
   const { input } = options;

@@ -301,12 +301,11 @@ describe('a stage', () => {
           input: () => page.through,
           played: {
             bindings: { turn: Controls.button({ key: 'ArrowLeft' }) },
-            start: (through) => ({ through, yaw: 0 }),
+            start: () => 0,
             // Turned left at a radian a second while the left arrow is held.
-            next: (through, before, controls, seconds) => ({
-              through,
-              yaw: before.yaw + (controls.values.button('turn').held ? seconds : 0),
-            }),
+            next: (_through, yaw, controls, seconds) =>
+              yaw + (controls.values.button('turn').held ? seconds : 0),
+            drawing: (through, yaw) => ({ through, yaw }),
           },
         });
         yield* Effect.sleep('200 millis');
@@ -322,6 +321,50 @@ describe('a stage', () => {
         expect(turned).toBeGreaterThan(0.15);
         expect(viewport.camera.rotation.y).toBeCloseTo(turned);
         expect(viewport.camera.position.z).toBeCloseTo(5);
+      }).pipe(Effect.scoped),
+  );
+
+  it.live(
+    'keeps what the controls must remember apart from what its views read, which it gives them of what the page keeps and what it played on',
+    () =>
+      Effect.gen(function* () {
+        const { joined } = yield* joinedLamp;
+        const { viewport } = yield* played;
+        /** How far the player turned to the left, and how long the left arrow has been held: it turns them only once held a quarter of a second. */
+        interface Turning {
+          readonly yaw: number;
+          readonly held: number;
+        }
+        const turning = View.rig(
+          [],
+          (camera, _held, _frame, _drawn, { yaw }: { readonly yaw: number }) => {
+            camera.rotation.set(0, yaw, 0);
+          },
+        );
+
+        yield* Stage.show(viewport, joined, {
+          views: [lamps, turning],
+          mirror: document.createElement('div'),
+          input: () => undefined,
+          played: {
+            bindings: { turn: Controls.button({ key: 'ArrowLeft' }) },
+            start: (): Turning => ({ yaw: 0, held: 0 }),
+            next: (_page, before, controls, seconds) => {
+              const held = controls.values.button('turn').held ? before.held + seconds : 0;
+              return { held, yaw: before.yaw + (held > 0.25 ? seconds : 0) };
+            },
+            drawing: (_page, { yaw }) => ({ yaw }),
+          },
+        });
+        yield* Effect.sleep('100 millis');
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));
+        yield* Effect.sleep('500 millis');
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowLeft' }));
+        yield* Effect.sleep('100 millis');
+
+        // Turned for the time it was held past a quarter of a second, not all of it.
+        expect(viewport.camera.rotation.y).toBeGreaterThan(0.05);
+        expect(viewport.camera.rotation.y).toBeLessThan(0.4);
       }).pipe(Effect.scoped),
   );
 
@@ -347,13 +390,11 @@ describe('a stage', () => {
           input: () => page.heeding,
           played: {
             bindings: { jump: Controls.button({ key: 'Space' }) },
-            start: (heeding) => ({ heeding, jumps: 0 }),
+            start: () => 0,
             // Not heeding the player, the page makes nothing of the controls.
-            next: (heeding, before, controls) => ({
-              heeding,
-              jumps:
-                heeding && controls.values.button('jump').pressed ? before.jumps + 1 : before.jumps,
-            }),
+            next: (heeding, jumps, controls) =>
+              heeding && controls.values.button('jump').pressed ? jumps + 1 : jumps,
+            drawing: (heeding, jumps) => ({ heeding, jumps }),
           },
         });
         yield* Effect.sleep('150 millis');
@@ -374,7 +415,7 @@ describe('a stage', () => {
   );
 
   it.live(
-    "sends the game the demands of each frame it draws, from the drawing's input and the controls, such as where the player heads",
+    'sends the game the demands of each frame it draws, from what the page keeps, what the stage played on, and the controls, such as where the player heads',
     () =>
       Effect.gen(function* () {
         const { joined } = yield* joinedLamp;
@@ -392,10 +433,11 @@ describe('a stage', () => {
           input: () => 0.5,
           played: {
             bindings: { ahead: Controls.button({ key: 'KeyW' }) },
-            start: (yaw) => ({ yaw }),
-            next: (yaw) => ({ yaw }),
+            start: () => undefined,
+            next: () => undefined,
+            drawing: (yaw) => ({ yaw }),
             // Heading where the camera faces while the player walks ahead, and nowhere else.
-            demands: ({ yaw }, controls) =>
+            demands: (yaw, _played, controls) =>
               controls.values.button('ahead').held ? [Heading.of({ angle: yaw })] : [],
           },
         });

@@ -77,14 +77,12 @@ export const subscriptions = Subscription.make<Model, Message, Services>()((entr
     alongside: capturedAs(host),
     shows: (model: Model) => model.session._tag === 'Joined' && model.session.canvas === 'Mounted',
     input: { schema: CubesView.Viewpoint, of: (model: Model) => model.viewpoint },
-    // Looking around changes every frame, which the Model never holds: the stage plays it on from the stick each frame it draws.
+    // Looking around changes every frame, which the Model never holds: the stage plays it on from the stick each frame it draws, and the views read it with where the player looks from.
     played: {
       bindings: Look.bindings,
-      start: (viewpoint) => ({ viewpoint, look: Look.start }),
-      next: (viewpoint, before, controls, seconds) => ({
-        viewpoint,
-        look: Look.look(controls, before.look, seconds),
-      }),
+      start: () => Look.start,
+      next: (_viewpoint, before, controls, seconds) => Look.look(controls, before, seconds),
+      drawing: (viewpoint, look) => ({ viewpoint, look }),
     },
     onNotJoined: (): Message => Message.LeftGame(),
     onFailed: (reason) => Message.FailedShowGame({ reason }),
