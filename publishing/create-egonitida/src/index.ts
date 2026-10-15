@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // What `npm create egonitida` prints until it can create a project: that it cannot yet, and EgoNitida's official channels.
-import manifest from './package.json' with { type: 'json' };
+import manifest from '../package.json' with { type: 'json' };
 
 console.log(`create-egonitida ${manifest.version}
 New projects cannot be created until EgoNitida is released.

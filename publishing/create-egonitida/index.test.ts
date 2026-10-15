@@ -2,9 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from '@effect/vitest';
 
 /** What `npm create egonitida` prints, run as npm runs its command. */
-const printed = execFileSync(process.execPath, [new URL('index.js', import.meta.url).pathname], {
-  encoding: 'utf8',
-});
+const printed = execFileSync(
+  process.execPath,
+  [new URL('src/index.ts', import.meta.url).pathname],
+  {
+    encoding: 'utf8',
+  },
+);
 
 describe('create-egonitida', () => {
   it('says new projects cannot be created until EgoNitida is released', () => {

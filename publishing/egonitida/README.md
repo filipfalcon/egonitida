@@ -1,10 +1,27 @@
 # egonitida
 
-EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. Conceived as an agentic-first platform, it serves individuals and teams alike, while remaining fully accessible to those who prefer to work without an agent. The `egonitida` command offers a convenient point of access to official EgoNitida resources. Further information is available at https://egonitida.com.
+EgoNitida is a real-time 3D engine built on <a href="https://effect.website/" target="_blank" rel="noopener noreferrer">Effect</a>, <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a>, and <a href="https://foldkit.dev/" target="_blank" rel="noopener noreferrer">Foldkit</a>. Conceived as an agentic-first platform, it serves individuals and teams alike, while remaining fully accessible to those who prefer to work without an agent.
 
-```bash
+The `egonitida` package provides the `egonitida` command, a convenient point of access to official EgoNitida resources. The engine itself is distributed as a set of packages under the `@egonitida` scope.
+
+## Usage
+
+```sh
 npx egonitida
 ```
+
+## Requirements
+
+- **Operating system:** macOS, Linux, or Windows.
+- **Node.js 24.15 or newer**, with npm, which provides `npx`.
+
+## Links
+
+- [Website](https://egonitida.com): news and information about EgoNitida.
+- [Source](https://github.com/filipfalcon/egonitida): the engine's repository, issues, and feature requests.
+- [Packages](https://www.npmjs.com/org/egonitida): every official EgoNitida package.
+- [Discord](https://discord.gg/F3YkynckH): questions, feedback, and conversation with the community.
+- [X](https://x.com/egonitida), [Instagram](https://www.instagram.com/egonitida), and [Threads](https://www.threads.net/@egonitida): updates from EgoNitida.
 
 ## License
 

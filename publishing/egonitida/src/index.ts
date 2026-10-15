@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // What `npx egonitida` prints: EgoNitida's version and where to find it.
-import manifest from './package.json' with { type: 'json' };
+import manifest from '../package.json' with { type: 'json' };
 
 console.log(`EgoNitida ${manifest.version}
 A real-time 3D engine built on Effect, Three.js, and Foldkit.

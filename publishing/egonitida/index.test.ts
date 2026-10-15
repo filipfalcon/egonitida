@@ -3,9 +3,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from '@effect/vitest';
 
 /** What `npx egonitida` prints, run as npm runs its command. */
-const printed = execFileSync(process.execPath, [new URL('index.js', import.meta.url).pathname], {
-  encoding: 'utf8',
-});
+const printed = execFileSync(
+  process.execPath,
+  [new URL('src/index.ts', import.meta.url).pathname],
+  {
+    encoding: 'utf8',
+  },
+);
 
 const { version } = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8'));
 

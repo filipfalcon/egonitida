@@ -16,14 +16,18 @@
     "url": "git+https://github.com/filipfalcon/egonitida.git"
   },
   "bin": {
-    "egonitida": "index.js"
+    "egonitida": "dist/index.mjs"
   },
   "files": [
-    "index.js",
+    "dist",
     "README.md",
     "LICENSE"
   ],
   "type": "module",
+  "scripts": {
+    "build": "vp pack src/index.ts",
+    "prepack": "vp pack src/index.ts"
+  },
   "engines": {
     "node": ">=24.15"
   }
