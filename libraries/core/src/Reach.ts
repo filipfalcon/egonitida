@@ -274,3 +274,255 @@ export const limb = (
     facingShort: Maths.acos(Math.min(Math.max(dot(normal, unit(facing.toward)), -1), 1)),
   };
 };
+
+/** How far a trunk is asked to turn about its length, bend forward, and lean to the side, in radians, each spread over its joints. */
+export interface Trunk {
+  readonly joints: ReadonlyArray<string>;
+  readonly turn: number;
+  readonly bend: number;
+  readonly side: number;
+}
+
+/** A trunk's pose reached: the pose, and how far short of each it fell, in radians. */
+export interface Spread {
+  readonly pose: Pose.Pose;
+  readonly short: { readonly turn: number; readonly bend: number; readonly side: number };
+}
+
+/** How far the joint `name` turns about `axis` toward the sign of `asked`, at `pose`: what its range lets it, nothing for a way it does not turn. */
+const reachOf = (
+  joints: Joint.Joints,
+  pose: Pose.Pose,
+  name: string,
+  axis: Joint.Axis,
+  asked: number,
+) => {
+  const limits = Joint.limitsAt(joints, pose.turns, name);
+  const range =
+    axis === 'flex' ? Option.some(limits.flex) : axis === 'abduct' ? limits.abduct : limits.twist;
+  return Option.match(range, {
+    onNone: () => 0,
+    onSome: ([min, max]) => (asked >= 0 ? Math.max(max, 0) : Math.max(-min, 0)),
+  });
+};
+
+/**
+ * `pose` with a trunk's turn, bend, and lean spread over `ask.joints`, each segment taking a share as large as how far it turns that way, as the spine spreads them: the lumbar spine bends far and hardly turns, the thoracic spine turns. Those axes of those joints are set, the rest left as they are, and the pose clamped. Asked beyond them all, each turns as far as it does, and it says how far short.
+ */
+export const spine = (joints: Joint.Joints, pose: Pose.Pose, ask: Trunk): Spread => {
+  const asked: ReadonlyArray<readonly [Joint.Axis, number]> = [
+    ['twist', ask.turn],
+    ['flex', ask.bend],
+    ['abduct', ask.side],
+  ];
+  let turns = pose.turns;
+  for (const [axis, total] of asked) {
+    const reaches = ask.joints.map((name) => reachOf(joints, pose, name, axis, total));
+    const all = reaches.reduce((sum, reach) => sum + reach, 0);
+    ask.joints.forEach((name, at) => {
+      const reach = reaches[at] ?? 0;
+      const share =
+        all === 0 ? 0 : Math.abs(total) >= all ? Math.sign(total) * reach : (total * reach) / all;
+      turns = { ...turns, [name]: { ...(turns[name] ?? Joint.still), [axis]: share } };
+    });
+  }
+  const clamped = Pose.clamp(joints, { ...pose, turns });
+  const reached = (axis: Joint.Axis) =>
+    ask.joints.reduce((sum, name) => sum + Joint.angleOf(clamped.turns, name, axis), 0);
+  return {
+    pose: clamped,
+    short: {
+      turn: Math.abs(ask.turn - reached('twist')),
+      bend: Math.abs(ask.bend - reached('flex')),
+      side: Math.abs(ask.side - reached('abduct')),
+    },
+  };
+};
+
+/** Where to look, and with what: the point `at`, in the model's space; the eyes, their `forward` the way each looks in its own frame; and the joints of the neck, from the one nearest the body, which turn the head for what the eyes cannot reach. */
+export interface Look {
+  readonly at: Ray.Point;
+  readonly eyes: ReadonlyArray<string>;
+  readonly forward: Ray.Point;
+  readonly neck: ReadonlyArray<string>;
+}
+
+/** A look reached: the pose, and how far short of looking at the point the eyes fell, in radians, the most of any eye. */
+export interface Looked {
+  readonly pose: Pose.Pose;
+  readonly short: number;
+}
+
+/** How many times the eyes and the neck are each turned toward what they look at: enough for the head's turn carrying the eyes along to settle. */
+const LOOK_PASSES = 3;
+
+/** The angle between two directions. */
+const angleBetween = (a: Ray.Point, b: Ray.Point) =>
+  Maths.acos(Math.min(Math.max(dot(unit(a), unit(b)), -1), 1));
+
+/** How far `eye` looks short of `at` at `pose`, and the way it looks and the way to the point, in the model's space. */
+const gazeOf = (
+  bones: Shape.Bones,
+  joints: Joint.Joints,
+  pose: Pose.Pose,
+  eye: string,
+  ask: Look,
+) => {
+  const placed = Pose.place(bones, joints, pose)[eye];
+  if (placed === undefined) {
+    return Option.none();
+  }
+  const looking = unit(Quaternion.rotate(placed.turn, ask.forward));
+  const toward = unit(less(ask.at, placed.at));
+  return Option.some({ placed, looking, toward, short: angleBetween(looking, toward) });
+};
+
+/**
+ * `pose` with the eyes looking at `ask.at`: the eyes first, as far as they turn; then, for what they cannot reach, the neck, its turn, bend, and lean spread over its joints as `spine` spreads them, the head carrying the eyes along; and the eyes again, a fixed number of passes. Says how far short the eyes fell.
+ */
+export const look = (
+  bones: Shape.Bones,
+  joints: Joint.Joints,
+  pose: Pose.Pose,
+  ask: Look,
+): Looked => {
+  const [eye] = ask.eyes;
+  const [base] = ask.neck;
+  const eyesOn = (now: Pose.Pose) =>
+    ask.eyes.reduce((looked, name) => {
+      const gaze = gazeOf(bones, joints, looked, name, ask);
+      return Option.match(gaze, {
+        onNone: () => looked,
+        onSome: ({ toward }) =>
+          Pose.clamp(
+            joints,
+            faced(bones, joints, looked, {
+              bone: name,
+              normal: ask.forward,
+              toward,
+              turning: [name],
+            }),
+          ),
+      });
+    }, now);
+  let now = eyesOn(pose);
+  for (let pass = 0; pass < LOOK_PASSES && eye !== undefined && base !== undefined; pass++) {
+    const gaze = gazeOf(bones, joints, now, eye, ask);
+    const baseJoint = joints[base];
+    const basePlaced = Pose.place(bones, joints, now)[base];
+    if (Option.isNone(gaze) || baseJoint === undefined || basePlaced === undefined) {
+      break;
+    }
+    if (gaze.value.short < 1e-9) {
+      break;
+    }
+    // What the eyes cannot reach, the neck turns: the whole turn from where they look to the point, less as far as they still turn.
+    const whole = Quaternion.between(gaze.value.looking, gaze.value.toward);
+    const ahead = eyesOn(now);
+    const left = Option.match(gazeOf(bones, joints, ahead, eye, ask), {
+      onNone: () => 0,
+      onSome: ({ short }) => short,
+    });
+    const share = gaze.value.short === 0 ? 0 : left / gaze.value.short;
+    const neckTurn = Quaternion.slerp(Quaternion.identity, whole, share);
+    // In the frame the neck turns in, as its turn about its length, its bend, and its lean.
+    const frame = frameOf(basePlaced, baseJoint, anglesIn(now, base));
+    const local = Quaternion.multiply(
+      Quaternion.multiply(Quaternion.invert(frame), neckTurn),
+      frame,
+    );
+    const twistAxis = Option.getOrElse(baseJoint.axes.twist, () => ({ x: 0, y: 1, z: 0 }));
+    const { swing, twist } = Quaternion.swingTwist(local, twistAxis);
+    const twisted = Quaternion.axisAngle(twist);
+    const swung = Quaternion.axisAngle(swing);
+    const along = (axis: Ray.Point, of: { axis: Ray.Point; angle: number }) =>
+      of.angle * dot(of.axis, axis);
+    const sum = (axis: Joint.Axis) =>
+      ask.neck.reduce((total, name) => total + Joint.angleOf(now.turns, name, axis), 0);
+    now = spine(joints, now, {
+      joints: ask.neck,
+      turn: sum('twist') + along(twistAxis, twisted),
+      bend: sum('flex') + along(baseJoint.axes.flex, swung),
+      side:
+        sum('abduct') +
+        Option.match(baseJoint.axes.abduct, {
+          onNone: () => 0,
+          onSome: (axis) => along(axis, swung),
+        }),
+    }).pose;
+    now = eyesOn(now);
+  }
+  const short = ask.eyes.reduce(
+    (most, name) =>
+      Math.max(
+        most,
+        Option.match(gazeOf(bones, joints, now, name, ask), {
+          onNone: () => 0,
+          onSome: (gaze) => gaze.short,
+        }),
+      ),
+    0,
+  );
+  return { pose: now, short };
+};
+
+/** A figure asked to stand over one foot: the limb she stands on, from its root's joint to the foot. */
+export interface Balance {
+  readonly stance: { readonly root: string; readonly end: string };
+}
+
+/** How many times the figure is moved over her standing foot, and that foot reached back to where it stood: enough for her legs' turning to settle. */
+const BALANCE_PASSES = 6;
+
+/**
+ * `pose` with the whole figure moved along the ground so her centre of mass stands over the foot she stands on, lowered as far as that leg needs to reach the ground it stood on, and that leg reaching back to where its foot stood, so it stays planted; a fixed number of passes, as each reach moves her mass a little.
+ */
+export const balance = (
+  bones: Shape.Bones,
+  joints: Joint.Joints,
+  pose: Pose.Pose,
+  ask: Balance,
+): Pose.Pose => {
+  const planted = Pose.place(bones, joints, pose)[ask.stance.end];
+  if (planted === undefined) {
+    return pose;
+  }
+  let now = pose;
+  for (let pass = 0; pass < BALANCE_PASSES; pass++) {
+    const centre = Pose.centreOfMass(bones, joints, now);
+    if (Option.isNone(centre)) {
+      return now;
+    }
+    const across = {
+      x: planted.at.x - centre.value.x,
+      z: planted.at.z - centre.value.z,
+    };
+    const placed = Pose.place(bones, joints, now);
+    const hip = placed[ask.stance.root];
+    const middle = Option.getOrUndefined(
+      Option.flatMap(Option.fromNullishOr(bones[ask.stance.end]), ({ parent }) => parent),
+    );
+    const knee = middle === undefined ? undefined : placed[middle];
+    const foot = placed[ask.stance.end];
+    // As low as the leg needs, at full stretch, to stand on the ground it stood on.
+    const lower =
+      hip === undefined || knee === undefined || foot === undefined
+        ? 0
+        : (() => {
+            const stretch = length(less(knee.at, hip.at)) + length(less(foot.at, knee.at));
+            const aside = Maths.hypot(
+              hip.at.x + across.x - planted.at.x,
+              hip.at.z + across.z - planted.at.z,
+            );
+            const height = hip.at.y - planted.at.y;
+            const most = aside >= stretch ? 0 : Math.sqrt(stretch * stretch - aside * aside);
+            return Math.max(height - most, 0);
+          })();
+    const moved = {
+      ...now,
+      at: { x: now.at.x + across.x, y: now.at.y - lower, z: now.at.z + across.z },
+    };
+    now = limb(bones, joints, moved, { ...ask.stance, to: planted.at }).pose;
+  }
+  return now;
+};
