@@ -147,7 +147,7 @@ const between = (a: Pose.Pose['at'], b: Pose.Pose['at'], t: number) => ({
 });
 
 /**
- * Her whole body posed as her feet are headed, `aim` says: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed; and, as far as the swinging foot has gone, she stands over the other, her legs reaching again from there.
+ * Her whole body posed as her feet are headed, `aim` says: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed, its knee ahead and its sole to the ground as far as her ankle turns; and, as far as the swinging foot has gone, she stands over the other, as far as the swinging leg still reaches from there.
  */
 export const poseOf = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
   const away = (foot: 'left' | 'right') => {
@@ -189,31 +189,47 @@ export const poseOf = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
       flex: degrees(4) * lean,
     },
   }).pose;
+  // Each leg reaching where its foot is headed, its knee bending ahead, its sole kept to the ground as far as her ankle turns; how far short the swinging one fell.
   const legs = (pose: Pose.Pose) => {
-    const reach = (posed: Pose.Pose, suffix: string, to: Pose.Pose['at']) =>
-      Reach.limb(Body.bones, Body.joints, posed, {
+    const reach = (posed: Pose.Pose, suffix: string, to: Pose.Pose['at']) => {
+      const sole = Body.touches[`sole_${suffix}`];
+      return Reach.limb(Body.bones, Body.joints, posed, {
         root: `thigh_${suffix}`,
         end: `foot_${suffix}`,
         to,
         swivel: { x: to.x, y: to.y + 0.4, z: to.z + 1 },
-      }).pose;
-    return reach(reach(pose, 'l', aim.left), 'r', aim.right);
+        facing:
+          sole === undefined
+            ? undefined
+            : {
+                bone: sole.bone,
+                normal: sole.normal,
+                toward: { x: 0, y: -1, z: 0 },
+                turning: [`foot_${suffix}`, `subtalar_${suffix}`],
+              },
+      });
+    };
+    const left = reach(pose, 'l', aim.left);
+    const right = reach(left.pose, 'r', aim.right);
+    return { pose: right.pose, short: swinging === 'l' ? left.short : right.short };
   };
   const reached = legs(trunk);
   if (lean === 0) {
-    return Pose.follow(Body.bones, Body.joints, reached);
+    return Pose.follow(Body.bones, Body.joints, reached.pose);
   }
-  // Over the foot she stands on, as far as the other has gone, her legs reaching again from there; her shoulders and the bones that twist with her following last.
+  // Over the foot she stands on, as far as the other has gone, but no further than the swinging leg still reaches where it is headed from there, her lean halved until it does; her shoulders and the bones that twist with her following last.
   const stance = swinging === 'l' ? 'r' : 'l';
-  const balanced = Reach.balance(Body.bones, Body.joints, reached, {
+  const balanced = Reach.balance(Body.bones, Body.joints, reached.pose, {
     stance: { root: `thigh_${stance}`, end: `foot_${stance}` },
     passes: 2,
   });
-  return Pose.follow(
-    Body.bones,
-    Body.joints,
-    legs({ ...reached, at: between(reached.at, balanced.at, lean) }),
-  );
+  const leaning = (share: number, tries: number): Pose.Pose => {
+    const leant = legs({ ...reached.pose, at: between(reached.pose.at, balanced.at, share) });
+    return leant.short <= reached.short + 0.002 || tries === 0
+      ? leant.pose
+      : leaning(share / 2, tries - 1);
+  };
+  return Pose.follow(Body.bones, Body.joints, leaning(lean, 3));
 };
 
 // RULES

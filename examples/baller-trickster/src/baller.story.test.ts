@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Chain, type Component, Game, Pose, State, Story } from '@lightocean/core';
+import { Chain, type Component, Game, Pose, Quaternion, State, Story } from '@lightocean/core';
 import { Option } from 'effect';
 import * as Baller from '#src/baller.ts';
 import * as Body from '#src/body.ts';
@@ -136,6 +136,26 @@ describe('her whole body', () => {
     expect(apart(placed['foot_r']?.at, Body.standing.right)).toBeLessThan(0.01);
     // Her pelvis gone toward her right foot.
     expect(pose.at.x).toBeLessThan(0);
+  });
+
+  it('keeps a swinging foot pointing ahead and its sole to the ground', () => {
+    const placing = Pose.placer(Body.bones, Body.joints, swung(1));
+    const toe = Body.touches['toe_l'];
+    const sole = Body.touches['sole_l'];
+    const toeBone = toe === undefined ? undefined : placing(toe.bone);
+    const soleBone = sole === undefined ? undefined : placing(sole.bone);
+    const ahead =
+      toe === undefined || toeBone === undefined
+        ? { x: NaN, y: NaN, z: NaN }
+        : Quaternion.rotate(toeBone.turn, toe.normal);
+    const down =
+      sole === undefined || soleBone === undefined
+        ? { x: NaN, y: NaN, z: NaN }
+        : Quaternion.rotate(soleBone.turn, sole.normal);
+
+    // Her toe within ten degrees of straight ahead, her sole within ten of straight down.
+    expect(ahead.z).toBeGreaterThan(Math.cos((10 * Math.PI) / 180));
+    expect(-down.y).toBeGreaterThan(Math.cos((10 * Math.PI) / 180));
   });
 
   it('turns her shoulders as her arms rise, as her model says they follow', () => {
