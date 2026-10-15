@@ -93,6 +93,9 @@ const twist = {
   ],
 };
 
+/** A hair tie as the model writes it: fixed to the bone above it, turning by no motion. */
+const tie = { kind: 'fixed', motions: {}, order: [], depends: [], follows: [] };
+
 /** A leg whose bones carry `joints` and `flesh` as their extras, by name, the root none. */
 const leg = (
   joints: Readonly<Record<string, unknown>>,
@@ -171,6 +174,13 @@ describe('Joints.read', () => {
     expect(follower?.joint.kind).toBe('Follower');
     expect(follower?.joint.follows[0]?.motion).toBe('rotate');
     expect(follower?.joint.follows[0]?.on).toEqual({ bone: 'thigh_l', motion: 'rotate' });
+  });
+
+  it('reads a joint fixed to the bone above it, with no motion', () => {
+    const [, fixed] = Result.getOrThrow(Joints.read(leg({ thigh_l: hipAlone, calf_l: tie })));
+
+    expect(fixed?.joint.kind).toBe('Fixed');
+    expect(fixed?.joint.order).toEqual([]);
   });
 
   it('reads axes that are not square to one another as they are written', () => {

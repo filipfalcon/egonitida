@@ -5,8 +5,8 @@ import type * as Ray from '#src/Ray.ts';
  * A figure's joints as plain data, as anatomy has them: how each bone turns on the one above it and how far, read from her model's file as the game is built (`?joints`, through `@egonitida/vite-plugin`). A joint turns by its motions, each named as anatomy names it, such as a knee's `flex` and `rotate` or an ankle's `dorsiflex`, about an axis in the bone's own frame as made, within a range; its turn is the product of its motions' turns in its `order`, the last turning a direction first, so its axes may be oblique, as anatomical axes often are. Every value is anatomical: nothing is the anatomical position, and `rest` is the value as the model was made. A limit may depend on another joint's motion, as a two-joint muscle makes it, its table giving the bound outright; a motion may follow another joint's motion, or a measure of how a bone lies, such as the arm's elevation the shoulder blade turns up by, its table's value added to the motion's own. Angles are in radians; a step and a view read them alike.
  */
 
-/** How a joint turns: a ball, a hinge, or a saddle, driven; a follower, turned only as it follows; a link of a chain, such as a ponytail's, swung; or free, as a pelvis is, which stands and turns as the whole figure does. */
-export type Kind = 'Ball' | 'Hinge' | 'Saddle' | 'Follower' | 'Chain' | 'Free';
+/** How a joint turns: a ball, a hinge, or a saddle, driven; a follower, turned only as it follows; a link of a chain, such as a ponytail's, swung; free, as a pelvis is, which stands and turns as the whole figure does; or fixed, as a hair tie is, which turns only as the bone above it does. */
+export type Kind = 'Ball' | 'Hinge' | 'Saddle' | 'Follower' | 'Chain' | 'Free' | 'Fixed';
 
 /** The least and the most of a motion, in radians. */
 export type Range = readonly [min: number, max: number];

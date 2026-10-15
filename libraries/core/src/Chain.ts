@@ -22,8 +22,9 @@ export interface Options {
   readonly damping: number;
 }
 
-/** How a chain swings, made by `plan`: the names of its points, its bones then the end of its last; where each stood as made, in the frame of the bone it hangs from; how long each link is; and how it swings. */
+/** How a chain swings, made by `plan`: the bone it hangs from, its first bone's parent, whose placing pins it, or none for a chain that hangs from nothing; the names of its points, its bones then the end of its last; where each stood as made, in the frame of the bone it hangs from; how long each link is; and how it swings. */
 export interface Plan {
+  readonly from: Option.Option<string>;
   readonly names: ReadonlyArray<string>;
   readonly made: ReadonlyArray<Point>;
   readonly lengths: ReadonlyArray<number>;
@@ -60,11 +61,12 @@ export const endOf = (last: string) => `${last}_end`;
  */
 export const plan = (bones: Shape.Bones, names: ReadonlyArray<string>, options: Options): Plan => {
   const [first] = names;
+  const hangsFrom = Option.flatMap(
+    Option.fromNullishOr(first === undefined ? undefined : bones[first]),
+    ({ parent }) => parent,
+  );
   const pin = Option.getOrUndefined(
-    Option.flatMap(
-      Option.fromNullishOr(first === undefined ? undefined : bones[first]),
-      ({ parent }) => Option.flatMap(parent, (name) => Option.fromNullishOr(bones[name])),
-    ),
+    Option.flatMap(hangsFrom, (name) => Option.fromNullishOr(bones[name])),
   );
   const back = pin === undefined ? Quaternion.identity : Quaternion.invert(pin.turn);
   const from = pin === undefined ? { x: 0, y: 0, z: 0 } : pin.at;
@@ -78,6 +80,7 @@ export const plan = (bones: Shape.Bones, names: ReadonlyArray<string>, options: 
   const points = [...at, end];
   const lastName = names[names.length - 1];
   return {
+    from: hangsFrom,
     names: [...names, ...(lastName === undefined ? [] : [endOf(lastName)])],
     made: points.map((point) => Quaternion.rotate(back, less(point, from))),
     lengths: points.map((point, index) => {

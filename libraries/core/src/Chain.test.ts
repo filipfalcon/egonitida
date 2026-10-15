@@ -47,6 +47,26 @@ const swung = (body: Chain.Body, seconds: number, pin: (step: number) => Chain.P
 };
 
 describe('a chain', () => {
+  it('names the bone it hangs from, its first bone’s parent, which its pin is placed by', () => {
+    const tied: Shape.Bones = {
+      ...head,
+      tie: {
+        parent: Option.some('head'),
+        at: { x: 0, y: 1.65, z: -0.05 },
+        turn: Quaternion.identity,
+      },
+      tail_01: {
+        parent: Option.some('tie'),
+        at: { x: 0, y: 1.65, z: -0.1 },
+        turn: Quaternion.identity,
+      },
+    };
+
+    expect(ponytail.from).toEqual(Option.some('head'));
+    expect(Chain.plan(tied, ['tail_01'], ponytail.options).from).toEqual(Option.some('tie'));
+    expect(Chain.plan(head, ['head'], ponytail.options).from).toEqual(Option.none());
+  });
+
   it('starts as it was made, pinned where its first bone is on the bone it hangs from', () => {
     const body = Chain.start(ponytail, pinned());
 

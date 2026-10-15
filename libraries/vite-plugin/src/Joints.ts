@@ -76,6 +76,7 @@ const KINDS: Readonly<Record<string, Joint.Kind>> = {
   follower: 'Follower',
   chain: 'Chain',
   free: 'Free',
+  fixed: 'Fixed',
 };
 
 /** Degrees, as radians. */
