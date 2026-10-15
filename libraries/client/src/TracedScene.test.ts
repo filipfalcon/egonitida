@@ -672,6 +672,25 @@ describe('a scene gathered with how its surfaces face and its pictures', () => {
     expect(Array.from(flat.placed.slice(base + 28, base + 32))).toEqual([1, 0, 0.5, -0.5]);
   });
 
+  it('gathers the picture a material’s glow is painted with, among the pictures of colours', () => {
+    const colours = new Three.Texture();
+    const glow = new Three.Texture();
+    const scene = new Three.Scene();
+    const glowing = new Three.Mesh(
+      new Three.BoxGeometry(1, 1, 1),
+      new Three.MeshStandardMaterial({ map: colours, emissive: 0x7c7c7c, emissiveMap: glow }),
+    );
+    glowing.position.z = -5;
+    scene.add(glowing);
+
+    const flat = TracedScene.gathering().gather(scene, camera);
+    const hit = Option.getOrThrow(TracedScene.trace(flat, [0, 0, 0], [0, 0, -1], 100));
+    const base = hit.placed * TracedScene.PLACED;
+
+    expect(flat.pictures).toEqual([colours, glow]);
+    expect(Array.from(flat.placed.slice(base + 32, base + 34))).toEqual([1, 1]);
+  });
+
   it('faces a mesh bent each frame as its corners turn, smoothly between them', () => {
     const geometry = new Three.SphereGeometry(1, 32, 16);
     geometry.morphAttributes['position'] = [

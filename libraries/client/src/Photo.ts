@@ -304,7 +304,13 @@ export const take = (
           .element(base.add(3))
           .xyz.mul(select(surface.and(painting.x.greaterThan(0.5)), painted, vec3(1)))
           .toVar();
-        const glow = device.placed.node.element(base.add(4)).xyz;
+        // The light it gives off, times its picture's where a picture paints it, as Three's emissive map does.
+        const glowing = device.placed.node.element(base.add(8)).toVar();
+        const glowLayer = int(glowing.y);
+        const glowPainted = texture(layers, placedIn(glowLayer)).depth(glowLayer).level(int(0)).xyz;
+        const glow = device.placed.node
+          .element(base.add(4))
+          .xyz.mul(select(glowing.x.greaterThan(0.5), glowPainted, vec3(1)));
         light.addAssign(carried.mul(glow));
         const point = from.add(way.mul(met.x)).toVar();
         If(surface.not().and(dot(along, along).greaterThan(0.5)), () => {

@@ -10,8 +10,8 @@ import * as Hairing from '#src/Hairing.ts';
 /** How many numbers each triangle, or each link of a strand, takes: a triangle's three corners, four numbers each, the fourth nothing; a link's start, four numbers, the fourth a whole, which tells it from a triangle; its end, four numbers, the fourth how far about the line between them it reaches; and four more of nothing. */
 export const TRIANGLE = 12;
 
-/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0, hair 1, or matte 2, how rough it is, how metal a surface is or how rough hair is about itself, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts, or, for a surface or something matte, whether a picture paints it, 1 or 0, and which of the scene's pictures; and, for a surface, whether a finish paints how rough it is, 1, how metal, 2, both, 3, or neither, 0, and which of the scene's finishes; and, for a surface or something matte, whether a relief tilts it, 1 or 0, which of the scene's finishes it is, and how far it tilts it across and down its picture. */
-export const PLACED = 32;
+/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0, hair 1, or matte 2, how rough it is, how metal a surface is or how rough hair is about itself, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts, or, for a surface or something matte, whether a picture paints it, 1 or 0, and which of the scene's pictures; and, for a surface, whether a finish paints how rough it is, 1, how metal, 2, both, 3, or neither, 0, and which of the scene's finishes; and, for a surface or something matte, whether a relief tilts it, 1 or 0, which of the scene's finishes it is, and how far it tilts it across and down its picture; and whether a picture paints the light it gives off, 1 or 0, which of the scene's pictures, and two numbers of nothing. */
+export const PLACED = 36;
 
 /** What a placed shape is made of, as light meets it: a surface, as rough and as metal as it is, from nothing to a whole, shining as Three's standard material does; matte, with no shine at all, as Lambert has it; or hair, taking light in as `absorption` says for every strand's width it goes through, as rough along it and about it as it is, its cuticle tilted as far as `tilt` says, in radians, bending light as `ior` says. */
 export type Material =
@@ -105,7 +105,7 @@ export const strandsOf = (
   };
 };
 
-/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, what it is made of, `matte` unless said, which of the scene's pictures paints its colour, if any, as its corners say where they lie in it, and which of its finishes paints how rough and how metal it is, if any. */
+/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, what it is made of, `matte` unless said, which of the scene's pictures paints its colour, if any, as its corners say where they lie in it, and which of its finishes paints how rough and how metal it is, if any, and which of its pictures paints the light it gives off, times that light, if any. */
 export interface Placed {
   readonly shape: number;
   readonly matrix: Three.Matrix4;
@@ -116,6 +116,7 @@ export interface Placed {
   readonly picture?: number;
   readonly finish?: Finish;
   readonly relief?: Relief;
+  readonly glow?: number;
 }
 
 /** Which of a scene's finishes tilts a surface as a relief, as a normal map does, and how far, across its picture and down it, as Three's `normalScale` says. */
@@ -280,6 +281,7 @@ export const flattenPlaced = (
     flat.set([e[2] ?? 0, e[6] ?? 0, e[10] ?? 0, e[14] ?? 0], base + 8);
     flat.set([...one.colour, roots[one.shape] ?? 0], base + 12);
     flat.set([...one.emissive, one.casts ? 1 : 0], base + 16);
+    flat.set(one.glow === undefined ? [0, 0, 0, 0] : [1, one.glow, 0, 0], base + 32);
     const material = one.material ?? matte;
     const painted = one.picture === undefined ? [0, 0] : [1, one.picture];
     if (material._tag === 'Surface') {
@@ -822,7 +824,7 @@ const surfaceOf = (material: Three.Material): Material => {
 /** The picture `material` holds as `key`, if any. */
 const pictureOf = (
   material: Three.Material,
-  key: 'map' | 'roughnessMap' | 'metalnessMap' | 'normalMap',
+  key: 'map' | 'roughnessMap' | 'metalnessMap' | 'normalMap' | 'emissiveMap',
 ): Option.Option<Three.Texture> => {
   const map: unknown = Reflect.get(material, key);
   return map instanceof Three.Texture ? Option.some(map) : Option.none();
@@ -965,6 +967,7 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
           () => [0, 0, 0] as const,
         );
         const painted = Option.map(pictureOf(material, 'map'), pictures.numberOf);
+        const glowing = Option.map(pictureOf(material, 'emissiveMap'), pictures.numberOf);
         // Three's standard material reads how rough it is and how metal from a picture each, which a model loaded usually makes one.
         const rough = pictureOf(material, 'roughnessMap');
         const metal = pictureOf(material, 'metalnessMap');
@@ -999,9 +1002,13 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
             onNone: () => withPicture,
             onSome: (finish) => ({ ...withPicture, finish }),
           });
-          return Option.match(relief, {
+          const withRelief = Option.match(relief, {
             onNone: () => withFinish,
             onSome: (tilted) => ({ ...withFinish, relief: tilted }),
+          });
+          return Option.match(glowing, {
+            onNone: () => withRelief,
+            onSome: (glow) => ({ ...withRelief, glow }),
           });
         };
         if (object instanceof Three.InstancedMesh) {
