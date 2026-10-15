@@ -1,7 +1,7 @@
 {
-  "name": "egonitida",
+  "name": "create-egonitida",
   "version": "0.0.1",
-  "description": "EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. The egonitida command provides quick access to official EgoNitida resources.",
+  "description": "EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. The create-egonitida command is the official way to create a new project on EgoNitida.",
   "keywords": [
     "egonitida"
   ],
@@ -14,10 +14,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/egonitida/egonitida.git",
-    "directory": "publishing/egonitida"
+    "directory": "libraries/create-egonitida"
   },
   "bin": {
-    "egonitida": "dist/index.mjs"
+    "create-egonitida": "dist/index.mjs"
   },
   "files": [
     "dist",

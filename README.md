@@ -149,26 +149,28 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 
 ## Repository
 
-| Path                       | What is in it                                                                     |
-| -------------------------- | --------------------------------------------------------------------------------- |
-| `libraries/core`           | The state, components, systems, rules, the game, hosts, clients, and `Story`      |
-| `libraries/client`         | The timeline, interpolation, views, `Viewport`, and `Scene`                       |
-| `libraries/server`         | `Room`: a game hosted in a Durable Object (experimental)                          |
-| `libraries/foldkit`        | A game inside a Foldkit application: `Session`, `Stage`, `Projection`, `Styled`   |
-| `libraries/devtools`       | Recording, replay, the step log, rewinding, and reloading with the state kept     |
-| `libraries/devtools-mcp`   | A running game as MCP tools                                                       |
-| `libraries/vite-plugin`    | The development server as the way tools reach a game                              |
-| `libraries/reflection`     | Schema annotations the editor's Details panel is generated from                   |
-| `libraries/oxlint-plugin`  | Lint rules for what the types cannot enforce                                      |
-| `applications/editor`      | The editor: a document held as a game's state, played and debugged in the browser |
-| `applications/playground`  | Cubes a player asks for and paints, with the page around them in Foldkit          |
-| `applications/website`     | The engine's website, with an ocean of lights on the engine at its top            |
-| `examples/spinning-cube`   | A cube that turns                                                                 |
-| `examples/click-to-colour` | Cubes a click paints                                                              |
-| `examples/save-score`      | A round whose score a rule saves through a command, to a Worker over KV           |
-| `examples/horde`           | Survivors against a horde: several domains, demands, randomness, spawning         |
-| `examples/shared-room`     | Walkers in a room many share across the network, each player's own predicted      |
-| `skills`                   | Agent skills for starting out, adding a domain, and auditing a game               |
+| Path                         | What is in it                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `libraries/core`             | The state, components, systems, rules, the game, hosts, clients, and `Story`      |
+| `libraries/client`           | The timeline, interpolation, views, `Viewport`, and `Scene`                       |
+| `libraries/server`           | `Room`: a game hosted in a Durable Object (experimental)                          |
+| `libraries/foldkit`          | A game inside a Foldkit application: `Session`, `Stage`, `Projection`, `Styled`   |
+| `libraries/devtools`         | Recording, replay, the step log, rewinding, and reloading with the state kept     |
+| `libraries/devtools-mcp`     | A running game as MCP tools                                                       |
+| `libraries/vite-plugin`      | The development server as the way tools reach a game                              |
+| `libraries/reflection`       | Schema annotations the editor's Details panel is generated from                   |
+| `libraries/oxlint-plugin`    | Lint rules for what the types cannot enforce                                      |
+| `libraries/egonitida`        | The `egonitida` command, a point of access to EgoNitida resources                 |
+| `libraries/create-egonitida` | `npm create egonitida`, which will create a new project on EgoNitida              |
+| `applications/editor`        | The editor: a document held as a game's state, played and debugged in the browser |
+| `applications/playground`    | Cubes a player asks for and paints, with the page around them in Foldkit          |
+| `applications/website`       | The engine's website, with an ocean of lights on the engine at its top            |
+| `examples/spinning-cube`     | A cube that turns                                                                 |
+| `examples/click-to-colour`   | Cubes a click paints                                                              |
+| `examples/save-score`        | A round whose score a rule saves through a command, to a Worker over KV           |
+| `examples/horde`             | Survivors against a horde: several domains, demands, randomness, spawning         |
+| `examples/shared-room`       | Walkers in a room many share across the network, each player's own predicted      |
+| `skills`                     | Agent skills for starting out, adding a domain, and auditing a game               |
 
 ## Running it
 
