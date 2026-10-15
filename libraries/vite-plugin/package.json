@@ -16,6 +16,9 @@
     },
     "./joints": {
       "types": "./types/joints.d.ts"
+    },
+    "./touches": {
+      "types": "./types/touches.d.ts"
     }
   },
   "dependencies": {
