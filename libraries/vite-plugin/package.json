@@ -14,6 +14,9 @@
     "./build": {
       "types": "./types/build.d.ts"
     },
+    "./clips": {
+      "types": "./types/clips.d.ts"
+    },
     "./joints": {
       "types": "./types/joints.d.ts"
     },

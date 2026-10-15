@@ -2,6 +2,7 @@ export * as Action from '#src/Action.ts';
 export * as Angle from '#src/Angle.ts';
 export * as Ball from '#src/Ball.ts';
 export * as Client from '#src/Client.ts';
+export * as Clip from '#src/Clip.ts';
 export * as Command from '#src/Command.ts';
 export * as Component from '#src/Component.ts';
 export * as Demand from '#src/Demand.ts';
