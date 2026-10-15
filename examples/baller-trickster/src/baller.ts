@@ -264,12 +264,24 @@ export const poseOf = (
   where: Component.ValueOf<typeof Aim>,
   spot: typeof Ground.Type = { x: 0, z: 0 },
 ): Pose.Pose => {
-  const posed = posedAt({
+  const known = posed.get(where);
+  if (known !== undefined && known.x === spot.x && known.z === spot.z) {
+    return known.pose;
+  }
+  const atOrigin = posedAt({
     left: from({ x: -spot.x, z: -spot.z }, where.left),
     right: from({ x: -spot.x, z: -spot.z }, where.right),
   });
-  return { ...posed, at: from(spot, posed.at) };
+  const pose = { ...atOrigin, at: from(spot, atOrigin.at) };
+  posed.set(where, { x: spot.x, z: spot.z, pose });
+  return pose;
 };
+
+/** The pose last worked out for each aim her feet were headed by, and where she stood for it: a pose is worked out from those alone, so her step, her client, and her drawing, posing her by the same aim, work it out once between them. */
+const posed = new WeakMap<
+  Component.ValueOf<typeof Aim>,
+  { readonly x: number; readonly z: number; readonly pose: Pose.Pose }
+>();
 
 /** Her whole body posed as `poseOf` poses it, standing at the origin, her feet headed where `aim` says from there. */
 const posedAt = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
@@ -503,11 +515,24 @@ export const drawnPoseOf = (
   ball: Option.Option<Pose.Pose['at']>,
 ): Pose.Pose => {
   const pose = poseOf(where, spot);
-  return Option.match(ball, {
-    onNone: () => pose,
-    onSome: (at) => Reach.look(Body.bones, Body.joints, pose, { ...LOOKING, at }).pose,
-  });
+  if (Option.isNone(ball)) {
+    return pose;
+  }
+  const at = ball.value;
+  const known = looked.get(pose);
+  if (known !== undefined && known.x === at.x && known.y === at.y && known.z === at.z) {
+    return known.pose;
+  }
+  const looking = Reach.look(Body.bones, Body.joints, pose, { ...LOOKING, at }).pose;
+  looked.set(pose, { ...at, pose: looking });
+  return looking;
 };
+
+/** How each pose last looked at a ball, and where that ball was: her client and her drawing, looking from the same pose at the same ball, work it out once between them. */
+const looked = new WeakMap<
+  Pose.Pose,
+  { readonly x: number; readonly y: number; readonly z: number; readonly pose: Pose.Pose }
+>();
 
 /** Where the bones carrying her hair are placed, posed as `pose` says, her ponytail's bones where its chain `ponytailBody` swings. */
 export const hairPlacing = (pose: Pose.Pose, ponytailBody: Chain.Body): Pose.Placer => {
