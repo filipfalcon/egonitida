@@ -219,3 +219,15 @@ export const standing = <D extends Dials>(
     Object.entries(bones).map(([name, bone]) => [name, place(name, bone).at]),
   );
 };
+
+/** `bones` shaped by `shape` as `values` say: each standing where `standing` stands it, turned as it was made. */
+export const shaped = <D extends Dials>(
+  shape: Shape<D>,
+  bones: Bones,
+  values: Values<D>,
+): Bones => {
+  const placed = standing(shape, bones, values);
+  return Object.fromEntries(
+    Object.entries(bones).map(([name, bone]) => [name, { ...bone, at: placed[name] ?? bone.at }]),
+  );
+};

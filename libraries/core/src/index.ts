@@ -12,6 +12,7 @@ export * as Input from '#src/Input.ts';
 export * as Joint from '#src/Joint.ts';
 export * as Maths from '#src/Maths.ts';
 export * as Pointing from '#src/Pointing.ts';
+export * as Pose from '#src/Pose.ts';
 export * as Ragdoll from '#src/Ragdoll.ts';
 export * as Quaternion from '#src/Quaternion.ts';
 export * as Random from '#src/Random.ts';
