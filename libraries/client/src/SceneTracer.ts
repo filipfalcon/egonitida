@@ -48,7 +48,9 @@ import * as TracedScene from '#src/TracedScene.ts';
 export interface Held {
   /** The shader's view of the buffer. */
   readonly node: Three.StorageBufferNode<'vec4'>;
-  /** Writes `values` into the buffer from its start, growing it first if they do not fit: a grown buffer is a new one, which shaders reading it are built anew for. Says whether it grew. */
+  /** A view of the buffer a shader writes through, such as one posing a scene's shapes on the device. */
+  readonly writable: Three.StorageBufferNode<'vec4'>;
+  /** Writes `values` into the buffer from its start, growing it first if they do not fit: a grown buffer is a new one, which shaders reading it are built anew for. The very values written last are not written again, so what the device wrote over them stands. Says whether it grew. */
   readonly write: (values: Float32Array) => boolean;
 }
 
@@ -58,18 +60,29 @@ const attributeOf = (capacity: number) =>
 
 /** A buffer of four numbers at a time, room for `capacity` groups to begin with. */
 export const held = (capacity: number): Held => {
-  const kept = { attribute: attributeOf(capacity) };
+  const kept: { attribute: Three.StorageBufferAttribute; last: Option.Option<Float32Array> } = {
+    attribute: attributeOf(capacity),
+    last: Option.none(),
+  };
   const node = storage(kept.attribute, 'vec4', kept.attribute.count).toReadOnly();
+  const writable = storage(kept.attribute, 'vec4', kept.attribute.count);
   return {
     node,
+    writable,
     write: (values) => {
+      if (Option.exists(kept.last, (last) => last === values)) {
+        return false;
+      }
+      kept.last = Option.some(values);
       const needed = Math.ceil(values.length / 4);
       const grew = needed > kept.attribute.count;
       if (grew) {
         // Twice what is needed, so a scene that grows a little at a time is not moved each frame.
         kept.attribute = attributeOf(needed * 2);
-        node.value = kept.attribute;
-        node.bufferCount = kept.attribute.count;
+        for (const view of [node, writable]) {
+          view.value = kept.attribute;
+          view.bufferCount = kept.attribute.count;
+        }
       }
       kept.attribute.array.set(values);
       kept.attribute.needsUpdate = true;

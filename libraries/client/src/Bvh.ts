@@ -373,3 +373,44 @@ export const threaded = (hierarchy: Hierarchy): Float32Array => {
   }
   return out;
 };
+
+/** A threaded hierarchy's nodes in an order a refit can follow level by level: every node once, by how high it stands over the leaves beneath it, the leaves first, so each comes after every node it holds, and where each level starts in that order and how many nodes it holds. Levels of many hierarchies at the same height can be refitted together. */
+export interface Levels {
+  readonly order: Uint32Array;
+  readonly levels: ReadonlyArray<{ readonly start: number; readonly count: number }>;
+}
+
+/** How high each node of `nodes`, a hierarchy as `threaded` lays it out, stands over its leaves: a leaf, or a root holding nothing, at nought, an inner node one over the higher of its children, the node after it and the node that follows everything that one holds. */
+export const heightsOf = (nodes: Float32Array): Uint32Array => {
+  const count = nodes.length / THREADED;
+  const heights = new Uint32Array(count);
+  // Children lie after their parents, so walking back finds every child's height before its parent's.
+  for (let node = count - 1; node >= 0; node -= 1) {
+    const holds = (nodes[node * THREADED + 7] ?? 0) === 0 && node + 1 < count;
+    if (!holds) {
+      continue;
+    }
+    const left = node + 1;
+    const right = nodes[left * THREADED + 3] ?? -1;
+    const rightHeight = right >= 0 && right < count ? (heights[right] ?? 0) : 0;
+    heights[node] = Math.max(heights[left] ?? 0, rightHeight) + 1;
+  }
+  return heights;
+};
+
+/** The levels of `nodes`, a hierarchy as `threaded` lays it out. */
+export const levelsOf = (nodes: Float32Array): Levels => {
+  const heights = heightsOf(nodes);
+  const highest = heights.reduce((most, height) => Math.max(most, height), 0);
+  const byHeight = Array.from({ length: highest + 1 }, (): Array<number> => []);
+  heights.forEach((height, node) => byHeight[height]?.push(node));
+  const order = new Uint32Array(heights.length);
+  const levels: Array<{ readonly start: number; readonly count: number }> = [];
+  let start = 0;
+  for (const level of byHeight) {
+    order.set(level, start);
+    levels.push({ start, count: level.length });
+    start += level.length;
+  }
+  return { order, levels };
+};

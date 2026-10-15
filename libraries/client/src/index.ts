@@ -19,6 +19,7 @@ export * as Navigation from '#src/Navigation.ts';
 export * as Posing from '#src/Posing.ts';
 export * as Hairing from '#src/Hairing.ts';
 export * as Photo from '#src/Photo.ts';
+export * as Poser from '#src/Poser.ts';
 export * as Ragdolling from '#src/Ragdolling.ts';
 export * as RayTracing from '#src/RayTracing.ts';
 export * as Scene from '#src/Scene.ts';

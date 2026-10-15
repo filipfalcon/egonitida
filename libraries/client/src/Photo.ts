@@ -38,6 +38,7 @@ import * as Three from 'three/webgpu';
 import * as Denoiser from '#src/Denoiser.ts';
 import * as HairTracer from '#src/HairTracer.ts';
 import * as PathTracer from '#src/PathTracer.ts';
+import * as Poser from '#src/Poser.ts';
 import * as SceneTracer from '#src/SceneTracer.ts';
 import * as SurfaceTracer from '#src/SurfaceTracer.ts';
 import * as TracedScene from '#src/TracedScene.ts';
@@ -222,9 +223,10 @@ export const take = (
     const { renderer, scene, camera } = viewport;
     const developing = developingOf(renderer, told);
     const device = SceneTracer.onDevice();
-    // Her hair too, every strand where it is drawn now.
-    const flat = TracedScene.gathering({ strands: true }).gather(scene, camera);
+    // Her hair too, every strand where it is drawn now; and what bones and morphs bend laid at rest, posed by the device as it is bent now, so the photograph is taken at once.
+    const flat = TracedScene.gathering({ strands: true, posing: 'OnDevice' }).gather(scene, camera);
     device.write(flat);
+    Poser.make(renderer, device).pose(flat);
     const lighting = PathTracer.lightingOf(scene);
     // Pictures of colours, kept as the colours they show; and finishes, how rough and how metal, kept as the numbers they hold.
     const layers = layersOf(flat.pictures, Three.SRGBColorSpace);

@@ -715,6 +715,95 @@ describe('a scene gathered with how its surfaces face and its pictures', () => {
     );
   });
 
+  /** The box over every placed shape, as the top hierarchy's root holds it: its least corner and its greatest. */
+  const placedBoxOf = (flat: TracedScene.Flat) => ({
+    min: new Three.Vector3(flat.placedNodes[0], flat.placedNodes[1], flat.placedNodes[2]),
+    max: new Three.Vector3(flat.placedNodes[4], flat.placedNodes[5], flat.placedNodes[6]),
+  });
+
+  /** Where every corner of `mesh` stands now, posed, in the scene. */
+  const posedCorners = (mesh: Three.Mesh) =>
+    Array.from({ length: mesh.geometry.getAttribute('position').count }, (_, at) =>
+      mesh.getVertexPosition(at, new Three.Vector3()).applyMatrix4(mesh.matrixWorld),
+    );
+
+  it('gathers a mesh bent by morphs, to be posed on the device, as it stands at rest, built once, in a box holding it however bent', () => {
+    const geometry = new Three.BoxGeometry(1, 1, 1);
+    geometry.morphAttributes['position'] = [
+      new Three.Float32BufferAttribute(
+        new Float32Array(geometry.getAttribute('position').count * 3).map((_, value) =>
+          value % 3 === 0 ? 0.5 : 0,
+        ),
+        3,
+      ),
+    ];
+    geometry.morphTargetsRelative = true;
+    const box = new Three.Mesh(geometry, new Three.MeshStandardMaterial());
+    box.morphTargetInfluences = [0];
+    const scene = new Three.Scene();
+    scene.add(box);
+    const gathering = TracedScene.gathering({ posing: 'OnDevice' });
+
+    const atRest = gathering.gather(scene, camera);
+    box.morphTargetInfluences = [1];
+    const bent = gathering.gather(scene, camera);
+
+    // Laid once, at rest: the device poses it.
+    expect(bent.triangles).toBe(atRest.triangles);
+    expect(
+      Math.max(...Array.from(bent.triangles).filter((_, value) => value % 4 === 0)),
+    ).toBeCloseTo(0.5, 6);
+    expect(bent.posed).toHaveLength(1);
+    expect(bent.posed[0]?.mesh).toBe(box);
+    expect(bent.posed[0]?.firstTriangle).toBe(0);
+    expect(bent.posed[0]?.order).toHaveLength(12);
+    const { min, max } = placedBoxOf(bent);
+    for (const corner of posedCorners(box)) {
+      expect(corner.x).toBeLessThanOrEqual(max.x + 1e-6);
+      expect(corner.x).toBeGreaterThanOrEqual(min.x - 1e-6);
+    }
+  });
+
+  it('holds a mesh bent by its bones, to be posed on the device, in a box however its bones turn', () => {
+    const geometry = new Three.BoxGeometry(0.2, 2, 0.2, 1, 4, 1);
+    geometry.translate(0, 1, 0);
+    const position = geometry.getAttribute('position');
+    const indices: Array<number> = [];
+    const weights: Array<number> = [];
+    for (let at = 0; at < position.count; at++) {
+      const upper = position.getY(at) > 1 ? 1 : 0;
+      indices.push(upper, 0, 0, 0);
+      weights.push(1, 0, 0, 0);
+    }
+    geometry.setAttribute('skinIndex', new Three.Uint16BufferAttribute(indices, 4));
+    geometry.setAttribute('skinWeight', new Three.Float32BufferAttribute(weights, 4));
+    const root = new Three.Bone();
+    const elbow = new Three.Bone();
+    elbow.position.y = 1;
+    root.add(elbow);
+    const arm = new Three.SkinnedMesh(geometry, new Three.MeshStandardMaterial());
+    arm.add(root);
+    arm.bind(new Three.Skeleton([root, elbow]));
+    const scene = new Three.Scene();
+    scene.add(arm);
+    const gathering = TracedScene.gathering({ posing: 'OnDevice' });
+    gathering.gather(scene, camera);
+
+    // Bent at the elbow, its forearm out to the side.
+    elbow.rotation.z = -Math.PI / 2;
+    scene.updateMatrixWorld();
+    arm.skeleton.update();
+    const bent = gathering.gather(scene, camera);
+
+    const { min, max } = placedBoxOf(bent);
+    for (const corner of posedCorners(arm)) {
+      expect(corner.x).toBeLessThanOrEqual(max.x + 1e-6);
+      expect(corner.x).toBeGreaterThanOrEqual(min.x - 1e-6);
+      expect(corner.y).toBeLessThanOrEqual(max.y + 1e-6);
+    }
+    expect(max.x).toBeGreaterThan(0.9);
+  });
+
   it.effect(
     'gathers the hair a model draws as its strands where they are drawn now, when asked',
     () =>

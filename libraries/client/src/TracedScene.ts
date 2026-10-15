@@ -105,7 +105,7 @@ export const strandsOf = (
   };
 };
 
-/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, what it is made of, `matte` unless said, which of the scene's pictures paints its colour, if any, as its corners say where they lie in it, and which of its finishes paints how rough and how metal it is, if any, and which of its pictures paints the light it gives off, times that light, if any. */
+/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, what it is made of, `matte` unless said, which of the scene's pictures paints its colour, if any, as its corners say where they lie in it, and which of its finishes paints how rough and how metal it is, if any, which of its pictures paints the light it gives off, times that light, if any, and, for a shape posed elsewhere than it is laid, such as on the graphics device, a box in its own space that holds it however it is posed now. */
 export interface Placed {
   readonly shape: number;
   readonly matrix: Three.Matrix4;
@@ -117,6 +117,7 @@ export interface Placed {
   readonly finish?: Finish;
   readonly relief?: Relief;
   readonly glow?: number;
+  readonly bounds?: Bvh.Box;
 }
 
 /** Which of a scene's finishes tilts a surface as a relief, as a normal map does, and how far, across its picture and down it, as Three's `normalScale` says. */
@@ -142,6 +143,16 @@ export interface Flat {
   readonly placedCount: number;
   readonly pictures: ReadonlyArray<Three.Texture>;
   readonly finishes: ReadonlyArray<Three.Texture>;
+  readonly posed: ReadonlyArray<PosedOnDevice>;
+}
+
+/** A mesh laid at rest, for the graphics device to pose as its bones and morphs bend it: which mesh, where its triangles start among all of them, where its hierarchy's nodes start and how many it has, and which of its triangles each of its laid triangles is, in the order they lie. */
+export interface PosedOnDevice {
+  readonly mesh: Three.Mesh;
+  readonly firstTriangle: number;
+  readonly firstNode: number;
+  readonly nodes: number;
+  readonly order: Uint32Array;
 }
 
 /** Lays `shapes` flat, their nodes naming where their children and triangles lie among all of them. */
@@ -152,6 +163,7 @@ export const flattenShapes = (
   readonly triangles: Float32Array;
   readonly corners: Float32Array;
   readonly roots: ReadonlyArray<number>;
+  readonly firstTriangles: ReadonlyArray<number>;
 } => {
   const threads = shapes.map(({ hierarchy }) => Bvh.threaded(hierarchy));
   const nodeCount = threads.reduce((sum, thread) => sum + thread.length, 0);
@@ -160,6 +172,7 @@ export const flattenShapes = (
   const triangles = new Float32Array(triangleCount * TRIANGLE);
   const corners = new Float32Array(triangleCount * CORNERS);
   const roots: Array<number> = [];
+  const firstTriangles: Array<number> = [];
   let nodeAt = 0;
   let triangleAt = 0;
   shapes.forEach((shape, index) => {
@@ -167,6 +180,7 @@ export const flattenShapes = (
     const thread = threads[index] ?? new Float32Array(0);
     const firstNode = nodeAt / Bvh.THREADED;
     roots.push(firstNode);
+    firstTriangles.push(triangleAt);
     shapeNodes.set(thread, nodeAt);
     for (let node = 0; node < thread.length / Bvh.THREADED; node += 1) {
       const at = nodeAt + node * Bvh.THREADED;
@@ -213,7 +227,7 @@ export const flattenShapes = (
     nodeAt += thread.length;
     triangleAt += hierarchy.order.length;
   });
-  return { shapeNodes, triangles, corners, roots };
+  return { shapeNodes, triangles, corners, roots, firstTriangles };
 };
 
 const corner = new Three.Vector3();
@@ -260,9 +274,11 @@ export const flattenPlaced = (
     return one !== undefined && countOf(one) > 0;
   });
   const boxes = new Float32Array(
-    kept.flatMap(({ shape, matrix }) => {
+    kept.flatMap(({ shape, matrix, bounds }) => {
       const hierarchy = shapes[shape]?.hierarchy;
-      return hierarchy === undefined ? [0, 0, 0, 0, 0, 0] : placedBox(Bvh.boxOf(hierarchy), matrix);
+      return hierarchy === undefined
+        ? [0, 0, 0, 0, 0, 0]
+        : placedBox(bounds ?? Bvh.boxOf(hierarchy), matrix);
     }),
   );
   const hierarchy = Bvh.build(boxes, kept.length);
@@ -329,6 +345,7 @@ export const flatten = (
     placedCount: top.count,
     pictures,
     finishes,
+    posed: [],
   };
 };
 
@@ -876,10 +893,94 @@ const versionOf = (geometry: Three.BufferGeometry) =>
     geometry.drawRange.count,
   ].join(':');
 
-/** What a gathering gathers besides meshes: the strands of the hair drawn, if `strands`, where they are drawn now, built anew every time, so best asked for once, as a photograph is. */
+/** What a gathering gathers besides meshes, and how: the strands of the hair drawn, if `strands`, where they are drawn now, built anew every time, so best asked for once, as a photograph is; and where a mesh bent by its bones or morphs is posed, `Here`, every frame, unless told `OnDevice`, laid once at rest and posed by the graphics device, as `Poser` poses it, in a box its bones hold. */
 export interface GatheringOptions {
   readonly strands?: boolean;
+  readonly posing?: 'Here' | 'OnDevice';
 }
+
+/** How far what a bent mesh draws may lie from its rest: from its bones, as far as any corner lies from a bone it follows at rest, and from its rest for every morph, as far as the morph moves any corner, each as far as it is turned. */
+interface Reach {
+  readonly bones: number;
+  readonly morphs: Float32Array;
+}
+
+const restBone = new Three.Matrix4();
+const boneAt = new Three.Vector3();
+const cornerAt = new Three.Vector3();
+
+/** How far what `mesh` draws may lie from its bones and from its rest. */
+const reachOf = (mesh: Three.Mesh): Reach => {
+  const geometry = mesh.geometry;
+  const position = geometry.getAttribute('position');
+  const morphs = geometry.morphAttributes['position'] ?? [];
+  const reaches = new Float32Array(morphs.length);
+  morphs.forEach((morph, target) => {
+    let furthest = 0;
+    for (let at = 0; at < morph.count; at += 1) {
+      const moved = cornerAt.fromBufferAttribute(morph, at);
+      if (!geometry.morphTargetsRelative) {
+        moved.sub(boneAt.fromBufferAttribute(position, at));
+      }
+      furthest = Math.max(furthest, moved.length());
+    }
+    reaches[target] = furthest;
+  });
+  if (!(mesh instanceof Three.SkinnedMesh)) {
+    return { bones: 0, morphs: reaches };
+  }
+  const { skeleton } = mesh;
+  // Where each bone stands at rest, in the mesh's own space, as its skinning has it.
+  const rests = skeleton.boneInverses.map((inverse) =>
+    new Three.Vector3().applyMatrix4(
+      restBone.copy(inverse).invert().premultiply(mesh.bindMatrixInverse),
+    ),
+  );
+  const index = geometry.getAttribute('skinIndex');
+  const weight = geometry.getAttribute('skinWeight');
+  let furthest = 0;
+  for (let at = 0; at < position.count; at += 1) {
+    cornerAt.fromBufferAttribute(position, at);
+    for (let which = 0; which < 4; which += 1) {
+      if (weight.getComponent(at, which) > 0) {
+        const rest = rests[index.getComponent(at, which)];
+        furthest = Math.max(furthest, rest === undefined ? 0 : rest.distanceTo(cornerAt));
+      }
+    }
+  }
+  return { bones: furthest, morphs: reaches };
+};
+
+/** A box in `mesh`'s own space holding what it draws however its bones and morphs bend it now: about its bones where they stand, as far as its corners reach from them, or about its rest box `rest`, and further for every morph turned. */
+const boundsOf = (mesh: Three.Mesh, rest: Bvh.Box, reach: Reach): Bvh.Box => {
+  const influences = mesh.morphTargetInfluences ?? [];
+  const morphed = Array.from(reach.morphs).reduce(
+    (sum, furthest, target) => sum + Math.abs(influences[target] ?? 0) * furthest,
+    0,
+  );
+  if (!(mesh instanceof Three.SkinnedMesh)) {
+    return {
+      min: [rest.min[0] - morphed, rest.min[1] - morphed, rest.min[2] - morphed],
+      max: [rest.max[0] + morphed, rest.max[1] + morphed, rest.max[2] + morphed],
+    };
+  }
+  const least = [Infinity, Infinity, Infinity];
+  const greatest = [-Infinity, -Infinity, -Infinity];
+  for (const bone of mesh.skeleton.bones) {
+    boneAt.setFromMatrixPosition(bone.matrixWorld).applyMatrix4(mesh.bindMatrixInverse);
+    least[0] = Math.min(least[0] ?? 0, boneAt.x);
+    least[1] = Math.min(least[1] ?? 0, boneAt.y);
+    least[2] = Math.min(least[2] ?? 0, boneAt.z);
+    greatest[0] = Math.max(greatest[0] ?? 0, boneAt.x);
+    greatest[1] = Math.max(greatest[1] ?? 0, boneAt.y);
+    greatest[2] = Math.max(greatest[2] ?? 0, boneAt.z);
+  }
+  const far = reach.bones + morphed;
+  return {
+    min: [(least[0] ?? 0) - far, (least[1] ?? 0) - far, (least[2] ?? 0) - far],
+    max: [(greatest[0] ?? 0) + far, (greatest[1] ?? 0) + far, (greatest[2] ?? 0) + far],
+  };
+};
 
 /** A gathering of scenes for rays, which keeps the shapes it built while they stay as they are; and gathers the hair drawn too, if `options` ask it to. */
 export const gathering = (options: GatheringOptions = {}): Gathering => {
@@ -888,6 +989,12 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
     { readonly shape: Triangles; readonly version: string }
   >();
   const posed = new WeakMap<Three.Mesh, Triangles>();
+  const onDevice = options.posing === 'OnDevice';
+  // Meshes laid at rest for the device to pose, and how far what they draw reaches.
+  const atRest = new WeakMap<
+    Three.Mesh,
+    { readonly shape: Triangles; readonly reach: Reach; readonly nodes: number }
+  >();
   const laid: {
     shapes: ReadonlyArray<Shape>;
     flat: ReturnType<typeof flattenShapes>;
@@ -895,6 +1002,20 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
 
   /** The shape `mesh` draws now: kept, posed anew, or built for a geometry that changed. */
   const drawnShapeOf = (mesh: Three.Mesh): Shape => {
+    if (isPosed(mesh) && onDevice) {
+      const kept = atRest.get(mesh);
+      if (kept !== undefined) {
+        return kept.shape;
+      }
+      const { positions, corners } = drawnOf(mesh, false);
+      const shape = shapeOf(positions, corners);
+      atRest.set(mesh, {
+        shape,
+        reach: reachOf(mesh),
+        nodes: Bvh.threaded(shape.hierarchy).length / Bvh.THREADED,
+      });
+      return shape;
+    }
     if (isPosed(mesh)) {
       const { positions, corners } = drawnOf(mesh, true);
       const before = posed.get(mesh);
@@ -925,6 +1046,8 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
       const placed: Array<Placed> = [];
       const pictures = numbering();
       const finishes = numbering();
+      // Each mesh laid at rest once, however many times it is placed.
+      const posedMeshes: Array<Three.Mesh> = [];
       scene.traverseVisible((object) => {
         if (options.strands === true && object.layers.test(camera.layers)) {
           Option.map(Hairing.tracedOf(object), ({ points, widths, perStrand, shading }) => {
@@ -955,6 +1078,9 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
           return;
         }
         const shape = drawnShapeOf(object);
+        if (onDevice && isPosed(object) && !posedMeshes.includes(object)) {
+          posedMeshes.push(object);
+        }
         const known = indices.get(shape);
         const index = known ?? shapes.length;
         if (known === undefined) {
@@ -986,6 +1112,7 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
           scale: scale instanceof Three.Vector2 ? ([scale.x, scale.y] as const) : ([1, 1] as const),
         }));
         const placing = (matrix: Three.Matrix4): Placed => {
+          const rest = onDevice ? atRest.get(object) : undefined;
           const plain = {
             shape: index,
             matrix,
@@ -993,6 +1120,10 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
             emissive,
             casts: object.castShadow,
             material: surfaceOf(material),
+            // Posed by the device, it is held in a box its bones and morphs hold now.
+            ...(rest === undefined
+              ? {}
+              : { bounds: boundsOf(object, Bvh.boxOf(rest.shape.hierarchy), rest.reach) }),
           };
           const withPicture = Option.match(painted, {
             onNone: () => plain,
@@ -1040,6 +1171,22 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
         placedCount: top.count,
         pictures: pictures.list,
         finishes: finishes.list,
+        posed: posedMeshes.flatMap((mesh) => {
+          const kept = atRest.get(mesh);
+          const index = kept === undefined ? undefined : indices.get(kept.shape);
+          if (kept === undefined || index === undefined) {
+            return [];
+          }
+          return [
+            {
+              mesh,
+              firstTriangle: laid.flat.firstTriangles[index] ?? 0,
+              firstNode: laid.flat.roots[index] ?? 0,
+              nodes: kept.nodes,
+              order: kept.shape.hierarchy.order,
+            },
+          ];
+        }),
       };
     },
   };

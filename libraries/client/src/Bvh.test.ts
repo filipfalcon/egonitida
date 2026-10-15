@@ -154,3 +154,46 @@ describe('a bounding volume hierarchy', () => {
     expect(items.toSorted((a, b) => a - b)).toEqual(Array.from({ length: 300 }, (_, item) => item));
   });
 });
+
+describe('Bvh.levelsOf', () => {
+  /** A hierarchy over `count` small boxes along a line, threaded. */
+  const threadedOver = (count: number) => {
+    const boxes = new Float32Array(
+      Array.from({ length: count }, (_, item) => [item, 0, 0, item + 0.5, 0.5, 0.5]).flat(),
+    );
+    return Bvh.threaded(Bvh.build(boxes, count));
+  };
+
+  it('orders every node of a threaded hierarchy once, each after the nodes it holds, the leaves first', () => {
+    const nodes = threadedOver(40);
+    const count = nodes.length / Bvh.THREADED;
+
+    const { order, levels } = Bvh.levelsOf(nodes);
+
+    expect(Array.from(order).toSorted((a, b) => a - b)).toEqual(
+      Array.from({ length: count }, (_, node) => node),
+    );
+    expect(levels.reduce((sum, { count: size }) => sum + size, 0)).toBe(count);
+    const placeOf = new Map(Array.from(order).map((node, place) => [node, place]));
+    for (let node = 0; node < count; node++) {
+      if ((nodes[node * Bvh.THREADED + 7] ?? 0) > 0) {
+        continue;
+      }
+      // An inner node's children: the next node, and the one after everything the first holds.
+      const left = node + 1;
+      const right = nodes[left * Bvh.THREADED + 3] ?? -1;
+      expect(placeOf.get(left) ?? Infinity).toBeLessThan(placeOf.get(node) ?? -Infinity);
+      expect(placeOf.get(right) ?? Infinity).toBeLessThan(placeOf.get(node) ?? -Infinity);
+    }
+    // The root last, a level of its own.
+    expect(order[order.length - 1]).toBe(0);
+    expect(levels[levels.length - 1]).toEqual({ start: count - 1, count: 1 });
+  });
+
+  it('orders a hierarchy over nothing as its root alone', () => {
+    const { order, levels } = Bvh.levelsOf(threadedOver(0));
+
+    expect(Array.from(order)).toEqual([0]);
+    expect(levels).toEqual([{ start: 0, count: 1 }]);
+  });
+});
