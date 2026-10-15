@@ -11,6 +11,7 @@ import {
   Reach,
   Rule,
   State,
+  Strands,
   System,
   Touch,
 } from '@egonitida/core';
@@ -18,7 +19,7 @@ import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 
 /**
- * The seventh example: a baller doing tricks with a ball, her legs worked by the player, one stick each. A stick places its foot, ahead and back, out and in, and a trigger lifts it; her hip, knee, and ankle turn as a leg turns to put it there, never further than a leg turns, and the rest of her goes with it: her trunk turning against the swinging leg, her arms swinging against it, her shoulders following her arms, and her weight over the foot she stands on. The state holds only where her feet are headed, as they go toward where the sticks place them at a foot's pace: her pose is worked out from that, by reaching, in the step as in the view, so a touch of the ball is the simulation's to decide. Whatever part of her boot or leg touches the ball strikes it, as fast as that part moves and gripping it as that part grips, and the ball flies, spins, bounces, and rolls; the player puts it back before her at a press, or drops it onto her foot to juggle; and she walks where the player sends her. Her ponytail swings as only her client sees it.
+ * The seventh example: a baller doing tricks with a ball, her legs worked by the player, one stick each. A stick places its foot, ahead and back, out and in, and a trigger lifts it; her hip, knee, and ankle turn as a leg turns to put it there, never further than a leg turns, and the rest of her goes with it: her trunk turning against the swinging leg, her arms swinging against it, her shoulders following her arms, and her weight over the foot she stands on. The state holds only where her feet are headed, as they go toward where the sticks place them at a foot's pace: her pose is worked out from that, by reaching, in the step as in the view, so a touch of the ball is the simulation's to decide. Whatever part of her boot or leg touches the ball strikes it, as fast as that part moves and gripping it as that part grips, and the ball flies, spins, bounces, and rolls; the player puts it back before her at a press, or drops it onto her foot to juggle; and she walks where the player sends her. Her hair swings as only her client sees it: her ponytail as a chain, and the guides her hair is drawn after, tied to her head and down her ponytail, kept out of her head, neck, back, and shoulders.
  */
 
 /** How far a stick places its foot from where it stands: ahead or back, and out or in, at a full tilt, and how high a trigger lifts it, in metres. */
@@ -119,11 +120,28 @@ export const ponytail = Chain.plan(
   { stiffness: 3, limit: (70 * Math.PI) / 180, damping: 0.03 },
 );
 
-/** Her ponytail as her client sees it, swinging from her hair tie as she moves: only the client draws it, so it is its alone, stepped after every step, never sent. */
-export const Hair = Component.make('Hair', Schema.Struct({ body: Chain.Body }), {
-  owner: 'simulation',
-  network: 'local',
-});
+/** How her hair's guides swing: springing back toward how they were groomed, a point of a whole stiffness a third of the way each tenth of a second, and losing a little of their swing each step. */
+export const swinging: Strands.Options = { stiffness: 30, damping: 0.02 };
+
+/** The bones whose flesh her hair is kept out of: her head, her neck, the top of her back, and her shoulders. */
+export const HAIR_COLLIDES = [
+  'head',
+  'neck_01',
+  'neck_02',
+  'spine_04',
+  'spine_03',
+  'clavicle_l',
+  'clavicle_r',
+  'upperarm_l',
+  'upperarm_r',
+];
+
+/** Her hair as her client sees it, swinging as she moves: her ponytail's chain, swinging from her hair tie, and her hair's guides, tied to her head and down her ponytail. Only the client draws it, so it is its alone, stepped after every step, never sent. */
+export const Hair = Component.make(
+  'Hair',
+  Schema.Struct({ body: Chain.Body, guides: Strands.Body }),
+  { owner: 'simulation', network: 'local' },
+);
 
 /** Her feet at rest, where they stand. */
 export const idle: Component.ValueOf<typeof Feet> = {
@@ -471,29 +489,53 @@ const play = System.make({
   },
 });
 
-/** Her ponytail swings from her hair tie as the step poses her: tied to it where it was made, the rest trailing as she moves. */
+/** Where the bones carrying her hair are placed, posed as her feet are headed where she stands, her ponytail's bones where its chain `ponytailBody` swings. */
+export const hairPlacing = (
+  where: Component.ValueOf<typeof Aim>,
+  spot: typeof Ground.Type,
+  ponytailBody: Chain.Body,
+): Pose.Placer => {
+  const posed = Pose.placer(Body.bones, Body.joints, poseOf(where, spot));
+  const tie = Option.getOrUndefined(Option.map(ponytail.from, posed));
+  const swung =
+    tie === undefined ? () => undefined : Chain.placing(ponytail, ponytailBody, Body.bones, tie);
+  return (name) => swung(name) ?? posed(name);
+};
+
+/** Her hair swings as the step poses her: her ponytail from her hair tie, tied to it where it was made, the rest trailing as she moves; and her hair's guides, tied where her head and her ponytail hold them, kept out of her head, neck, back, and shoulders. */
 const swingHair = System.make({
   name: 'swingHair',
   reads: [Aim, Spot],
   writes: [Hair],
   emits: [],
   run: (context) => {
+    const seconds = context.time.secondsPerStep;
     for (const [baller, aim, spot] of context.query(Aim, Spot)) {
-      const placing = Pose.placer(Body.bones, Body.joints, poseOf(aim, spot));
-      const tie = Option.getOrUndefined(Option.map(ponytail.from, placing));
+      const posed = Pose.placer(Body.bones, Body.joints, poseOf(aim, spot));
+      const tie = Option.getOrUndefined(Option.map(ponytail.from, posed));
       if (tie === undefined) {
         continue;
       }
-      context.set(
-        baller,
-        Hair,
-        Option.match(context.get(baller, Hair), {
-          onNone: () => ({ body: Chain.start(ponytail, tie) }),
-          onSome: ({ body }) => ({
-            body: Chain.step(ponytail, body, context.time.secondsPerStep, tie),
-          }),
-        }),
-      );
+      const was = Option.getOrUndefined(context.get(baller, Hair));
+      const body =
+        was === undefined
+          ? Chain.start(ponytail, tie)
+          : Chain.step(ponytail, was.body, seconds, tie);
+      const swung = Chain.placing(ponytail, body, Body.bones, tie);
+      const placing: Pose.Placer = (name) => swung(name) ?? posed(name);
+      const guides =
+        was === undefined
+          ? Strands.start(Body.hair.guides, Body.bones, placing)
+          : Strands.step(
+              Body.hair.guides,
+              was.guides,
+              seconds,
+              Body.bones,
+              placing,
+              Strands.capsulesOf(Body.joints, posed, HAIR_COLLIDES),
+              swinging,
+            );
+      context.set(baller, Hair, { body, guides });
     }
   },
 });

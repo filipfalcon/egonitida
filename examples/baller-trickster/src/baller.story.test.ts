@@ -1,5 +1,14 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Chain, type Component, Game, Pose, Quaternion, State, Story } from '@egonitida/core';
+import {
+  Chain,
+  type Component,
+  Game,
+  Pose,
+  Quaternion,
+  State,
+  Story,
+  Strands,
+} from '@egonitida/core';
 import { Option } from 'effect';
 import * as Baller from '#src/baller.ts';
 import * as Body from '#src/body.ts';
@@ -213,6 +222,77 @@ describe('her ponytail', () => {
     expect(
       apart(moving['ponytail_05'], still['ponytail_05'] ?? Body.standing.left),
     ).toBeGreaterThan(0.001);
+  });
+});
+
+describe('her hair', () => {
+  const { guides } = Body.hair;
+
+  /** Her state after `steps` of her client's own steps from `state`. */
+  const stepped = (state: State.State, steps: number) => {
+    let now = state;
+    for (let tick = 1; tick <= steps; tick++) {
+      now = Game.stepLocal(Baller.game, now, { tick });
+    }
+    return now;
+  };
+
+  /** Her guides as her client swings them in `state`, and where her bones carry them as groomed there. */
+  const guidesIn = (state: State.State) => {
+    const aim = Option.getOrThrow(State.get(state, baller, Baller.Aim));
+    const spot = Option.getOrThrow(State.get(state, baller, Baller.Spot));
+    const hair = Option.getOrThrow(State.get(state, baller, Baller.Hair));
+    return {
+      now: hair.guides.now,
+      groomed: Strands.carried(guides, Body.bones, Baller.hairPlacing(aim, spot, hair.body)),
+    };
+  };
+
+  /** Point `index` of `values`. */
+  const pointOf = (values: ReadonlyArray<number>, index: number) => ({
+    x: values[index * 3] ?? NaN,
+    y: values[index * 3 + 1] ?? NaN,
+    z: values[index * 3 + 2] ?? NaN,
+  });
+
+  it('hangs as groomed while she stands still, every root where her head or her ponytail holds it', () => {
+    // Four seconds in: her ponytail's chain starts as it was made and drops under its weight, and her guides settle after it.
+    const { now, groomed } = guidesIn(stepped(joined, 240));
+    const count = now.length / 3;
+
+    let furthest = 0;
+    for (let point = 0; point < count; point++) {
+      const away = apart(pointOf(now, point), pointOf(groomed, point));
+      furthest = Math.max(furthest, away);
+      if (point % guides.points === 0) {
+        expect(away).toBeLessThan(1e-9);
+      }
+    }
+    expect(furthest).toBeLessThan(0.01);
+  });
+
+  it('swings as she moves, her ponytail’s guides with her ponytail', () => {
+    const still = guidesIn(stepped(joined, 30)).now;
+    const kicking = Story.story(
+      Baller.game,
+      standing,
+      Story.demand('baller', Baller.Feet, placing({ y: 1, lift: 1 })),
+      Story.seconds(0.2),
+    );
+
+    const moving = guidesIn(stepped(kicking.state, 12));
+
+    // The last point of the first guide over her scalp, and of the first down her ponytail.
+    const scalpTip = guides.points - 1;
+    const ponytailTip = (guides.scalp + 1) * guides.points - 1;
+    expect(apart(pointOf(moving.now, scalpTip), pointOf(still, scalpTip))).toBeGreaterThan(0.001);
+    expect(apart(pointOf(moving.now, ponytailTip), pointOf(still, ponytailTip))).toBeGreaterThan(
+      0.001,
+    );
+    const ponytailRoot = guides.scalp * guides.points;
+    expect(
+      apart(pointOf(moving.now, ponytailRoot), pointOf(moving.groomed, ponytailRoot)),
+    ).toBeLessThan(1e-9);
   });
 });
 
