@@ -13,6 +13,8 @@ import {
   float,
   floor,
   int,
+  log,
+  max,
   min,
   mix,
   modelViewMatrix,
@@ -32,7 +34,7 @@ import {
 import * as Three from 'three/webgpu';
 
 /**
- * A model's hair drawn as strands after the guides a game swings, y = h(x): the model's own strands, the lines `HairStrands`, each point placed every frame on the graphics device as `Strands.follow` places it, along the guides it follows as far as it is along its own strand, beside them as it was made, turned as their roots have turned. Each strand is lit as hair is, by every light of the scene, as Marschner's model scatters light off it, through it, and back off its inside, along the way it runs (`lobes`, worked out the same on the graphics device). The model's guides, the lines `HairGuides`, and its hair as cards are not shown. Which guides each strand follows is worked out once, as the drawing is built; each frame the drawing is given only where the guides swing and how their roots have turned.
+ * A model's hair drawn as strands after the guides a game swings, y = h(x): the model's own strands, the lines `HairStrands`, each point placed every frame on the graphics device as `Strands.follow` places it, along the guides it follows as far as it is along its own strand, beside them as it was made, turned as their roots have turned. Each strand is lit as hair is, by every light of the scene, as Marschner's model scatters light off it, through it, and back off its inside, along the way it runs (`lobes`, worked out the same on the graphics device), each strand varied in its colour and roughness by its own random number, as the model gives it (`varied`). The model's guides, the lines `HairGuides`, and its hair as cards are not shown. Which guides each strand follows is worked out once, as the drawing is built; each frame the drawing is given only where the guides swing and how their roots have turned.
  */
 
 /** The model has no strands to draw, or not as many as the hair counts, and why. */
@@ -83,6 +85,18 @@ export const absorptionOf = (shading: Strands.Shading): Colour => {
     r: eumelanin * 0.506 + pheomelanin * 0.343 + tinted(red),
     g: eumelanin * 0.841 + pheomelanin * 0.733 + tinted(green),
     b: eumelanin * 1.653 + pheomelanin * 1.924 + tinted(blue),
+  };
+};
+
+/** How a strand of hair shaded as `shading` is shaded, varied by its own random number `random`, from nothing to a whole, as Blender's Principled Hair varies it: its melanin by as much as its colour's randomness says, its roughness, along it and about it, by as much as its roughness's says, either way of a middling number. */
+export const varied = (shading: Strands.Shading, random: number): Strands.Shading => {
+  const colourBy = 1 + 2 * (random - 0.5) * Math.min(Math.max(shading.randomColor, 0), 1);
+  const roughnessBy = 1 + 2 * (random - 0.5) * shading.randomRoughness;
+  return {
+    ...shading,
+    melanin: shading.melanin * colourBy,
+    roughness: shading.roughness * roughnessBy,
+    radialRoughness: shading.radialRoughness * roughnessBy,
   };
 };
 
@@ -224,9 +238,31 @@ const ambientOf = (context: unknown) => {
   return isNode(irradiance) && isNode(diffuse) ? { irradiance, diffuse } : undefined;
 };
 
-/** `lobes` on the graphics device: what light from `toLight` scatters toward the eye, along `toEye`, off a strand shaded as `shading` running along `tangent`, all their lobes added up. */
+/** A strand of hair shaded as `shading` on the graphics device, varied by its own random number `random` as `varied` varies it: how much light it takes in, how wide its lobes spread, and its colour seen through twice. */
+const strandOf = (shading: Strands.Shading, random: Three.Node<'float'>) => {
+  const colourBy = random
+    .sub(0.5)
+    .mul(2 * Math.min(Math.max(shading.randomColor, 0), 1))
+    .add(1);
+  const roughnessBy = random
+    .sub(0.5)
+    .mul(2 * shading.randomRoughness)
+    .add(1);
+  const concentration = log(max(float(1).sub(colourBy.mul(shading.melanin)), 0.0001)).negate();
+  // What its tint takes in alone: as `absorptionOf` has it, of hair holding no melanin.
+  const tinted = absorptionOf({ ...shading, melanin: 0 });
+  const taken = vec3(0.506, 0.841, 1.653)
+    .mul(concentration.mul(1 - shading.melaninRedness))
+    .add(vec3(0.343, 0.733, 1.924).mul(concentration.mul(shading.melaninRedness)))
+    .add(vec3(tinted.r, tinted.g, tinted.b));
+  const rough = max(roughnessBy.mul(shading.roughness), 0.001);
+  return { taken, width: rough.mul(rough), seen: exp(taken.mul(-2)) };
+};
+
+/** `lobes` on the graphics device: what light from `toLight` scatters toward the eye, along `toEye`, off a strand shaded as `shading` and as `strand` varies it, running along `tangent`, all their lobes added up. */
 const scattered = (
   shading: Strands.Shading,
+  strand: ReturnType<typeof strandOf>,
   tangent: Three.Node<'vec3'>,
   toLight: Three.Node<'vec3'>,
   toEye: Three.Node<'vec3'>,
@@ -249,13 +285,11 @@ const scattered = (
     exp(angle.mul(angle).mul(-0.5).div(width.mul(width))).div(width.mul(Math.sqrt(2 * Math.PI)));
   const bending = float(1).div(float(1.19).div(cosHalfDifference).add(cosHalfDifference.mul(0.36)));
   const tilt = Math.sin(shading.offset);
-  const width = Math.max(shading.roughness, 0.001) ** 2;
+  const { width, taken } = strand;
   const along = sinLight.add(sinEye);
-  const taken = absorptionOf(shading);
-  const through = (path: Three.Node<'float'>) =>
-    exp(vec3(taken.r, taken.g, taken.b).mul(path).negate());
+  const through = (path: Three.Node<'float'>) => exp(taken.mul(path).negate());
 
-  const reflected = spreadOf(cosHalfAround.mul(width * Math.SQRT2), along.add(2 * tilt))
+  const reflected = spreadOf(cosHalfAround.mul(width).mul(Math.SQRT2), along.add(2 * tilt))
     .mul(cosHalfAround.mul(0.25))
     .mul(surface(sqrt(saturate(dot(toLight, toEye).mul(0.5).add(0.5)))));
 
@@ -268,14 +302,14 @@ const scattered = (
       .mul(2)
       .div(cosHalfDifference),
   ).mul(
-    spreadOf(float(width / 2), along.sub(tilt))
+    spreadOf(width.div(2), along.sub(tilt))
       .mul(exp(cosAround.mul(-3.65).sub(3.98)))
       .mul(float(1).sub(leaving).mul(float(1).sub(leaving))),
   );
 
   const inside = surface(cosHalfDifference.mul(0.5));
   const internal = through(float(3.2).div(cosHalfDifference)).mul(
-    spreadOf(float(width * 2), along.sub(4 * tilt))
+    spreadOf(width.mul(2), along.sub(4 * tilt))
       .mul(exp(cosAround.mul(17).sub(16.78)))
       .mul(float(1).sub(inside).mul(float(1).sub(inside)).mul(inside)),
   );
@@ -286,21 +320,22 @@ const scattered = (
     .mul(1 - 0.33)
     .add(float(1).sub(abs(sinLight)).mul(0.33))
     .div(Math.PI);
-  const seen = colourOf(shading);
-  const many = vec3(Math.sqrt(seen.r), Math.sqrt(seen.g), Math.sqrt(seen.b)).mul(soft);
+  const many = sqrt(strand.seen).mul(soft);
 
   return transmitted.add(internal).add(reflected).add(many);
 };
 
-/** How a strand is lit: each light scattered off it as `lobes` has it, along the way the strand runs; and the light from everywhere at once taken in and given back as its colour seen through twice. */
+/** How a strand is lit, varied by its own random number: each light scattered off it as `lobes` has it, along the way the strand runs; and the light from everywhere at once taken in and given back as its colour seen through twice. */
 class HairLighting extends Three.LightingModel {
   readonly #shading: Strands.Shading;
   readonly #tangent: Three.Node<'vec3'>;
+  readonly #random: Three.Node<'float'>;
 
-  constructor(shading: Strands.Shading, tangent: Three.Node<'vec3'>) {
+  constructor(shading: Strands.Shading, tangent: Three.Node<'vec3'>, random: Three.Node<'float'>) {
     super();
     this.#shading = shading;
     this.#tangent = tangent;
+    this.#random = random;
   }
 
   override direct({
@@ -310,6 +345,7 @@ class HairLighting extends Three.LightingModel {
   }: Three.LightingModelDirectInput): void {
     const lit = scattered(
       this.#shading,
+      strandOf(this.#shading, this.#random),
       normalize(this.#tangent),
       asVec3(lightDirection),
       positionViewDirection,
@@ -322,9 +358,8 @@ class HairLighting extends Three.LightingModel {
     if (ambient === undefined) {
       return;
     }
-    const colour = colourOf(this.#shading);
     const given = asVec3(ambient.irradiance)
-      .mul(vec3(colour.r, colour.g, colour.b))
+      .mul(strandOf(this.#shading, this.#random).seen)
       .mul(1 / Math.PI);
     ambient.diffuse.assign(asVec3(ambient.diffuse).add(given));
   }
@@ -334,12 +369,14 @@ class HairLighting extends Three.LightingModel {
 class HairMaterial extends Three.LineBasicNodeMaterial {
   readonly #shading: Strands.Shading;
   readonly #tangent: Three.Node<'vec3'>;
+  readonly #random: Three.Node<'float'>;
 
-  constructor(shading: Strands.Shading, tangent: Three.Node<'vec3'>) {
+  constructor(shading: Strands.Shading, tangent: Three.Node<'vec3'>, random: Three.Node<'float'>) {
     super();
     this.lights = true;
     this.#shading = shading;
     this.#tangent = tangent;
+    this.#random = random;
     // A strand has no surface of its own to face a way: lights that ask, such as the sky's, are given the way across it toward the eye.
     const running = normalize(tangent);
     this.normalNode = normalize(
@@ -348,7 +385,7 @@ class HairMaterial extends Three.LineBasicNodeMaterial {
   }
 
   override setupLightingModel(): Three.LightingModel {
-    return new HairLighting(this.#shading, this.#tangent);
+    return new HairLighting(this.#shading, this.#tangent, this.#random);
   }
 }
 
@@ -367,14 +404,23 @@ export class Haired {
     readonly attribute: Three.StorageBufferAttribute;
   };
 
+  readonly #randoms: ReadonlyArray<number>;
+
   constructor(
     bound: ReadonlyArray<Strands.Bound>,
+    randoms: ReadonlyArray<number>,
     now: { readonly values: Float32Array; readonly attribute: Three.StorageBufferAttribute },
     turns: { readonly values: Float32Array; readonly attribute: Three.StorageBufferAttribute },
   ) {
     this.bound = bound;
+    this.#randoms = randoms;
     this.#now = now;
     this.#turns = turns;
+  }
+
+  /** Each drawn strand's own random number, which varies how it is shaded. */
+  randoms(): ReadonlyArray<number> {
+    return this.#randoms;
   }
 
   /** Draws the strands after the guides swung to `now`, three numbers a point, the bone carrying each guide's root turned as `turns` say since it was made. */
@@ -439,12 +485,18 @@ export const fit = (
 
     const drawnMade = buffer(position.count);
     padded(madeAt, drawnMade.values);
+    // Each strand's own random number, as its root has it in the model, or a middling one.
+    const random = drawn.geometry.getAttribute('_random');
+    const randoms = Array.from({ length: strands }, (_, strand) =>
+      random === undefined ? 0.5 : random.getX(strand * hair.drawn.points),
+    );
     const following = buffer(strands * 2);
     bound.forEach(({ guides: of, weights }, strand) => {
       for (let which = 0; which < 3; which++) {
         following.values[strand * 8 + which] = of[which] ?? 0;
         following.values[strand * 8 + 4 + which] = weights[which] ?? 0;
       }
+      following.values[strand * 8 + 7] = randoms[strand] ?? 0.5;
     });
     const guidePoints = guides.at.length / 3;
     const guidesMade = buffer(guidePoints);
@@ -513,8 +565,12 @@ export const fit = (
       'vHairTangent',
     );
 
+    const ownRandom = varying(
+      Fn(() => following.node.element(int(vertexIndex).div(pointsDrawn).mul(2).add(1)).w)(),
+      'vHairRandom',
+    );
     const colour = colourOf(hair.shading);
-    const material = new HairMaterial(hair.shading, tangent);
+    const material = new HairMaterial(hair.shading, tangent, ownRandom);
     material.positionNode = placed;
     material.colorNode = vec3(colour.r, colour.g, colour.b);
     drawn.material = material;
@@ -526,5 +582,5 @@ export const fit = (
         shown.visible = false;
       }
     }
-    return Effect.succeed(new Haired(bound, guidesNow, turns));
+    return Effect.succeed(new Haired(bound, randoms, guidesNow, turns));
   });

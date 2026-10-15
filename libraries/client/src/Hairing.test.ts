@@ -59,10 +59,15 @@ const lines = (name: string, at: ReadonlyArray<number>) => {
   return drawn;
 };
 
-/** A model as delivered: her strands, her guides, and her hair as cards. */
+/** A model as delivered: her strands, each with a random number of its own, her guides, and her hair as cards. */
 const model = () => {
   const made = new Three.Group();
-  made.add(lines('HairStrands', drawnAt));
+  const strands = lines('HairStrands', drawnAt);
+  strands.geometry.setAttribute(
+    '_random',
+    new Three.Float32BufferAttribute([0.25, 0.25, 0.25, 0.75, 0.75, 0.75], 1),
+  );
+  made.add(strands);
   made.add(lines('HairGuides', guides.at));
   for (const name of ['HairCards', 'ponytail']) {
     const cards = new Three.Mesh(new Three.BufferGeometry(), new Three.MeshBasicMaterial());
@@ -126,6 +131,19 @@ describe('Hairing.fit', () => {
     }),
   );
 
+  it.effect(
+    'gives each strand the random number its model gives it, or a middling one if none',
+    () =>
+      Effect.gen(function* () {
+        const haired = yield* Hairing.fit(model(), hair);
+        const plain = new Three.Group();
+        plain.add(lines('HairStrands', drawnAt));
+
+        expect(haired.randoms()).toEqual([0.25, 0.75]);
+        expect((yield* Hairing.fit(plain, hair)).randoms()).toEqual([0.5, 0.5]);
+      }),
+  );
+
   it.effect('refuses a model with no strands, or strands the hair counts otherwise', () =>
     Effect.gen(function* () {
       const bare = new Three.Group();
@@ -138,6 +156,24 @@ describe('Hairing.fit', () => {
       );
     }),
   );
+});
+
+describe('Hairing.varied', () => {
+  const varying = { ...hair.shading, randomColor: 0.2, randomRoughness: 0.1 };
+
+  it('varies a strand as Blender’s Principled Hair does: its melanin by its colour’s randomness, its roughness by its own', () => {
+    const most = Hairing.varied(varying, 1);
+    const least = Hairing.varied(varying, 0);
+
+    expect(most.melanin).toBeCloseTo(varying.melanin * 1.2, 12);
+    expect(least.melanin).toBeCloseTo(varying.melanin * 0.8, 12);
+    expect(most.roughness).toBeCloseTo(varying.roughness * 1.1, 12);
+    expect(most.radialRoughness).toBeCloseTo(varying.radialRoughness * 1.1, 12);
+  });
+
+  it('leaves a strand of a middling random number as the hair is shaded', () => {
+    expect(Hairing.varied(varying, 0.5)).toEqual(varying);
+  });
 });
 
 describe('Hairing.absorptionOf', () => {
