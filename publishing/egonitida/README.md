@@ -2,7 +2,7 @@
 
 EgoNitida is a real-time 3D engine built on <a href="https://effect.website/" target="_blank" rel="noopener noreferrer">Effect</a>, <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a>, and <a href="https://foldkit.dev/" target="_blank" rel="noopener noreferrer">Foldkit</a>. Conceived as an agentic-first platform, it serves individuals and teams alike, while remaining fully accessible to those who prefer to work without an agent.
 
-The `egonitida` package provides the `egonitida` command, a convenient point of access to official EgoNitida resources. The engine itself is distributed as a set of packages under the `@egonitida` scope.
+The `egonitida` package provides the `egonitida` command, a convenient point of access to EgoNitida resources. The engine itself is distributed as a set of packages under the `@egonitida` scope.
 
 ## Usage
 
@@ -20,10 +20,10 @@ npx egonitida
 
 ## Links
 
-- [Website](https://egonitida.com): the official home of EgoNitida, with news and resources.
-- [Source](https://github.com/egonitida/egonitida): the official repository of EgoNitida, with source code and issues.
-- [Packages](https://npmjs.com/org/egonitida): the official npm organization of EgoNitida, with every published package.
-- [Discord](https://discord.gg/6zsggGTGZf): the official community of EgoNitida, with discussion, support, and showcase.
+- [Website](https://egonitida.com): the home of EgoNitida, with news and resources.
+- [Source](https://github.com/egonitida/egonitida): the repository of EgoNitida, with source code and issues.
+- [Packages](https://npmjs.com/org/egonitida): the npm organization of EgoNitida, with every published package.
+- [Discord](https://discord.gg/6zsggGTGZf): the community of EgoNitida, with discussion, support, and showcase.
 - [X](https://x.com/egonitida), [Instagram](https://instagram.com/egonitida), and [Threads](https://threads.com/@egonitida): updates from EgoNitida.
 
 ## License
