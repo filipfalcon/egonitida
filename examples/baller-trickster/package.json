@@ -1,0 +1,24 @@
+{
+  "name": "@lightocean/example-baller-trickster",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#package.json": "./package.json",
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vp dev"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.0",
+    "@lightocean/client": "*",
+    "@lightocean/core": "*",
+    "effect": "4.0.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@lightocean/vite-plugin": "*",
+    "@types/three": "0.186.0"
+  }
+}

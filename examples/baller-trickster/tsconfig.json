@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The example runs in the browser; its game also runs in a worker and in tests. Her body is read from her model as it is built.
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": [
+      "vite/client",
+      "@lightocean/vite-plugin/bones",
+      "@lightocean/vite-plugin/joints",
+      "@lightocean/vite-plugin/touches"
+    ]
+  }
+}
