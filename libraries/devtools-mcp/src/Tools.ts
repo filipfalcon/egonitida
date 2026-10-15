@@ -5,7 +5,7 @@ import * as Ask from '#src/Ask.ts';
 import * as Discovery from '#src/Discovery.ts';
 
 /**
- * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the state at any tick kept, compare two ticks, read the log between them; suspend, step, show, and resume time, or play on from a past tick; play the game, as one player or many; and write what happened as a story test. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
+ * What an agent can do with a running game, as MCP tools: list the hosts running, read what the game is made of, read the state at any tick kept, compare two ticks, read the log between them; suspend, step, show, and resume time, or play on from a past tick; play the game, as one player or many, and press keys on its page as its player; and write what happened as a story test. Each tool asks the newest host unless it names one, and answers in JSON, or says why it could not.
  */
 
 const host = Schema.optionalKey(Schema.String).annotate({
@@ -185,6 +185,20 @@ export const toolkit = Toolkit.make(
   ),
   playing(
     asking(
+      'egonitida_press',
+      "Presses a key on the newest page drawing a host, as its player would, held for so many frames it draws, one unless told: to play what the page's own controls do, such as a camera, a menu, or a photograph, which no action of the game does. The key is named by where it is on the keyboard, as KeyboardEvent.code names it, such as KeyP, Space, or ArrowLeft.",
+      {
+        key: Schema.String.annotate({
+          description: 'The key, as KeyboardEvent.code names it, such as KeyP.',
+        }),
+        frames: Schema.optionalKey(Schema.Int).annotate({
+          description: 'How many frames the key is held; one if left out.',
+        }),
+      },
+    ),
+  ),
+  playing(
+    asking(
       'egonitida_act',
       'Takes an action as from the player of an entity, at the next step: the action tagged with its name, with its fields but the player, as egonitida_describe gives its schema.',
       { entity, action: Schema.Unknown },
@@ -223,6 +237,11 @@ export const implementations = (from: string) => {
     egonitida_leave: ({ host, ...asked }) => ask({ _tag: 'Leave', ...asked }, host),
     egonitida_demand: ({ host, ...asked }) => ask({ _tag: 'Demand', ...asked }, host),
     egonitida_act: ({ host, ...asked }) => ask({ _tag: 'Act', ...asked }, host),
+    egonitida_press: ({ host, key, frames }) =>
+      Discovery.relays(from).pipe(
+        Effect.flatMap((relays) => Ask.press(relays, { host, key, frames: frames ?? 1 })),
+        Effect.mapError(({ reason }) => ({ reason })),
+      ),
   });
 };
 

@@ -7,7 +7,7 @@ import * as Bridge from '#src/Bridge.ts';
  * It knows nothing of how either side is reached; whatever runs it gives it a connection to each, and the same connection for the same side every time.
  */
 
-/** What a tool asks a relay: which hosts are there, a request of one of them, or a shot of what a page drawing one shows, the newest unless named. */
+/** What a tool asks a relay: which hosts are there, a request of one of them, a shot of what a page drawing one shows, or a key pressed on that page, the newest unless named. */
 export const ToRelay = Schema.Union([
   Schema.TaggedStruct('Hosts', { id: Schema.Int }),
   Schema.TaggedStruct('Ask', {
@@ -20,6 +20,13 @@ export const ToRelay = Schema.Union([
     id: Schema.Int,
     host: Schema.OptionFromOptionalKey(Schema.String),
     width: Schema.OptionFromOptionalKey(Schema.Int),
+  }),
+  /** The key at `key`, a `KeyboardEvent.code`, held for `frames` frames on the newest page drawing a host, the host named or the newest. */
+  Schema.TaggedStruct('Press', {
+    id: Schema.Int,
+    host: Schema.OptionFromOptionalKey(Schema.String),
+    key: Schema.String,
+    frames: Schema.Int,
   }),
 ]);
 export type ToRelay = typeof ToRelay.Type;
@@ -171,7 +178,7 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
     }
     const id = known.nextId;
     known.nextId += 1;
-    if (message._tag === 'Capture') {
+    if (message._tag === 'Capture' || message._tag === 'Press') {
       const page = known.pages.findLast(({ host }) => host === target.success.host);
       if (page === undefined) {
         return tool.send({
@@ -181,7 +188,11 @@ export const make: Effect.Effect<Relay> = Effect.sync(() => {
         });
       }
       known.waiting.set(id, { tool, id: message.id, host: target.success.host, asked: page.peer });
-      return page.peer.send({ _tag: 'Capture', id, page: page.page, width: message.width });
+      return page.peer.send(
+        message._tag === 'Capture'
+          ? { _tag: 'Capture', id, page: page.page, width: message.width }
+          : { _tag: 'Press', id, page: page.page, key: message.key, frames: message.frames },
+      );
     }
     known.waiting.set(id, {
       tool,

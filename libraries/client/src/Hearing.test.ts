@@ -47,4 +47,31 @@ describe('hearing the devices a player holds', () => {
       expect(reading.mouse.buttons.size).toBe(0);
     }).pipe(Effect.scoped),
   );
+
+  it.effect(
+    'holds a key pressed from outside for as many readings as asked, as a player holding it',
+    () =>
+      Effect.gen(function* () {
+        const hearing = yield* Hearing.make(window);
+
+        hearing.press('KeyP', 2);
+        const first = hearing.read();
+        const second = hearing.read();
+        const third = hearing.read();
+
+        expect([...first.keys]).toEqual(['KeyP']);
+        expect([...second.keys]).toEqual(['KeyP']);
+        expect([...third.keys]).toEqual([]);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect('holds a key pressed from outside even where the page plays by pads alone', () =>
+    Effect.gen(function* () {
+      const hearing = yield* Hearing.make(window, { keyboardAndMouse: Option.none() });
+
+      hearing.press('KeyP', 1);
+
+      expect([...hearing.read().keys]).toEqual(['KeyP']);
+    }).pipe(Effect.scoped),
+  );
 });

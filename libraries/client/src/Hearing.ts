@@ -20,6 +20,8 @@ export interface Options {
 export interface Hearing {
   readonly read: () => Devices.Reading;
   readonly hid: Hid.Pool;
+  /** Holds the key at `code`, a `KeyboardEvent.code`, for the next `readings` readings, as a player holding it would: so a tool, such as an agent through the devtools, plays the page as its player does. */
+  readonly press: (code: string, readings: number) => void;
 }
 
 /** The devices of `target`, a window, heard as `options` say, until the scope closes. */
@@ -35,21 +37,43 @@ export const make = (
     const hid = yield* Hid.pool(options.drivers ?? []);
     const layouts = options.layouts ?? [];
     const only = options.only ?? Option.none();
+    // Each key pressed from outside, and how many readings more it is held.
+    const pressed = new Map<string, number>();
+    const pressedNow = () => {
+      const held = [...pressed.keys()];
+      for (const [code, left] of pressed) {
+        if (left <= 1) {
+          pressed.delete(code);
+        } else {
+          pressed.set(code, left - 1);
+        }
+      }
+      return held;
+    };
     return {
-      read: () => ({
-        pads: [
-          ...hid.connections().flatMap((connection) => Option.toArray(connection.pad())),
-          ...Gamepads.poll(
-            layouts,
-            hid.connections().map(({ model }) => model),
-            only,
-          ),
-        ],
-        ...Option.match(keyboardAndMouse, {
-          onNone: () => ({ keys: Devices.idle.keys, mouse: Devices.idle.mouse }),
-          onSome: (source) => source.read(),
-        }),
-      }),
+      read: () => {
+        const reading: Devices.Reading = {
+          pads: [
+            ...hid.connections().flatMap((connection) => Option.toArray(connection.pad())),
+            ...Gamepads.poll(
+              layouts,
+              hid.connections().map(({ model }) => model),
+              only,
+            ),
+          ],
+          ...Option.match(keyboardAndMouse, {
+            onNone: () => ({ keys: Devices.idle.keys, mouse: Devices.idle.mouse }),
+            onSome: (source) => source.read(),
+          }),
+        };
+        const held = pressedNow();
+        return held.length === 0
+          ? reading
+          : { ...reading, keys: new Set([...reading.keys, ...held]) };
+      },
       hid,
+      press: (code, readings) => {
+        pressed.set(code, Math.max(pressed.get(code) ?? 0, readings));
+      },
     };
   });

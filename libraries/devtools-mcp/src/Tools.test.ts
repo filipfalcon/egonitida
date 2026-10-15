@@ -69,6 +69,7 @@ describe('the tools', () => {
         'egonitida_live',
         'egonitida_log',
         'egonitida_play_from',
+        'egonitida_press',
         'egonitida_resume',
         'egonitida_seek',
         'egonitida_span',
@@ -96,5 +97,19 @@ describe('the tools', () => {
         content: [{ type: 'text', text: expect.stringContaining('no host is called nowhere') }],
       });
     }),
+  );
+
+  it.live(
+    'press a key on the page drawing a host, as its player would, for a frame unless told',
+    () =>
+      Effect.gen(function* () {
+        const tools = yield* workspace;
+
+        const once = yield* tools.egonitida_press({ key: 'KeyP' });
+        const held = yield* tools.egonitida_press({ key: 'KeyW', frames: 30 });
+
+        expect(once).toEqual({ key: 'KeyP', frames: 1 });
+        expect(held).toEqual({ key: 'KeyW', frames: 30 });
+      }),
   );
 });

@@ -228,4 +228,25 @@ describe('a relay', () => {
         ]);
       }),
   );
+
+  it.effect('hands a press to the newest page that shows the host, and its answer back', () =>
+    Effect.gen(function* () {
+      const { relay, tool } = yield* relayed;
+      const page = peer<Bridge.ToHost>();
+      yield* relay.fromHost(page, { _tag: 'Showing', page: 'page-1', host: 'horde-b' });
+
+      yield* relay.fromTool(tool, { _tag: 'Press', id: 5, key: 'KeyP', frames: 2 });
+      const presses = page.received.flatMap((message) =>
+        message._tag === 'Press' ? [message] : [],
+      );
+      yield* Effect.forEach(presses, ({ id }) =>
+        relay.fromHost(page, { _tag: 'Answered', id, answer: { key: 'KeyP', frames: 2 } }),
+      );
+
+      expect(presses).toMatchObject([{ _tag: 'Press', page: 'page-1', key: 'KeyP', frames: 2 }]);
+      expect(tool.received).toEqual([
+        { _tag: 'Answered', id: 5, answer: { key: 'KeyP', frames: 2 } },
+      ]);
+    }),
+  );
 });

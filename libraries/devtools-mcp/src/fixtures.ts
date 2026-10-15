@@ -48,7 +48,7 @@ export const counting = Game.make({
   ],
 });
 
-/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, serving the MCP server beside it for the workspace the directory is in, as a development server does, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time suspended, and each drawn by a page whose every shot is one pixel. */
+/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, serving the MCP server beside it for the workspace the directory is in, as a development server does, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time suspended, and each drawn by a page whose every shot is one pixel, and which takes every press. */
 export const served = (names: ReadonlyArray<string>, directory?: string) =>
   Effect.gen(function* () {
     const relay = yield* Relay.make;
@@ -97,6 +97,7 @@ export const served = (names: ReadonlyArray<string>, directory?: string) =>
           host: name,
           capture: (width) =>
             Effect.succeed({ png: PIXEL, width: Option.getOrElse(width, () => 1), height: 1 }),
+          press: () => Effect.void,
         },
       );
     }

@@ -38,8 +38,10 @@ const main = Effect.gen(function* () {
     }),
   );
 
+  const hearing = yield* Hearing.make(window, {});
+
   // Where the player looks at her from, played on from the sticks every frame.
-  // In development, an agent asking through the development server can see what this page draws.
+  // In development, an agent asking through the development server can see what this page draws, and press its keys as the player.
   if (import.meta.env.DEV) {
     yield* Option.match(Bridge.vite, {
       onNone: () => Effect.void,
@@ -48,6 +50,7 @@ const main = Effect.gen(function* () {
           host,
           capture: (width) =>
             viewport.capture(width, drawn).pipe(Effect.mapError(({ reason }) => reason)),
+          press: (key, frames) => Effect.sync(() => hearing.press(key, frames)),
         }),
     });
   }
@@ -62,8 +65,6 @@ const main = Effect.gen(function* () {
     Option.some({ camera: viewport.camera, player: client.entity }),
     () => played.orbit,
   );
-  const hearing = yield* Hearing.make(window, {});
-
   const ground = new Three.Mesh(
     new Three.PlaneGeometry(20, 20),
     new Three.MeshStandardNodeMaterial({ color: 0x2f6b34, roughness: 1 }),

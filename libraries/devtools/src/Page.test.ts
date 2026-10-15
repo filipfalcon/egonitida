@@ -3,14 +3,14 @@ import { Effect, Option, Queue, Stream } from 'effect';
 import type * as Bridge from '#src/Bridge.ts';
 import * as Page from '#src/Page.ts';
 
-/** A page drawing the host `horde-a`, over a channel in memory, whose captures come from `capture`. */
-const paged = (capture: Page.Capture) =>
+/** A page drawing the host `horde-a`, over a channel in memory, whose captures come from `capture`, and its presses from `press` if given. */
+const paged = (capture: Page.Capture, press?: Page.Press) =>
   Effect.gen(function* () {
     const sent = yield* Queue.unbounded<Bridge.FromHost>();
     const toPage = yield* Queue.unbounded<unknown>();
     yield* Page.serve(
       { send: (message) => Queue.offer(sent, message), received: Stream.fromQueue(toPage) },
-      { host: 'horde-a', capture },
+      { host: 'horde-a', capture, ...(press === undefined ? {} : { press }) },
     );
     const hello = yield* Queue.take(sent);
     const page = hello._tag === 'Showing' ? hello.page : '';
@@ -65,6 +65,45 @@ describe('a page that draws a host', () => {
         reason: 'the renderer has not started',
       });
       expect(yield* Queue.take(sent)).toEqual(hello);
+    }),
+  );
+
+  it.effect('presses a key as the player would, for as many frames as asked', () =>
+    Effect.gen(function* () {
+      const pressed: Array<readonly [string, number]> = [];
+      const { sent, toPage, page } = yield* paged(shot, (key, frames) =>
+        Effect.sync(() => void pressed.push([key, frames])),
+      );
+
+      yield* Queue.offer(toPage, { _tag: 'Press', id: 9, page, key: 'KeyP', frames: 3 });
+      yield* Queue.offer(toPage, {
+        _tag: 'Press',
+        id: 10,
+        page: 'another',
+        key: 'KeyQ',
+        frames: 1,
+      });
+
+      expect(yield* Queue.take(sent)).toEqual({
+        _tag: 'Answered',
+        id: 9,
+        answer: { key: 'KeyP', frames: 3 },
+      });
+      expect(pressed).toEqual([['KeyP', 3]]);
+    }),
+  );
+
+  it.effect('says a page that hears no presses from outside cannot be pressed', () =>
+    Effect.gen(function* () {
+      const { sent, toPage, page } = yield* paged(shot);
+
+      yield* Queue.offer(toPage, { _tag: 'Press', id: 11, page, key: 'KeyP', frames: 1 });
+
+      expect(yield* Queue.take(sent)).toEqual({
+        _tag: 'Unanswered',
+        id: 11,
+        reason: 'this page takes no presses: give Page.serve how it presses a key',
+      });
     }),
   );
 });

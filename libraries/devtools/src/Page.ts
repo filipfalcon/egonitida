@@ -2,7 +2,7 @@ import { Effect, Option, Random, Schema, type Scope, Stream } from 'effect';
 import * as Bridge from '#src/Bridge.ts';
 
 /**
- * A page's side of the way to it from a relay: a page that draws a host says so, with an id of its own and the host's, and answers a capture of it with a shot of what it draws now, so an agent sees what a person would. It knows nothing of how the page draws; whatever runs it gives it how to capture.
+ * A page's side of the way to it from a relay: a page that draws a host says so, with an id of its own and the host's, answers a capture of it with a shot of what it draws now, so an agent sees what a person would, and presses a key on it, so an agent plays it as a person would. It knows nothing of how the page draws or hears its devices; whatever runs it gives it how to capture and how to press.
  */
 
 /** A shot of what a page draws: a PNG, as base64, and its size in pixels. */
@@ -12,10 +12,13 @@ export type Shot = typeof Shot.Type;
 /** How a page takes a shot of what it draws, at most `width` pixels across if given; or why it could not. */
 export type Capture = (width: Option.Option<number>) => Effect.Effect<Shot, string>;
 
-/** Answers the captures a relay asks of this page over `channel`, as a page drawing `host`, until the scope closes. */
+/** How a page holds the key at `key`, a `KeyboardEvent.code`, for its next `frames` frames, as its player would, such as `Hearing`'s `press`. */
+export type Press = (key: string, frames: number) => Effect.Effect<void>;
+
+/** Answers the captures and presses a relay asks of this page over `channel`, as a page drawing `host`, until the scope closes; a page given no `press` says it takes none. */
 export const serve = (
   channel: Bridge.Channel,
-  options: { readonly host: string; readonly capture: Capture },
+  options: { readonly host: string; readonly capture: Capture; readonly press?: Press },
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function* () {
     const page = `page-${(yield* Random.nextInt).toString(36)}`;
@@ -23,6 +26,24 @@ export const serve = (
     const answer = (message: Bridge.ToHost) => {
       if (message._tag === 'Who') {
         return channel.send(hello);
+      }
+      if (message._tag === 'Press') {
+        if (message.page !== page) {
+          return Effect.void;
+        }
+        const { id, key, frames } = message;
+        return Option.match(Option.fromNullishOr(options.press), {
+          onNone: () =>
+            channel.send({
+              _tag: 'Unanswered',
+              id,
+              reason: 'this page takes no presses: give Page.serve how it presses a key',
+            }),
+          onSome: (press) =>
+            press(key, frames).pipe(
+              Effect.andThen(channel.send({ _tag: 'Answered', id, answer: { key, frames } })),
+            ),
+        });
       }
       if (message._tag !== 'Capture' || message.page !== page) {
         return Effect.void;

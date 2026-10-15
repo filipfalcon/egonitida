@@ -18,7 +18,7 @@ export const FromHost = Schema.Union([
 ]);
 export type FromHost = typeof FromHost.Type;
 
-/** What a relay sends a host or a page: a request for one host, by its id, a capture of what one page draws, or a question who is there. */
+/** What a relay sends a host or a page: a request for one host, by its id, a capture of what one page draws, a key pressed on one page, or a question who is there. */
 export const ToHost = Schema.Union([
   Schema.TaggedStruct('Ask', { id: Schema.Int, host: Schema.String, request: Schema.Unknown }),
   /** A shot of what a page draws now, at most `width` pixels across if given. */
@@ -26,6 +26,13 @@ export const ToHost = Schema.Union([
     id: Schema.Int,
     page: Schema.String,
     width: Schema.OptionFromOptionalKey(Schema.Int),
+  }),
+  /** The key at `key`, a `KeyboardEvent.code`, held on a page for `frames` frames, as its player would hold it. */
+  Schema.TaggedStruct('Press', {
+    id: Schema.Int,
+    page: Schema.String,
+    key: Schema.String,
+    frames: Schema.Int,
   }),
   Schema.TaggedStruct('Who', {}),
 ]);
@@ -56,7 +63,7 @@ export const serve = (
       if (message._tag === 'Who') {
         return channel.send(hello);
       }
-      if (message._tag === 'Capture' || message.host !== id) {
+      if (message._tag === 'Capture' || message._tag === 'Press' || message.host !== id) {
         return Effect.void;
       }
       return inspector.answerUnknown(message.request).pipe(

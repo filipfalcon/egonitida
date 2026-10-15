@@ -130,3 +130,28 @@ export const capture = (
         return yield* new Failed({ reason: 'the relay answered something it was not asked' });
     }
   });
+
+/** Holds the key at `key` for `frames` frames on the newest page drawing the host named `host`, or the newest, as its player would; what the page answered, or why it could not. */
+export const press = (
+  relays: ReadonlyArray<Relay.Record>,
+  options: { readonly host?: string | undefined; readonly key: string; readonly frames: number },
+): Effect.Effect<unknown, Failed> =>
+  Effect.gen(function* () {
+    const named = Option.fromNullishOr(options.host);
+    const record = yield* relayFor(relays, named);
+    const answer = yield* send(record, {
+      _tag: 'Press',
+      id: 1,
+      ...Option.match(named, { onNone: () => ({}), onSome: (only) => ({ host: only }) }),
+      key: options.key,
+      frames: options.frames,
+    });
+    switch (answer._tag) {
+      case 'Answered':
+        return answer.answer;
+      case 'Unanswered':
+        return yield* new Failed({ reason: answer.reason });
+      case 'Hosts':
+        return yield* new Failed({ reason: 'the relay answered something it was not asked' });
+    }
+  });
