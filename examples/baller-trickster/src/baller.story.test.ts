@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { type Component, Pose, Story } from '@lightocean/core';
+import { Chain, type Component, Game, Pose, State, Story } from '@lightocean/core';
+import { Option } from 'effect';
 import * as Baller from '#src/baller.ts';
 import * as Body from '#src/body.ts';
 
@@ -49,8 +50,9 @@ describe('a baller', () => {
       Story.seconds(0.5),
       Story.expect('baller', Baller.Aim, (aim) => {
         expect(apart(aim.left, target)).toBeLessThan(1e-9);
+        // Reached from where she stands over her other foot, within her hip's limits: within two centimetres.
         const foot = Pose.place(Body.bones, Body.joints, Baller.poseOf(aim))['foot_l'];
-        expect(apart(foot?.at, target)).toBeLessThan(0.01);
+        expect(apart(foot?.at, target)).toBeLessThan(0.02);
       }),
     );
   });
@@ -100,5 +102,89 @@ describe('a baller', () => {
         expect(Math.hypot(velocity.x, velocity.y, velocity.z)).toBeLessThan(0.2);
       }),
     );
+  });
+});
+
+describe('her whole body', () => {
+  /** Her pose with her left foot swung `ahead`, from −1 to 1, and lifted half way. */
+  const swung = (ahead: number) => Baller.poseOf(Baller.targetOf(placing({ y: ahead, lift: 0.5 })));
+
+  it('swings the arm across from the swinging leg forward, and the one beside it back', () => {
+    const forward = swung(1);
+
+    expect(forward.turns['upperarm_r']?.['flex'] ?? 0).toBeGreaterThan(0);
+    expect(forward.turns['upperarm_l']?.['flex'] ?? 0).toBeLessThan(0);
+  });
+
+  it('turns her trunk against the swinging leg, and leans it toward the foot she stands on', () => {
+    const turned = (pose: Pose.Pose, motion: string) =>
+      ['spine_01', 'spine_02', 'spine_03', 'spine_04'].reduce(
+        (sum, name) => sum + (pose.turns[name]?.[motion] ?? 0),
+        0,
+      );
+    const forward = swung(1);
+
+    // Her left leg ahead, she turns to her right, and leans to her right, over her right foot.
+    expect(turned(forward, 'turn')).toBeLessThan(0);
+    expect(turned(forward, 'bend')).toBeLessThan(0);
+  });
+
+  it('stands over the foot she stands on as the other swings, that foot staying where it stood', () => {
+    const pose = swung(1);
+    const placed = Pose.place(Body.bones, Body.joints, pose);
+
+    expect(apart(placed['foot_r']?.at, Body.standing.right)).toBeLessThan(0.01);
+    // Her pelvis gone toward her right foot.
+    expect(pose.at.x).toBeLessThan(0);
+  });
+
+  it('turns her shoulders as her arms rise, as her model says they follow', () => {
+    const pose = Pose.clamp(Body.bones, Body.joints, swung(1));
+    const standing = Pose.clamp(Body.bones, Body.joints, Pose.rest);
+
+    expect(pose.turns['scapula_r']).not.toEqual(standing.turns['scapula_r']);
+  });
+});
+
+describe('her ponytail', () => {
+  /** The ponytail's points after `steps` of her client's own steps from `state`, if she has one yet. */
+  const swung = (state: State.State, steps: number) => {
+    let now = state;
+    for (let tick = 1; tick <= steps; tick++) {
+      now = Game.stepLocal(Baller.game, now, { tick });
+    }
+    return Option.map(State.get(now, baller, Baller.Hair), ({ body }) =>
+      Chain.points(Baller.ponytail, body),
+    );
+  };
+
+  it('hangs from her head where it is tied, below it, its links as long as they were made', () => {
+    const made = (name: string) => Body.bones[name]?.at ?? { x: 0, y: 0, z: 0 };
+    const tied = made('ponytail_01');
+
+    const points = Option.getOrThrow(swung(joined, 60));
+
+    expect(apart(points['ponytail_01'], tied)).toBeCloseTo(0, 6);
+    expect(points['ponytail_05']?.y ?? Infinity).toBeLessThan(tied.y);
+    expect(apart(points['ponytail_02'], points['ponytail_01'] ?? tied)).toBeCloseTo(
+      apart(made('ponytail_02'), tied),
+      6,
+    );
+  });
+
+  it('swings as she moves', () => {
+    const still = Option.getOrThrow(swung(joined, 30));
+    const kicking = Story.story(
+      Baller.game,
+      standing,
+      Story.demand('baller', Baller.Feet, placing({ y: 1, lift: 1 })),
+      Story.seconds(0.2),
+    );
+
+    const moving = Option.getOrThrow(swung(kicking.state, 12));
+
+    expect(
+      apart(moving['ponytail_05'], still['ponytail_05'] ?? Body.standing.left),
+    ).toBeGreaterThan(0.001);
   });
 });

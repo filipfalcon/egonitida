@@ -5,10 +5,11 @@ import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';
 import * as BallerView from '#src/baller.view.ts';
+import * as Camera from '#src/camera.ts';
 import * as BallerControls from '#src/controls.ts';
 import * as Model from '#src/model.ts';
 
-// The page: joins the local server in a worker as a baller, sends where the sticks place her feet every frame, puts the ball back at a press, and draws her and the ball at every frame the display shows, from behind her.
+// The page: joins the local server in a worker as a baller, sends where the sticks place her feet every frame, puts the ball back at a press, and draws her and the ball at every frame the display shows, from where the player turns the camera about her.
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');
   const hud = document.querySelector('#hud');
@@ -20,7 +21,17 @@ const main = Effect.gen(function* () {
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
   const viewport = yield* Viewport.make(canvas, Viewport.sharp);
   const model = yield* Effect.cached(Model.load);
-  const views = yield* View.make(BallerView.make(model).views);
+  // Where the player looks at her from, played on from the sticks every frame.
+  const played = {
+    controls: Controls.start(BallerControls.bindings),
+    feet: Baller.idle,
+    orbit: Camera.start,
+  };
+  const views = yield* View.make(
+    BallerView.make(model).views,
+    Option.some({ camera: viewport.camera, player: client.entity }),
+    () => played.orbit,
+  );
   const hearing = yield* Hearing.make(window, {});
 
   const ground = new Three.Mesh(
@@ -32,24 +43,23 @@ const main = Effect.gen(function* () {
   const sun = new Three.DirectionalLight(0xffffff, 1.5);
   sun.position.set(2, 4, -3);
   viewport.scene.add(sun);
-  // From behind her, so a stick pushed right sends her foot right.
-  viewport.camera.position.set(0, 1.5, -2.2);
-  viewport.camera.lookAt(0, 0.6, 0.6);
   hud.textContent = [
     'left stick or WASD: left foot',
     'right stick or IJKL: right foot',
     'triggers or Q and U: lift them',
+    'L3 or R3 held, or Shift: the stick turns the camera',
     'Triangle or R: the ball back',
   ].join('\n');
 
-  const played = { controls: Controls.start(BallerControls.bindings) };
   yield* viewport.loop((seconds) =>
     Option.match(drawing.frame(seconds), {
       onNone: () => Effect.void,
       onSome: (frame) =>
         Effect.gen(function* () {
           played.controls = Controls.read(BallerControls.bindings, hearing.read(), played.controls);
-          yield* client.send([Baller.Feet.of(BallerControls.feetOf(played.controls))]);
+          played.feet = BallerControls.feetOf(played.controls, played.feet);
+          played.orbit = Camera.orbit(played.controls, played.orbit, seconds);
+          yield* client.send([Baller.Feet.of(played.feet)]);
           if (BallerControls.replaced(played.controls)) {
             yield* client.act(Baller.ReplacedBall, {});
           }

@@ -1,10 +1,11 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Scene } from '@lightocean/client';
-import { Pose, State, Story } from '@lightocean/core';
+import { Game, Pose, State, Story } from '@lightocean/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';
 import * as BallerView from '#src/baller.view.ts';
+import * as Camera from '#src/camera.ts';
 import * as Body from '#src/body.ts';
 
 /** A stand-in for her model: a bone for each of her bones, standing and turned as she was made, with no skin. */
@@ -66,11 +67,13 @@ describe('the baller drawn', () => {
         }),
         Story.seconds(0.5),
       );
-      const scene = yield* Scene.make(views.views);
+      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.start);
 
-      yield* scene.show(kicked.state);
+      // Her ponytail as her client steps it, after the step.
+      yield* scene.show(Game.stepLocal(Baller.game, kicked.state, { tick: kicked.state.tick }));
 
       const aim = Option.getOrThrow(State.get(kicked.state, baller, Baller.Aim));
+      // Her feet are not what she looks with, so the look moves them not.
       const placed = Pose.place(Body.bones, Body.joints, Baller.poseOf(aim))['foot_l'];
       const foot = Option.flatMap(scene.find(views.ballers, baller), (drawn) =>
         drawnAt(drawn, 'foot_l'),
@@ -87,7 +90,7 @@ describe('the baller drawn', () => {
 
   it.effect('draws the ball where it is', () =>
     Effect.gen(function* () {
-      const scene = yield* Scene.make(views.views);
+      const scene = yield* Scene.make(views.views, Option.none(), () => Camera.start);
 
       yield* scene.show(Baller.state);
 
@@ -96,5 +99,28 @@ describe('the baller drawn', () => {
         Option.some(expect.closeTo(Baller.BALL_START.z, 9)),
       );
     }),
+  );
+
+  it.effect(
+    'looks at her from behind as it starts, and from her left as the player turns it there',
+    () =>
+      Effect.gen(function* () {
+        const [joined, baller] = Baller.join(Baller.state);
+        const orbit = { current: Camera.start };
+        const scene = yield* Scene.make(views.views, Option.some(baller), () => orbit.current);
+
+        yield* scene.show(joined);
+        const behind = scene.camera.position.clone();
+        orbit.current = { ...Camera.start, around: Math.PI / 2 };
+        yield* scene.show(joined);
+        const left = scene.camera.position.clone();
+
+        expect(behind.z).toBeLessThan(BallerView.LOOKS_AT.z - 1);
+        expect(left.x).toBeGreaterThan(BallerView.LOOKS_AT.x + 1);
+        // Looking at where her feet work the ball, whichever side it stands.
+        const ahead = new Three.Vector3();
+        scene.camera.getWorldDirection(ahead);
+        expect(ahead.x).toBeLessThan(0);
+      }),
   );
 });

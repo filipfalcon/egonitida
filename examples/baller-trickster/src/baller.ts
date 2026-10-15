@@ -1,6 +1,7 @@
 import {
   Action,
   Ball as Flight,
+  Chain,
   Component,
   Domain,
   Game,
@@ -16,7 +17,7 @@ import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 
 /**
- * The seventh example: a baller doing tricks with a ball, her legs worked by the player, one stick each. A stick places its foot, ahead and back, out and in, and a trigger lifts it; her hip, knee, and ankle turn as a leg turns to put it there, never further than a leg turns. The state holds only where her feet are headed, as they go toward where the sticks place them at a foot's pace: her pose is worked out from that, by reaching, in the step as in the view, so a touch of the ball is the simulation's to decide. Whatever part of her boot or leg touches the ball strikes it, as fast as that part moves and gripping it as that part grips, and the ball flies, spins, bounces, and rolls; the player puts it back before her at a press.
+ * The seventh example: a baller doing tricks with a ball, her legs worked by the player, one stick each. A stick places its foot, ahead and back, out and in, and a trigger lifts it; her hip, knee, and ankle turn as a leg turns to put it there, never further than a leg turns, and the rest of her goes with it: her trunk turning against the swinging leg, her arms swinging against it, her shoulders following her arms, and her weight over the foot she stands on. The state holds only where her feet are headed, as they go toward where the sticks place them at a foot's pace: her pose is worked out from that, by reaching, in the step as in the view, so a touch of the ball is the simulation's to decide. Whatever part of her boot or leg touches the ball strikes it, as fast as that part moves and gripping it as that part grips, and the ball flies, spins, bounces, and rolls; the player puts it back before her at a press. Her ponytail swings as only her client sees it.
  */
 
 /** How far a stick places its foot from where it stands: ahead or back, and out or in, at a full tilt, and how high a trigger lifts it, in metres. */
@@ -61,6 +62,19 @@ export const Kickoff = Component.make(
   { owner: 'rules', network: 'server' },
 );
 
+/** How her ponytail swings: hanging from her head in five links, springing back toward how it hung as made, a little, and bending no further than 70° from it. */
+export const ponytail = Chain.plan(
+  Body.bones,
+  ['ponytail_01', 'ponytail_02', 'ponytail_03', 'ponytail_04', 'ponytail_05'],
+  { stiffness: 3, limit: (70 * Math.PI) / 180, damping: 0.03 },
+);
+
+/** Her ponytail as her client sees it, swinging from her head as she moves: only the client draws it, so it is its alone, stepped after every step, never sent. */
+export const Hair = Component.make('Hair', Schema.Struct({ body: Chain.Body }), {
+  owner: 'simulation',
+  network: 'local',
+});
+
 /** Her feet at rest, where they stand. */
 export const idle: Component.ValueOf<typeof Feet> = {
   left: { x: 0, y: 0, lift: 0 },
@@ -100,16 +114,106 @@ const toward = (from: Pose.Pose['at'], to: Pose.Pose['at'], by: number) => {
       };
 };
 
-/** Her pose with her feet headed where `aim` says: each leg reaching from its hip to its foot's place, its knee toward ahead of it, within what a leg turns. */
+/** Degrees, as radians. */
+const degrees = (angle: number) => (angle * Math.PI) / 180;
+
+/** The spine's joints, from the pelvis up, which spread her trunk's turn, lean, and bend. */
+const SPINE = ['spine_01', 'spine_02', 'spine_03', 'spine_04'];
+
+/** How far a foot has gone from where it stands, for her to stand over the other: past this, in metres, she stands wholly over it. */
+const SHIFTED_BY = 0.15;
+
+/** A finger's joints as they hang relaxed: each bent a little more toward its tip. */
+const relaxed = (finger: string, suffix: string) => ({
+  [`${finger}_01_${suffix}`]: { flex: degrees(12) },
+  [`${finger}_02_${suffix}`]: { flex: degrees(22) },
+  [`${finger}_03_${suffix}`]: { flex: degrees(18) },
+});
+
+/** A hand as it hangs relaxed. */
+const hand = (suffix: string) => ({
+  ...relaxed('index', suffix),
+  ...relaxed('middle', suffix),
+  ...relaxed('ring', suffix),
+  ...relaxed('pinky', suffix),
+  [`hand_${suffix}`]: { flex: degrees(8) },
+});
+
+/** `a` and `b` as far between them as `t`. */
+const between = (a: Pose.Pose['at'], b: Pose.Pose['at'], t: number) => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t,
+  z: a.z + (b.z - a.z) * t,
+});
+
+/**
+ * Her whole body posed as her feet are headed, `aim` says: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed; and, as far as the swinging foot has gone, she stands over the other, her legs reaching again from there.
+ */
 export const poseOf = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
-  const reach = (pose: Pose.Pose, suffix: string, to: Pose.Pose['at']) =>
-    Reach.limb(Body.bones, Body.joints, pose, {
-      root: `thigh_${suffix}`,
-      end: `foot_${suffix}`,
-      to,
-      swivel: { x: to.x, y: to.y + 0.4, z: to.z + 1 },
-    }).pose;
-  return reach(reach(Pose.rest, 'l', aim.left), 'r', aim.right);
+  const away = (foot: 'left' | 'right') => {
+    const from = STANDING[foot];
+    const to = aim[foot];
+    return { ahead: to.z - from.z, far: Maths.hypot(to.x - from.x, to.y - from.y, to.z - from.z) };
+  };
+  const left = away('left');
+  const right = away('right');
+  const swinging = left.far >= right.far ? 'l' : 'r';
+  const swing = swinging === 'l' ? left : right;
+  // +1 as her left leg swings, −1 as her right does; how far ahead it swings, from −1 to 1.
+  const side = swinging === 'l' ? 1 : -1;
+  const ahead = Math.min(Math.max(swing.ahead / REACH.ahead, -1), 1);
+  const lean = Math.min(swing.far / SHIFTED_BY, 1);
+  const posture: Pose.Pose = {
+    ...Pose.rest,
+    turns: {
+      ...hand('l'),
+      ...hand('r'),
+      [`upperarm_${swinging}`]: {
+        flex: degrees(-25) * ahead,
+        abduct: degrees(10 + 25 * lean),
+      },
+      [`upperarm_${swinging === 'l' ? 'r' : 'l'}`]: {
+        flex: degrees(35) * ahead,
+        abduct: degrees(10),
+      },
+      lowerarm_l: { flex: degrees(50 + 20 * lean) },
+      lowerarm_r: { flex: degrees(50 + 20 * lean) },
+    },
+  };
+  const trunk = Reach.spine(Body.joints, posture, {
+    joints: SPINE,
+    motions: {
+      // Against the swinging leg, toward her left as it grows; leaning toward the foot she stands on; a little forward.
+      turn: -side * ahead * degrees(15),
+      bend: -side * lean * degrees(6),
+      flex: degrees(4) * lean,
+    },
+  }).pose;
+  const legs = (pose: Pose.Pose) => {
+    const reach = (posed: Pose.Pose, suffix: string, to: Pose.Pose['at']) =>
+      Reach.limb(Body.bones, Body.joints, posed, {
+        root: `thigh_${suffix}`,
+        end: `foot_${suffix}`,
+        to,
+        swivel: { x: to.x, y: to.y + 0.4, z: to.z + 1 },
+      }).pose;
+    return reach(reach(pose, 'l', aim.left), 'r', aim.right);
+  };
+  const reached = legs(trunk);
+  if (lean === 0) {
+    return Pose.follow(Body.bones, Body.joints, reached);
+  }
+  // Over the foot she stands on, as far as the other has gone, her legs reaching again from there; her shoulders and the bones that twist with her following last.
+  const stance = swinging === 'l' ? 'r' : 'l';
+  const balanced = Reach.balance(Body.bones, Body.joints, reached, {
+    stance: { root: `thigh_${stance}`, end: `foot_${stance}` },
+    passes: 2,
+  });
+  return Pose.follow(
+    Body.bones,
+    Body.joints,
+    legs({ ...reached, at: between(reached.at, balanced.at, lean) }),
+  );
 };
 
 // RULES
@@ -179,16 +283,43 @@ const play = System.make({
   },
 });
 
+/** Her ponytail swings from her head as the step poses her: tied to it where it was made, the rest trailing as she moves. */
+const swingHair = System.make({
+  name: 'swingHair',
+  reads: [Aim],
+  writes: [Hair],
+  emits: [],
+  run: (context) => {
+    for (const [baller, aim] of context.query(Aim)) {
+      const head = Pose.placer(Body.bones, Body.joints, poseOf(aim))('head');
+      if (head === undefined) {
+        continue;
+      }
+      context.set(
+        baller,
+        Hair,
+        Option.match(context.get(baller, Hair), {
+          onNone: () => ({ body: Chain.start(ponytail, head) }),
+          onSome: ({ body }) => ({
+            body: Chain.step(ponytail, body, context.time.secondsPerStep, head),
+          }),
+        }),
+      );
+    }
+  },
+});
+
 // DOMAIN
 
 export const domain = Domain.make({
   name: 'Baller',
   requires: [],
-  components: [Feet, Aim, Ball, Kickoff],
+  components: [Feet, Aim, Ball, Kickoff, Hair],
   actions: [ReplacedBall],
   events: [],
   systems: [play],
   rules: [replaceBall],
+  localSystems: [swingHair],
 });
 
 export const game = Game.make({ stepRate: 60, domains: [domain] });
