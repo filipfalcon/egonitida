@@ -14,7 +14,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0",
+    "@effect/platform-node": "4.0.3",
     "@egonitida/devtools": "*",
     "effect": "4.0.0",
     "ws": "8.22.0"
