@@ -2,7 +2,7 @@
 
 EgoNitida is a real-time 3D engine built on <a href="https://effect.website/" target="_blank" rel="noopener noreferrer">Effect</a>, <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a>, and <a href="https://foldkit.dev/" target="_blank" rel="noopener noreferrer">Foldkit</a>. Conceived as an agentic-first platform, it serves individuals and teams alike, while remaining fully accessible to those who prefer to work without an agent.
 
-The `create-egonitida` package is what `npm create egonitida` runs, the starting point for new EgoNitida projects. The engine itself is distributed as a set of packages under the `@egonitida` scope.
+The `create-egonitida` package powers `npm create egonitida`, the starting point for new EgoNitida projects. The engine itself is distributed as a set of packages under the `@egonitida` scope.
 
 ## Usage
 
