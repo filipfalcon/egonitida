@@ -1,4 +1,4 @@
-import type { Pose } from '@lightocean/core';
+import type { Pose, Touch } from '@lightocean/core';
 import madeBones from '#src/footballer.glb?bones';
 import madeJoints from '#src/footballer.glb?joints';
 import madeTouches from '#src/footballer.glb?touches';
@@ -33,3 +33,11 @@ export const gripOf = (part: string): number =>
         : part.startsWith('toe')
           ? 0.1
           : 0.2;
+
+/** A touch as it springs a ball off her: off the way her surface faces, where the ball meets it on that side, as the flat of a boot does rather than the round of the point standing for it; off the touch's own normal where it meets her from aside or behind. */
+export const flatOf = (touched: Touch.Touched): Touch.Touched => {
+  const { normal, facing } = touched;
+  return normal.x * facing.x + normal.y * facing.y + normal.z * facing.z > 0
+    ? { ...touched, normal: facing }
+    : touched;
+};

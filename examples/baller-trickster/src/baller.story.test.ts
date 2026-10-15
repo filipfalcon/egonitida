@@ -138,24 +138,31 @@ describe('her whole body', () => {
     expect(pose.at.x).toBeLessThan(0);
   });
 
-  it('keeps a swinging foot pointing ahead and its sole to the ground', () => {
-    const placing = Pose.placer(Body.bones, Body.joints, swung(1));
-    const toe = Body.touches['toe_l'];
-    const sole = Body.touches['sole_l'];
-    const toeBone = toe === undefined ? undefined : placing(toe.bone);
-    const soleBone = sole === undefined ? undefined : placing(sole.bone);
-    const ahead =
-      toe === undefined || toeBone === undefined
-        ? { x: NaN, y: NaN, z: NaN }
-        : Quaternion.rotate(toeBone.turn, toe.normal);
-    const down =
-      sole === undefined || soleBone === undefined
-        ? { x: NaN, y: NaN, z: NaN }
-        : Quaternion.rotate(soleBone.turn, sole.normal);
+  /** The way the surface of her touch point `part` faces, posed as `pose`. */
+  const facingOf = (pose: Pose.Pose, part: string) => {
+    const point = Body.touches[part];
+    const bone =
+      point === undefined ? undefined : Pose.placer(Body.bones, Body.joints, pose)(point.bone);
+    return point === undefined || bone === undefined
+      ? { x: NaN, y: NaN, z: NaN }
+      : Quaternion.rotate(bone.turn, point.normal);
+  };
+
+  it('keeps a foot swung along the ground pointing ahead and its sole to the ground', () => {
+    const along = Baller.poseOf(Baller.targetOf(placing({ y: 1 })));
 
     // Her toe within ten degrees of straight ahead, her sole within ten of straight down.
-    expect(ahead.z).toBeGreaterThan(Math.cos((10 * Math.PI) / 180));
-    expect(-down.y).toBeGreaterThan(Math.cos((10 * Math.PI) / 180));
+    expect(facingOf(along, 'toe_l').z).toBeGreaterThan(Math.cos((10 * Math.PI) / 180));
+    expect(-facingOf(along, 'sole_l').y).toBeGreaterThan(Math.cos((10 * Math.PI) / 180));
+  });
+
+  it('points a lifted foot’s toes down, its instep facing up, as a juggler holds it', () => {
+    const lifted = Baller.poseOf(
+      Baller.targetOf(placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead, lift: 0.5 })),
+    );
+
+    // Her instep within ten degrees of straight up.
+    expect(facingOf(lifted, 'instep_l').y).toBeGreaterThan(Math.cos((10 * Math.PI) / 180));
   });
 
   it('turns her shoulders as her arms rise, as her model says they follow', () => {
@@ -312,5 +319,38 @@ describe('walking and juggling', () => {
     expect(hard.y).toBeGreaterThan(soft.y + 1);
     expect(Math.hypot(soft.x, soft.z)).toBeLessThan(0.6);
     expect(Math.hypot(hard.x, hard.z)).toBeLessThan(0.6);
+  });
+
+  it('sends a ball falling onto her instep held up, off its middle, back up as the flat of her boot faces, not off its edge', () => {
+    const dropped = Story.story(
+      Baller.game,
+      standing,
+      Story.demand(
+        'baller',
+        Baller.Feet,
+        placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead, lift: 0.25 }),
+      ),
+      Story.seconds(0.3),
+      Story.act('baller', Baller.DroppedBall, {}),
+      Story.step(),
+    ).state;
+    // The ball falling two centimetres ahead of the middle of her instep.
+    const falling = Option.getOrThrow(State.get(dropped, Baller.ball, Baller.Ball));
+    const draft = State.draft(dropped);
+    State.write(draft, Baller.ball, Baller.Ball, {
+      ...falling,
+      at: { ...falling.at, z: falling.at.z + 0.02 },
+    });
+    const velocities: Array<Pose.Pose['at']> = [];
+    Story.story(
+      Baller.game,
+      Story.given(State.finish(draft), { baller, ball: Baller.ball }),
+      Story.seconds(0.4),
+      Story.expect('ball', Baller.Ball, ({ velocity }) => velocities.push(velocity)),
+    );
+    const [off = { x: 0, y: 0, z: 0 }] = velocities;
+
+    expect(off.y).toBeGreaterThan(0);
+    expect(Math.hypot(off.x, off.z)).toBeLessThan(off.y * 0.1);
   });
 });

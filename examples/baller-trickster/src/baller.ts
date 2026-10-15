@@ -51,6 +51,20 @@ export const INSTEP = (() => {
   return { x: bone.at.x + on.x, y: bone.at.y + on.y + instep.radius, z: bone.at.z + on.z };
 })();
 
+/** How high a foot is lifted before it points its toes down all the way, its instep facing up, in metres. */
+const POINTED_BY = 0.1;
+
+/** The way the instep of the foot `suffix` names faces as she stands, its sole on the ground: up and ahead, as the top of a boot slopes to its toes; straight up, if she has no instep. */
+const flatInstep = (suffix: string): Pose.Pose['at'] => {
+  const point = Body.touches[`instep_${suffix}`];
+  const bone =
+    point === undefined ? undefined : Pose.placer(Body.bones, Body.joints, Pose.rest)(point.bone);
+  return point === undefined || bone === undefined
+    ? { x: 0, y: 1, z: 0 }
+    : Quaternion.rotate(bone.turn, point.normal);
+};
+const FLAT_INSTEP = { l: flatInstep('l'), r: flatInstep('r') };
+
 /** Where over her left instep a ball is dropped, from where she stands: ahead of her standing foot, where a stick held half ahead puts it, clear of her shin and her hand, and how high, in metres. */
 export const DROP_AHEAD = 0.35;
 export const DROP_HEIGHT = 0.6;
@@ -226,7 +240,7 @@ const between = (a: Pose.Pose['at'], b: Pose.Pose['at'], t: number) => ({
 });
 
 /**
- * Her whole body posed as her feet are headed, `where` says, standing at `spot`: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed, its knee ahead and its sole to the ground as far as her ankle turns; and, as far as the swinging foot has gone, she stands over the other, as far as the swinging leg still reaches from there, crouching as low as it needs to reach.
+ * Her whole body posed as her feet are headed, `where` says, standing at `spot`: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed, its knee ahead and, as far as her ankle turns, its sole to the ground, or, lifted, its toes pointed until its instep faces up, as a juggler holds a foot; and, as far as the swinging foot has gone, she stands over the other, as far as the swinging leg still reaches from there, crouching as low as it needs to reach.
  */
 export const poseOf = (
   where: Component.ValueOf<typeof Aim>,
@@ -280,22 +294,33 @@ const posedAt = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
       flex: degrees(4) * lean,
     },
   }).pose;
-  // Each leg reaching where its foot is headed, its knee bending ahead, its sole kept to the ground as far as her ankle turns; how far short the swinging one fell.
+  // Each leg reaching where its foot is headed, its knee bending ahead, facing as far as her ankle turns; how far short the swinging one fell.
   const legs = (pose: Pose.Pose) => {
-    const reach = (posed: Pose.Pose, suffix: string, to: Pose.Pose['at']) => {
+    const reach = (posed: Pose.Pose, suffix: 'l' | 'r', to: Pose.Pose['at']) => {
+      // Its sole down on the ground; lifted, its toes pointed, its instep turning up as it rises until it faces straight up.
+      const lifted = Math.min(
+        Math.max((to.y - STANDING[suffix === 'l' ? 'left' : 'right'].y) / POINTED_BY, 0),
+        1,
+      );
       const sole = Body.touches[`sole_${suffix}`];
+      const instep = Body.touches[`instep_${suffix}`];
+      const surface = lifted > 0 && instep !== undefined ? instep : sole;
+      const way =
+        surface === instep
+          ? between(FLAT_INSTEP[suffix], { x: 0, y: 1, z: 0 }, lifted)
+          : { x: 0, y: -1, z: 0 };
       return Reach.limb(Body.bones, Body.joints, posed, {
         root: `thigh_${suffix}`,
         end: `foot_${suffix}`,
         to,
         swivel: { x: to.x, y: to.y + 0.4, z: to.z + 1 },
         facing:
-          sole === undefined
+          surface === undefined
             ? undefined
             : {
-                bone: sole.bone,
-                normal: sole.normal,
-                toward: { x: 0, y: -1, z: 0 },
+                bone: surface.bone,
+                normal: surface.normal,
+                toward: way,
                 turning: [`foot_${suffix}`, `subtalar_${suffix}`],
               },
       });
@@ -427,7 +452,12 @@ const play = System.make({
             {
               onNone: () => now,
               onSome: (touched) =>
-                Flight.struck(Flight.football, now, touched, Body.gripOf(touched.part)),
+                Flight.struck(
+                  Flight.football,
+                  now,
+                  Body.flatOf(touched),
+                  Body.gripOf(touched.part),
+                ),
             },
           ),
         flying,
