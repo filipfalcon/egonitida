@@ -1,8 +1,15 @@
+import { Option, Schema } from 'effect';
+import type * as Joint from '#src/Joint.ts';
 import * as Maths from '#src/Maths.ts';
+import type * as Pose from '#src/Pose.ts';
+import * as Quaternion from '#src/Quaternion.ts';
 import type * as Ray from '#src/Ray.ts';
+import type * as Shape from '#src/Shape.ts';
 
 /**
  * Hair as strands, as plain data: polylines of points, each strand as many points as every other, root first, read from a model's file as the game is built (`?strands`, through `@egonitida/vite-plugin`). A figure's hair is drawn as many strands and swung as few guides, each drawn strand following the guides nearest its root; the strands over her scalp come first, then those down her ponytail, each kind following guides of its own. Where a point stands as the model was made, how wide it is, how stiff, and which bones carry it, are flat arrays, as a step and a view read them alike.
+ *
+ * Guides swing as plain data too: each root tied where the bones carrying it place it, the rest trailing as it moves, springing back toward the shape it was groomed in by its stiffness, every link as long as it was made, and kept out of the flesh about her bones it was groomed outside of. It was groomed as it hangs, so only the pull of its weight away from how it hung as groomed moves it: still, it hangs as groomed; bowed, it falls. Only a client draws it, so a game keeps it as a local component, stepped by a local system, as a ponytail's chain is; it is stepped in steps of its own, with `Maths`, the same start swinging the same way every time.
  */
 
 /** Strands of hair as the model was made: how many points each strand has; how many lie over the scalp, coming first, and how many down a ponytail, after them; where each point stands, three numbers each, in the model's space; how wide each point is, in metres; how stiff, from nothing to a whole; one random number for each strand, from nothing to a whole; and which bones carry each point, four indices into `bones` each, with their four weights. */
@@ -104,3 +111,302 @@ export const bind = (
     };
   });
 };
+
+/** A capsule a guide is kept out of, such as the flesh about a bone: from one end of its axis to the other, `radius` round about it, in metres, in the model's space. */
+export interface Capsule {
+  readonly from: Ray.Point;
+  readonly to: Ray.Point;
+  readonly radius: number;
+}
+
+/** How guides swing: how fast a point of a whole stiffness springs back toward the shape it was groomed in, a share of the way each second, a point of less stiffness as much less; and how much of its swing each loses each step of its own. */
+export interface Options {
+  readonly stiffness: number;
+  readonly damping: number;
+}
+
+/** Guides swinging: where each of their points is now and was a moment before, three numbers each, in their order. */
+export const Body = Schema.Struct({
+  now: Schema.Array(Schema.Finite),
+  before: Schema.Array(Schema.Finite),
+});
+export type Body = typeof Body.Type;
+
+/** They swing in steps this long, however long the game's are. */
+const SUBSTEP = 1 / 120;
+/** How hard everything falls, in metres a second each second. */
+const GRAVITY = 9.81;
+/** Straight down, as hard as everything falls. */
+const DOWN: Ray.Point = { x: 0, y: -GRAVITY, z: 0 };
+
+/** How a bone carries the points it holds: from where it stood as made to where it is placed, turned as far as it turned since. */
+interface Carrier {
+  readonly from: Ray.Point;
+  readonly to: Ray.Point;
+  readonly turn: Quaternion.Quaternion;
+}
+
+/** How each bone `strands` names carries what it holds, as made by `made` and placed by `placing`; none for a bone either knows not. */
+const carriersOf = (
+  strands: Strands,
+  made: Shape.Bones,
+  placing: Pose.Placer,
+): ReadonlyArray<Carrier | undefined> =>
+  strands.bones.map((name) => {
+    const as = made[name];
+    const placed = placing(name);
+    return as === undefined || placed === undefined
+      ? undefined
+      : {
+          from: as.at,
+          to: placed.at,
+          turn: Quaternion.multiply(placed.turn, Quaternion.invert(as.turn)),
+        };
+  });
+
+/**
+ * Where each point of `strands` stands as the bones carrying it are placed by `placing`, three numbers each: each bone carrying it as far as its weight, from where it stood as `made` to where it is placed, as a model's skin is carried. A point no bone it names carries stays where it was made.
+ */
+export const carried = (
+  strands: Strands,
+  made: Shape.Bones,
+  placing: Pose.Placer,
+): ReadonlyArray<number> => {
+  const carriers = carriersOf(strands, made, placing);
+  const at: Array<number> = [];
+  const count = strands.at.length / 3;
+  for (let point = 0; point < count; point++) {
+    const x = strands.at[point * 3] ?? 0;
+    const y = strands.at[point * 3 + 1] ?? 0;
+    const z = strands.at[point * 3 + 2] ?? 0;
+    let total = 0;
+    let sumX = 0;
+    let sumY = 0;
+    let sumZ = 0;
+    for (let influence = 0; influence < 4; influence++) {
+      const weight = strands.weights[point * 4 + influence] ?? 0;
+      const carrier = carriers[strands.joints[point * 4 + influence] ?? 0];
+      if (weight <= 0 || carrier === undefined) {
+        continue;
+      }
+      const turned = Quaternion.rotate(carrier.turn, {
+        x: x - carrier.from.x,
+        y: y - carrier.from.y,
+        z: z - carrier.from.z,
+      });
+      sumX += weight * (carrier.to.x + turned.x);
+      sumY += weight * (carrier.to.y + turned.y);
+      sumZ += weight * (carrier.to.z + turned.z);
+      total += weight;
+    }
+    if (total > 0) {
+      at.push(sumX / total, sumY / total, sumZ / total);
+    } else {
+      at.push(x, y, z);
+    }
+  }
+  return at;
+};
+
+/** The pull of each guide's weight away from how it hung as groomed: straight down, less straight down turned as the bone carrying most of its root has turned since it was made. Nothing, as that bone stands as made. */
+const pullsOf = (
+  strands: Strands,
+  carriers: ReadonlyArray<Carrier | undefined>,
+): ReadonlyArray<Ray.Point> =>
+  Array.from({ length: strands.scalp + strands.ponytail }, (_, strand) => {
+    const root = strand * strands.points;
+    let heaviest: Carrier | undefined;
+    let most = 0;
+    for (let influence = 0; influence < 4; influence++) {
+      const weight = strands.weights[root * 4 + influence] ?? 0;
+      const carrier = carriers[strands.joints[root * 4 + influence] ?? 0];
+      if (weight > most && carrier !== undefined) {
+        heaviest = carrier;
+        most = weight;
+      }
+    }
+    if (heaviest === undefined) {
+      return { x: 0, y: 0, z: 0 };
+    }
+    const hung = Quaternion.rotate(heaviest.turn, DOWN);
+    return { x: DOWN.x - hung.x, y: DOWN.y - hung.y, z: DOWN.z - hung.z };
+  });
+
+/** How long each link of `strands` was made, from the point before it; nothing for a root. */
+const lengthsOf = (strands: Strands): ReadonlyArray<number> => {
+  const count = strands.at.length / 3;
+  const lengths: Array<number> = [];
+  for (let point = 0; point < count; point++) {
+    lengths.push(
+      point % strands.points === 0
+        ? 0
+        : Maths.hypot(
+            (strands.at[point * 3] ?? 0) - (strands.at[point * 3 - 3] ?? 0),
+            (strands.at[point * 3 + 1] ?? 0) - (strands.at[point * 3 - 2] ?? 0),
+            (strands.at[point * 3 + 2] ?? 0) - (strands.at[point * 3 - 1] ?? 0),
+          ),
+    );
+  }
+  return lengths;
+};
+
+/** Whether `at` lies inside `capsule`, and the point on its surface nearest, if so. */
+const outOf = (capsule: Capsule, x: number, y: number, z: number): Ray.Point | undefined => {
+  const axisX = capsule.to.x - capsule.from.x;
+  const axisY = capsule.to.y - capsule.from.y;
+  const axisZ = capsule.to.z - capsule.from.z;
+  const span = axisX * axisX + axisY * axisY + axisZ * axisZ;
+  const along =
+    span === 0
+      ? 0
+      : Math.min(
+          Math.max(
+            ((x - capsule.from.x) * axisX +
+              (y - capsule.from.y) * axisY +
+              (z - capsule.from.z) * axisZ) /
+              span,
+            0,
+          ),
+          1,
+        );
+  const nearX = capsule.from.x + axisX * along;
+  const nearY = capsule.from.y + axisY * along;
+  const nearZ = capsule.from.z + axisZ * along;
+  const away = Maths.hypot(x - nearX, y - nearY, z - nearZ);
+  if (away >= capsule.radius || away === 0) {
+    return undefined;
+  }
+  const out = capsule.radius / away;
+  return {
+    x: nearX + (x - nearX) * out,
+    y: nearY + (y - nearY) * out,
+    z: nearZ + (z - nearZ) * out,
+  };
+};
+
+/** Guides of `strands` starting to swing, as groomed, carried by the bones `placing` places from how they were `made`, still. */
+export const start = (strands: Strands, made: Shape.Bones, placing: Pose.Placer): Body => {
+  const now = carried(strands, made, placing);
+  return { now, before: now };
+};
+
+/**
+ * The guides `body` of `strands` after `seconds` of swinging, in steps of its own however long the game's are, carried by the bones `placing` places now from how they were `made`, among `capsules`, as `options` say: each root tied where its bones place it; each other point trailing as it moves, losing a little of its swing each step, pulled by its weight only as far as it hangs otherwise than groomed, sprung back toward the shape it was groomed in, as the bones now carry that shape, as far as its stiffness, held as far from the point before it as it was made, and kept out of each capsule it was groomed outside of, which comes first where the two disagree.
+ */
+export const step = (
+  strands: Strands,
+  body: Body,
+  seconds: number,
+  made: Shape.Bones,
+  placing: Pose.Placer,
+  capsules: ReadonlyArray<Capsule>,
+  options: Options,
+): Body => {
+  const carriers = carriersOf(strands, made, placing);
+  const target = carried(strands, made, placing);
+  const pulls = pullsOf(strands, carriers);
+  const lengths = lengthsOf(strands);
+  const steps = Math.max(Math.round(seconds / SUBSTEP), 1);
+  const each = seconds / steps;
+  const keep = Math.max(1 - options.damping, 0);
+  const count = strands.at.length / 3;
+  // Which capsules each point was groomed outside of, as the bones carry its groomed place now.
+  const kept = Array.from({ length: count }, (_, point) =>
+    capsules.filter(
+      (capsule) =>
+        outOf(
+          capsule,
+          target[point * 3] ?? 0,
+          target[point * 3 + 1] ?? 0,
+          target[point * 3 + 2] ?? 0,
+        ) === undefined,
+    ),
+  );
+  const now = [...body.now];
+  const before = [...body.before];
+  for (let at = 0; at < steps; at++) {
+    for (let point = 0; point < count; point++) {
+      const x = now[point * 3] ?? 0;
+      const y = now[point * 3 + 1] ?? 0;
+      const z = now[point * 3 + 2] ?? 0;
+      const index = point % strands.points;
+      if (index === 0) {
+        // Tied where its bones place it.
+        before[point * 3] = x;
+        before[point * 3 + 1] = y;
+        before[point * 3 + 2] = z;
+        now[point * 3] = target[point * 3] ?? x;
+        now[point * 3 + 1] = target[point * 3 + 1] ?? y;
+        now[point * 3 + 2] = target[point * 3 + 2] ?? z;
+        continue;
+      }
+      const pull = pulls[Math.floor(point / strands.points)] ?? { x: 0, y: 0, z: 0 };
+      let nextX = x + (x - (before[point * 3] ?? x)) * keep + pull.x * each * each;
+      let nextY = y + (y - (before[point * 3 + 1] ?? y)) * keep + pull.y * each * each;
+      let nextZ = z + (z - (before[point * 3 + 2] ?? z)) * keep + pull.z * each * each;
+      before[point * 3] = x;
+      before[point * 3 + 1] = y;
+      before[point * 3 + 2] = z;
+      const aboveX = now[point * 3 - 3] ?? x;
+      const aboveY = now[point * 3 - 2] ?? y;
+      const aboveZ = now[point * 3 - 1] ?? z;
+      // Sprung back toward its groomed shape, hanging from the point before it as the bones carry it.
+      const spring = Math.min((strands.stiffness[point] ?? 0) * options.stiffness * each, 1);
+      nextX += (aboveX + (target[point * 3] ?? 0) - (target[point * 3 - 3] ?? 0) - nextX) * spring;
+      nextY +=
+        (aboveY + (target[point * 3 + 1] ?? 0) - (target[point * 3 - 2] ?? 0) - nextY) * spring;
+      nextZ +=
+        (aboveZ + (target[point * 3 + 2] ?? 0) - (target[point * 3 - 1] ?? 0) - nextZ) * spring;
+      for (const capsule of kept[point] ?? []) {
+        const surface = outOf(capsule, nextX, nextY, nextZ);
+        if (surface !== undefined) {
+          nextX = surface.x;
+          nextY = surface.y;
+          nextZ = surface.z;
+        }
+      }
+      // As far from the point before it as it was made.
+      const away = Maths.hypot(nextX - aboveX, nextY - aboveY, nextZ - aboveZ);
+      const length = lengths[point] ?? 0;
+      const scale = away === 0 ? 0 : length / away;
+      let heldX = aboveX + (nextX - aboveX) * scale;
+      let heldY = aboveY + (nextY - aboveY) * scale;
+      let heldZ = aboveZ + (nextZ - aboveZ) * scale;
+      // Out of its capsules again, should holding its length have drawn it back in.
+      for (const capsule of kept[point] ?? []) {
+        const surface = outOf(capsule, heldX, heldY, heldZ);
+        if (surface !== undefined) {
+          heldX = surface.x;
+          heldY = surface.y;
+          heldZ = surface.z;
+        }
+      }
+      now[point * 3] = heldX;
+      now[point * 3 + 1] = heldY;
+      now[point * 3 + 2] = heldZ;
+    }
+  }
+  return { now, before };
+};
+
+/** The flesh about each of the bones `names` that has some, as `joints` say, a capsule from where `placing` places the bone along its own +y, as far as the flesh is long. */
+export const capsulesOf = (
+  joints: Joint.Joints,
+  placing: Pose.Placer,
+  names: ReadonlyArray<string>,
+): ReadonlyArray<Capsule> =>
+  names.flatMap((name) => {
+    const flesh = Option.flatMap(Option.fromNullishOr(joints[name]), (joint) => joint.flesh);
+    const placed = placing(name);
+    if (Option.isNone(flesh) || placed === undefined) {
+      return [];
+    }
+    const along = Quaternion.rotate(placed.turn, { x: 0, y: flesh.value.length, z: 0 });
+    return [
+      {
+        from: placed.at,
+        to: { x: placed.at.x + along.x, y: placed.at.y + along.y, z: placed.at.z + along.z },
+        radius: flesh.value.radius,
+      },
+    ];
+  });
