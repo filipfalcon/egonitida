@@ -253,6 +253,34 @@ describe('Pose.clamp', () => {
     expect(clamped.turns['calf']?.['rotate']).toBeCloseTo(degrees(-15), 12);
   });
 
+  it('keeps limits alone with `limit`, leaving what follows to `follow`', () => {
+    const twist = joint(
+      'Follower',
+      { rotate: motion([0, 1, 0], [0, 0]) },
+      {
+        follows: [
+          {
+            motion: 'rotate',
+            on: { bone: 'thigh', motion: 'rotate' },
+            table: [
+              [-Math.PI, Math.PI / 2],
+              [Math.PI, -Math.PI / 2],
+            ],
+          },
+        ],
+      },
+    );
+    const figure = { ...joints, calf: twist };
+    const rotated = posed({ thigh: { rotate: degrees(60) } });
+
+    const limited = Pose.limit(figure, rotated);
+    const followed = Pose.follow(leg, figure, limited);
+
+    expect(limited.turns['thigh']?.['rotate']).toBeCloseTo(degrees(45), 12);
+    expect(limited.turns['calf']?.['rotate'] ?? 0).toBeCloseTo(0, 12);
+    expect(followed.turns['calf']?.['rotate']).toBeCloseTo(degrees(-22.5), 12);
+  });
+
   it('turns a shoulder blade up by the arm’s elevation, which its own turn raises, until they settle', () => {
     // A trunk, a blade on it, and an arm hanging from the blade, the blade and the arm made pointing down their own +y.
     const down = Quaternion.about({ x: 0, y: 0, z: 1 }, Math.PI);

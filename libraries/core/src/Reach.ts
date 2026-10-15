@@ -212,38 +212,72 @@ const facingNow = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, fa
 };
 
 /**
- * `pose` with the joints of `facing` turned, in order, a fixed number of passes, each of their motions in their order, as far toward facing as asked as its limits let it, analytically for that motion's axis.
+ * `pose` with the joints of `facing` turned, in order, at most a fixed number of passes, until it faces as asked or a pass turns nothing, each of their motions in their order, as far toward facing as asked as its limits let it, analytically for that motion's axis.
  */
 const faced = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, facing: Facing) => {
   const toward = unit(facing.toward);
   let now = pose;
   for (let pass = 0; pass < FACING_PASSES; pass++) {
+    // Facing as asked already, it turns no further.
+    if (dot(facingNow(bones, joints, now, facing), toward) > 1 - 1e-18) {
+      break;
+    }
+    const before = now;
     for (const name of facing.turning) {
       const joint = joints[name];
-      if (joint === undefined) {
+      const bone = bones[name];
+      if (joint === undefined || bone === undefined) {
         continue;
       }
-      for (const motion of joint.order) {
-        const placed = Pose.placer(bones, joints, now)(name);
-        const axis =
-          placed === undefined ? Option.none() : axisOf(joint, placed, anglesIn(now, name), motion);
+      // The frame it turns in, from where its parent stands, which its own turning moves not: placed once.
+      const above = Option.getOrUndefined(bone.parent);
+      const parentBone = above === undefined ? undefined : bones[above];
+      const parent = above === undefined ? undefined : Pose.placer(bones, joints, now)(above);
+      const frame =
+        parentBone === undefined || parent === undefined
+          ? Quaternion.multiply(now.turn, bone.turn)
+          : Quaternion.multiply(
+              parent.turn,
+              Quaternion.multiply(Quaternion.invert(parentBone.turn), bone.turn),
+            );
+      for (const [at, motion] of joint.order.entries()) {
+        const own = joint.motions[motion];
         const range = Joint.limitsAt(joints, now.turns, name)[motion];
-        if (Option.isNone(axis) || range === undefined) {
+        if (own === undefined || range === undefined) {
           continue;
         }
-        const normal = facingNow(bones, joints, now, facing);
-        const square = less(normal, times(axis.value, dot(normal, axis.value)));
-        const turn = Maths.atan2(dot(cross(axis.value, normal), toward), dot(square, toward));
+        const angles = anglesIn(now, name);
+        const prefix = Pose.turnOf({ ...joint, order: joint.order.slice(0, at) }, angles);
+        const axis = unit(Quaternion.rotate(Quaternion.multiply(frame, prefix), own.axis));
+        // The surface's way: on this bone, from its frame; further down, placed.
+        const normal =
+          facing.bone === name
+            ? unit(
+                Quaternion.rotate(
+                  Quaternion.multiply(frame, Pose.turnOf(joint, angles)),
+                  facing.normal,
+                ),
+              )
+            : facingNow(bones, joints, now, facing);
+        const square = less(normal, times(axis, dot(normal, axis)));
+        const turn = Maths.atan2(dot(cross(axis, normal), toward), dot(square, toward));
         const value = Joint.valueOf(joints, now.turns, { bone: name, motion });
-        now = setting(now, name, motion, within(value + turn, range));
+        const turned = within(value + turn, range);
+        if (turned !== value) {
+          now = setting(now, name, motion, turned);
+        }
       }
+    }
+    // A pass that turned nothing, each joint as far as its limits let it: another would turn nothing either.
+    if (now === before) {
+      break;
     }
   }
   return now;
 };
 
 /**
- * `pose` with the limb `ask` names reaching: its middle joint bent by its bending motion so its end lies as far from its root's joint as `ask.to`, analytically, about that motion's own axis; its root's joint turned to bring the end onto the point, and about the line to it so the middle joint lies toward `ask.swivel`; the pose clamped to every joint's limits; and then the joints `ask.facing` names turned to face its surface as asked. Says how far the end fell short of the point, and the surface of facing as asked. A limb whose joints the bones and joints do not make, a root, a middle joint whose parent it is, and an end below that, is left as it is.
+ * `pose` with the limb `ask` names reaching: its middle joint bent by its bending motion so its end lies as far from its root's joint as `ask.to`, analytically, about that motion's own axis; its root's joint turned to bring the end onto the point, and about the line to it so the middle joint lies toward `ask.swivel`; the pose kept within every joint's limits, as `Pose.limit` keeps it, what follows left for `Pose.follow`; and then the joints `ask.facing` names turned to face its surface as asked. Says how far the end fell short of the point, and the surface of facing as asked. A limb whose joints the bones and joints do not make, a root, a middle joint whose parent it is, and an end below that, is left as it is.
  */
 export const limb = (
   bones: Shape.Bones,
@@ -282,8 +316,7 @@ export const limb = (
     bend,
     bendFor(bones, joints, pose, names, middle, bend, distance),
   );
-  const aimed = Pose.clamp(
-    bones,
+  const aimed = Pose.limit(
     joints,
     turning(bent, ask.root, aimFor(bones, joints, bent, names, root, ask)),
   );
@@ -291,7 +324,7 @@ export const limb = (
   if (facing === undefined) {
     return { pose: aimed, short: shortOf(aimed), facingShort: 0 };
   }
-  const turned = Pose.clamp(bones, joints, faced(bones, joints, aimed, facing));
+  const turned = Pose.limit(joints, faced(bones, joints, aimed, facing));
   const normal = facingNow(bones, joints, turned, facing);
   return {
     pose: turned,
@@ -325,14 +358,9 @@ const reachOf = (
 };
 
 /**
- * `pose` with a trunk's motions spread over `ask.joints`, each segment taking a share of each motion's total as large as how far it turns that way, as the spine spreads them: the lumbar spine flexes far and hardly turns, the thoracic spine turns. Those motions of those joints are set, the rest left as they are, and the pose clamped. Asked beyond them all, each turns as far as it does, and it says how far short of each.
+ * `pose` with a trunk's motions spread over `ask.joints`, each segment taking a share of each motion's total as large as how far it turns that way, as the spine spreads them: the lumbar spine flexes far and hardly turns, the thoracic spine turns. Those motions of those joints are set, the rest left as they are, and the pose kept within every limit. Asked beyond them all, each turns as far as it does, and it says how far short of each.
  */
-export const spine = (
-  bones: Shape.Bones,
-  joints: Joint.Joints,
-  pose: Pose.Pose,
-  ask: Trunk,
-): Spread => {
+export const spine = (joints: Joint.Joints, pose: Pose.Pose, ask: Trunk): Spread => {
   let turns = pose.turns;
   for (const [motion, total] of Object.entries(ask.motions)) {
     const reaches = ask.joints.map((name) => reachOf(joints, pose, name, motion, total));
@@ -347,7 +375,7 @@ export const spine = (
       turns = { ...turns, [name]: { ...turns[name], [motion]: share } };
     });
   }
-  const clamped = Pose.clamp(bones, joints, { ...pose, turns });
+  const clamped = Pose.limit(joints, { ...pose, turns });
   const reached = (motion: string) =>
     ask.joints
       .filter((name) => Joint.hasMotion(joints, name, motion))
@@ -412,22 +440,19 @@ export const look = (
 ): Looked => {
   const [eye] = ask.eyes;
   const [base] = ask.neck;
+  // Each eye turned within its own ranges as it faces: nothing else of her moves, so nothing else is clamped.
   const eyesOn = (now: Pose.Pose) =>
     ask.eyes.reduce(
       (looked, name) =>
         Option.match(gazeOf(bones, joints, looked, name, ask), {
           onNone: () => looked,
           onSome: ({ toward }) =>
-            Pose.clamp(
-              bones,
-              joints,
-              faced(bones, joints, looked, {
-                bone: name,
-                normal: ask.forward,
-                toward,
-                turning: [name],
-              }),
-            ),
+            faced(bones, joints, looked, {
+              bone: name,
+              normal: ask.forward,
+              toward,
+              turning: [name],
+            }),
         }),
       now,
     );
@@ -473,7 +498,7 @@ export const look = (
         return [motion, sum + added];
       }),
     );
-    now = eyesOn(spine(bones, joints, now, { joints: ask.neck, motions }).pose);
+    now = eyesOn(spine(joints, now, { joints: ask.neck, motions }).pose);
   }
   const short = ask.eyes.reduce(
     (most, name) =>
@@ -489,16 +514,17 @@ export const look = (
   return { pose: now, short };
 };
 
-/** A figure asked to stand over one foot: the limb she stands on, from its root's joint to the foot, bending by its motion `bend`, `flex` unless named. */
+/** A figure asked to stand over one foot: the limb she stands on, from its root's joint to the foot, bending by its motion `bend`, `flex` unless named; and how many passes she takes to settle over it, six unless named, fewer for a step that cannot spare the time. */
 export interface Balance {
   readonly stance: {
     readonly root: string;
     readonly end: string;
     readonly bend?: string | undefined;
   };
+  readonly passes?: number | undefined;
 }
 
-/** How many times the figure is moved over her standing foot, and that foot reached back to where it stood: enough for her legs' turning to settle. */
+/** How many times the figure is moved over her standing foot, and that foot reached back to where it stood, unless asked otherwise: enough for her legs' turning to settle. */
 const BALANCE_PASSES = 6;
 
 /**
@@ -515,7 +541,7 @@ export const balance = (
     return pose;
   }
   let now = pose;
-  for (let pass = 0; pass < BALANCE_PASSES; pass++) {
+  for (let pass = 0; pass < (ask.passes ?? BALANCE_PASSES); pass++) {
     const centre = Pose.centreOfMass(bones, joints, now);
     if (Option.isNone(centre)) {
       return now;

@@ -186,7 +186,7 @@ const spinal: Joint.Joints = {
 
 describe('Reach.spine', () => {
   it('spreads a turn and a bend over the spine as far as each segment turns and bends', () => {
-    const reached = Reach.spine(trunk, spinal, Pose.rest, {
+    const reached = Reach.spine(spinal, Pose.rest, {
       joints: ['spine_01', 'spine_02'],
       motions: { turn: degrees(11), flex: degrees(25) },
     });
@@ -200,7 +200,7 @@ describe('Reach.spine', () => {
   });
 
   it('turns every segment as far as it turns, and says how far short, for a turn beyond them all', () => {
-    const reached = Reach.spine(trunk, spinal, Pose.rest, {
+    const reached = Reach.spine(spinal, Pose.rest, {
       joints: ['spine_01', 'spine_02'],
       motions: { turn: degrees(-30) },
     });

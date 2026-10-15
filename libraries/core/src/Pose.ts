@@ -219,35 +219,59 @@ export const measured = (placing: Placer, bone: string, measure: Joint.Measure):
     : Maths.acos(Math.min(Math.max(dot(along, toward) / lengths, -1), 1));
 };
 
-/** How many times the motions that follow are set: a shoulder blade follows an arm's elevation, which its own turn changes, so it settles over several: a third of a turn followed, as a blade follows, is left a hundredth of a degree off. */
+/** How many times at most the motions that follow are set: a shoulder blade follows an arm's elevation, which its own turn changes, so it settles over several, a third of a turn followed, as a blade follows, left a hundredth of a degree off at most; one that settles sooner stops. */
 const FOLLOW_PASSES = 8;
 
 /**
- * `pose` with every motion within its limits, and every motion that follows set: each joint's motions in its order, each within its range at the pose as clamped so far, a bound that depends on another motion read at that motion's value outright; then, a few passes, each motion that follows another joint's motion, or a measure of how a bone lies, the value its table reads there added to its own value as clamped. A pose within every limit, with nothing that follows, is given back as it is.
+ * `pose` with every motion within its limits: each joint's motions in its order, each within its range, a bound that depends on another motion read at that motion's value as limited so far, outright. A pose within every limit is given back as it is. What follows is left as it is: `follow` sets it.
  */
-export const clamp = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose): Pose => {
-  let turns: Joint.Turns = pose.turns;
+export const limit = (joints: Joint.Joints, pose: Pose): Pose => {
+  // A draft of the turns, each joint copied only as it changes.
+  const draft: Record<string, Joint.Angles> = { ...pose.turns };
+  let changed = false;
   for (const [name, joint] of Object.entries(joints)) {
     for (const motion of joint.order) {
-      const range = Joint.limitsAt(joints, turns, name)[motion];
-      if (range === undefined) {
+      const made = joint.motions[motion];
+      if (made === undefined) {
         continue;
       }
-      const value = Joint.valueOf(joints, turns, { bone: name, motion });
-      const within = Math.min(Math.max(value, range[0]), range[1]);
+      // Its range as made, a bound its tables give read at their source's value as limited so far.
+      let [min, max] = made.range;
+      for (const { motion: bound, end, on, table } of joint.depends) {
+        if (bound === motion) {
+          const value = Joint.along(table, Joint.valueOf(joints, draft, on));
+          if (end === 'min') {
+            min = value;
+          } else {
+            max = value;
+          }
+        }
+      }
+      const value = draft[name]?.[motion] ?? made.rest;
+      const within = Math.min(Math.max(value, min), max);
       if (within !== value) {
-        turns = { ...turns, [name]: { ...turns[name], [motion]: within } };
+        draft[name] = { ...draft[name], [motion]: within };
+        changed = true;
       }
     }
   }
+  return changed ? { ...pose, turns: draft } : pose;
+};
+
+/**
+ * `pose` with every motion that follows set, a few passes, until they settle: each that follows another joint's motion, or a measure of how a bone lies, the value its table reads there added to its own value in `pose`. A pose with nothing that follows is given back as it is.
+ */
+export const follow = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose): Pose => {
   const followers = Object.entries(joints).filter(([, joint]) => joint.follows.length > 0);
   if (followers.length === 0) {
-    return turns === pose.turns ? pose : { ...pose, turns };
+    return pose;
   }
-  const clamped = turns;
+  const own: Joint.Turns = pose.turns;
+  let turns: Joint.Turns = own;
   for (let pass = 0; pass < FOLLOW_PASSES; pass++) {
     const placing = placer(bones, joints, { ...pose, turns });
-    let next = clamped;
+    const next: Record<string, Joint.Angles> = { ...own };
+    let moved = 0;
     for (const [name, joint] of followers) {
       for (const { motion, on, table } of joint.follows) {
         const measure = joints[on.bone]?.measures[on.motion];
@@ -255,14 +279,29 @@ export const clamp = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose): Pos
           measure === undefined
             ? Joint.valueOf(joints, turns, on)
             : measured(placing, on.bone, measure);
-        const own = Joint.valueOf(joints, next, { bone: name, motion });
-        next = { ...next, [name]: { ...next[name], [motion]: own + Joint.along(table, value) } };
+        const followed =
+          Joint.valueOf(joints, next, { bone: name, motion }) + Joint.along(table, value);
+        moved = Math.max(
+          moved,
+          Math.abs(followed - Joint.valueOf(joints, turns, { bone: name, motion })),
+        );
+        next[name] = { ...next[name], [motion]: followed };
       }
     }
     turns = next;
+    // Settled: another pass would follow no further.
+    if (moved < 1e-12) {
+      break;
+    }
   }
   return { ...pose, turns };
 };
+
+/**
+ * `pose` with every motion within its limits, as `limit` keeps them, and then every motion that follows set, as `follow` sets them. A pose within every limit, with nothing that follows, is given back as it is.
+ */
+export const clamp = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose): Pose =>
+  follow(bones, joints, limit(joints, pose));
 
 /** The names of every joint any of `poses` turns. */
 const namesOf = (poses: ReadonlyArray<Pose>) => [
