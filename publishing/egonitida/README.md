@@ -28,4 +28,4 @@ npx egonitida
 
 ## License
 
-MIT
+[MIT](LICENSE)
