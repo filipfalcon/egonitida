@@ -7,13 +7,13 @@
   ],
   "homepage": "https://egonitida.com",
   "bugs": {
-    "url": "https://github.com/filipfalcon/egonitida/issues"
+    "url": "https://github.com/egonitida/egonitida/issues"
   },
   "license": "MIT",
   "author": "Filip Falcon",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/filipfalcon/egonitida.git"
+    "url": "git+https://github.com/egonitida/egonitida.git"
   },
   "bin": {
     "egonitida": "dist/index.mjs"

@@ -21,7 +21,7 @@ npx egonitida
 ## Links
 
 - [Website](https://egonitida.com): the official home of EgoNitida, with news and resources.
-- [Source](https://github.com/filipfalcon/egonitida): the engine's repository, issues, and feature requests.
+- [Source](https://github.com/egonitida/egonitida): the engine's repository, issues, and feature requests.
 - [Packages](https://www.npmjs.com/org/egonitida): every official EgoNitida package.
 - [Discord](https://discord.gg/F3YkynckH): questions, feedback, and conversation with the community.
 - [X](https://x.com/egonitida), [Instagram](https://www.instagram.com/egonitida), and [Threads](https://www.threads.net/@egonitida): updates from EgoNitida.

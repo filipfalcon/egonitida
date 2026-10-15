@@ -18,7 +18,7 @@ describe('create-egonitida', () => {
   it('lists every official channel', () => {
     for (const link of [
       'https://egonitida.com',
-      'https://github.com/filipfalcon/egonitida',
+      'https://github.com/egonitida/egonitida',
       'https://www.npmjs.com/org/egonitida',
       'https://x.com/egonitida',
       'https://www.instagram.com/egonitida',
