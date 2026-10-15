@@ -7,8 +7,20 @@ const printed = execFileSync(process.execPath, [new URL('index.js', import.meta.
 });
 
 describe('create-egonitida', () => {
-  it('says EgoNitida is not published yet, and where it is', () => {
-    expect(printed).toContain('not published yet');
-    expect(printed).toContain('https://github.com/filipfalcon/egonitida');
+  it('says new projects cannot be created until EgoNitida is released', () => {
+    expect(printed).toContain('until EgoNitida is released');
+  });
+
+  it('lists every official channel', () => {
+    for (const link of [
+      'https://egonitida.com',
+      'https://github.com/filipfalcon/egonitida',
+      'https://www.npmjs.com/org/egonitida',
+      'https://x.com/egonitida',
+      'https://www.instagram.com/egonitida',
+      'https://www.threads.net/@egonitida',
+    ]) {
+      expect(printed).toContain(link);
+    }
   });
 });

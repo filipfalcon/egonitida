@@ -1,12 +1,9 @@
 {
   "name": "create-egonitida",
   "version": "0.0.1",
-  "description": "Starts a new game on EgoNitida, an engine for real-time web applications and games: npm create egonitida.",
+  "description": "EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. The create-egonitida command is the official way to create a new project on EgoNitida.",
   "keywords": [
-    "create",
-    "egonitida",
-    "game-engine",
-    "scaffold"
+    "egonitida"
   ],
   "homepage": "https://egonitida.com",
   "bugs": {

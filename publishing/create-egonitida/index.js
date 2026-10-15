@@ -1,9 +1,14 @@
 #!/usr/bin/env node
-// What `npm create egonitida` says until it can start a game: where EgoNitida is, and that it is not published yet.
-console.log(`EgoNitida is an engine for real-time web applications and games.
+// What `npm create egonitida` prints until it can create a project: that it cannot yet, and EgoNitida's official channels.
+import manifest from './package.json' with { type: 'json' };
 
-It is not published yet, so there is no game to start here. Its source,
-its architecture, and its examples are at:
+console.log(`create-egonitida ${manifest.version}
+New projects cannot be created until EgoNitida is released.
 
-  https://github.com/filipfalcon/egonitida
+  Website    https://egonitida.com
+  Source     https://github.com/filipfalcon/egonitida
+  Packages   https://www.npmjs.com/org/egonitida
+  X          https://x.com/egonitida
+  Instagram  https://www.instagram.com/egonitida
+  Threads    https://www.threads.net/@egonitida
 `);

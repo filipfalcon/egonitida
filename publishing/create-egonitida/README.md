@@ -1,12 +1,10 @@
 # create-egonitida
 
-Starts a new game on EgoNitida, an engine for real-time web applications and games:
+EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. The `create-egonitida` command is the official way to create a new project on EgoNitida. Until EgoNitida is released, it lists the engine's website, source code, packages, and social channels. Official EgoNitida packages are published exclusively under the @egonitida scope.
 
 ```bash
 npm create egonitida
 ```
-
-EgoNitida is not published yet, so for now this only says where it is: [github.com/filipfalcon/egonitida](https://github.com/filipfalcon/egonitida). The engine's packages are published under the `@egonitida` scope.
 
 ## License
 
