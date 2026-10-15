@@ -5,6 +5,8 @@ import {
   Fn,
   abs,
   asin,
+  attribute,
+  cameraProjectionMatrix,
   clamp,
   cos,
   cross,
@@ -19,9 +21,11 @@ import {
   mix,
   modelViewMatrix,
   normalize,
+  positionView,
   positionViewDirection,
   pow,
   saturate,
+  screenSize,
   select,
   sqrt,
   storage,
@@ -87,6 +91,10 @@ export const absorptionOf = (shading: Strands.Shading): Colour => {
     b: eumelanin * 1.653 + pheomelanin * 1.924 + tinted(blue),
   };
 };
+
+/** How much of a pixel a strand `width` wide covers, `distance` from the eye, where a pixel is a metre over `focal` at a metre away: its width over a pixel's there, a whole pixel at most. */
+export const coverage = (width: number, distance: number, focal: number): number =>
+  Math.min((width * focal) / distance, 1);
 
 /** How a strand of hair shaded as `shading` is shaded, varied by its own random number `random`, from nothing to a whole, as Blender's Principled Hair varies it: its melanin by as much as its colour's randomness says, its roughness, along it and about it, by as much as its roughness's says, either way of a middling number. */
 export const varied = (shading: Strands.Shading, random: number): Strands.Shading => {
@@ -448,7 +456,7 @@ export class Haired {
 }
 
 /**
- * `model`'s hair, counted and shaded as `hair` says, drawn as its strands after its guides: the lines `HairStrands` placed on the graphics device each frame as their guides swing, lit as hair shaded as the hair says is, never culled, since where they are drawn is not where they were made; the lines `HairGuides`, and the meshes `cards` names, its hair as cards, `HairCards` unless named otherwise, not shown. Fails with `Unfitted` if the model has no lines `HairStrands`, or not as many points in them as the hair counts.
+ * `model`'s hair, counted and shaded as `hair` says, drawn as its strands after its guides: the lines `HairStrands` placed on the graphics device each frame as their guides swing, lit as hair shaded as the hair says is, never culled, since where they are drawn is not where they were made, each as much of a pixel as it covers, over what is behind it; the lines `HairGuides`, and the meshes `cards` names, its hair as cards, `HairCards` unless named otherwise, not shown. Fails with `Unfitted` if the model has no lines `HairStrands`, or not as many points in them as the hair counts.
  */
 export const fit = (
   model: Three.Object3D,
@@ -573,6 +581,17 @@ export const fit = (
     const material = new HairMaterial(hair.shading, tangent, ownRandom);
     material.positionNode = placed;
     material.colorNode = vec3(colour.r, colour.g, colour.b);
+    // Thinner than a pixel, each strand is drawn as much of one as it covers, as `coverage` has it, over what is behind it: how wide each point is, as the model has it, or as its guides' roots are.
+    const widths = drawn.geometry.getAttribute('_width');
+    const width =
+      widths === undefined ? float(guides.width[0] ?? 0.00008) : attribute('_width', 'float');
+    const focal = cameraProjectionMatrix
+      .mul(vec4(0, 1, 0, 0))
+      .y.mul(screenSize.y)
+      .mul(0.5);
+    material.opacityNode = clamp(width.mul(focal).div(positionView.z.negate()), 0, 1);
+    material.transparent = true;
+    material.depthWrite = false;
     drawn.material = material;
     drawn.frustumCulled = false;
     drawn.visible = true;

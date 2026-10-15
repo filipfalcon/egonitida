@@ -93,6 +93,9 @@ describe('Hairing.fit', () => {
           Three.LineBasicNodeMaterial,
         );
         expect(strands instanceof Three.LineSegments && strands.material.lights).toBe(true);
+        // Thinner than a pixel, each strand covers as much of one as it is wide: drawn over what is behind it, never hiding the strands behind it.
+        expect(strands instanceof Three.LineSegments && strands.material.transparent).toBe(true);
+        expect(strands instanceof Three.LineSegments && strands.material.depthWrite).toBe(false);
         expect(delivered.getObjectByName('HairGuides')?.visible).toBe(false);
         expect(delivered.getObjectByName('HairCards')?.visible).toBe(false);
         expect(delivered.getObjectByName('ponytail')?.visible).toBe(false);
@@ -156,6 +159,18 @@ describe('Hairing.fit', () => {
       );
     }),
   );
+});
+
+describe('Hairing.coverage', () => {
+  it('is as much of a pixel as a strand covers: its width over how wide a pixel is where it is', () => {
+    // A thousand pixels a metre at a metre away: a strand 80 µm wide covers eight hundredths of one.
+    expect(Hairing.coverage(0.00008, 1, 1000)).toBeCloseTo(0.08, 12);
+    expect(Hairing.coverage(0.00008, 2, 1000)).toBeCloseTo(0.04, 12);
+  });
+
+  it('is a whole pixel at most, for a strand wider than one', () => {
+    expect(Hairing.coverage(0.01, 1, 1000)).toBe(1);
+  });
 });
 
 describe('Hairing.varied', () => {
