@@ -9,8 +9,22 @@ import * as Bvh from '#src/Bvh.ts';
 /** How many numbers each triangle, or each link of a strand, takes: a triangle's three corners, four numbers each, the fourth nothing; a link's start, four numbers, the fourth a whole, which tells it from a triangle; its end, four numbers, the fourth how far about the line between them it reaches; and four more of nothing. */
 export const TRIANGLE = 12;
 
-/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, and the light it gives off and whether it casts a shadow, 1 or 0. */
-export const PLACED = 20;
+/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0 or hair 1, how rough it is, how metal, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts. */
+export const PLACED = 28;
+
+/** What a placed shape is made of, as light meets it: a surface, as rough and as metal as it is, from nothing to a whole; or hair, taking light in as `absorption` says for every strand's width it goes through, as rough along it as it is, its cuticle tilted as far as `tilt` says, in radians, bending light as `ior` says. */
+export type Material =
+  | { readonly _tag: 'Surface'; readonly roughness: number; readonly metalness: number }
+  | {
+      readonly _tag: 'Hair';
+      readonly absorption: readonly [number, number, number];
+      readonly roughness: number;
+      readonly tilt: number;
+      readonly ior: number;
+    };
+
+/** A surface wholly rough and not metal at all, as what says nothing of how it is made is taken to be. */
+export const matte: Material = { _tag: 'Surface', roughness: 1, metalness: 0 };
 
 /** A shape rays meet, in its own space, with its hierarchy: of triangles, such as a body's skin, or of strands, such as its hair. */
 export type Shape = Triangles | Strands;
@@ -77,13 +91,14 @@ export const strandsOf = (
   };
 };
 
-/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, and whether it casts a shadow. */
+/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, and what it is made of, `matte` unless said. */
 export interface Placed {
   readonly shape: number;
   readonly matrix: Three.Matrix4;
   readonly colour: readonly [number, number, number];
   readonly emissive: readonly [number, number, number];
   readonly casts: boolean;
+  readonly material?: Material;
 }
 
 /** The scene laid flat: every shape's hierarchy one after another, their triangles in the order their leaves name them, the placed shapes in the order the top hierarchy's leaves name them, and that hierarchy. */
@@ -209,6 +224,15 @@ export const flattenPlaced = (
     flat.set([e[2] ?? 0, e[6] ?? 0, e[10] ?? 0, e[14] ?? 0], base + 8);
     flat.set([...one.colour, roots[one.shape] ?? 0], base + 12);
     flat.set([...one.emissive, one.casts ? 1 : 0], base + 16);
+    const material = one.material ?? matte;
+    if (material._tag === 'Surface') {
+      flat.set([0, material.roughness, material.metalness, 0, 0, 0, 0, 0], base + 20);
+    } else {
+      flat.set(
+        [1, material.roughness, 0, material.ior, ...material.absorption, material.tilt],
+        base + 20,
+      );
+    }
   });
   return { placed: flat, placedNodes: Bvh.threaded(hierarchy), count: kept.length };
 };
@@ -488,6 +512,17 @@ const colourOf = (
     : Option.none();
 };
 
+/** What `material` is made of as light meets it: a surface as rough and as metal as it says, wholly rough and not metal where it says not. */
+const surfaceOf = (material: Three.Material): Material => {
+  const roughness: unknown = Reflect.get(material, 'roughness');
+  const metalness: unknown = Reflect.get(material, 'metalness');
+  return {
+    _tag: 'Surface',
+    roughness: typeof roughness === 'number' ? roughness : 1,
+    metalness: typeof metalness === 'number' ? metalness : 0,
+  };
+};
+
 /** How bright `material` gives off its light, once if it says not. */
 const emissiveIntensityOf = (material: Three.Material): number => {
   const intensity: unknown = Reflect.get(material, 'emissiveIntensity');
@@ -578,6 +613,7 @@ export const gathering = (): Gathering => {
               colour,
               emissive,
               casts: object.castShadow,
+              material: surfaceOf(material),
             });
           }
           return;
@@ -588,6 +624,7 @@ export const gathering = (): Gathering => {
           colour,
           emissive,
           casts: object.castShadow,
+          material: surfaceOf(material),
         });
       });
       // The shapes are laid flat again only when they changed: a moving scene of shapes that stay as they are lays only what is placed.

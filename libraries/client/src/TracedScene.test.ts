@@ -402,3 +402,61 @@ describe('strands as rays meet them', () => {
     expect(shapeHit([0, 2, 5])).toEqual(Option.some(expect.closeTo(6, 6)));
   });
 });
+
+describe('what a traced scene holds of how its shapes are made', () => {
+  const square = TracedScene.shapeOf(new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0]));
+  const placedWith = (material: TracedScene.Material): TracedScene.Placed => ({
+    shape: 0,
+    matrix: new Three.Matrix4(),
+    colour: [1, 1, 1],
+    emissive: [0, 0, 0],
+    casts: true,
+    material,
+  });
+  const materialOf = (flat: TracedScene.Flat) =>
+    Array.from(flat.placed.slice(TracedScene.PLACED - 8, TracedScene.PLACED));
+
+  it('holds a surface as rough and as metal as it is', () => {
+    const flat = TracedScene.flatten(
+      [square],
+      [placedWith({ _tag: 'Surface', roughness: 0.4, metalness: 0.25 })],
+    );
+
+    expect(materialOf(flat)).toEqual(
+      [0, 0.4, 0.25, 0, 0, 0, 0, 0].map((value) => Math.fround(value)),
+    );
+  });
+
+  it('holds hair as it takes light in, how rough it is, how its cuticle tilts, and how it bends light', () => {
+    const flat = TracedScene.flatten(
+      [square],
+      [
+        placedWith({
+          _tag: 'Hair',
+          absorption: [1, 1.5, 2.5],
+          roughness: 0.3,
+          tilt: 0.035,
+          ior: 1.55,
+        }),
+      ],
+    );
+
+    expect(materialOf(flat)).toEqual(
+      [1, 0.3, 0, 1.55, 1, 1.5, 2.5, 0.035].map((value) => Math.fround(value)),
+    );
+  });
+
+  it('gathers a mesh as rough and as metal as its material is, and a whole rough if it says not', () => {
+    const scene = new Three.Scene();
+    const shiny = new Three.Mesh(
+      new Three.BoxGeometry(1, 1, 1),
+      new Three.MeshStandardMaterial({ roughness: 0.2, metalness: 0.7 }),
+    );
+    shiny.position.z = -5;
+    scene.add(shiny);
+
+    const flat = TracedScene.gathering().gather(scene, new Three.PerspectiveCamera());
+
+    expect(materialOf(flat).slice(0, 3)).toEqual([0, 0.2, 0.7].map((value) => Math.fround(value)));
+  });
+});
