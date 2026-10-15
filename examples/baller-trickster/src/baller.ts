@@ -24,8 +24,11 @@ import * as Body from '#src/body.ts';
 /** How far a stick places its foot from where it stands: ahead or back, and out or in, at a full tilt, and how high a trigger lifts it, in metres. */
 export const REACH = { ahead: 0.45, across: 0.3, lift: 0.45 };
 
-/** How fast a foot goes toward where its stick places it, in metres a second: as fast as the stick moves, a slow stick touching the ball softly, but no faster than this. */
+/** How fast a foot goes at most toward where its stick places it, in metres a second, as a stick or a trigger moved all at once sends it. */
 export const FOOT_SPEED = 5;
+
+/** How long a foot takes to go most of the way toward where its stick places it, in seconds: its pace is how far it has to go over this, so a trigger pressed a little lifts it gently, touching the ball softly, and one pressed fully kicks it up. */
+export const FOOT_EASE = 0.06;
 
 /** How fast she walks, at a full press, in metres a second. */
 export const WALK_SPEED = 1.5;
@@ -49,7 +52,7 @@ export const INSTEP = (() => {
 })();
 
 /** Where over her left instep a ball is dropped, from where she stands: ahead of her standing foot, where a stick held half ahead puts it, clear of her shin and her hand, and how high, in metres. */
-export const DROP_AHEAD = 0.3;
+export const DROP_AHEAD = 0.35;
 export const DROP_HEIGHT = 0.6;
 
 const Point = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, z: Schema.Finite });
@@ -163,6 +166,17 @@ const toward = (from: Pose.Pose['at'], to: Pose.Pose['at'], by: number) => {
         z: from.z + (way.z * by) / far,
       };
 };
+
+/** A foot at `from` gone toward `to` for `seconds`, as fast as it has far to go over `FOOT_EASE`, but no faster than `FOOT_SPEED`, and no slower than a tenth of a metre a second, so it gets there. */
+const eased = (from: Pose.Pose['at'], to: Pose.Pose['at'], seconds: number) =>
+  toward(
+    from,
+    to,
+    Math.min(
+      Math.max(Maths.hypot(to.x - from.x, to.y - from.y, to.z - from.z) / FOOT_EASE, 0.1),
+      FOOT_SPEED,
+    ) * seconds,
+  );
 
 /** Degrees, as radians. */
 const degrees = (angle: number) => (angle * Math.PI) / 180;
@@ -386,8 +400,8 @@ const play = System.make({
       };
       const target = targetOf(feet, walked);
       const now = {
-        left: toward(aim.left, target.left, FOOT_SPEED * seconds),
-        right: toward(aim.right, target.right, FOOT_SPEED * seconds),
+        left: eased(aim.left, target.left, seconds),
+        right: eased(aim.right, target.right, seconds),
       };
       context.set(baller, Spot, walked);
       context.set(baller, Aim, now);

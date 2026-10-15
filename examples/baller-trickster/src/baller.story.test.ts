@@ -280,4 +280,37 @@ describe('walking and juggling', () => {
     // Up off her foot, above it again.
     expect(heights[0] ?? 0).toBeGreaterThan(Baller.INSTEP.y + 0.2);
   });
+
+  /** The ball's velocity once off her foot, lifted by `lift` as the dropped ball comes down onto it, about a hand above it. */
+  const touchedBy = (lift: number) => {
+    const velocities: Array<Pose.Pose['at']> = [];
+    Story.story(
+      Baller.game,
+      standing,
+      Story.demand('baller', Baller.Feet, ready),
+      Story.seconds(0.3),
+      Story.act('baller', Baller.DroppedBall, {}),
+      Story.step(),
+      Story.seconds(0.21),
+      Story.demand(
+        'baller',
+        Baller.Feet,
+        placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead, lift }),
+      ),
+      Story.seconds(0.19),
+      Story.expect('ball', Baller.Ball, ({ velocity }) => velocities.push(velocity)),
+    );
+    return velocities[0] ?? { x: 0, y: 0, z: 0 };
+  };
+
+  it('touches a falling ball up off a foot lifted into it, softly for a trigger pressed a little, harder for one pressed further', () => {
+    const soft = touchedBy(0.3);
+    const hard = touchedBy(0.6);
+
+    // Both straight up, hardly ahead or aside.
+    expect(soft.y).toBeGreaterThan(1);
+    expect(hard.y).toBeGreaterThan(soft.y + 1);
+    expect(Math.hypot(soft.x, soft.z)).toBeLessThan(0.6);
+    expect(Math.hypot(hard.x, hard.z)).toBeLessThan(0.6);
+  });
 });
