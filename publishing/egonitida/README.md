@@ -20,11 +20,15 @@ npx egonitida
 
 ## Links
 
-- [Website](https://egonitida.com): news and information about EgoNitida.
-- [Source](https://github.com/filipfalcon/egonitida): the engine's repository, issues, and feature requests.
-- [Packages](https://www.npmjs.com/org/egonitida): every official EgoNitida package.
-- [Discord](https://discord.gg/F3YkynckH): questions, feedback, and conversation with the community.
-- [X](https://x.com/egonitida), [Instagram](https://www.instagram.com/egonitida), and [Threads](https://www.threads.net/@egonitida): updates from EgoNitida.
+| Link                                               | Description                                               |
+| -------------------------------------------------- | --------------------------------------------------------- |
+| [Website](https://egonitida.com)                   | News and information about EgoNitida.                     |
+| [Source](https://github.com/filipfalcon/egonitida) | The engine's repository, issues, and feature requests.    |
+| [Packages](https://www.npmjs.com/org/egonitida)    | Every official EgoNitida package.                         |
+| [Discord](https://discord.gg/F3YkynckH)            | Questions, feedback, and conversation with the community. |
+| [X](https://x.com/egonitida)                       | Updates from EgoNitida.                                   |
+| [Instagram](https://www.instagram.com/egonitida)   | Updates from EgoNitida.                                   |
+| [Threads](https://www.threads.net/@egonitida)      | Updates from EgoNitida.                                   |
 
 ## License
 
