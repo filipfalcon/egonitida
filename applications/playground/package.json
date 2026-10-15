@@ -19,7 +19,7 @@
     "@egonitida/devtools": "*",
     "@egonitida/foldkit": "*",
     "@stylexjs/stylex": "0.19.1",
-    "effect": "4.0.0",
+    "effect": "4.0.3",
     "foldkit": "0.168.0",
     "three": "0.186.1"
   },

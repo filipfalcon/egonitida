@@ -29,7 +29,7 @@
     "@egonitida/core": "*",
     "@egonitida/devtools": "*",
     "@egonitida/devtools-mcp": "*",
-    "effect": "4.0.0",
+    "effect": "4.0.3",
     "ws": "8.22.0"
   },
   "devDependencies": {

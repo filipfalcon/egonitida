@@ -12,6 +12,6 @@
   },
   "dependencies": {
     "@egonitida/core": "*",
-    "effect": "4.0.0"
+    "effect": "4.0.3"
   }
 }
