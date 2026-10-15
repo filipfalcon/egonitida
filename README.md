@@ -8,8 +8,8 @@
 
 <p align="center">
   <a href="https://x.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=x&logoColor=white" alt="EgoNitida on X: @egonitida"></a>
-  <a href="https://www.instagram.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-E4405F?logo=instagram&logoColor=white" alt="EgoNitida on Instagram: @egonitida"></a>
-  <a href="https://www.threads.net/@egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=threads&logoColor=white" alt="EgoNitida on Threads: @egonitida"></a>
+  <a href="https://instagram.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-E4405F?logo=instagram&logoColor=white" alt="EgoNitida on Instagram: @egonitida"></a>
+  <a href="https://threads.com/@egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=threads&logoColor=white" alt="EgoNitida on Threads: @egonitida"></a>
 </p>
 
 <h3 align="center">Build games agents understand.</h3>

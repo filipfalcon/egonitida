@@ -24,8 +24,8 @@ describe('egonitida', () => {
       'https://github.com/egonitida/egonitida',
       'https://npmjs.com/org/egonitida',
       'https://x.com/egonitida',
-      'https://www.instagram.com/egonitida',
-      'https://www.threads.net/@egonitida',
+      'https://instagram.com/egonitida',
+      'https://threads.com/@egonitida',
     ]) {
       expect(printed).toContain(link);
     }

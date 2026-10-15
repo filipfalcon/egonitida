@@ -9,6 +9,6 @@ New projects cannot be created until EgoNitida is released.
   Source     https://github.com/egonitida/egonitida
   Packages   https://npmjs.com/org/egonitida
   X          https://x.com/egonitida
-  Instagram  https://www.instagram.com/egonitida
-  Threads    https://www.threads.net/@egonitida
+  Instagram  https://instagram.com/egonitida
+  Threads    https://threads.com/@egonitida
 `);
