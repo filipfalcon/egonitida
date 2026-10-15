@@ -136,6 +136,33 @@ describe('Reach.limb', () => {
     expect(reached.facingShort).toBeCloseTo(degrees(40), 6);
   });
 
+  it('turns a leg asked to stand nearly straight no further about its length than the swivel asks', () => {
+    // Made with the knee a centimetre forward, as a figure stands, and asked just short of full stretch straight below the hip: the knee lies almost on the line to the foot.
+    const bent = { ...leg, calf: { ...bone('thigh', 0.5), at: { x: 0, y: 0.5, z: 0.01 } } };
+    const reached = Reach.limb(bent, joints, Pose.rest, {
+      root: 'thigh',
+      end: 'foot',
+      to: { x: 0, y: 0.01, z: 0.02 },
+      swivel: { x: 0, y: 0.5, z: 2 },
+    });
+
+    expect(Math.abs(reached.pose.turns['thigh']?.['rotate'] ?? 0)).toBeLessThan(degrees(5));
+    expect(reached.short).toBeLessThan(1e-9);
+  });
+
+  it('keeps a leg asked beyond its reach turned as the swivel asks, its knee straight, not twisted round', () => {
+    // Made with the knee a little forward, as a figure stands, and asked beyond its reach ahead and below: at full stretch the knee lies on the line to the foot, so where it lies says nothing of which way it bends.
+    const bent = { ...leg, calf: { ...bone('thigh', 0.5), at: { x: 0, y: 0.5, z: 0.01 } } };
+    const reached = Reach.limb(bent, joints, Pose.rest, {
+      root: 'thigh',
+      end: 'foot',
+      to: { x: 0.1, y: -0.2, z: 0.4 },
+      swivel: { x: 0.1, y: 0.5, z: 2 },
+    });
+
+    expect(Math.abs(reached.pose.turns['thigh']?.['rotate'] ?? 0)).toBeLessThan(degrees(10));
+  });
+
   it('gives the same pose for the same targets, every time', () => {
     const ask = () =>
       Reach.limb(leg, joints, Pose.rest, {

@@ -157,7 +157,7 @@ const bendFor = (
 };
 
 /**
- * The angles of the joint `root` that bring the limb's end from where it is to `to`: the shortest turn of the whole limb about the root's joint onto the line to it, then about that line until its middle joint lies toward `swivel`, if given; read back as the root's motions' values.
+ * The angles of the joint `root` that bring the limb's end from where it is to `to`: the shortest turn of the whole limb about the root's joint onto the line to it, then about that line until its middle joint bends toward `swivel`, if given; read back as the root's motions' values.
  */
 const aimFor = (
   bones: Shape.Bones,
@@ -165,6 +165,7 @@ const aimFor = (
   pose: Pose.Pose,
   names: { readonly root: string; readonly middle: string; readonly end: string },
   root: Joint.Joint,
+  middle: Joint.Joint,
   ask: Limb,
 ): Joint.Angles => {
   const angles = anglesIn(pose, names.root);
@@ -185,9 +186,13 @@ const aimFor = (
     ask.swivel === undefined
       ? onto
       : (() => {
-          // About the line to the target, until the middle joint lies toward the swivel.
-          const kneeNow = Quaternion.rotate(onto, less(knee.at, hip.at));
-          const from = less(kneeNow, times(line, dot(kneeNow, line)));
+          // About the line to the target, until the middle joint bends toward the swivel: the way it bends is square to its bending axis and the line, however straight it is, where it lies says nothing of that once the limb is straight.
+          const bending = axisOf(middle, knee, anglesIn(pose, names.middle), ask.bend ?? 'flex');
+          const way = Option.match(bending, {
+            onNone: () => Quaternion.rotate(onto, less(knee.at, hip.at)),
+            onSome: (axis) => cross(line, Quaternion.rotate(onto, axis)),
+          });
+          const from = less(way, times(line, dot(way, line)));
           const hint = less(ask.swivel, hip.at);
           const to = less(hint, times(line, dot(hint, line)));
           if (length(from) === 0 || length(to) === 0) {
@@ -318,7 +323,7 @@ export const limb = (
   );
   const aimed = Pose.limit(
     joints,
-    turning(bent, ask.root, aimFor(bones, joints, bent, names, root, ask)),
+    turning(bent, ask.root, aimFor(bones, joints, bent, names, root, middle, ask)),
   );
   const { facing } = ask;
   if (facing === undefined) {
