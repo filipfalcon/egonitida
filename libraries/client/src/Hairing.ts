@@ -3,10 +3,15 @@ import type { Quaternion } from '@egonitida/core';
 import { Data, Effect } from 'effect';
 import {
   Fn,
+  If,
+  Loop,
   abs,
   asin,
-  attribute,
+  atomicAdd,
+  atomicLoad,
+  atomicStore,
   cameraProjectionMatrix,
+  cameraWorldMatrix,
   clamp,
   cos,
   cross,
@@ -14,12 +19,15 @@ import {
   exp,
   float,
   floor,
+  instanceIndex,
   int,
+  length,
   log,
   max,
   min,
   mix,
   modelViewMatrix,
+  modelWorldMatrixInverse,
   normalize,
   positionView,
   positionViewDirection,
@@ -29,6 +37,7 @@ import {
   select,
   sqrt,
   storage,
+  uint,
   uniform,
   varying,
   vec3,
@@ -440,17 +449,27 @@ const scattered = (
   return transmitted.add(internal).add(reflected).add(many);
 };
 
-/** How a strand is lit, varied by its own random number: each light scattered off it as `lobes` has it, along the way the strand runs; and the light from everywhere at once taken in and given back as its colour seen through twice. */
+/** How much of a light from the way given, in the camera's space, reaches a point of a strand through the hair about it. */
+type Shadowed = (toLight: Three.Node<'vec3'>) => Three.Node<'float'>;
+
+/** How a strand is lit, varied by its own random number: each light scattered off it as `lobes` has it, along the way the strand runs, as much of it as gets through the hair between it and the light; and the light from everywhere at once taken in and given back as its colour seen through twice. */
 class HairLighting extends Three.LightingModel {
   readonly #shading: Strands.Shading;
   readonly #tangent: Three.Node<'vec3'>;
   readonly #random: Three.Node<'float'>;
+  readonly #shadowed: Shadowed;
 
-  constructor(shading: Strands.Shading, tangent: Three.Node<'vec3'>, random: Three.Node<'float'>) {
+  constructor(
+    shading: Strands.Shading,
+    tangent: Three.Node<'vec3'>,
+    random: Three.Node<'float'>,
+    shadowed: Shadowed,
+  ) {
     super();
     this.#shading = shading;
     this.#tangent = tangent;
     this.#random = random;
+    this.#shadowed = shadowed;
   }
 
   override direct({
@@ -464,7 +483,9 @@ class HairLighting extends Three.LightingModel {
       normalize(this.#tangent),
       asVec3(lightDirection),
       positionViewDirection,
-    ).mul(asVec3(lightColor));
+    )
+      .mul(asVec3(lightColor))
+      .mul(this.#shadowed(asVec3(lightDirection)));
     reflectedLight.directSpecular.assign(asVec3(reflectedLight.directSpecular).add(lit));
   }
 
@@ -485,13 +506,20 @@ class HairMaterial extends Three.LineBasicNodeMaterial {
   readonly #shading: Strands.Shading;
   readonly #tangent: Three.Node<'vec3'>;
   readonly #random: Three.Node<'float'>;
+  readonly #shadowed: Shadowed;
 
-  constructor(shading: Strands.Shading, tangent: Three.Node<'vec3'>, random: Three.Node<'float'>) {
+  constructor(
+    shading: Strands.Shading,
+    tangent: Three.Node<'vec3'>,
+    random: Three.Node<'float'>,
+    shadowed: Shadowed,
+  ) {
     super();
     this.lights = true;
     this.#shading = shading;
     this.#tangent = tangent;
     this.#random = random;
+    this.#shadowed = shadowed;
     // A strand has no surface of its own to face a way: lights that ask, such as the sky's, are given the way across it toward the eye.
     const running = normalize(tangent);
     this.normalNode = normalize(
@@ -500,8 +528,45 @@ class HairMaterial extends Three.LineBasicNodeMaterial {
   }
 
   override setupLightingModel(): Three.LightingModel {
-    return new HairLighting(this.#shading, this.#tangent, this.#random);
+    return new HairLighting(this.#shading, this.#tangent, this.#random, this.#shadowed);
   }
+}
+
+/** How many voxels a side the grid hair is added up in has, and how much hair, in square metres of a strand's length times its width, each count of a voxel stands for. */
+const GRID = 64;
+const COUNTED = 1e-9;
+
+/** How many voxels a strand's light is looked for through, on the graphics device, and how many voxels apart: a few steps a pixel, as many as cross the hair about a head. */
+const MARCHED = 16;
+const STRIDE = 2;
+
+/** Work the graphics device does once a frame before drawing what reads this node, which stands for a whole: hair added up in its grid, before the strands it shades are drawn. */
+class EachFrame extends Three.Node {
+  readonly #work: (renderer: Three.Renderer) => void;
+
+  constructor(work: (renderer: Three.Renderer) => void) {
+    super('float');
+    this.#work = work;
+    this.updateBeforeType = Three.NodeUpdateType.FRAME;
+  }
+
+  override updateBefore(frame: Three.NodeFrame): boolean {
+    if (frame.renderer !== null) {
+      this.#work(frame.renderer);
+    }
+    return true;
+  }
+
+  override setup(): Three.Node {
+    return float(1);
+  }
+}
+
+/** The grid hair is added up in, as the drawing has it: where its least corner is and how wide a voxel is, given to the graphics device; and the grid as worked out last. */
+interface Kept {
+  readonly from: Three.UniformNode<'vec3', Three.Vector3>;
+  readonly voxel: Three.UniformNode<'float', number>;
+  last: Grid;
 }
 
 /**
@@ -520,17 +585,25 @@ export class Haired {
   };
 
   readonly #randoms: ReadonlyArray<number>;
+  readonly #grid: Kept;
 
   constructor(
     bound: ReadonlyArray<Strands.Bound>,
     randoms: ReadonlyArray<number>,
     now: { readonly values: Float32Array; readonly attribute: Three.StorageBufferAttribute },
     turns: { readonly values: Float32Array; readonly attribute: Three.StorageBufferAttribute },
+    grid: Kept,
   ) {
     this.bound = bound;
     this.#randoms = randoms;
     this.#now = now;
     this.#turns = turns;
+    this.#grid = grid;
+  }
+
+  /** The grid the hair is added up in, about where its guides were last given, a decimetre more on every side for the strands about them. */
+  grid(): Grid {
+    return this.#grid.last;
   }
 
   /** Each drawn strand's own random number, which varies how it is shaded. */
@@ -549,6 +622,10 @@ export class Haired {
       this.#turns.values[guide * 4 + 3] = turn.w;
     });
     this.#turns.attribute.needsUpdate = true;
+    const grid = gridAbout(now, GRID, 0.1);
+    this.#grid.last = grid;
+    this.#grid.from.value.set(grid.from.x, grid.from.y, grid.from.z);
+    this.#grid.voxel.value = grid.voxel;
   }
 
   /** Where the drawing was last given the guides, four numbers a point. */
@@ -604,8 +681,14 @@ export const fit = (
     ).flat();
     const bound = Strands.bind(guides, hair.drawn, roots);
 
+    // Where each point was made, and how wide it is, as the model has it, or as its guides' roots are.
+    const widths = drawn.geometry.getAttribute('_width');
     const drawnMade = buffer(position.count);
     padded(madeAt, drawnMade.values);
+    for (let point = 0; point < position.count; point++) {
+      drawnMade.values[point * 4 + 3] =
+        widths === undefined ? (guides.width[0] ?? 0.00008) : widths.getX(point);
+    }
     // Each strand's own random number, as its root has it in the model, or a middling one.
     const random = drawn.geometry.getAttribute('_random');
     const randoms = Array.from({ length: strands }, (_, strand) =>
@@ -690,21 +773,93 @@ export const fit = (
       Fn(() => following.node.element(int(vertexIndex).div(pointsDrawn).mul(2).add(1)).w)(),
       'vHairRandom',
     );
+
+    // The hair about her added up in a grid every frame, as `density` adds it up, before her strands are drawn: each link counted, as long as it is times as wide as it starts, in the voxel it starts in.
+    const cells = GRID ** 3;
+    const counts = new Three.StorageBufferAttribute(new Uint32Array(cells), 1);
+    // Added to atomically, and so read atomically too, wherever it is read.
+    const counting = storage(counts, 'uint', cells).toAtomic();
+    const grid: Kept = {
+      from: uniform(new Three.Vector3()),
+      voxel: uniform(0.01),
+      last: gridAbout(guides.at, GRID, 0.1),
+    };
+    grid.from.value.set(grid.last.from.x, grid.last.from.y, grid.last.from.z);
+    grid.voxel.value = grid.last.voxel;
+    /** The voxel `at` lies in, by its index, and whether it lies in the grid at all. */
+    const voxelAt = (at: Three.Node<'vec3'>) => {
+      const cell = floor(at.sub(grid.from).div(grid.voxel));
+      const inside = cell.x
+        .greaterThanEqual(0)
+        .and(cell.y.greaterThanEqual(0))
+        .and(cell.z.greaterThanEqual(0))
+        .and(cell.x.lessThan(GRID))
+        .and(cell.y.lessThan(GRID))
+        .and(cell.z.lessThan(GRID));
+      const index = int(cell.x)
+        .add(int(cell.y).mul(GRID))
+        .add(int(cell.z).mul(GRID * GRID));
+      return { inside, index };
+    };
+    const emptied = Fn(() => {
+      atomicStore(counting.element(instanceIndex), 0);
+    })().compute(cells);
+    const added = Fn(() => {
+      const point = int(instanceIndex);
+      If(point.mod(pointsDrawn).notEqual(pointsDrawn.sub(1)), () => {
+        const here = placedAt(point);
+        const link = length(placedAt(point.add(1)).sub(here)).mul(drawnMade.node.element(point).w);
+        const { inside, index } = voxelAt(here);
+        If(inside, () => {
+          atomicAdd(counting.element(index), uint(link.div(COUNTED)));
+        });
+      });
+    })().compute(position.count);
+    const addedUp = new Three.ConvertNode<'float'>(
+      new EachFrame((renderer) => {
+        // Drawing, the renderer is ready, so it computes at once and gives back no promise.
+        void renderer.compute([emptied, added]);
+      }),
+      'float',
+    );
+    // Where each point of a strand is, in the model's space, for the light to go from it through the hair.
+    const at = varying(placed, 'vHairAt');
+    /** As `transmittance` has it, every other voxel: from a voxel beyond the point toward the light, each voxel's hair taking light away, for as long as a step a voxel's hair stands for. */
+    // Marched in a function of its own on the graphics device, which a loop needs to be written in.
+    const marched = Fn(([way]: [Three.Node<'vec3'>]) => {
+      const covered = float(0).toVar();
+      Loop(MARCHED, ({ i }) => {
+        const { inside, index } = voxelAt(
+          at.add(way.mul(grid.voxel.mul(float(i).mul(STRIDE).add(1)))),
+        );
+        If(inside, () => {
+          covered.addAssign(float(atomicLoad(counting.element(index))).mul(STRIDE));
+        });
+      });
+      return exp(covered.mul(COUNTED).div(grid.voxel.mul(grid.voxel)).negate());
+    });
+    const shadowed: Shadowed = (toLight) => {
+      const inWorld = cameraWorldMatrix.mul(vec4(toLight, 0)).xyz;
+      return marched(normalize(modelWorldMatrixInverse.mul(vec4(inWorld, 0)).xyz));
+    };
+
     const colour = colourOf(hair.shading);
-    const material = new HairMaterial(hair.shading, tangent, ownRandom);
+    const material = new HairMaterial(hair.shading, tangent, ownRandom, shadowed);
     material.positionNode = placed;
     material.colorNode = vec3(colour.r, colour.g, colour.b);
-    // Thinner than a pixel, each strand is drawn as much of one as it covers, as `coverage` has it, over what is behind it: how wide each point is, as the model has it, or as its guides' roots are.
-    const widths = drawn.geometry.getAttribute('_width');
-    const width =
-      widths === undefined ? float(guides.width[0] ?? 0.00008) : attribute('_width', 'float');
+    // Thinner than a pixel, each strand is drawn as much of one as it covers, as `coverage` has it, over what is behind it; its hair added up first.
+    const width = varying(drawnMade.node.element(int(vertexIndex)).w, 'vHairWidth');
     const focal = cameraProjectionMatrix
       .mul(vec4(0, 1, 0, 0))
       .y.mul(screenSize.y)
       .mul(0.5);
     // Drawing only every so many strands, each covers as much more, so the hair is as thick.
     const every = Math.max(Math.round(options.every ?? 1), 1);
-    material.opacityNode = clamp(width.mul(focal).mul(every).div(positionView.z.negate()), 0, 1);
+    material.opacityNode = clamp(
+      width.mul(focal).mul(every).div(positionView.z.negate()),
+      0,
+      1,
+    ).mul(addedUp);
     if (every > 1) {
       drawn.geometry.setIndex(
         Array.from({ length: Math.ceil(strands / every) }, (_, kept) =>
@@ -726,5 +881,5 @@ export const fit = (
         shown.visible = false;
       }
     }
-    return Effect.succeed(new Haired(bound, randoms, guidesNow, turns));
+    return Effect.succeed(new Haired(bound, randoms, guidesNow, turns, grid));
   });

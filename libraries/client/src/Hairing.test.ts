@@ -134,6 +134,22 @@ describe('Hairing.fit', () => {
     }),
   );
 
+  it.effect('keeps the grid its hair is added up in about where her guides swing', () =>
+    Effect.gen(function* () {
+      const haired = yield* Hairing.fit(model(), hair);
+      const moved = guides.at.map((value, index) => value + (index % 3 === 0 ? 1 : 0));
+
+      haired.draw(moved, [Quaternion.identity, Quaternion.identity]);
+
+      const { from, voxel, size } = haired.grid();
+      for (let point = 0; point < moved.length / 3; point++) {
+        const x = moved[point * 3] ?? NaN;
+        expect(x).toBeGreaterThan(from.x);
+        expect(x).toBeLessThan(from.x + voxel * size);
+      }
+    }),
+  );
+
   it.effect('draws only every so many strands, if asked, each covering as much more', () =>
     Effect.gen(function* () {
       const delivered = model();
