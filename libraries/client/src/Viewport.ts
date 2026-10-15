@@ -52,9 +52,10 @@ export interface Viewport {
   readonly render: Effect.Effect<void>;
   /** Waits until the graphics device is lost, such as when a driver resets or the browser takes it back, and is why: nothing is drawn after it. */
   readonly lost: Effect.Effect<{ readonly reason: string }>;
-  /** Draws the scene as it is now and takes a shot of it: a PNG, as base64, at most `width` pixels across if given, and its size; for showing a tool what a person sees. */
+  /** Draws the scene as it is now, or as `draw` draws it, such as a photograph being developed, and takes a shot of it: a PNG, as base64, at most `width` pixels across if given, and its size; for showing a tool what a person sees. */
   readonly capture: (
     width: Option.Option<number>,
+    draw?: Effect.Effect<void>,
   ) => Effect.Effect<
     { readonly png: string; readonly width: number; readonly height: number },
     ViewportError
@@ -657,7 +658,7 @@ export const make = (
     );
 
     // The canvas holds what was drawn only until the task that drew it ends, so the shot is taken in the same task.
-    const capture = (width: Option.Option<number>) =>
+    const capture = (width: Option.Option<number>, draw?: Effect.Effect<void>) =>
       Effect.suspend(() => {
         if (Deferred.isDoneUnsafe(lost)) {
           return Effect.fail(new ViewportError({ reason: 'The graphics device was lost.' }));
@@ -669,8 +670,7 @@ export const make = (
             }),
           );
         }
-        drawNow();
-        return shot(canvas, width);
+        return Effect.andThen(draw ?? Effect.sync(drawNow), shot(canvas, width));
       });
 
     return {

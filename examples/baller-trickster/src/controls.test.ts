@@ -39,6 +39,18 @@ describe('the baller’s controls', () => {
     expect(BallerControls.replaced(controls)).toBe(true);
   });
 
+  it('take a photograph at a press of P, or of the pad’s Create button', () => {
+    expect(BallerControls.photographed(read({ ...Devices.idle, keys: new Set(['KeyP']) }))).toBe(
+      true,
+    );
+    expect(
+      BallerControls.photographed(
+        read(onPad({ buttons: { ...Devices.idlePad.buttons, Select: 1 } })),
+      ),
+    ).toBe(true);
+    expect(BallerControls.photographed(read(Devices.idle))).toBe(false);
+  });
+
   it('turn the camera by a stick held in, its foot holding where it was', () => {
     const held = { x: 0.3, y: 0.5, lift: 0 };
     const controls = read(

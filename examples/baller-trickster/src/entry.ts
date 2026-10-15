@@ -1,8 +1,8 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Controls, Drawing, Hearing, Tab, View, Viewport } from '@egonitida/client';
+import { Controls, Drawing, Hearing, Photo, Tab, View, Viewport } from '@egonitida/client';
 import { Client, WorkerTransport } from '@egonitida/core';
 import { Bridge, Page } from '@egonitida/devtools';
-import { Effect, Option } from 'effect';
+import { Effect, Exit, Option, Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';
 import * as BallerView from '#src/baller.view.ts';
@@ -10,7 +10,7 @@ import * as Camera from '#src/camera.ts';
 import * as BallerControls from '#src/controls.ts';
 import * as Model from '#src/model.ts';
 
-// The page: joins the local server in a worker as a baller, sends where the sticks place her feet every frame, puts the ball back at a press, and draws her and the ball at every frame the display shows, from where the player turns the camera about her.
+// The page: joins the local server in a worker as a baller, sends where the sticks place her feet every frame, puts the ball back at a press, and draws her and the ball at every frame the display shows, from where the player turns the camera about her; or, while a photograph of her is taken, develops it instead, path traced, finer every frame.
 /** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the state kept for the tab. */
 const host = Tab.id('baller-trickster');
 
@@ -25,6 +25,19 @@ const main = Effect.gen(function* () {
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
   const viewport = yield* Viewport.make(canvas, Viewport.sharp);
   const model = yield* Effect.cached(Model.load);
+  // A photograph being developed, and the scope it is let go of with, while one is.
+  const photographing: {
+    current: Option.Option<{ readonly photo: Photo.Photo; readonly scope: Scope.Closeable }>;
+  } = {
+    current: Option.none(),
+  };
+  const drawn = Effect.suspend(() =>
+    Option.match(photographing.current, {
+      onNone: () => viewport.render,
+      onSome: ({ photo }) => photo.develop,
+    }),
+  );
+
   // Where the player looks at her from, played on from the sticks every frame.
   // In development, an agent asking through the development server can see what this page draws.
   if (import.meta.env.DEV) {
@@ -33,7 +46,8 @@ const main = Effect.gen(function* () {
       onSome: (channel) =>
         Page.serve(channel, {
           host,
-          capture: (width) => viewport.capture(width).pipe(Effect.mapError(({ reason }) => reason)),
+          capture: (width) =>
+            viewport.capture(width, drawn).pipe(Effect.mapError(({ reason }) => reason)),
         }),
     });
   }
@@ -67,6 +81,7 @@ const main = Effect.gen(function* () {
     'Triangle or R: the ball back',
     'Square or F: the ball dropped onto her foot',
     'directional pad or arrows: walk',
+    'Create or P: a photograph, path traced',
   ].join('\n');
 
   yield* viewport.loop((seconds) =>
@@ -87,9 +102,20 @@ const main = Effect.gen(function* () {
           if (BallerControls.dropped(played.controls)) {
             yield* client.act(Baller.DroppedBall, {});
           }
+          if (BallerControls.photographed(played.controls)) {
+            photographing.current = yield* Option.match(photographing.current, {
+              onNone: () =>
+                Effect.gen(function* () {
+                  const scope = yield* Scope.make();
+                  const photo = yield* Scope.provide(Photo.take(viewport), scope);
+                  return Option.some({ photo, scope });
+                }),
+              onSome: ({ scope }) => Effect.as(Scope.close(scope, Exit.void), Option.none()),
+            });
+          }
           yield* views.frame(frame);
         }),
-    }).pipe(Effect.andThen(viewport.render)),
+    }).pipe(Effect.andThen(drawn)),
   );
   return yield* Effect.never;
 }).pipe(
