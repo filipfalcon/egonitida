@@ -36,8 +36,8 @@ export const skyAt = (lighting: Lighting, way: Point): Colour => {
   ];
 };
 
-/** How many times a path bounces at most, and from how many bounces on it may fade, as likely as it is dark. */
-const BOUNCES = 8;
+/** How many times a path bounces at most, and from how many bounces on it may fade, as likely as it is dark: so many that light bounced among strands of hair, or between walls, is all but never cut short, while fading ends most paths long before. */
+const BOUNCES = 32;
 const FADING = 3;
 
 /** How far from a surface a path leaves it, so it does not meet the surface it left. */

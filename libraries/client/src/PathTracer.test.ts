@@ -90,6 +90,32 @@ describe('PathTracer.radiance', () => {
     expect(shaded).toBeCloseTo(0, 6);
   });
 
+  it('carries light through as many bounces as it takes, inside a closed box glowing as much as it sends back', () => {
+    const lighting: PathTracer.Lighting = { up: [0, 0, 0], down: [0, 0, 0], suns: [] };
+    // Each wall gives off 1 and sends on 0.8 of what reaches it: 1 + 0.8 + 0.64 + … = 5 in all.
+    const flat = TracedScene.flatten(
+      [box],
+      [placed(0, [0.8, 0.8, 0.8], { emissive: [1, 1, 1], at: [0, 0, 0] })],
+    );
+    const random = numbers(9);
+    const count = 4000;
+    let sum = 0;
+    for (let path = 0; path < count; path++) {
+      const z = 1 - 2 * random();
+      const across = Math.sqrt(1 - z * z);
+      const angle = 2 * Math.PI * random();
+      const way: readonly [number, number, number] = [
+        across * Math.cos(angle),
+        across * Math.sin(angle),
+        z,
+      ];
+      sum += PathTracer.radiance(flat, [0, 0, 0], way, lighting, random)[0];
+    }
+
+    expect(sum / count).toBeGreaterThan(4.85);
+    expect(sum / count).toBeLessThan(5.15);
+  });
+
   it('gives off the light of what glows', () => {
     const lighting: PathTracer.Lighting = { up: [0, 0, 0], down: [0, 0, 0], suns: [] };
     const flat = TracedScene.flatten([floor], [placed(0, [0, 0, 0], { emissive: [2, 1, 0.5] })]);

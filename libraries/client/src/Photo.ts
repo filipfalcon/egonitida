@@ -37,8 +37,9 @@ import * as TracedScene from '#src/TracedScene.ts';
  * A photograph of what a viewport shows, path traced: the scene gathered for rays as it is when the photograph is taken, and lit as it is lit then, and a path followed from the camera through every pixel, as `PathTracer.radiance` follows one, the paths averaged, so the picture grows finer the longer it is developed. Each time it is developed, the graphics device follows paths through the next rows of pixels, only once it has followed those before, and as many rows as it follows within its budget, so it never falls behind, with the work waiting on it piling up, nor keeps the page from drawing. The game may go on meanwhile: the photograph is of the moment it was taken.
  */
 
-/** How many times a path bounces at most, and how many suns light it at most. */
-const BOUNCES = 6;
+/** How many times a path bounces at most, as `PathTracer` has it, and from how many bounces on it may fade, as likely as it is dark; and how many suns light it at most. */
+const BOUNCES = 32;
+const FADING = 3;
 const SUNS = 2;
 
 /** How far from a surface a path leaves it, and how far a ray looks for what it meets. */
@@ -226,7 +227,7 @@ export const take = (
       const way = normalize(cameraWorld.mul(vec4(seen.xyz.div(seen.w), 0)).xyz).toVar();
       const light = vec3(0).toVar();
       const carried = vec3(1).toVar();
-      Loop(BOUNCES, () => {
+      Loop(BOUNCES, ({ i }) => {
         const { met, normal, uv, along } = SceneTracer.traceFacing(device, from, way, float(FAR));
         const placed = int(met.y).toVar();
         If(placed.lessThan(0), () => {
@@ -329,6 +330,14 @@ export const take = (
                 .add(facing.mul(sqrt(rise))),
             ),
           );
+        });
+        // From the fourth bounce a path fades as likely as it is dark, what remains of it carried on as much brighter, so no light is lost on average.
+        If(int(i).greaterThanEqual(FADING), () => {
+          const keep = clamp(max(carried.x, max(carried.y, carried.z)), 0, 1).toVar();
+          If(next().greaterThanEqual(keep), () => {
+            Break();
+          });
+          carried.divAssign(keep);
         });
       });
       const before = summing.element(pixel);
