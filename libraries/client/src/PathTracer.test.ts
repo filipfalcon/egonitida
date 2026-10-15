@@ -43,9 +43,19 @@ const numbers = (seed: number) => {
 const down: readonly [number, number, number] = [0, -1, 0];
 const above: readonly [number, number, number] = [0.3, 2, 0.2];
 
+describe('PathTracer.skyAt', () => {
+  it('is as bright as the sky straight up, as the ground straight down, and between them halfway at the horizon', () => {
+    const lighting: PathTracer.Lighting = { up: [1, 1, 1], down: [0, 0, 0], suns: [] };
+
+    expect(PathTracer.skyAt(lighting, [0, 1, 0])).toEqual([1, 1, 1]);
+    expect(PathTracer.skyAt(lighting, [0, -1, 0])).toEqual([0, 0, 0]);
+    expect(PathTracer.skyAt(lighting, [1, 0, 0])).toEqual([0.5, 0.5, 0.5]);
+  });
+});
+
 describe('PathTracer.radiance', () => {
   it('is the sky where a ray meets nothing', () => {
-    const lighting: PathTracer.Lighting = { sky: [0.2, 0.4, 0.8], suns: [] };
+    const lighting: PathTracer.Lighting = { up: [0.2, 0.4, 0.8], down: [0.2, 0.4, 0.8], suns: [] };
     const empty = TracedScene.flatten([], []);
 
     expect(PathTracer.radiance(empty, [0, 0, 0], [0, 0, -1], lighting, numbers(1))).toEqual([
@@ -54,7 +64,7 @@ describe('PathTracer.radiance', () => {
   });
 
   it('is a matte floor’s colour times the sky above it, however its light is sampled', () => {
-    const lighting: PathTracer.Lighting = { sky: [1, 1, 1], suns: [] };
+    const lighting: PathTracer.Lighting = { up: [1, 1, 1], down: [1, 1, 1], suns: [] };
     const flat = TracedScene.flatten([floor], [placed(0, [0.5, 0.5, 0.5])]);
 
     for (let seed = 1; seed <= 20; seed++) {
@@ -65,7 +75,8 @@ describe('PathTracer.radiance', () => {
 
   it('is lit by a sun straight above a matte floor as much as Lambert has it, and none of it in a box’s shadow', () => {
     const lighting: PathTracer.Lighting = {
-      sky: [0, 0, 0],
+      up: [0, 0, 0],
+      down: [0, 0, 0],
       suns: [{ toward: [0, 1, 0], irradiance: [1, 1, 1] }],
     };
     const flat = TracedScene.flatten(
@@ -80,9 +91,28 @@ describe('PathTracer.radiance', () => {
   });
 
   it('gives off the light of what glows', () => {
-    const lighting: PathTracer.Lighting = { sky: [0, 0, 0], suns: [] };
+    const lighting: PathTracer.Lighting = { up: [0, 0, 0], down: [0, 0, 0], suns: [] };
     const flat = TracedScene.flatten([floor], [placed(0, [0, 0, 0], { emissive: [2, 1, 0.5] })]);
 
     expect(PathTracer.radiance(flat, above, down, lighting, numbers(5))).toEqual([2, 1, 0.5]);
+  });
+});
+
+describe('PathTracer.lightingOf', () => {
+  it('lights a path as Three lights the scene: its hemisphere as the sky, its directional lights as suns', () => {
+    const scene = new Three.Scene();
+    scene.add(new Three.HemisphereLight(0xffffff, 0x000000, Math.PI));
+    const sun = new Three.DirectionalLight(0xffffff, 2);
+    sun.position.set(0, 4, 3);
+    scene.add(sun);
+
+    const lighting = PathTracer.lightingOf(scene);
+
+    expect(lighting.up[0]).toBeCloseTo(1, 6);
+    expect(lighting.down[0]).toBeCloseTo(0, 6);
+    expect(lighting.suns).toHaveLength(1);
+    expect(lighting.suns[0]?.toward[1]).toBeCloseTo(0.8, 6);
+    expect(lighting.suns[0]?.toward[2]).toBeCloseTo(0.6, 6);
+    expect(lighting.suns[0]?.irradiance[0]).toBeCloseTo(2, 6);
   });
 });
