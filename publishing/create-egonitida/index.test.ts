@@ -19,7 +19,7 @@ describe('create-egonitida', () => {
     for (const link of [
       'https://egonitida.com',
       'https://github.com/egonitida/egonitida',
-      'https://www.npmjs.com/org/egonitida',
+      'https://npmjs.com/org/egonitida',
       'https://x.com/egonitida',
       'https://www.instagram.com/egonitida',
       'https://www.threads.net/@egonitida',

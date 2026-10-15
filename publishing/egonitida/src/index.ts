@@ -7,7 +7,7 @@ A real-time 3D engine built on Effect, Three.js, and Foldkit.
 
   Website    https://egonitida.com
   Source     https://github.com/egonitida/egonitida
-  Packages   https://www.npmjs.com/org/egonitida
+  Packages   https://npmjs.com/org/egonitida
   X          https://x.com/egonitida
   Instagram  https://www.instagram.com/egonitida
   Threads    https://www.threads.net/@egonitida
