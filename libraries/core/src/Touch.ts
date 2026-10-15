@@ -71,16 +71,16 @@ const wayFrom = (from: Ray.Point, to: Ray.Point): Ray.Point => {
   return long === 0 ? { x: 0, y: 1, z: 0 } : times(way, 1 / long);
 };
 
-/** Every part of the figure placed as `placed` places it that touches `sphere`: its touch points, then the flesh about its bones. */
+/** Every part of the figure placed as `placed` places it, each bone only as it is asked for, that touches `sphere`: its touch points, then the flesh about its bones. */
 const touching = (
-  placed: Readonly<Record<string, Pose.Placed>>,
+  placed: Pose.Placer,
   joints: Joint.Joints,
   touches: Touches,
   sphere: Sphere,
 ): ReadonlyArray<Found> => {
   const found: Array<Found> = [];
   for (const [part, point] of Object.entries(touches)) {
-    const on = placed[point.bone];
+    const on = placed(point.bone);
     if (on === undefined) {
       continue;
     }
@@ -101,7 +101,7 @@ const touching = (
     }
   }
   for (const [name, joint] of Object.entries(joints)) {
-    const on = placed[name];
+    const on = placed(name);
     if (on === undefined || Option.isNone(joint.flesh)) {
       continue;
     }
@@ -144,12 +144,12 @@ export const of = (
 ): Option.Option<Touched> => {
   for (let step = 1; step <= SWEEP; step++) {
     const pose = step === SWEEP ? now : Pose.between(joints, before, now, step / SWEEP);
-    const found = touching(Pose.place(bones, joints, pose), joints, touches, sphere);
+    const found = touching(Pose.placer(bones, joints, pose), joints, touches, sphere);
     const [deepest] = [...found].sort((a, b) => b.depth - a.depth);
     if (deepest !== undefined) {
       // Where that point of her was, and is, carried by its bone.
-      const was = Pose.place(bones, joints, before)[deepest.bone];
-      const is = Pose.place(bones, joints, now)[deepest.bone];
+      const was = Pose.placer(bones, joints, before)(deepest.bone);
+      const is = Pose.placer(bones, joints, now)(deepest.bone);
       const velocity =
         was === undefined || is === undefined || seconds <= 0
           ? { x: 0, y: 0, z: 0 }

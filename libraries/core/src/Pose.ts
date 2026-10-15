@@ -132,47 +132,64 @@ const plus = (point: Ray.Point, by: Ray.Point): Ray.Point => ({
   z: point.z + by.z,
 });
 
+/** Where a bone of a posed figure stands, by its name, worked out as it is first asked for, with the bones above it and no others; nothing for a bone the figure lacks. */
+export type Placer = (name: string) => Placed | undefined;
+
 /**
- * Where every one of `bones` stands and how it is turned, `joints` turned as `pose` says (forward kinematics): each bone where it was made from its parent, carried with its parent's turn, and turned by its own joint, if it is one; the bones with no parent placed and turned as the whole figure is. On a figure shaped by `Shape.shaped`, she is posed as she is shaped.
+ * Where the bones of `bones` stand and how they are turned, `joints` turned as `pose` says (forward kinematics), each worked out only as it is asked for, with the bones above it, and kept: for a step that wants a foot or two of a figure of many bones. Each bone stands where it was made from its parent, carried with its parent's turn, and turned by its own joint, if it is one; the bones with no parent are placed and turned as the whole figure is. On a figure shaped by `Shape.shaped`, she is posed as she is shaped.
+ */
+export const placer = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose): Placer => {
+  const placed = new Map<string, Placed>();
+  const placing = (name: string): Placed | undefined => {
+    const known = placed.get(name);
+    if (known !== undefined) {
+      return known;
+    }
+    const bone = bones[name];
+    if (bone === undefined) {
+      return undefined;
+    }
+    const joint = joints[name];
+    const own = joint === undefined ? Quaternion.identity : turnOf(joint, pose.turns[name] ?? {});
+    const above = Option.getOrUndefined(bone.parent);
+    const made = above === undefined ? undefined : bones[above];
+    const from = above === undefined || made === undefined ? undefined : placing(above);
+    const now =
+      from === undefined || made === undefined
+        ? {
+            at: plus(Quaternion.rotate(pose.turn, bone.at), pose.at),
+            turn: Quaternion.multiply(Quaternion.multiply(pose.turn, bone.turn), own),
+          }
+        : (() => {
+            const back = Quaternion.invert(made.turn);
+            // Where it was made, and how it was turned, in its parent's own frame.
+            const offset = Quaternion.rotate(back, less(bone.at, made.at));
+            const local = Quaternion.multiply(back, bone.turn);
+            return {
+              at: plus(from.at, Quaternion.rotate(from.turn, offset)),
+              turn: Quaternion.multiply(Quaternion.multiply(from.turn, local), own),
+            };
+          })();
+    placed.set(name, now);
+    return now;
+  };
+  return placing;
+};
+
+/**
+ * Where every one of `bones` stands and how it is turned, `joints` turned as `pose` says (forward kinematics), as `placer` places each.
  */
 export const place = (
   bones: Shape.Bones,
   joints: Joint.Joints,
   pose: Pose,
 ): Readonly<Record<string, Placed>> => {
-  const placed = new Map<string, Placed>();
-  const placing = (name: string, bone: Shape.Bone): Placed => {
-    const known = placed.get(name);
-    if (known !== undefined) {
-      return known;
-    }
-    const joint = joints[name];
-    const own = joint === undefined ? Quaternion.identity : turnOf(joint, pose.turns[name] ?? {});
-    const parent = Option.flatMap(bone.parent, (above) =>
-      Option.map(Option.fromNullishOr(bones[above]), (made) => ({ name: above, made })),
-    );
-    const now = Option.match(parent, {
-      onNone: () => ({
-        at: plus(Quaternion.rotate(pose.turn, bone.at), pose.at),
-        turn: Quaternion.multiply(Quaternion.multiply(pose.turn, bone.turn), own),
-      }),
-      onSome: ({ name: above, made }) => {
-        const from = placing(above, made);
-        const back = Quaternion.invert(made.turn);
-        // Where it was made, and how it was turned, in its parent's own frame.
-        const offset = Quaternion.rotate(back, less(bone.at, made.at));
-        const local = Quaternion.multiply(back, bone.turn);
-        return {
-          at: plus(from.at, Quaternion.rotate(from.turn, offset)),
-          turn: Quaternion.multiply(Quaternion.multiply(from.turn, local), own),
-        };
-      },
-    });
-    placed.set(name, now);
-    return now;
-  };
+  const placing = placer(bones, joints, pose);
   return Object.fromEntries(
-    Object.entries(bones).map(([name, bone]) => [name, placing(name, bone)]),
+    Object.keys(bones).flatMap((name) => {
+      const placed = placing(name);
+      return placed === undefined ? [] : [[name, placed]];
+    }),
   );
 };
 
@@ -186,14 +203,10 @@ export const points = (
     Object.entries(place(bones, joints, pose)).map(([name, { at }]) => [name, at]),
   );
 
-/** The measure `measure` of the bone `bone`, placed as `placed` places it: the angle between its own +y and the measure's direction in the frame of the bone it is measured from; its rest, if either is not placed. */
-export const measured = (
-  placed: Readonly<Record<string, Placed>>,
-  bone: string,
-  measure: Joint.Measure,
-): number => {
-  const own = placed[bone];
-  const from = placed[measure.from];
+/** The measure `measure` of the bone `bone`, placed as `placing` places it: the angle between its own +y and the measure's direction in the frame of the bone it is measured from; its rest, if either is not placed. */
+export const measured = (placing: Placer, bone: string, measure: Joint.Measure): number => {
+  const own = placing(bone);
+  const from = placing(measure.from);
   if (own === undefined || from === undefined) {
     return measure.rest;
   }
@@ -233,7 +246,7 @@ export const clamp = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose): Pos
   }
   const clamped = turns;
   for (let pass = 0; pass < FOLLOW_PASSES; pass++) {
-    const placed = place(bones, joints, { ...pose, turns });
+    const placing = placer(bones, joints, { ...pose, turns });
     let next = clamped;
     for (const [name, joint] of followers) {
       for (const { motion, on, table } of joint.follows) {
@@ -241,7 +254,7 @@ export const clamp = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose): Pos
         const value =
           measure === undefined
             ? Joint.valueOf(joints, turns, on)
-            : measured(placed, on.bone, measure);
+            : measured(placing, on.bone, measure);
         const own = Joint.valueOf(joints, next, { bone: name, motion });
         next = { ...next, [name]: { ...next[name], [motion]: own + Joint.along(table, value) } };
       }
@@ -361,10 +374,10 @@ export const centreOfMass = (
   joints: Joint.Joints,
   pose: Pose,
 ): Option.Option<Ray.Point> => {
-  const placed = place(bones, joints, pose);
+  const placed = placer(bones, joints, pose);
   const sum = { x: 0, y: 0, z: 0, mass: 0 };
   for (const [name, joint] of Object.entries(joints)) {
-    const bone = placed[name];
+    const bone = placed(name);
     if (bone === undefined || Option.isNone(joint.flesh)) {
       continue;
     }

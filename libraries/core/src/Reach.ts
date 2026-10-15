@@ -116,10 +116,10 @@ const bendFor = (
     return current;
   }
   const atRest = setting(pose, names.middle, bend, motion.rest);
-  const placed = Pose.place(bones, joints, atRest);
-  const hip = placed[names.root];
-  const knee = placed[names.middle];
-  const foot = placed[names.end];
+  const placed = Pose.placer(bones, joints, atRest);
+  const hip = placed(names.root);
+  const knee = placed(names.middle);
+  const foot = placed(names.end);
   const axis =
     knee === undefined ? Option.none() : axisOf(middle, knee, anglesIn(atRest, names.middle), bend);
   if (hip === undefined || knee === undefined || foot === undefined || Option.isNone(axis)) {
@@ -168,10 +168,10 @@ const aimFor = (
   ask: Limb,
 ): Joint.Angles => {
   const angles = anglesIn(pose, names.root);
-  const placed = Pose.place(bones, joints, pose);
-  const hip = placed[names.root];
-  const knee = placed[names.middle];
-  const foot = placed[names.end];
+  const placed = Pose.placer(bones, joints, pose);
+  const hip = placed(names.root);
+  const knee = placed(names.middle);
+  const foot = placed(names.end);
   if (hip === undefined || knee === undefined || foot === undefined) {
     return angles;
   }
@@ -207,7 +207,7 @@ const aimFor = (
 
 /** The way the surface `facing` faces now, in the model's space, at `pose`. */
 const facingNow = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, facing: Facing) => {
-  const placed = Pose.place(bones, joints, pose)[facing.bone];
+  const placed = Pose.placer(bones, joints, pose)(facing.bone);
   return placed === undefined ? facing.normal : unit(Quaternion.rotate(placed.turn, facing.normal));
 };
 
@@ -224,7 +224,7 @@ const faced = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, facing
         continue;
       }
       for (const motion of joint.order) {
-        const placed = Pose.place(bones, joints, now)[name];
+        const placed = Pose.placer(bones, joints, now)(name);
         const axis =
           placed === undefined ? Option.none() : axisOf(joint, placed, anglesIn(now, name), motion);
         const range = Joint.limitsAt(joints, now.turns, name)[motion];
@@ -258,7 +258,7 @@ export const limb = (
   const root = joints[ask.root];
   const middle = middleName === undefined ? undefined : joints[middleName];
   const shortOf = (reached: Pose.Pose) => {
-    const placed = Pose.place(bones, joints, reached)[ask.end];
+    const placed = Pose.placer(bones, joints, reached)(ask.end);
     return placed === undefined ? Infinity : length(less(placed.at, ask.to));
   };
   if (
@@ -274,7 +274,7 @@ export const limb = (
   }
   const names = { root: ask.root, middle: middleName, end: ask.end };
   const bend = ask.bend ?? 'flex';
-  const hip = Pose.place(bones, joints, pose)[ask.root];
+  const hip = Pose.placer(bones, joints, pose)(ask.root);
   const distance = hip === undefined ? 0 : length(less(ask.to, hip.at));
   const bent = setting(
     pose,
@@ -392,7 +392,7 @@ const gazeOf = (
   eye: string,
   ask: Look,
 ) => {
-  const placed = Pose.place(bones, joints, pose)[eye];
+  const placed = Pose.placer(bones, joints, pose)(eye);
   if (placed === undefined) {
     return Option.none();
   }
@@ -435,7 +435,7 @@ export const look = (
   for (let pass = 0; pass < LOOK_PASSES && eye !== undefined && base !== undefined; pass++) {
     const gaze = gazeOf(bones, joints, now, eye, ask);
     const baseJoint = joints[base];
-    const basePlaced = Pose.place(bones, joints, now)[base];
+    const basePlaced = Pose.placer(bones, joints, now)(base);
     if (
       Option.isNone(gaze) ||
       baseJoint === undefined ||
@@ -510,7 +510,7 @@ export const balance = (
   pose: Pose.Pose,
   ask: Balance,
 ): Pose.Pose => {
-  const planted = Pose.place(bones, joints, pose)[ask.stance.end];
+  const planted = Pose.placer(bones, joints, pose)(ask.stance.end);
   if (planted === undefined) {
     return pose;
   }
@@ -521,13 +521,13 @@ export const balance = (
       return now;
     }
     const across = { x: planted.at.x - centre.value.x, z: planted.at.z - centre.value.z };
-    const placed = Pose.place(bones, joints, now);
-    const hip = placed[ask.stance.root];
+    const placed = Pose.placer(bones, joints, now);
+    const hip = placed(ask.stance.root);
     const middle = Option.getOrUndefined(
       Option.flatMap(Option.fromNullishOr(bones[ask.stance.end]), ({ parent }) => parent),
     );
-    const knee = middle === undefined ? undefined : placed[middle];
-    const foot = placed[ask.stance.end];
+    const knee = middle === undefined ? undefined : placed(middle);
+    const foot = placed(ask.stance.end);
     // As low as the leg needs, at full stretch, to stand on the ground it stood on.
     const lower =
       hip === undefined || knee === undefined || foot === undefined
