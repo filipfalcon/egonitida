@@ -13,6 +13,7 @@ import {
   getScreenPosition,
   getViewPosition,
   int,
+  length,
   max,
   min,
   mix,
@@ -148,6 +149,51 @@ const PLACED_GROUPS = TracedScene.PLACED / 4;
 /** How many groups of four numbers a triangle takes on the device. */
 const TRIANGLE_GROUPS = TracedScene.TRIANGLE / 4;
 
+/** How far along the ray from `origin` going `direction`, as long as `direction` is, it meets the capsule about the line from `a` to `b`, `radius` round, as `TracedScene`'s walk works it out: along its side where the ray is not along the line itself, else the nearer of its round ends; far beyond anything where it misses. */
+const meetsLink = (
+  a: Three.Node<'vec3'>,
+  b: Three.Node<'vec3'>,
+  radius: Three.Node<'float'>,
+  origin: Three.Node<'vec3'>,
+  direction: Three.Node<'vec3'>,
+): Three.Node<'float'> => {
+  const long = length(direction).max(LEAST);
+  const way = direction.div(long);
+  const ba = b.sub(a);
+  const oa = origin.sub(a);
+  const baba = dot(ba, ba);
+  const bard = dot(ba, way);
+  const baoa = dot(ba, oa);
+  const sideA = baba.sub(bard.mul(bard));
+  const sideB = baba.mul(dot(way, oa)).sub(baoa.mul(bard));
+  const sideC = baba.mul(dot(oa, oa)).sub(baoa.mul(baoa)).sub(radius.mul(radius).mul(baba));
+  const side = sideB.mul(sideB).sub(sideA.mul(sideC));
+  const t = sideB
+    .negate()
+    .sub(sqrt(side.max(0)))
+    .div(sideA.max(LEAST));
+  const along = baoa.add(t.mul(bard));
+  const alongSide = select(
+    sideA
+      .greaterThan(LEAST)
+      .and(side.greaterThanEqual(0))
+      .and(along.greaterThan(0))
+      .and(along.lessThan(baba)),
+    t,
+    float(MISSED),
+  );
+  const roundEnd = (end: Three.Node<'vec3'>) => {
+    const from = origin.sub(end);
+    const endB = dot(way, from);
+    const round = endB.mul(endB).sub(dot(from, from).sub(radius.mul(radius)));
+    return select(round.greaterThan(0), endB.negate().sub(sqrt(round.max(0))), float(MISSED));
+  };
+  return min(alongSide, min(roundEnd(a), roundEnd(b))).div(long);
+};
+
+/** How far a ray that misses a link is taken to meet it: beyond anything a walk is looking for. */
+const MISSED = 1e30;
+
 /**
  * The walk a shader takes through `device` for the ray from `origin` going `direction`, before `far`: what it meets first of what it is `seeking`, as how far along it in `x` and which placed shape in `y`, -1 where it meets nothing. Built where it is called, into the shader calling it: the same walk as `TracedScene.trace`, the top hierarchy threaded to each shape whose box the ray meets, and that shape's, in its own space, to the triangles.
  */
@@ -229,30 +275,47 @@ export const trace = (
                     Break();
                   });
                   const at = triangle.mul(TRIANGLE_GROUPS).toVar();
-                  const a = device.triangles.node.element(at).xyz.toVar();
-                  const e1 = device.triangles.node.element(at.add(1)).xyz.sub(a).toVar();
-                  const e2 = device.triangles.node.element(at.add(2)).xyz.sub(a).toVar();
-                  const p = cross(localDirection, e2).toVar();
-                  const determinant = dot(e1, p).toVar();
-                  If(abs(determinant).greaterThanEqual(LEAST), () => {
-                    const scale = float(1).div(determinant).toVar();
-                    const s = localOrigin.sub(a).toVar();
-                    const u = dot(s, p).mul(scale).toVar();
-                    const q = cross(s, e1).toVar();
-                    const v = dot(localDirection, q).mul(scale).toVar();
-                    const t = dot(e2, q).mul(scale).toVar();
-                    If(
-                      u
-                        .greaterThanEqual(0)
-                        .and(v.greaterThanEqual(0))
-                        .and(u.add(v).lessThanEqual(1))
-                        .and(t.greaterThan(TracedScene.NEAREST))
-                        .and(t.lessThan(best)),
-                      () => {
-                        best.assign(t);
-                        hit.assign(placed);
-                      },
-                    );
+                  const first4 = device.triangles.node.element(at).toVar();
+                  const a = first4.xyz.toVar();
+                  If(first4.w.greaterThan(0.5), () => {
+                    // A link of a strand: a capsule about the line from its start to its end.
+                    const second = device.triangles.node.element(at.add(1)).toVar();
+                    const t = meetsLink(
+                      a,
+                      second.xyz,
+                      second.w,
+                      localOrigin,
+                      localDirection,
+                    ).toVar();
+                    If(t.greaterThan(TracedScene.NEAREST).and(t.lessThan(best)), () => {
+                      best.assign(t);
+                      hit.assign(placed);
+                    });
+                  }).Else(() => {
+                    const e1 = device.triangles.node.element(at.add(1)).xyz.sub(a).toVar();
+                    const e2 = device.triangles.node.element(at.add(2)).xyz.sub(a).toVar();
+                    const p = cross(localDirection, e2).toVar();
+                    const determinant = dot(e1, p).toVar();
+                    If(abs(determinant).greaterThanEqual(LEAST), () => {
+                      const scale = float(1).div(determinant).toVar();
+                      const s = localOrigin.sub(a).toVar();
+                      const u = dot(s, p).mul(scale).toVar();
+                      const q = cross(s, e1).toVar();
+                      const v = dot(localDirection, q).mul(scale).toVar();
+                      const t = dot(e2, q).mul(scale).toVar();
+                      If(
+                        u
+                          .greaterThanEqual(0)
+                          .and(v.greaterThanEqual(0))
+                          .and(u.add(v).lessThanEqual(1))
+                          .and(t.greaterThan(TracedScene.NEAREST))
+                          .and(t.lessThan(best)),
+                        () => {
+                          best.assign(t);
+                          hit.assign(placed);
+                        },
+                      );
+                    });
                   });
                   triangle.addAssign(1);
                 });
