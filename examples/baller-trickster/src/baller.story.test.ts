@@ -194,16 +194,22 @@ describe('her ponytail', () => {
     );
   };
 
-  it('hangs from her head where it is tied, below it, its links as long as they were made', () => {
+  it('hangs from her head where it is tied, as she looks at the ball, below it, its links as long as they were made', () => {
     const made = (name: string) => Body.bones[name]?.at ?? { x: 0, y: 0, z: 0 };
-    const tied = made('ponytail_01');
+    // Tied where her head, looking at the ball before her, holds it.
+    const aim = Option.getOrThrow(State.get(joined, baller, Baller.Aim));
+    const spot = Option.getOrThrow(State.get(joined, baller, Baller.Spot));
+    const ball = Option.map(State.get(joined, Baller.ball, Baller.Ball), ({ at }) => at);
+    const tied =
+      Pose.place(Body.bones, Body.joints, Baller.drawnPoseOf(aim, spot, ball))['ponytail_01']?.at ??
+      made('ponytail_01');
 
     const points = Option.getOrThrow(swung(joined, 60));
 
     expect(apart(points['ponytail_01'], tied)).toBeCloseTo(0, 6);
     expect(points['ponytail_05']?.y ?? Infinity).toBeLessThan(tied.y);
     expect(apart(points['ponytail_02'], points['ponytail_01'] ?? tied)).toBeCloseTo(
-      apart(made('ponytail_02'), tied),
+      apart(made('ponytail_02'), made('ponytail_01')),
       6,
     );
   });
@@ -242,9 +248,15 @@ describe('her hair', () => {
     const aim = Option.getOrThrow(State.get(state, baller, Baller.Aim));
     const spot = Option.getOrThrow(State.get(state, baller, Baller.Spot));
     const hair = Option.getOrThrow(State.get(state, baller, Baller.Hair));
+    const ball = Option.map(State.get(state, Baller.ball, Baller.Ball), ({ at }) => at);
     return {
       now: hair.guides.now,
-      groomed: Strands.carried(guides, Body.bones, Baller.hairPlacing(aim, spot, hair.body)),
+      // Where her bones carry them as drawn: her head turned to look at the ball.
+      groomed: Strands.carried(
+        guides,
+        Body.bones,
+        Baller.hairPlacing(Baller.drawnPoseOf(aim, spot, ball), hair.body),
+      ),
     };
   };
 
@@ -255,20 +267,54 @@ describe('her hair', () => {
     z: values[index * 3 + 2] ?? NaN,
   });
 
-  it('hangs as groomed while she stands still, every root where her head or her ponytail holds it', () => {
+  it('settles while she stands still, every root where her head or her ponytail holds it, near how it was groomed', () => {
     // Four seconds in: her ponytail's chain starts as it was made and drops under its weight, and her guides settle after it.
-    const { now, groomed } = guidesIn(stepped(joined, 240));
+    const settled = stepped(joined, 240);
+    const { now, groomed } = guidesIn(settled);
+    const later = guidesIn(stepped(settled, 30)).now;
     const count = now.length / 3;
 
     let furthest = 0;
+    let moved = 0;
     for (let point = 0; point < count; point++) {
       const away = apart(pointOf(now, point), pointOf(groomed, point));
       furthest = Math.max(furthest, away);
+      moved = Math.max(moved, apart(pointOf(later, point), pointOf(now, point)));
       if (point % guides.points === 0) {
         expect(away).toBeLessThan(1e-9);
       }
     }
-    expect(furthest).toBeLessThan(0.01);
+    expect(moved).toBeLessThan(0.001);
+    // Her head bowed to look at the ball at her feet, her hair falls a little from how it was groomed.
+    expect(furthest).toBeLessThan(0.03);
+  });
+
+  it('hangs from her head as it is drawn, turned to look at the ball', () => {
+    const aim = Option.getOrThrow(State.get(joined, baller, Baller.Aim));
+    const spot = Option.getOrThrow(State.get(joined, baller, Baller.Spot));
+    const ball = Option.map(State.get(joined, Baller.ball, Baller.Ball), ({ at }) => at);
+    const looking = Baller.drawnPoseOf(aim, spot, ball);
+    const head = (pose: Pose.Pose) => Pose.place(Body.bones, Body.joints, pose)['head']?.turn;
+
+    // The ball lies before her feet: she looks down at it, her head turned from how her step poses it.
+    expect(
+      Math.abs(
+        Quaternion.dot(
+          head(looking) ?? Quaternion.identity,
+          head(Baller.poseOf(aim, spot)) ?? Quaternion.identity,
+        ),
+      ),
+    ).toBeLessThan(1 - 1e-4);
+    const { now } = guidesIn(stepped(joined, 1));
+    const groomed = Strands.carried(
+      guides,
+      Body.bones,
+      Baller.hairPlacing(
+        looking,
+        Option.getOrThrow(State.get(stepped(joined, 1), baller, Baller.Hair)).body,
+      ),
+    );
+    expect(apart(pointOf(now, 0), pointOf(groomed, 0))).toBeLessThan(1e-9);
   });
 
   it('swings as she moves, her ponytail’s guides with her ponytail', () => {

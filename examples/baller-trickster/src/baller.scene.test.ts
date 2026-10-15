@@ -41,6 +41,25 @@ const standIn = () => {
   for (const name of Object.keys(Body.bones)) {
     place(name);
   }
+  // Her strands, as many as her model has, each on the root of a guide in turn.
+  const { guides, drawn } = Body.hair;
+  const strands = drawn.scalp + drawn.ponytail;
+  const at = new Float32Array(strands * drawn.points * 3);
+  for (let strand = 0; strand < strands; strand++) {
+    const guide =
+      strand < drawn.scalp ? strand % guides.scalp : guides.scalp + (strand % guides.ponytail);
+    for (let point = 0; point < drawn.points; point++) {
+      for (let axis = 0; axis < 3; axis++) {
+        at[(strand * drawn.points + point) * 3 + axis] =
+          guides.at[guide * guides.points * 3 + axis] ?? 0;
+      }
+    }
+  }
+  const geometry = new Three.BufferGeometry();
+  geometry.setAttribute('position', new Three.BufferAttribute(at, 3));
+  const lines = new Three.LineSegments(geometry, new Three.LineBasicMaterial());
+  lines.name = 'HairStrands';
+  model.add(lines);
   return model;
 };
 
@@ -85,6 +104,30 @@ describe('the baller drawn', () => {
             : at.distanceTo(new Three.Vector3(placed.at.x, placed.at.y, placed.at.z)),
         ),
       ).toEqual(Option.some(expect.closeTo(0, 5)));
+    }),
+  );
+
+  it.effect('draws her hair after her guides as her client swings them', () =>
+    Effect.gen(function* () {
+      const [joined, baller] = Baller.join(Baller.state);
+      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.start);
+      const swung = Game.stepLocal(Baller.game, Game.stepLocal(Baller.game, joined, { tick: 1 }), {
+        tick: 2,
+      });
+
+      yield* scene.show(swung);
+
+      const hair = Option.getOrThrow(State.get(swung, baller, Baller.Hair));
+      const given = Option.map(scene.find(views.ballers, baller), (drawn) =>
+        Array.from(drawn.strands.guidesNow()).filter((_, index) => index % 4 !== 3),
+      );
+      expect(given).toEqual(Option.some(hair.guides.now.map((value) => Math.fround(value))));
+      expect(
+        Option.map(
+          scene.find(views.ballers, baller),
+          (drawn) => drawn.getObjectByName('HairStrands')?.visible,
+        ),
+      ).toEqual(Option.some(true));
     }),
   );
 

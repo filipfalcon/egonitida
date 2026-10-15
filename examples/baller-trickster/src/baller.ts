@@ -489,29 +489,47 @@ const play = System.make({
   },
 });
 
-/** Where the bones carrying her hair are placed, posed as her feet are headed where she stands, her ponytail's bones where its chain `ponytailBody` swings. */
-export const hairPlacing = (
+/** What her eyes look with: each eye, looking along its own +y, and her neck, which turns her head for what they cannot reach. */
+export const LOOKING = {
+  eyes: ['eye_l', 'eye_r'],
+  forward: { x: 0, y: 1, z: 0 },
+  neck: ['neck_01', 'neck_02', 'head'],
+};
+
+/** Her whole body as she is drawn: posed as `poseOf` poses her, her eyes on the ball at `ball`, if there is one, and her head after them, which only her client sees, so her hair hangs from her head where it is drawn. */
+export const drawnPoseOf = (
   where: Component.ValueOf<typeof Aim>,
   spot: typeof Ground.Type,
-  ponytailBody: Chain.Body,
-): Pose.Placer => {
-  const posed = Pose.placer(Body.bones, Body.joints, poseOf(where, spot));
+  ball: Option.Option<Pose.Pose['at']>,
+): Pose.Pose => {
+  const pose = poseOf(where, spot);
+  return Option.match(ball, {
+    onNone: () => pose,
+    onSome: (at) => Reach.look(Body.bones, Body.joints, pose, { ...LOOKING, at }).pose,
+  });
+};
+
+/** Where the bones carrying her hair are placed, posed as `pose` says, her ponytail's bones where its chain `ponytailBody` swings. */
+export const hairPlacing = (pose: Pose.Pose, ponytailBody: Chain.Body): Pose.Placer => {
+  const posed = Pose.placer(Body.bones, Body.joints, pose);
   const tie = Option.getOrUndefined(Option.map(ponytail.from, posed));
   const swung =
     tie === undefined ? () => undefined : Chain.placing(ponytail, ponytailBody, Body.bones, tie);
   return (name) => swung(name) ?? posed(name);
 };
 
-/** Her hair swings as the step poses her: her ponytail from her hair tie, tied to it where it was made, the rest trailing as she moves; and her hair's guides, tied where her head and her ponytail hold them, kept out of her head, neck, back, and shoulders. */
+/** Her hair swings as she is drawn, looking at the ball: her ponytail from her hair tie, tied to it where it was made, the rest trailing as she moves; and her hair's guides, tied where her head and her ponytail hold them, kept out of her head, neck, back, and shoulders. */
 const swingHair = System.make({
   name: 'swingHair',
-  reads: [Aim, Spot],
+  reads: [Aim, Spot, Ball],
   writes: [Hair],
   emits: [],
   run: (context) => {
     const seconds = context.time.secondsPerStep;
+    const [first] = context.query(Ball);
+    const ball = Option.map(Option.fromNullishOr(first), ([, flying]) => flying.at);
     for (const [baller, aim, spot] of context.query(Aim, Spot)) {
-      const posed = Pose.placer(Body.bones, Body.joints, poseOf(aim, spot));
+      const posed = Pose.placer(Body.bones, Body.joints, drawnPoseOf(aim, spot, ball));
       const tie = Option.getOrUndefined(Option.map(ponytail.from, posed));
       if (tie === undefined) {
         continue;

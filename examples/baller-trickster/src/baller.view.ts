@@ -1,5 +1,5 @@
-import { Posing, Ragdolling, View } from '@egonitida/client';
-import { Ball, Chain, Reach } from '@egonitida/core';
+import { Hairing, Posing, Ragdolling, View } from '@egonitida/client';
+import { Ball, Chain, Strands } from '@egonitida/core';
 import { Array, Effect, Option } from 'effect';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as Three from 'three/webgpu';
@@ -8,7 +8,7 @@ import * as Body from '#src/body.ts';
 import type * as Camera from '#src/camera.ts';
 
 /**
- * The baller drawn as her model, posed every frame as the step poses her, from where her feet are headed, so she is drawn where the simulation decides what touches the ball; her eyes, and her head after them, on the ball, which only the drawing needs; her ponytail swinging as her client steps it; the ball; and the camera, about her where the player turns it. Her model is loaded by the page and given to the views, so a test gives one of its own.
+ * The baller drawn as her model, posed every frame as the step poses her, from where her feet are headed, so she is drawn where the simulation decides what touches the ball; her eyes, and her head after them, on the ball, which only the drawing needs; her ponytail swinging as her client steps it, and her hair drawn as strands after the guides it swings; the ball; and the camera, about her where the player turns it. Her model is loaded by the page and given to the views, so a test gives one of its own.
  */
 
 /** How her ponytail's bones are aimed at the points it swings as: each at the next. */
@@ -19,25 +19,20 @@ const hair = Ragdolling.make({
   ponytail_04: { toward: 'ponytail_05' },
 });
 
-/** A baller as drawn: her model, how it is posed, and how her ponytail is. */
+/** A baller as drawn: her model, how it is posed, how her ponytail is, and her hair as strands. */
 class Drawn extends Three.Group {
   readonly posed: Posing.Posed;
   readonly hair: Ragdolling.Ragdolled;
+  readonly strands: Hairing.Haired;
 
-  constructor(posed: Posing.Posed, hairs: Ragdolling.Ragdolled) {
+  constructor(posed: Posing.Posed, hairs: Ragdolling.Ragdolled, strands: Hairing.Haired) {
     super();
     this.posed = posed;
     this.hair = hairs;
+    this.strands = strands;
     this.add(posed.model);
   }
 }
-
-/** What her eyes look with: each eye, looking along its own +y, and her neck, which turns her head for what they cannot reach. */
-const LOOKING = {
-  eyes: ['eye_l', 'eye_r'],
-  forward: { x: 0, y: 1, z: 0 },
-  neck: ['neck_01', 'neck_02', 'head'],
-};
 
 /** A ball's look: white, as a ball under lights is. */
 const BALL_COLOUR = 0xf2f2f2;
@@ -86,25 +81,30 @@ export const camera = View.rig(
 );
 
 /**
- * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her feet are headed where she stands, looking at the ball, her ponytail swinging; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
+ * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her feet are headed where she stands, looking at the ball, her ponytail swinging, her hair drawn as strands; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
  */
 export const make = <E>(model: Effect.Effect<Three.Object3D, E>) => {
   const ballers = View.each([Baller.Aim, Baller.Spot, Baller.Hair], {
     acquire: () =>
       Effect.gen(function* () {
         const copy = clone(yield* model);
-        return new Drawn(yield* Posing.fit(copy, Body.joints), yield* Ragdolling.fit(copy, hair));
+        return new Drawn(
+          yield* Posing.fit(copy, Body.joints),
+          yield* Ragdolling.fit(copy, hair),
+          yield* Hairing.fit(copy, Body.hair),
+        );
       }).pipe(Effect.orDie),
     draw: (drawn, held, frame) => {
-      const pose = Baller.poseOf(held(Baller.Aim), held(Baller.Spot));
-      // Her eyes on the ball, and her head after them, as only the drawing needs.
-      const looked = Option.match(Array.head(frame.query(Baller.Ball)), {
-        onNone: () => pose,
-        onSome: ([, ball]) =>
-          Reach.look(Body.bones, Body.joints, pose, { ...LOOKING, at: ball.at }).pose,
-      });
+      // Her eyes on the ball, and her head after them, as her hair swings from it.
+      const ball = Option.map(Array.head(frame.query(Baller.Ball)), ([, { at }]) => at);
+      const looked = Baller.drawnPoseOf(held(Baller.Aim), held(Baller.Spot), ball);
       drawn.posed.pose(looked);
-      drawn.hair.pose(Chain.points(Baller.ponytail, held(Baller.Hair).body), 1);
+      const swung = held(Baller.Hair);
+      drawn.hair.pose(Chain.points(Baller.ponytail, swung.body), 1);
+      drawn.strands.draw(
+        swung.guides.now,
+        Strands.turnsOf(Body.hair.guides, Body.bones, Baller.hairPlacing(looked, swung.body)),
+      );
     },
   });
   return { ballers, views: [ballers, balls, camera] };
