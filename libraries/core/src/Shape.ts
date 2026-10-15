@@ -1,5 +1,6 @@
 import { Option } from 'effect';
 import * as Maths from '#src/Maths.ts';
+import type * as Quaternion from '#src/Quaternion.ts';
 import type * as Ray from '#src/Ray.ts';
 
 /**
@@ -54,10 +55,11 @@ export interface Shape<D extends Dials> {
 /** A value for each of the dials `D`, such as a component of the game holds them. */
 export type Values<D extends Dials> = { readonly [Name in keyof D]: number };
 
-/** A bone of a figure as its model was made: the bone above it, if any, and where it stands, in the model's space. */
+/** A bone of a figure as its model was made: the bone above it, if any, where it stands, and how it is turned, in the model's space. */
 export interface Bone {
   readonly parent: Option.Option<string>;
   readonly at: Ray.Point;
+  readonly turn: Quaternion.Quaternion;
 }
 
 /** A figure's bones as its model was made, by name, such as `@lightocean/vite-plugin` reads them from a model's file. */

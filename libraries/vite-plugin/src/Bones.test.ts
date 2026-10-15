@@ -108,6 +108,17 @@ describe('Bones.read', () => {
     expect(off(bone('knee')?.at, 0.2, 1, 0.3)).toBeLessThan(1e-6);
   });
 
+  it('turns each as its skin was bound to it, however grown', () => {
+    const turn = (name: string) => bone(name)?.turn ?? { x: NaN, y: NaN, z: NaN, w: NaN };
+    // A quarter about the depth.
+    const quarter = { x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 };
+    const unlike = (a: Bones.Bone['turn'], b: Bones.Bone['turn']) =>
+      1 - Math.abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
+
+    expect(unlike(turn('root'), { x: 0, y: 0, z: 0, w: 1 })).toBeLessThan(1e-12);
+    expect(unlike(turn('knee'), quarter)).toBeLessThan(1e-12);
+  });
+
   it('refuses what is no binary glTF, and bones it cannot tell apart', () => {
     const twice = glb({
       asset: { version: '2.0' },
@@ -126,9 +137,11 @@ describe('Bones.sourceOf', () => {
 
     expect(source).toContain("import { Option } from 'effect';");
     expect(source).toContain('/** The bones of leg.glb as it was made. */');
-    expect(source).toContain('"root": { parent: Option.none(), at: { x: 0, y: 0, z: 0 } },');
     expect(source).toContain(
-      '"hip_bone": { parent: Option.some("root"), at: { x: 0, y: 2, z: 0 } },',
+      '"root": { parent: Option.none(), at: { x: 0, y: 0, z: 0 }, turn: { x: 0, y: 0, z: 0, w: 1 } },',
+    );
+    expect(source).toContain(
+      '"hip_bone": { parent: Option.some("root"), at: { x: 0, y: 2, z: 0 }, turn: { x: 0, y: 0, z: 0, w: 1 } },',
     );
   });
 });

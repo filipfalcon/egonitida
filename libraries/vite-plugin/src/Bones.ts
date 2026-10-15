@@ -1,19 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
+import { Quaternion } from '@lightocean/core';
 import { Option, Result, Schema } from 'effect';
 
 /**
- * A model's bones as it was made, read from its file as the game is built: a module importing `./figure.glb?bones` is given them as `Shape.Bones`, each bone by its name, the bone above it, and where it stands, so the simulation stands a figure as long as her model is drawn, read from the model itself and never copied out of it. A binary glTF, as Blender exports one, is read; each bone stands where its skin was bound to it, as `Shaping` finds it, and is named as Three.js names it on loading.
+ * A model's bones as it was made, read from its file as the game is built: a module importing `./figure.glb?bones` is given them as `Shape.Bones`, each bone by its name, the bone above it, where it stands, and how it is turned, so the simulation stands a figure as long as her model is drawn, read from the model itself and never copied out of it. A binary glTF, as Blender exports one, is read; each bone stands, and is turned, as its skin was bound to it, as `Shaping` finds it, and is named as Three.js names it on loading.
  */
 
 /** What an import asks of a model's file to be given its bones: `?bones`, among whatever other queries the development server adds to it. */
 export const QUERY = 'bones';
 
-/** A bone as read: its name, the name of the bone above it, if any, and where it stands. */
+/** A bone as read: its name, the name of the bone above it, if any, where it stands, and how it is turned. */
 export interface Bone {
   readonly name: string;
   readonly parent: Option.Option<string>;
   readonly at: { readonly x: number; readonly y: number; readonly z: number };
+  readonly turn: Quaternion.Quaternion;
 }
 
 /** The parts of a glTF's JSON its bones are read from. */
@@ -156,8 +158,20 @@ const boundAt = (m: ReadonlyArray<number>) => {
   };
 };
 
+/** How a joint whose inverse bind matrix is `m`, column by column, is turned as bound: its bind matrix's turn, which turns the inverse's back. */
+const boundTurn = (m: ReadonlyArray<number>) => {
+  const [a0 = 1, a1 = 0, a2 = 0, , b0 = 0, b1 = 1, b2 = 0, , c0 = 0, c1 = 0, c2 = 1] = m;
+  return Quaternion.invert(
+    Quaternion.fromColumns([
+      [a0, a1, a2],
+      [b0, b1, b2],
+      [c0, c1, c2],
+    ]),
+  );
+};
+
 /**
- * The bones of the binary glTF `bytes`: every joint of its skins, the first skin naming one placing it, by its name as Three.js gives it, the nearest joint above it its parent, standing where its skin was bound to it; or why they cannot be read, such as a bone with no name, or two of the same.
+ * The bones of the binary glTF `bytes`: every joint of its skins, the first skin naming one placing it, by its name as Three.js gives it, the nearest joint above it its parent, standing and turned as its skin was bound to it; or why they cannot be read, such as a bone with no name, or two of the same.
  */
 export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Bone>, string> =>
   Result.flatMap(chunksOf(bytes), ({ json, bin }) =>
@@ -171,7 +185,7 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Bone>, stri
             above.set(child, index);
           }
         });
-        const placed = new Map<number, Bone['at']>();
+        const placed = new Map<number, Pick<Bone, 'at' | 'turn'>>();
         for (const skin of gltf.skins ?? []) {
           const matrices =
             skin.inverseBindMatrices === undefined
@@ -182,7 +196,8 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Bone>, stri
           }
           skin.joints.forEach((joint, at) => {
             if (!placed.has(joint)) {
-              placed.set(joint, boundAt(matrices.success[at] ?? []));
+              const matrix = matrices.success[at] ?? [];
+              placed.set(joint, { at: boundAt(matrix), turn: boundTurn(matrix) });
             }
           });
         }
@@ -195,10 +210,11 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Bone>, stri
               ? Option.some(nameOf(parent))
               : parentOf(parent);
         };
-        const bones = [...placed].map(([index, at]) => ({
+        const bones = [...placed].map(([index, { at, turn }]) => ({
           name: nameOf(index),
           parent: parentOf(index),
           at,
+          turn,
         }));
         const unnamed = bones.find(({ name }) => name === '');
         if (unnamed !== undefined) {
@@ -217,11 +233,11 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Bone>, stri
 /** The source of the module that gives `bones`, read from the file `file`, as `Shape.Bones`. */
 export const sourceOf = (file: string, bones: ReadonlyArray<Bone>): string => {
   const entries = bones.map(
-    ({ name, parent, at }) =>
+    ({ name, parent, at, turn }) =>
       `  ${JSON.stringify(name)}: { parent: ${Option.match(parent, {
         onNone: () => 'Option.none()',
         onSome: (above) => `Option.some(${JSON.stringify(above)})`,
-      })}, at: { x: ${at.x}, y: ${at.y}, z: ${at.z} } },`,
+      })}, at: { x: ${at.x}, y: ${at.y}, z: ${at.z} }, turn: { x: ${turn.x}, y: ${turn.y}, z: ${turn.z}, w: ${turn.w} } },`,
   );
   return `import { Option } from 'effect';\n\n/** The bones of ${basename(file)} as it was made. */\nexport default {\n${entries.join('\n')}\n};\n`;
 };

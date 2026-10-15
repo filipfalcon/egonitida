@@ -16,6 +16,7 @@
     }
   },
   "dependencies": {
+    "@lightocean/core": "*",
     "@lightocean/devtools": "*",
     "@lightocean/devtools-mcp": "*",
     "effect": "4.0.0",

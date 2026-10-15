@@ -1,13 +1,14 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Option } from 'effect';
+import * as Quaternion from '#src/Quaternion.ts';
 import * as Shape from '#src/Shape.ts';
 
 /** A leg standing on the ground as a model was made: a root at the origin, a hip two metres over it, a knee a metre below the hip, and a foot on the ground. */
 const leg: Shape.Bones = {
-  root: { parent: Option.none(), at: { x: 0, y: 0, z: 0 } },
-  hip: { parent: Option.some('root'), at: { x: 0, y: 2, z: 0 } },
-  knee: { parent: Option.some('hip'), at: { x: 0, y: 1, z: 0 } },
-  foot: { parent: Option.some('knee'), at: { x: 0, y: 0, z: 0 } },
+  root: { parent: Option.none(), at: { x: 0, y: 0, z: 0 }, turn: Quaternion.identity },
+  hip: { parent: Option.some('root'), at: { x: 0, y: 2, z: 0 }, turn: Quaternion.identity },
+  knee: { parent: Option.some('hip'), at: { x: 0, y: 1, z: 0 }, turn: Quaternion.identity },
+  foot: { parent: Option.some('knee'), at: { x: 0, y: 0, z: 0 }, turn: Quaternion.identity },
 };
 
 /** How far `point` is from `x`, `y`, `z`. */

@@ -556,10 +556,12 @@ describe('Shape.standing', () => {
     model.traverse((child) => {
       if (child instanceof Three.Bone) {
         const at = child.getWorldPosition(new Three.Vector3());
+        const { x, y, z, w } = child.getWorldQuaternion(new Three.Quaternion());
         bones[child.name] = {
           parent:
             child.parent instanceof Three.Bone ? Option.some(child.parent.name) : Option.none(),
           at: { x: at.x, y: at.y, z: at.z },
+          turn: { x, y, z, w },
         };
       }
     });
