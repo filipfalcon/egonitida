@@ -11,6 +11,7 @@ const unlike = (a: Quaternion.Quaternion, b: Quaternion.Quaternion) =>
 
 const up = { x: 0, y: 1, z: 0 };
 const across = { x: 1, y: 0, z: 0 };
+const AHEAD = { x: 0, y: 0, z: 1 };
 
 describe('Quaternion', () => {
   it('turns a point about an axis, to the left as the angle grows', () => {
@@ -78,5 +79,19 @@ describe('Quaternion', () => {
 
     expect(angle).toBeCloseTo(0.9, 14);
     expect(apart(axis, { x: -1, y: 0, z: 0 })).toBeLessThan(1e-14);
+  });
+
+  it('turns one direction onto another the shortest way, even straight back', () => {
+    const from = { x: 0, y: 1, z: 0 };
+    const onto = { x: 0, y: 0, z: 2 };
+    const back = { x: 0, y: -1, z: 0 };
+
+    expect(apart(Quaternion.rotate(Quaternion.between(from, onto), from), AHEAD)).toBeLessThan(
+      1e-15,
+    );
+    expect(apart(Quaternion.rotate(Quaternion.between(from, back), from), back)).toBeLessThan(
+      1e-15,
+    );
+    expect(unlike(Quaternion.between(from, from), Quaternion.identity)).toBeLessThan(1e-15);
   });
 });

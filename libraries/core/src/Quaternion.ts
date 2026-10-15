@@ -90,6 +90,29 @@ export const axisAngle = (q: Quaternion): { readonly axis: Point; readonly angle
       };
 };
 
+/** The shortest turn that takes the direction `from` onto the direction `onto`; for two straight apart, a half turn about any axis square to them. */
+export const between = (from: Point, onto: Point): Quaternion => {
+  const a = Maths.hypot(from.x, from.y, from.z);
+  const b = Maths.hypot(onto.x, onto.y, onto.z);
+  if (a === 0 || b === 0) {
+    return identity;
+  }
+  const u = { x: from.x / a, y: from.y / a, z: from.z / a };
+  const v = { x: onto.x / b, y: onto.y / b, z: onto.z / b };
+  const cosine = u.x * v.x + u.y * v.y + u.z * v.z;
+  if (cosine < -1 + 1e-12) {
+    // Straight apart: a half turn about an axis square to them, across x or, if they lie along it, y.
+    const square = Math.abs(u.x) < 0.9 ? { x: 0, y: -u.z, z: u.y } : { x: u.z, y: 0, z: -u.x };
+    return about(square, Math.PI);
+  }
+  return normalize({
+    x: u.y * v.z - u.z * v.y,
+    y: u.z * v.x - u.x * v.z,
+    z: u.x * v.y - u.y * v.x,
+    w: 1 + cosine,
+  });
+};
+
 /** The way from `a` to `b`, `t` of it along, at a steady pace, the short way round. */
 export const slerp = (a: Quaternion, b: Quaternion, t: number): Quaternion => {
   const cosine = dot(a, b);

@@ -16,6 +16,7 @@ export * as Pose from '#src/Pose.ts';
 export * as Ragdoll from '#src/Ragdoll.ts';
 export * as Quaternion from '#src/Quaternion.ts';
 export * as Random from '#src/Random.ts';
+export * as Reach from '#src/Reach.ts';
 export * as Ray from '#src/Ray.ts';
 export * as Rule from '#src/Rule.ts';
 export * as Shape from '#src/Shape.ts';
