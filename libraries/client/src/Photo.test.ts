@@ -37,3 +37,22 @@ describe('Photo.placingsOf', () => {
     expect(flippedV).toBeCloseTo(0.8, 6);
   });
 });
+
+describe('Photo.developingOf', () => {
+  it('develops a photograph as the renderer puts out its frames, unless told otherwise', () => {
+    const renderer = { toneMapping: Three.NoToneMapping, toneMappingExposure: 1.5 };
+
+    expect(Photo.developingOf(renderer, {})).toEqual({
+      toneMapping: Three.NoToneMapping,
+      exposure: 1.5,
+    });
+    expect(Photo.developingOf(renderer, { toneMapping: Three.NeutralToneMapping })).toEqual({
+      toneMapping: Three.NeutralToneMapping,
+      exposure: 1.5,
+    });
+    expect(Photo.developingOf(renderer, { exposure: 2 })).toEqual({
+      toneMapping: Three.NoToneMapping,
+      exposure: 2,
+    });
+  });
+});

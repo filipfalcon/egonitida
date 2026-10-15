@@ -49,6 +49,21 @@ export interface Photo {
   readonly samples: Effect.Effect<number>;
 }
 
+/** How a photograph is developed: the curve its light is mapped to the screen's by, as Three's tone mappings name them, and how much it is exposed, the light times this before it is mapped. */
+export interface Developing {
+  readonly toneMapping: Three.ToneMapping;
+  readonly exposure: number;
+}
+
+/** How a photograph is developed, as `told`, the rest as `renderer` puts out its frames: so a photograph told nothing looks as the viewport does, and one told a curve keeps highlights the viewport clips. */
+export const developingOf = (
+  renderer: { readonly toneMapping: Three.ToneMapping; readonly toneMappingExposure: number },
+  told: Partial<Developing>,
+): Developing => ({
+  toneMapping: told.toneMapping ?? renderer.toneMapping,
+  exposure: told.exposure ?? renderer.toneMappingExposure,
+});
+
 /** How many numbers each picture's placing takes: the two rows of what moves a place in the picture to where its photograph samples it, four numbers each, the fourth nothing. */
 export const PLACING = 8;
 
@@ -113,15 +128,19 @@ const mixed = (value: Three.Node<'uint'>) => {
 };
 
 /**
- * A photograph of what `viewport` shows now, path traced: its scene gathered for rays and its lights taken as they are now, and nothing followed yet. Let go of with the scope.
+ * A photograph of what `viewport` shows now, path traced: its scene gathered for rays and its lights taken as they are now, and nothing followed yet, developed as `told`, the rest as the viewport's renderer puts out its frames. Let go of with the scope.
  */
-export const take = (viewport: {
-  readonly renderer: Three.WebGPURenderer;
-  readonly scene: Three.Scene;
-  readonly camera: Three.PerspectiveCamera;
-}): Effect.Effect<Photo, never, Scope.Scope> =>
+export const take = (
+  viewport: {
+    readonly renderer: Three.WebGPURenderer;
+    readonly scene: Three.Scene;
+    readonly camera: Three.PerspectiveCamera;
+  },
+  told: Partial<Developing> = {},
+): Effect.Effect<Photo, never, Scope.Scope> =>
   Effect.gen(function* () {
     const { renderer, scene, camera } = viewport;
+    const developing = developingOf(renderer, told);
     const device = SceneTracer.onDevice();
     const flat = TracedScene.gathering().gather(scene, camera);
     device.write(flat);
@@ -245,7 +264,13 @@ export const take = (viewport: {
         frame.value = followed.count;
         void renderer.compute(follow);
         followed.count += 1;
+        // Put out as the photograph is developed, the renderer left as it puts out the viewport's frames.
+        const { toneMapping, toneMappingExposure } = renderer;
+        renderer.toneMapping = developing.toneMapping;
+        renderer.toneMappingExposure = developing.exposure;
         quad.render(renderer);
+        renderer.toneMapping = toneMapping;
+        renderer.toneMappingExposure = toneMappingExposure;
       }),
       samples: Effect.sync(() => followed.count),
     };
