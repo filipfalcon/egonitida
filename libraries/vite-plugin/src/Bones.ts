@@ -71,7 +71,9 @@ const FLOAT = 5126;
 export const sanitized = (name: string) => name.replace(/\s/g, '_').replace(/[[\].:/]/g, '');
 
 /** The JSON and binary chunks of the binary glTF `bytes`, or why it is none. */
-const chunksOf = (bytes: Uint8Array): Result.Result<{ json: unknown; bin: DataView }, string> => {
+export const chunksOf = (
+  bytes: Uint8Array,
+): Result.Result<{ json: unknown; bin: DataView }, string> => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (bytes.byteLength < 12 || view.getUint32(0, true) !== MAGIC) {
     return Result.fail('it is no binary glTF');

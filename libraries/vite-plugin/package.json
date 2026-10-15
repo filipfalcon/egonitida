@@ -13,6 +13,9 @@
     },
     "./build": {
       "types": "./types/build.d.ts"
+    },
+    "./joints": {
+      "types": "./types/joints.d.ts"
     }
   },
   "dependencies": {
