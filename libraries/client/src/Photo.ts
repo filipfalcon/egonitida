@@ -34,7 +34,7 @@ import * as SceneTracer from '#src/SceneTracer.ts';
 import * as TracedScene from '#src/TracedScene.ts';
 
 /**
- * A photograph of what a viewport shows, path traced: the scene gathered for rays as it is when the photograph is taken, and lit as it is lit then, and a path followed from the camera through every pixel each time it is developed, as `PathTracer.radiance` follows one, the paths averaged, so the picture grows finer the longer it is developed. The game may go on meanwhile: the photograph is of the moment it was taken.
+ * A photograph of what a viewport shows, path traced: the scene gathered for rays as it is when the photograph is taken, and lit as it is lit then, and a path followed from the camera through every pixel, as `PathTracer.radiance` follows one, the paths averaged, so the picture grows finer the longer it is developed. Each time it is developed, the graphics device follows paths through the next rows of pixels, only once it has followed those before, and as many rows as it follows within its budget, so it never falls behind, with the work waiting on it piling up, nor keeps the page from drawing. The game may go on meanwhile: the photograph is of the moment it was taken.
  */
 
 /** How many times a path bounces at most, and how many suns light it at most. */
@@ -45,11 +45,39 @@ const SUNS = 2;
 const AWAY = 1e-4;
 const FAR = 1e6;
 
-/** A photograph being developed: one more path through every pixel, added to those before and drawn on the viewport's canvas, and how many paths have been followed through each so far. */
+/** A photograph being developed: paths followed through the next rows of its pixels, once the graphics device has followed those before, added to them and drawn on the viewport's canvas; and how many paths have been followed through every pixel so far. */
 export interface Photo {
   readonly develop: Effect.Effect<void>;
   readonly samples: Effect.Effect<number>;
 }
+
+/** How long, in milliseconds, the graphics device is given to follow each batch of paths: short enough that it never falls behind what it is asked, nor keeps the page from drawing. */
+export const BUDGET = 25;
+
+/** Which paths a photograph follows next: through every pixel how many times over so far, from which pixel, and through how many. */
+export interface Batches {
+  readonly pass: number;
+  readonly first: number;
+  readonly size: number;
+}
+
+/** The first batch of a photograph `width` pixels across: eight rows from the top. */
+export const batchesOf = (width: number): Batches => ({ pass: 0, first: 0, size: width * 8 });
+
+/** The batch after `batches`, which took `took` milliseconds, of a photograph `width` pixels across and `total` in all: from the pixel after it, the next pass begun after the last; as many more pixels as the budget gives time for, at most four times as many, whole rows of them, at least one and at most the photograph. */
+export const batched = (
+  batches: Batches,
+  photograph: { readonly width: number; readonly total: number; readonly took: number },
+): Batches => {
+  const { width, total, took } = photograph;
+  const next = batches.first + Math.min(batches.size, total - batches.first);
+  const grown = batches.size * (took > 0 ? Math.min(BUDGET / took, 4) : 4);
+  return {
+    pass: next >= total ? batches.pass + 1 : batches.pass,
+    first: next >= total ? 0 : next,
+    size: Math.min(Math.max(Math.round(grown / width), 1) * width, total),
+  };
+};
 
 /** How a photograph is developed: the curve its light is mapped to the screen's by, as Three's tone mappings name them, and how much it is exposed, the light times this before it is mapped. */
 export interface Developing {
@@ -167,6 +195,10 @@ export const take = (
     const cameraWorld = uniform(camera.matrixWorld.clone());
     const projectionInverse = uniform(camera.projectionMatrixInverse.clone());
     const frame = uniform(0, 'uint');
+    const firstPixel = uniform(0, 'uint');
+    // Written last by every batch, and read back, which waits for the graphics device to finish the batch.
+    const finished = new Three.StorageBufferAttribute(new Uint32Array(4), 1);
+    const finishing = storage(finished, 'uint', 4);
     const up = vec3(...lighting.up);
     const down = vec3(...lighting.down);
     const suns = Array.from({ length: SUNS }, (_, index) => {
@@ -178,7 +210,7 @@ export const take = (
     });
 
     const follow = Fn(() => {
-      const pixel = instanceIndex;
+      const pixel = instanceIndex.add(firstPixel);
       const x = pixel.mod(width);
       const y = pixel.div(width);
       const seed = mixed(pixel.add(frame.mul(9781)).add(1)).toVar();
@@ -301,6 +333,9 @@ export const take = (
       });
       const before = summing.element(pixel);
       before.assign(select(frame.equal(0), vec4(light, 1), before.add(vec4(light, 1))));
+      If(instanceIndex.equal(0), () => {
+        finishing.element(0).assign(frame.add(1));
+      });
     })().compute(width * height);
 
     // The paths so far averaged, for each pixel of the canvas.
@@ -313,12 +348,29 @@ export const take = (
     const quad = new Three.QuadMesh(developed);
     yield* Effect.addFinalizer(() => Effect.sync(() => developed.dispose()));
 
-    const followed = { count: 0 };
+    // The batch to follow next, and whether the graphics device is still following the last.
+    const total = width * height;
+    const kept = { batches: batchesOf(width), following: false };
     return {
       develop: Effect.sync(() => {
-        frame.value = followed.count;
-        void renderer.compute(follow);
-        followed.count += 1;
+        if (!kept.following) {
+          const { batches } = kept;
+          frame.value = batches.pass;
+          firstPixel.value = batches.first;
+          kept.following = true;
+          const started = performance.now();
+          // The renderer is ready, so it computes at once and gives back no promise.
+          void renderer.compute(follow, Math.min(batches.size, total - batches.first));
+          void renderer.getArrayBufferAsync(finished).then(
+            () => {
+              kept.batches = batched(batches, { width, total, took: performance.now() - started });
+              kept.following = false;
+            },
+            () => {
+              kept.following = false;
+            },
+          );
+        }
         // Put out as the photograph is developed, the renderer left as it puts out the viewport's frames.
         const { toneMapping, toneMappingExposure } = renderer;
         renderer.toneMapping = developing.toneMapping;
@@ -327,6 +379,6 @@ export const take = (
         renderer.toneMapping = toneMapping;
         renderer.toneMappingExposure = toneMappingExposure;
       }),
-      samples: Effect.sync(() => followed.count),
+      samples: Effect.sync(() => kept.batches.pass),
     };
   });

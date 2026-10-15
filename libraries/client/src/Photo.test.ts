@@ -56,3 +56,30 @@ describe('Photo.developingOf', () => {
     });
   });
 });
+
+describe('Photo.batched', () => {
+  const width = 100;
+  const total = width * 50;
+
+  it('follows the next rows after a batch, as many more as it had time for, whole rows at a time', () => {
+    const first = Photo.batchesOf(width);
+    const quick = Photo.batched(first, { width, total, took: Photo.BUDGET / 4 });
+    const slow = Photo.batched(quick, { width, total, took: Photo.BUDGET * 2 });
+
+    expect(quick.first).toBe(first.size);
+    expect(quick.size).toBe(first.size * 4);
+    expect(slow.size).toBe(quick.size / 2);
+    expect(slow.size % width).toBe(0);
+  });
+
+  it('never follows less than a row or more than the photograph, and starts the next pass after its last row', () => {
+    const tiny = Photo.batched(Photo.batchesOf(width), { width, total, took: Photo.BUDGET * 1000 });
+    const whole = Photo.batched(
+      { pass: 0, first: total - width, size: total },
+      { width, total, took: 0 },
+    );
+
+    expect(tiny.size).toBe(width);
+    expect(whole).toEqual({ pass: 1, first: 0, size: total });
+  });
+});
