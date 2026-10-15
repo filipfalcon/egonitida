@@ -6,6 +6,7 @@ import {
   Loop,
   PI,
   abs,
+  clamp,
   cos,
   cross,
   dot,
@@ -194,18 +195,19 @@ const meetsLink = (
 /** How far a ray that misses a link is taken to meet it: beyond anything a walk is looking for. */
 const MISSED = 1e30;
 
-/**
- * The walk a shader takes through `device` for the ray from `origin` going `direction`, before `far`: what it meets first of what it is `seeking`, as how far along it in `x` and which placed shape in `y`, -1 where it meets nothing. Built where it is called, into the shader calling it: the same walk as `TracedScene.trace`, the top hierarchy threaded to each shape whose box the ray meets, and that shape's, in its own space, to the triangles.
- */
-export const trace = (
+/** The walk `trace` takes, as it ends: how far along the ray it met something, which placed shape, -1 for none, which of the triangles or links it met, by its place among them, and the ray as it was in that shape's own space. */
+const walk = (
   device: OnDevice,
   origin: Three.Node<'vec3'>,
   direction: Three.Node<'vec3'>,
   far: Three.Node<'float'>,
-  seeking: TracedScene.Meets = 'Anything',
-): Three.Node<'vec2'> => {
+  seeking: TracedScene.Meets,
+) => {
   const best = float(far).toVar();
   const hit = int(-1).toVar();
+  const item = int(0).toVar();
+  const metFrom = vec3(0).toVar();
+  const metAlong = vec3(0).toVar();
   const invert = inverseOf(direction).toVar();
   const node = select(device.placedCount.greaterThan(0), int(0), int(-1)).toVar();
   Loop(() => {
@@ -290,6 +292,9 @@ export const trace = (
                     If(t.greaterThan(TracedScene.NEAREST).and(t.lessThan(best)), () => {
                       best.assign(t);
                       hit.assign(placed);
+                      item.assign(triangle);
+                      metFrom.assign(localOrigin);
+                      metAlong.assign(localDirection);
                     });
                   }).Else(() => {
                     const e1 = device.triangles.node.element(at.add(1)).xyz.sub(a).toVar();
@@ -313,6 +318,9 @@ export const trace = (
                         () => {
                           best.assign(t);
                           hit.assign(placed);
+                          item.assign(triangle);
+                          metFrom.assign(localOrigin);
+                          metAlong.assign(localDirection);
                         },
                       );
                     });
@@ -327,7 +335,55 @@ export const trace = (
         node.assign(after);
       });
   });
+  return { best, hit, item, metFrom, metAlong };
+};
+
+/**
+ * The walk a shader takes through `device` for the ray from `origin` going `direction`, before `far`: what it meets first of what it is `seeking`, as how far along it in `x` and which placed shape in `y`, -1 where it meets nothing. Built where it is called, into the shader calling it: the same walk as `TracedScene.trace`, the top hierarchy threaded to each shape whose box the ray meets, and that shape's, in its own space, to the triangles.
+ */
+export const trace = (
+  device: OnDevice,
+  origin: Three.Node<'vec3'>,
+  direction: Three.Node<'vec3'>,
+  far: Three.Node<'float'>,
+  seeking: TracedScene.Meets = 'Anything',
+): Three.Node<'vec2'> => {
+  const { best, hit } = walk(device, origin, direction, far, seeking);
   return vec2(best, float(hit));
+};
+
+/** What the ray from `origin` going `direction` meets first in `device` before `far`, as `trace` finds it, and which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, as `TracedScene.trace` works it out; up where it meets nothing. */
+export const traceFacing = (
+  device: OnDevice,
+  origin: Three.Node<'vec3'>,
+  direction: Three.Node<'vec3'>,
+  far: Three.Node<'float'>,
+): { readonly met: Three.Node<'vec2'>; readonly normal: Three.Node<'vec3'> } => {
+  const { best, hit, item, metFrom, metAlong } = walk(device, origin, direction, far, 'Anything');
+  const at = item.mul(TRIANGLE_GROUPS);
+  const first = device.triangles.node.element(at);
+  const a = first.xyz;
+  const b = device.triangles.node.element(at.add(1)).xyz;
+  const c = device.triangles.node.element(at.add(2)).xyz;
+  const point = metFrom.add(metAlong.mul(best));
+  const ba = b.sub(a);
+  const share = clamp(dot(point.sub(a), ba).div(dot(ba, ba).max(LEAST)), 0, 1);
+  const local = select(
+    first.w.greaterThan(0.5),
+    point.sub(a).sub(ba.mul(share)),
+    cross(ba, c.sub(a)),
+  );
+  // Into the scene by the transpose of the rows that turn the scene into the shape's space.
+  const base = select(hit.greaterThanEqual(0), hit, int(0)).mul(PLACED_GROUPS);
+  const row0 = device.placed.node.element(base).xyz;
+  const row1 = device.placed.node.element(base.add(1)).xyz;
+  const row2 = device.placed.node.element(base.add(2)).xyz;
+  const turned = normalize(row0.mul(local.x).add(row1.mul(local.y)).add(row2.mul(local.z)));
+  const facing = select(dot(turned, direction).greaterThan(0), turned.negate(), turned);
+  return {
+    met: vec2(best, float(hit)),
+    normal: select(hit.greaterThanEqual(0), facing, vec3(0, 1, 0)),
+  };
 };
 
 /** What a frame drew that tracing reads: its picture, its depth, its surfaces' directions in the camera's space, a picture of how rough they are in its `a`, and one of their colours with how metal they are in its `a`. */
