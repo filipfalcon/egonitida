@@ -1,5 +1,6 @@
 import { Option } from 'effect';
 import * as Three from 'three/webgpu';
+import * as HairScattering from '#src/HairScattering.ts';
 import * as TracedScene from '#src/TracedScene.ts';
 
 /**
@@ -74,6 +75,55 @@ const scattered = (normal: Point, random: () => number): Point => {
   ];
 };
 
+/** A strand of hair met by a ray going `way`, at the placed shape whose numbers start at `base`, running `along`, its surface facing `normal`: the strand ready to scatter light, the way it is seen from in its own frame, and how a way turns into that frame and back. */
+const fibreAt = (flat: TracedScene.Flat, base: number, along: Point, normal: Point, way: Point) => {
+  const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const seenWorld: Point = [-way[0], -way[1], -way[2]];
+  const lengthwise = dot(seenWorld, along);
+  const acrossRaw: Point = [
+    seenWorld[0] - along[0] * lengthwise,
+    seenWorld[1] - along[1] * lengthwise,
+    seenWorld[2] - along[2] * lengthwise,
+  ];
+  const acrossLong = Math.hypot(...acrossRaw);
+  // Seen straight along the strand, it is seen as its surface faces.
+  const toward: Point =
+    acrossLong > 1e-6
+      ? [acrossRaw[0] / acrossLong, acrossRaw[1] / acrossLong, acrossRaw[2] / acrossLong]
+      : normal;
+  const side: Point = [
+    toward[1] * along[2] - toward[2] * along[1],
+    toward[2] * along[0] - toward[0] * along[2],
+    toward[0] * along[1] - toward[1] * along[0],
+  ];
+  const local = (world: Point): HairScattering.Way => [
+    dot(world, along),
+    dot(world, side),
+    dot(world, toward),
+  ];
+  return {
+    prepared: HairScattering.prepare({
+      offset: Math.min(Math.max(dot(normal, side), -1), 1),
+      ior: flat.placed[base + 23] ?? 1.55,
+      absorption: [
+        flat.placed[base + 24] ?? 0,
+        flat.placed[base + 25] ?? 0,
+        flat.placed[base + 26] ?? 0,
+      ],
+      roughness: flat.placed[base + 21] ?? 0.3,
+      radialRoughness: flat.placed[base + 22] ?? 0.3,
+      tilt: flat.placed[base + 27] ?? 0,
+    }),
+    seen: local(seenWorld),
+    local,
+    world: (inFrame: HairScattering.Way): Point => [
+      along[0] * inFrame[0] + side[0] * inFrame[1] + toward[0] * inFrame[2],
+      along[1] * inFrame[0] + side[1] * inFrame[1] + toward[1] * inFrame[2],
+      along[2] * inFrame[0] + side[2] * inFrame[1] + toward[2] * inFrame[2],
+    ],
+  };
+};
+
 /**
  * How much light reaches `origin` from the way `direction`, of length one, through `flat` lit by `lighting`, along one path whose bounces `random` chooses: what each surface met gives off, each sun it sees, matte, as much as Lambert has it, and the sky where the path leaves the scene, each carried back as much as the surfaces between send it on. From the fourth bounce a path fades as likely as it is dark, what remains of it carried on as much brighter, so no light is lost on average.
  */
@@ -109,6 +159,52 @@ export const radiance = (
       flat.placed[base + 18] ?? 0,
     ];
     const { normal } = hit;
+    const point: Point = [
+      from[0] + way[0] * hit.distance,
+      from[1] + way[1] * hit.distance,
+      from[2] + way[2] * hit.distance,
+    ];
+    const hair = Option.filter(hit.along, () => (flat.placed[base + 20] ?? 0) === 1);
+    if (Option.isSome(hair)) {
+      for (let part = 0; part < 3; part++) {
+        light[part] = (light[part] ?? 0) + (carried[part] ?? 0) * (glow[part] ?? 0);
+      }
+      const fibre = fibreAt(flat, base, hair.value, normal, way);
+      for (const sun of lighting.suns) {
+        // Light goes through a strand: it is lit from wherever a sun is not hidden.
+        if (Option.isSome(TracedScene.trace(flat, point, sun.toward, FAR, 'Casting'))) {
+          continue;
+        }
+        const sent = HairScattering.scattered(fibre.prepared, fibre.seen, fibre.local(sun.toward));
+        for (let part = 0; part < 3; part++) {
+          light[part] =
+            (light[part] ?? 0) +
+            (carried[part] ?? 0) * (sent[part] ?? 0) * (sun.irradiance[part] ?? 0);
+        }
+      }
+      const chosen = HairScattering.sample(fibre.prepared, fibre.seen, [
+        random(),
+        random(),
+        random(),
+        random(),
+      ]);
+      for (let part = 0; part < 3; part++) {
+        carried[part] = (carried[part] ?? 0) * (chosen.carried[part] ?? 0);
+      }
+      if (bounce >= FADING) {
+        const keep = Math.min(Math.max(carried[0] ?? 0, carried[1] ?? 0, carried[2] ?? 0), 1);
+        if (random() >= keep) {
+          break;
+        }
+        for (let part = 0; part < 3; part++) {
+          carried[part] = (carried[part] ?? 0) / keep;
+        }
+      }
+      // On from where it met the strand, through it or away from it.
+      from = point;
+      way = fibre.world(chosen.way);
+      continue;
+    }
     const at: Point = [
       from[0] + way[0] * hit.distance + normal[0] * AWAY,
       from[1] + way[1] * hit.distance + normal[1] * AWAY,

@@ -356,7 +356,7 @@ export const trace = (
   return vec2(best, float(hit));
 };
 
-/** What the ray from `origin` going `direction` meets first in `device` before `far`, as `trace` finds it, which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, and where it lies in the picture that paints it, as `TracedScene.trace` works them out: weighed between what the corners of the triangle it meets say, where they say it, and as the triangle itself faces where they do not; up and nowhere where it meets nothing. */
+/** What the ray from `origin` going `direction` meets first in `device` before `far`, as `trace` finds it, which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, where it lies in the picture that paints it, and which way a strand it meets runs, root toward tip, or nothing for a triangle, as `TracedScene.trace` works them out: weighed between what the corners of the triangle it meets say, where they say it, and as the triangle itself faces where they do not; up and nowhere where it meets nothing. */
 export const traceFacing = (
   device: OnDevice,
   origin: Three.Node<'vec3'>,
@@ -366,6 +366,7 @@ export const traceFacing = (
   readonly met: Three.Node<'vec2'>;
   readonly normal: Three.Node<'vec3'>;
   readonly uv: Three.Node<'vec2'>;
+  readonly along: Three.Node<'vec3'>;
 } => {
   const { best, hit, item, metFrom, metAlong } = walk(device, origin, direction, far, 'Anything');
   const at = item.mul(TRIANGLE_GROUPS);
@@ -416,10 +417,18 @@ export const traceFacing = (
   const row2 = device.placed.node.element(base.add(2)).xyz;
   const turned = normalize(row0.mul(local.x).add(row1.mul(local.y)).add(row2.mul(local.z)));
   const facing = select(dot(turned, direction).greaterThan(0), turned.negate(), turned);
+  // A strand's way into the scene by what places it: the inverse of the rows, by their cross products, its determinant keeping which way it runs.
+  const placedWay = cross(row1, row2)
+    .mul(ba.x)
+    .add(cross(row2, row0).mul(ba.y))
+    .add(cross(row0, row1).mul(ba.z));
+  const determinant = dot(row0, cross(row1, row2));
+  const runs = normalize(placedWay).mul(select(determinant.lessThan(0), float(-1), float(1)));
   return {
     met: vec2(best, float(hit)),
     normal: select(hit.greaterThanEqual(0), facing, vec3(0, 1, 0)),
     uv: select(hit.greaterThanEqual(0), uv, vec2(0)),
+    along: select(hit.greaterThanEqual(0).and(first.w.greaterThan(0.5)), runs, vec3(0)),
   };
 };
 

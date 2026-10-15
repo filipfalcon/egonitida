@@ -10,16 +10,17 @@ import * as Hairing from '#src/Hairing.ts';
 /** How many numbers each triangle, or each link of a strand, takes: a triangle's three corners, four numbers each, the fourth nothing; a link's start, four numbers, the fourth a whole, which tells it from a triangle; its end, four numbers, the fourth how far about the line between them it reaches; and four more of nothing. */
 export const TRIANGLE = 12;
 
-/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0 or hair 1, how rough it is, how metal, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts, or, for a surface, whether a picture paints it, 1 or 0, and which of the scene's pictures. */
+/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0 or hair 1, how rough it is, how metal a surface is or how rough hair is about itself, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts, or, for a surface, whether a picture paints it, 1 or 0, and which of the scene's pictures. */
 export const PLACED = 28;
 
-/** What a placed shape is made of, as light meets it: a surface, as rough and as metal as it is, from nothing to a whole; or hair, taking light in as `absorption` says for every strand's width it goes through, as rough along it as it is, its cuticle tilted as far as `tilt` says, in radians, bending light as `ior` says. */
+/** What a placed shape is made of, as light meets it: a surface, as rough and as metal as it is, from nothing to a whole; or hair, taking light in as `absorption` says for every strand's width it goes through, as rough along it and about it as it is, its cuticle tilted as far as `tilt` says, in radians, bending light as `ior` says. */
 export type Material =
   | { readonly _tag: 'Surface'; readonly roughness: number; readonly metalness: number }
   | {
       readonly _tag: 'Hair';
       readonly absorption: readonly [number, number, number];
       readonly roughness: number;
+      readonly radialRoughness: number;
       readonly tilt: number;
       readonly ior: number;
     };
@@ -264,7 +265,14 @@ export const flattenPlaced = (
       flat.set([0, material.roughness, material.metalness, 0, ...painted, 0, 0], base + 20);
     } else {
       flat.set(
-        [1, material.roughness, 0, material.ior, ...material.absorption, material.tilt],
+        [
+          1,
+          material.roughness,
+          material.radialRoughness,
+          material.ior,
+          ...material.absorption,
+          material.tilt,
+        ],
         base + 20,
       );
     }
@@ -418,12 +426,13 @@ const meets = (
   return t > NEAREST ? t : Infinity;
 };
 
-/** What a ray meets first: how far along it, which placed shape, by its place in the flat scene, and which way its surface faces there, in the scene, of length one, turned back toward where the ray came from. */
+/** What a ray meets first: how far along it, which placed shape, by its place in the flat scene, which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, where it lies in its picture, and, for a strand, which way it runs there, from its root toward its tip, of length one. */
 export interface Hit {
   readonly distance: number;
   readonly placed: number;
   readonly normal: readonly [number, number, number];
   readonly uv: readonly [number, number];
+  readonly along: Option.Option<readonly [number, number, number]>;
 }
 
 /** How much each corner of the triangle at `item` of `triangles` weighs at `point`, which lies in its plane: its barycentric weights, adding up to a whole. */
@@ -612,9 +621,47 @@ export const trace = (
     0
       ? -1
       : 1;
+  // A strand's way into the scene by what places it, the inverse of the rows, by their cross products.
+  const link = found.item * TRIANGLE;
+  const row = (index: number) => [0, 1, 2].map((axis) => flat.placed[base + index * 4 + axis] ?? 0);
+  const [row0, row1, row2] = [row(0), row(1), row(2)];
+  const runs = [0, 1, 2].map(
+    (axis) => (flat.triangles[link + 4 + axis] ?? 0) - (flat.triangles[link + axis] ?? 0),
+  );
+  const placedWay = [
+    [row1, row2],
+    [row2, row0],
+    [row0, row1],
+  ]
+    .map(([u = [], v = []], index) => {
+      const crossed = [
+        (u[1] ?? 0) * (v[2] ?? 0) - (u[2] ?? 0) * (v[1] ?? 0),
+        (u[2] ?? 0) * (v[0] ?? 0) - (u[0] ?? 0) * (v[2] ?? 0),
+        (u[0] ?? 0) * (v[1] ?? 0) - (u[1] ?? 0) * (v[0] ?? 0),
+      ];
+      return crossed.map((part) => part * (runs[index] ?? 0));
+    })
+    .reduce((sum, each) => sum.map((part, axis) => part + (each[axis] ?? 0)), [0, 0, 0]);
+  // The inverse's determinant only scales, unless it turns the way about.
+  const determinant =
+    (row0[0] ?? 0) * ((row1[1] ?? 0) * (row2[2] ?? 0) - (row1[2] ?? 0) * (row2[1] ?? 0)) -
+    (row0[1] ?? 0) * ((row1[0] ?? 0) * (row2[2] ?? 0) - (row1[2] ?? 0) * (row2[0] ?? 0)) +
+    (row0[2] ?? 0) * ((row1[0] ?? 0) * (row2[1] ?? 0) - (row1[1] ?? 0) * (row2[0] ?? 0));
+  const wayLong =
+    Math.hypot(placedWay[0] ?? 0, placedWay[1] ?? 0, placedWay[2] ?? 0) *
+    Math.sign(determinant || 1);
+  const along: Option.Option<readonly [number, number, number]> =
+    (flat.triangles[link + 3] ?? 0) === 1 && wayLong !== 0
+      ? Option.some([
+          (placedWay[0] ?? 0) / wayLong,
+          (placedWay[1] ?? 0) / wayLong,
+          (placedWay[2] ?? 0) / wayLong,
+        ])
+      : Option.none();
   return Option.some({
     distance: found.distance,
     placed: found.placed,
+    along,
     normal: [
       ((turned[0] ?? 0) / long) * back,
       ((turned[1] ?? 0) / long) * back,
@@ -838,6 +885,7 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
                 _tag: 'Hair',
                 absorption: [absorption.r, absorption.g, absorption.b],
                 roughness: shading.roughness,
+                radialRoughness: shading.radialRoughness,
                 tilt: shading.offset,
                 ior: shading.ior,
               },

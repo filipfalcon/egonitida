@@ -5,6 +5,7 @@ import {
   If,
   Loop,
   PI,
+  clamp,
   cos,
   cross,
   dot,
@@ -27,6 +28,7 @@ import {
   vec4,
 } from 'three/tsl';
 import * as Three from 'three/webgpu';
+import * as HairTracer from '#src/HairTracer.ts';
 import * as PathTracer from '#src/PathTracer.ts';
 import * as SceneTracer from '#src/SceneTracer.ts';
 import * as TracedScene from '#src/TracedScene.ts';
@@ -193,7 +195,7 @@ export const take = (
       const light = vec3(0).toVar();
       const carried = vec3(1).toVar();
       Loop(BOUNCES, () => {
-        const { met, normal, uv } = SceneTracer.traceFacing(device, from, way, float(FAR));
+        const { met, normal, uv, along } = SceneTracer.traceFacing(device, from, way, float(FAR));
         const placed = int(met.y).toVar();
         If(placed.lessThan(0), () => {
           light.addAssign(carried.mul(mix(down, up, way.y.mul(0.5).add(0.5))));
@@ -215,36 +217,87 @@ export const take = (
           .xyz.mul(select(surface.and(painting.x.greaterThan(0.5)), painted, vec3(1)))
           .toVar();
         const glow = device.placed.node.element(base.add(4)).xyz;
-        const facing = normal.toVar();
-        const at = from.add(way.mul(met.x)).add(facing.mul(AWAY)).toVar();
         light.addAssign(carried.mul(glow));
-        for (const sun of suns) {
-          const lit = dot(facing, sun.toward).toVar();
-          If(lit.greaterThan(0), () => {
-            // In a photograph whatever stands between a surface and a sun shades it, whether or not a game asked it to cast a shadow.
-            const hidden = SceneTracer.trace(device, at, sun.toward, float(FAR));
+        const point = from.add(way.mul(met.x)).toVar();
+        If(surface.not().and(dot(along, along).greaterThan(0.5)), () => {
+          // Hair, as `HairScattering` scatters light: in the strand's own frame, along it, across it, and toward where it is seen from.
+          const material = device.placed.node.element(base.add(5));
+          const taking = device.placed.node.element(base.add(6));
+          const seenWorld = way.negate();
+          const acrossRaw = seenWorld.sub(along.mul(dot(seenWorld, along)));
+          const toward = select(
+            dot(acrossRaw, acrossRaw).greaterThan(1e-12),
+            normalize(acrossRaw),
+            normal,
+          ).toVar();
+          const side = cross(toward, along).toVar();
+          const local = (world: Three.Node<'vec3'>) =>
+            vec3(dot(world, along), dot(world, side), dot(world, toward));
+          const shape = vec4(clamp(dot(normal, side), -1, 1), material.w, material.y, material.z);
+          const seenHere = local(seenWorld).toVar();
+          for (const sun of suns) {
+            // Light goes through a strand: it is lit from wherever a sun is not hidden.
+            const hidden = SceneTracer.trace(device, point, sun.toward, float(FAR));
             If(hidden.y.lessThan(0), () => {
-              light.addAssign(carried.mul(colour).mul(sun.irradiance).mul(lit).div(PI));
+              light.addAssign(
+                carried
+                  .mul(HairTracer.scattered(seenHere, local(sun.toward), shape, taking))
+                  .mul(sun.irradiance),
+              );
             });
-          });
-        }
-        carried.mulAssign(colour);
-        // The next way as likely as its cosine to the surface, as a matte surface scatters light.
-        const angle = next().mul(2 * Math.PI);
-        const rise = next();
-        const helper = select(facing.x.abs().greaterThan(0.9), vec3(0, 1, 0), vec3(1, 0, 0));
-        const first = normalize(cross(helper, facing));
-        const second = cross(facing, first);
-        const out = sqrt(float(1).sub(rise));
-        from.assign(at);
-        way.assign(
-          normalize(
-            first
-              .mul(cos(angle).mul(out))
-              .add(second.mul(sin(angle).mul(out)))
-              .add(facing.mul(sqrt(rise))),
-          ),
-        );
+          }
+          const chosenHere = HairTracer.chosen(
+            seenHere,
+            vec4(next(), next(), next(), next()),
+            shape,
+            taking,
+          ).toVar();
+          const likely = HairTracer.likelihood(seenHere, chosenHere, shape, taking);
+          carried.mulAssign(
+            select(
+              likely.greaterThan(0),
+              HairTracer.scattered(seenHere, chosenHere, shape, taking).div(likely),
+              vec3(0),
+            ),
+          );
+          // On from where it met the strand, through it or away from it.
+          from.assign(point);
+          way.assign(
+            normalize(
+              along.mul(chosenHere.x).add(side.mul(chosenHere.y)).add(toward.mul(chosenHere.z)),
+            ),
+          );
+        }).Else(() => {
+          const facing = normal.toVar();
+          const at = point.add(facing.mul(AWAY)).toVar();
+          for (const sun of suns) {
+            const lit = dot(facing, sun.toward).toVar();
+            If(lit.greaterThan(0), () => {
+              // In a photograph whatever stands between a surface and a sun shades it, whether or not a game asked it to cast a shadow.
+              const hidden = SceneTracer.trace(device, at, sun.toward, float(FAR));
+              If(hidden.y.lessThan(0), () => {
+                light.addAssign(carried.mul(colour).mul(sun.irradiance).mul(lit).div(PI));
+              });
+            });
+          }
+          carried.mulAssign(colour);
+          // The next way as likely as its cosine to the surface, as a matte surface scatters light.
+          const angle = next().mul(2 * Math.PI);
+          const rise = next();
+          const helper = select(facing.x.abs().greaterThan(0.9), vec3(0, 1, 0), vec3(1, 0, 0));
+          const first = normalize(cross(helper, facing));
+          const second = cross(facing, first);
+          const out = sqrt(float(1).sub(rise));
+          from.assign(at);
+          way.assign(
+            normalize(
+              first
+                .mul(cos(angle).mul(out))
+                .add(second.mul(sin(angle).mul(out)))
+                .add(facing.mul(sqrt(rise))),
+            ),
+          );
+        });
       });
       const before = summing.element(pixel);
       before.assign(select(frame.equal(0), vec4(light, 1), before.add(vec4(light, 1))));

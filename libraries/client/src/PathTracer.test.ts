@@ -98,6 +98,47 @@ describe('PathTracer.radiance', () => {
   });
 });
 
+describe('PathTracer.radiance through hair', () => {
+  /** One strand along x, a centimetre thick, lying at y = 0. */
+  const strand = TracedScene.strandsOf(
+    new Float32Array([-1, 0, 0, 1, 0, 0]),
+    new Float32Array([0.02, 0.02]),
+    2,
+  );
+  const sunAbove: PathTracer.Lighting = {
+    up: [0, 0, 0],
+    down: [0, 0, 0],
+    suns: [{ toward: [0, 1, 0], irradiance: [1, 1, 1] }],
+  };
+  const madeOf = (material: TracedScene.Material): TracedScene.Placed => ({
+    shape: 0,
+    matrix: new Three.Matrix4(),
+    colour: [0, 0, 0],
+    emissive: [0, 0, 0],
+    casts: true,
+    material,
+  });
+
+  it('shines white off a strand of black hair where a sun glances off it, as nothing matte of its colour does', () => {
+    const black: TracedScene.Material = {
+      _tag: 'Hair',
+      absorption: [50, 50, 50],
+      roughness: 0.3,
+      radialRoughness: 0.3,
+      tilt: 0,
+      ior: 1.55,
+    };
+    const hair = TracedScene.flatten([strand], [madeOf(black)]);
+    const matte = TracedScene.flatten([strand], [madeOf(TracedScene.matte)]);
+
+    const [shine] = PathTracer.radiance(hair, [0, 1, 0], down, sunAbove, numbers(2));
+    const [dull] = PathTracer.radiance(matte, [0, 1, 0], down, sunAbove, numbers(2));
+
+    expect(shine).toBeGreaterThan(0.05);
+    expect(dull).toBeCloseTo(0, 6);
+  });
+});
+
 describe('PathTracer.lightingOf', () => {
   it('lights a path as Three lights the scene: its hemisphere as the sky, its directional lights as suns', () => {
     const scene = new Three.Scene();

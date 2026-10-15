@@ -432,7 +432,7 @@ describe('what a traced scene holds of how its shapes are made', () => {
     );
   });
 
-  it('holds hair as it takes light in, how rough it is, how its cuticle tilts, and how it bends light', () => {
+  it('holds hair as it takes light in, how rough it is along and about itself, how its cuticle tilts, and how it bends light', () => {
     const flat = TracedScene.flatten(
       [square],
       [
@@ -440,6 +440,7 @@ describe('what a traced scene holds of how its shapes are made', () => {
           _tag: 'Hair',
           absorption: [1, 1.5, 2.5],
           roughness: 0.3,
+          radialRoughness: 0.4,
           tilt: 0.035,
           ior: 1.55,
         }),
@@ -447,7 +448,7 @@ describe('what a traced scene holds of how its shapes are made', () => {
     );
 
     expect(materialOf(flat)).toEqual(
-      [1, 0.3, 0, 1.55, 1, 1.5, 2.5, 0.035].map((value) => Math.fround(value)),
+      [1, 0.3, 0.4, 1.55, 1, 1.5, 2.5, 0.035].map((value) => Math.fround(value)),
     );
   });
 
@@ -520,6 +521,29 @@ describe('which way what a ray meets faces', () => {
     expect(Option.map(normalOf(flat, [3, 0, 0], [-1, 0, 0]), ([x]) => x)).toEqual(
       Option.some(expect.closeTo(1, 9)),
     );
+  });
+
+  it('runs along a strand where the ray meets it, from its root toward its tip, as it is placed', () => {
+    const strand = TracedScene.strandsOf(
+      new Float32Array([-1, 0, 0, 1, 0, 0]),
+      new Float32Array([0.2, 0.2]),
+      2,
+    );
+    // Turned a quarter about z, and twice as large: it runs up.
+    const turned = new Three.Matrix4()
+      .makeRotationZ(Math.PI / 2)
+      .multiply(new Three.Matrix4().makeScale(2, 2, 2));
+    const flat = TracedScene.flatten([strand], [placedAt(0, turned)]);
+    const hit = Option.getOrThrow(TracedScene.trace(flat, [0, 0.5, 5], [0, 0, -1], 100));
+    const plain = TracedScene.flatten([flatTriangle], [placedAt(0)]);
+
+    const [x, y, z] = Option.getOrThrow(hit.along);
+    expect(x).toBeCloseTo(0, 6);
+    expect(y).toBeCloseTo(1, 6);
+    expect(z).toBeCloseTo(0, 6);
+    expect(
+      Option.map(TracedScene.trace(plain, [0, 0, 5], [0, 0, -1], 100), ({ along }) => along),
+    ).toEqual(Option.some(Option.none()));
   });
 });
 
