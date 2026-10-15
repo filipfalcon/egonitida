@@ -220,6 +220,22 @@ describe('Strands.step', () => {
     expect(pointOf(settled.now, 3).y).toBeLessThan(pointOf(carried, 3).y - 0.02);
   });
 
+  it('leaves a ponytail’s guide to the bones carrying it, which hang it under its weight already', () => {
+    // The same guide, down a ponytail; the head bowed, which here stands for the ponytail's bones swinging.
+    const ponytail: Strands.Strands = { ...hanging, scalp: 0, ponytail: 1 };
+    const bowed = headAt(
+      { x: 0, y: 1.6, z: 0 },
+      Quaternion.about({ x: 1, y: 0, z: 0 }, Math.PI / 2),
+    );
+    let now = Strands.start(ponytail, made, still);
+    for (let step = 0; step < 120; step++) {
+      now = Strands.step(ponytail, now, 1 / 60, made, bowed, [], swinging);
+    }
+    const carried = Strands.carried(ponytail, made, bowed);
+
+    expect(apart(pointOf(now.now, 3), pointOf(carried, 3))).toBeLessThan(1e-4);
+  });
+
   it('never passes into a capsule it was groomed outside of, such as her neck', () => {
     // A neck across behind the guide's lower half, going with the head, its surface a centimetre behind the guide; the head darting forward, the guide swinging back into it.
     const forward = (step: number) => Math.min(step + 1, 6) / 30;

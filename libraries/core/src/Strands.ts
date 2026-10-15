@@ -9,7 +9,7 @@ import type * as Shape from '#src/Shape.ts';
 /**
  * Hair as strands, as plain data: polylines of points, each strand as many points as every other, root first, read from a model's file as the game is built (`?strands`, through `@egonitida/vite-plugin`). A figure's hair is drawn as many strands and swung as few guides, each drawn strand following the guides nearest its root; the strands over her scalp come first, then those down her ponytail, each kind following guides of its own. Where a point stands as the model was made, how wide it is, how stiff, and which bones carry it, are flat arrays, as a step and a view read them alike.
  *
- * Guides swing as plain data too: each root tied where the bones carrying it place it, the rest trailing as it moves, springing back toward the shape it was groomed in by its stiffness, every link as long as it was made, and kept out of the flesh about her bones it was groomed outside of. It was groomed as it hangs, so only the pull of its weight away from how it hung as groomed moves it: still, it hangs as groomed; bowed, it falls. Only a client draws it, so a game keeps it as a local component, stepped by a local system, as a ponytail's chain is; it is stepped in steps of its own, with `Maths`, the same start swinging the same way every time.
+ * Guides swing as plain data too: each root tied where the bones carrying it place it, the rest trailing as it moves, springing back toward the shape it was groomed in by its stiffness, every link as long as it was made, and kept out of the flesh about her bones it was groomed outside of. It was groomed as it hangs, so only the pull of its weight away from how it hung as groomed moves it: still, it hangs as groomed; bowed, it falls. A ponytail's guides feel no pull of their own, since the chain swinging the bones that carry them hangs them under their weight already. Only a client draws it, so a game keeps it as a local component, stepped by a local system, as a ponytail's chain is; it is stepped in steps of its own, with `Maths`, the same start swinging the same way every time.
  */
 
 /** Strands of hair as the model was made: how many points each strand has; how many lie over the scalp, coming first, and how many down a ponytail, after them; where each point stands, three numbers each, in the model's space; how wide each point is, in metres; how stiff, from nothing to a whole; one random number for each strand, from nothing to a whole; and which bones carry each point, four indices into `bones` each, with their four weights. */
@@ -208,12 +208,15 @@ export const carried = (
   return at;
 };
 
-/** The pull of each guide's weight away from how it hung as groomed: straight down, less straight down turned as the bone carrying most of its root has turned since it was made. Nothing, as that bone stands as made. */
+/** The pull of each guide's weight away from how it hung as groomed: straight down, less straight down turned as the bone carrying most of its root has turned since it was made, nothing as that bone stands as made. Nothing for a guide down a ponytail: the bones carrying it, which a chain swings, hang it under its weight already. */
 const pullsOf = (
   strands: Strands,
   carriers: ReadonlyArray<Carrier | undefined>,
 ): ReadonlyArray<Ray.Point> =>
   Array.from({ length: strands.scalp + strands.ponytail }, (_, strand) => {
+    if (strand >= strands.scalp) {
+      return { x: 0, y: 0, z: 0 };
+    }
     const root = strand * strands.points;
     let heaviest: Carrier | undefined;
     let most = 0;
