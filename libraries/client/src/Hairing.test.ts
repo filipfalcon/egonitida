@@ -87,6 +87,7 @@ describe('Hairing.fit', () => {
         expect(strands instanceof Three.LineSegments && strands.material).toBeInstanceOf(
           Three.LineBasicNodeMaterial,
         );
+        expect(strands instanceof Three.LineSegments && strands.material.lights).toBe(true);
         expect(delivered.getObjectByName('HairGuides')?.visible).toBe(false);
         expect(delivered.getObjectByName('HairCards')?.visible).toBe(false);
         expect(delivered.getObjectByName('ponytail')?.visible).toBe(false);
@@ -155,5 +156,54 @@ describe('Hairing.colourOf', () => {
 
     expect(dark.r + dark.g + dark.b).toBeLessThan(fair.r + fair.g + fair.b);
     expect(red.r - red.b).toBeGreaterThan(0.2);
+  });
+});
+
+describe('Hairing.lobes', () => {
+  /** A strand standing along +y, seen from +z. */
+  const along = { x: 0, y: 1, z: 0 };
+  const toEye = { x: 0, y: 0, z: 1 };
+  /** Light coming from the eye's side, `rise` up the strand from straight on, or from behind it. */
+  const lit = (rise: number, behind = false) => {
+    const unit = Math.hypot(rise, 1);
+    return { x: 0, y: rise / unit, z: (behind ? -1 : 1) / unit };
+  };
+  const brown = hair.shading;
+  const sum = ({ r, g, b }: { r: number; g: number; b: number }) => r + g + b;
+
+  it('shines white off its surface, brightest where light glances back as from a mirror, shifted toward the root by its cuticle’s tilt', () => {
+    const rises = Array.from({ length: 81 }, (_, step) => -0.4 + step / 100);
+    const shine = rises.map((rise) => Hairing.lobes(brown, along, lit(rise), toEye).reflected);
+    const brightest =
+      rises[shine.reduce((best, now, at) => (sum(now) > sum(shine[best] ?? now) ? at : best), 0)];
+
+    expect(shine[40]?.r).toBeCloseTo(shine[40]?.b ?? NaN, 12);
+    // Its scales tilt toward the tip, so it glances brightest with light from below the mirror's angle.
+    expect(brightest).toBeLessThan(0);
+    expect(brightest).toBeCloseTo(-2 * Math.sin(brown.offset), 1);
+  });
+
+  it('glows through, its colour, when lit from behind, far more than when lit from before', () => {
+    const behind = Hairing.lobes(brown, along, lit(0, true), toEye).transmitted;
+    const before = Hairing.lobes(brown, along, lit(0), toEye).transmitted;
+
+    expect(sum(behind)).toBeGreaterThan(sum(before) * 100);
+    expect(behind.r).toBeGreaterThan(behind.g);
+    expect(behind.g).toBeGreaterThan(behind.b);
+  });
+
+  it('shines a second time, coloured, from within', () => {
+    const inner = Hairing.lobes(brown, along, lit(0.15), toEye).internal;
+
+    expect(inner.r).toBeGreaterThan(inner.b);
+    expect(sum(inner)).toBeGreaterThan(0);
+  });
+
+  it('lets less light through and back the darker it is, its surface shining alike', () => {
+    const dark = Hairing.lobes({ ...brown, melanin: 0.95 }, along, lit(0.1, true), toEye);
+    const fair = Hairing.lobes({ ...brown, melanin: 0.3 }, along, lit(0.1, true), toEye);
+
+    expect(sum(dark.transmitted)).toBeLessThan(sum(fair.transmitted));
+    expect(sum(dark.reflected)).toBeCloseTo(sum(fair.reflected), 12);
   });
 });
