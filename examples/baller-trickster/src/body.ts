@@ -1,10 +1,11 @@
 import type { Pose, Touch } from '@egonitida/core';
 import madeBones from '#src/footballer.glb?bones';
 import madeJoints from '#src/footballer.glb?joints';
+import madeHair from '#src/footballer.glb?strands';
 import madeTouches from '#src/footballer.glb?touches';
 
 /**
- * The baller's body, read from her model as the game is built: her bones as made, standing at the origin facing +z, her left toward +x; her joints, by named motions within their anatomical ranges, the way her model writes them; and the parts of her a ball is touched by. Read from the model itself, they never drift from what is drawn.
+ * The baller's body, read from her model as the game is built: her bones as made, standing at the origin facing +z, her left toward +x; her joints, by named motions within their anatomical ranges, the way her model writes them; the parts of her a ball is touched by; and her hair as strands. Read from the model itself, they never drift from what is drawn.
  */
 
 /** Her bones as made. */
@@ -15,6 +16,9 @@ export const joints = madeJoints;
 
 /** The parts of her a ball is touched by: her boots' insteps, insides, outsides, soles, heels, and toes, her knees, her thighs, her chest, and her head. */
 export const touches = madeTouches;
+
+/** Her hair as strands: the guides it swings as, the strands drawn of it, and how they are shaded. */
+export const hair = madeHair;
 
 /** Where the bone `name` stands as made; the origin, if she has none. */
 const madeAt = (name: string): Pose.Pose['at'] => bones[name]?.at ?? { x: 0, y: 0, z: 0 };

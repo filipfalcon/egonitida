@@ -8,6 +8,7 @@
       "@egonitida/vite-plugin/build",
       "@egonitida/vite-plugin/bones",
       "@egonitida/vite-plugin/joints",
+      "@egonitida/vite-plugin/strands",
       "@egonitida/vite-plugin/touches"
     ]
   }
