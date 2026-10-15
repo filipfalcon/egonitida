@@ -5,6 +5,7 @@
     "lib": ["esnext", "dom", "dom.iterable"],
     "types": [
       "vite/client",
+      "@lightocean/vite-plugin/build",
       "@lightocean/vite-plugin/bones",
       "@lightocean/vite-plugin/joints",
       "@lightocean/vite-plugin/touches"

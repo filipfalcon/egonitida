@@ -1,6 +1,7 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Controls, Drawing, Hearing, View, Viewport } from '@lightocean/client';
+import { Controls, Drawing, Hearing, Tab, View, Viewport } from '@lightocean/client';
 import { Client, WorkerTransport } from '@lightocean/core';
+import { Bridge, Page } from '@lightocean/devtools';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';
@@ -10,6 +11,9 @@ import * as BallerControls from '#src/controls.ts';
 import * as Model from '#src/model.ts';
 
 // The page: joins the local server in a worker as a baller, sends where the sticks place her feet every frame, puts the ball back at a press, and draws her and the ball at every frame the display shows, from where the player turns the camera about her.
+/** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the state kept for the tab. */
+const host = Tab.id('baller-trickster');
+
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');
   const hud = document.querySelector('#hud');
@@ -22,6 +26,17 @@ const main = Effect.gen(function* () {
   const viewport = yield* Viewport.make(canvas, Viewport.sharp);
   const model = yield* Effect.cached(Model.load);
   // Where the player looks at her from, played on from the sticks every frame.
+  // In development, an agent asking through the development server can see what this page draws.
+  if (import.meta.env.DEV) {
+    yield* Option.match(Bridge.vite, {
+      onNone: () => Effect.void,
+      onSome: (channel) =>
+        Page.serve(channel, {
+          host,
+          capture: (width) => viewport.capture(width).pipe(Effect.mapError(({ reason }) => reason)),
+        }),
+    });
+  }
   const played = {
     controls: Controls.start(BallerControls.bindings),
     feet: Baller.idle,
@@ -71,7 +86,11 @@ const main = Effect.gen(function* () {
 }).pipe(
   Effect.provide(
     BrowserWorker.layer(
-      () => new Worker(new URL('./simulation.worker.ts', import.meta.url), { type: 'module' }),
+      () =>
+        new Worker(new URL('./simulation.worker.ts', import.meta.url), {
+          type: 'module',
+          name: host,
+        }),
     ),
   ),
   Effect.scoped,
