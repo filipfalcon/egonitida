@@ -23,7 +23,7 @@ npx egonitida
 - [Website](https://egonitida.com): the official home of EgoNitida, with news and resources.
 - [Source](https://github.com/egonitida/egonitida): the official repository of EgoNitida, with source code and issues.
 - [Packages](https://npmjs.com/org/egonitida): the official npm organization of EgoNitida, with every published package.
-- [Discord](https://discord.gg/6zsggGTGZf): questions, feedback, and conversation with the community.
+- [Discord](https://discord.gg/6zsggGTGZf): the official community of EgoNitida, with discussion and support.
 - [X](https://x.com/egonitida), [Instagram](https://instagram.com/egonitida), and [Threads](https://threads.com/@egonitida): updates from EgoNitida.
 
 ## License

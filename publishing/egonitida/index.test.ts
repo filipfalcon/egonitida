@@ -23,6 +23,7 @@ describe('egonitida', () => {
       'https://egonitida.com',
       'https://github.com/egonitida/egonitida',
       'https://npmjs.com/org/egonitida',
+      'https://discord.gg/6zsggGTGZf',
       'https://x.com/egonitida',
       'https://instagram.com/egonitida',
       'https://threads.com/@egonitida',

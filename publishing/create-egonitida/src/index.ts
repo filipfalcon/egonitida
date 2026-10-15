@@ -8,6 +8,7 @@ New projects cannot be created until EgoNitida is released.
   Website    https://egonitida.com
   Source     https://github.com/egonitida/egonitida
   Packages   https://npmjs.com/org/egonitida
+  Discord    https://discord.gg/6zsggGTGZf
   X          https://x.com/egonitida
   Instagram  https://instagram.com/egonitida
   Threads    https://threads.com/@egonitida
