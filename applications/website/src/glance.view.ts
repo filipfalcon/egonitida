@@ -1,5 +1,5 @@
-import { type Drawing, View } from '@nitida/client';
-import type { Component } from '@nitida/core';
+import { type Drawing, View } from '@egonitida/client';
+import type { Component } from '@egonitida/core';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Glance from '#src/glance.ts';

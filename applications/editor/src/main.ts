@@ -1,6 +1,6 @@
-import { Inspect, Log, Rewind } from '@nitida/devtools';
-import { Session } from '@nitida/foldkit';
-import { Pointing } from '@nitida/core';
+import { Inspect, Log, Rewind } from '@egonitida/devtools';
+import { Session } from '@egonitida/foldkit';
+import { Pointing } from '@egonitida/core';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';

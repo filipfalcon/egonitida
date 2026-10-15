@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Story as Stories, State } from '@nitida/core';
+import { Story as Stories, State } from '@egonitida/core';
 import { Option } from 'effect';
 import { Story } from 'foldkit';
 import * as Press from '#src/press.ts';

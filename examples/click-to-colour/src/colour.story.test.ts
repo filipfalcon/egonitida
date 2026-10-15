@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Pointing, Story } from '@nitida/core';
+import { Pointing, Story } from '@egonitida/core';
 import * as Colour from '#src/colour.ts';
 
 const given = Story.given(Colour.state, {

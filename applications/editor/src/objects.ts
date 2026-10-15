@@ -1,5 +1,5 @@
-import { Component, Domain, Event, Pointing, Rule, System } from '@nitida/core';
-import { Inspector } from '@nitida/reflection';
+import { Component, Domain, Event, Pointing, Rule, System } from '@egonitida/core';
+import { Inspector } from '@egonitida/reflection';
 import { Option, Schema } from 'effect';
 
 /**

@@ -1,4 +1,4 @@
-import { Haptics, Lighting, View } from '@nitida/client';
+import { Haptics, Lighting, View } from '@egonitida/client';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Body from '#src/body.ts';

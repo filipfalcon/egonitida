@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Domain, Game, Host, System, State } from '@nitida/core';
-import { Transport } from '@nitida/core/internal';
+import { Client, Component, Domain, Game, Host, System, State } from '@egonitida/core';
+import { Transport } from '@egonitida/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import * as Drawing from '#src/Drawing.ts';
 import * as Prediction from '#src/Prediction.ts';

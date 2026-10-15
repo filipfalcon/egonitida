@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Scene } from '@nitida/client';
-import { Pointing, Story } from '@nitida/core';
+import { Scene } from '@egonitida/client';
+import { Pointing, Story } from '@egonitida/core';
 import { Effect, Option } from 'effect';
 import * as Score from '#src/score.ts';
 import * as ScoreView from '#src/score.view.ts';

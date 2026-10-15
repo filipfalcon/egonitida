@@ -1,6 +1,6 @@
 import { markdown } from '@foldkit/markdown/vite';
 import { foldkit } from '@foldkit/vite-plugin';
-import { Build, Devtools } from '@nitida/vite-plugin';
+import { Build, Devtools } from '@egonitida/vite-plugin';
 import stylex from '@stylexjs/unplugin';
 import type { Plugin } from 'vite';
 import { islandAttributes } from './src/islands.ts';

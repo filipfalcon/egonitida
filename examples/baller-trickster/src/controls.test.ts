@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Controls, Devices } from '@nitida/client';
+import { Controls, Devices } from '@egonitida/client';
 import * as Baller from '#src/baller.ts';
 import * as Camera from '#src/camera.ts';
 import * as BallerControls from '#src/controls.ts';

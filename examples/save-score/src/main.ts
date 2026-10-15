@@ -1,5 +1,5 @@
-import { State } from '@nitida/core';
-import { Session } from '@nitida/foldkit';
+import { State } from '@egonitida/core';
+import { Session } from '@egonitida/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';

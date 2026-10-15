@@ -1,4 +1,4 @@
-import { type Client, type Component, Demand, Game, type Input, State } from '@nitida/core';
+import { type Client, type Component, Demand, Game, type Input, State } from '@egonitida/core';
 import { Effect, Option, Schedule, Schema, type Scope, Stream } from 'effect';
 import type * as Drawing from '#src/Drawing.ts';
 import * as Interpolate from '#src/Interpolate.ts';

@@ -1,7 +1,7 @@
 import { expect, it } from '@effect/vitest';
-import { Client, Host, Story, State } from '@nitida/core';
-import { Transport } from '@nitida/core/internal';
-import { Log, Recording, Replay, Transcript } from '@nitida/devtools';
+import { Client, Host, Story, State } from '@egonitida/core';
+import { Transport } from '@egonitida/core/internal';
+import { Log, Recording, Replay, Transcript } from '@egonitida/devtools';
 import { Effect, Option, Result } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Game from '#src/game.ts';

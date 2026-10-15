@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Story, State } from '@nitida/core';
+import { Story, State } from '@egonitida/core';
 import * as Walkers from '#src/walkers.ts';
 
 describe('walkers in a shared room', () => {

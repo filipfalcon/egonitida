@@ -15,7 +15,7 @@ export class Scores extends Context.Service<
     /** Saves `score`, and tells the best kept so far, this one included. */
     readonly save: (score: number) => Effect.Effect<number, Unsaved>;
   }
->()('@nitida/example-save-score/Scores') {}
+>()('@egonitida/example-save-score/Scores') {}
 
 /** Scores kept nowhere, every one unsaved for `reason`: where the page was not told where scores are kept. */
 export const nowhere = (reason: string): Layer.Layer<Scores> =>

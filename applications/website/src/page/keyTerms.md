@@ -58,7 +58,7 @@ A demand is what a player is doing with their controls, such as a stick held to 
 
 A recording of a game is made of segments, one for each version of its code the host played: a reload of new code ends one segment and begins the next. A segment is the state it began at, its version, and, in order, everything that replaced the state after: its steps, each with its input, players joining and leaving, and restores of another state. Everything else follows from them, under that version.
 
-A build is which code of a game runs, as its bundler names it: `@nitida/vite-plugin` gives each build an id, and a game's worker gives it to its host. With the schema of the state, a hash for each component, it makes up the version a segment holds for. A segment replayed by another version says so before anything else, and where it comes apart is a change of the code, not a game that is not deterministic.
+A build is which code of a game runs, as its bundler names it: `@egonitida/vite-plugin` gives each build an id, and a game's worker gives it to its host. With the schema of the state, a hash for each component, it makes up the version a segment holds for. A segment replayed by another version says so before anything else, and where it comes apart is a change of the code, not a game that is not deterministic.
 
 ## Primitives
 

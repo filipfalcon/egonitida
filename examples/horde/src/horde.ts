@@ -1,4 +1,4 @@
-import { Component, Domain, Maths, Rule, System } from '@nitida/core';
+import { Component, Domain, Maths, Rule, System } from '@egonitida/core';
 import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 import * as Survivor from '#src/survivor.ts';

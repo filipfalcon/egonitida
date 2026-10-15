@@ -1,4 +1,4 @@
-import { View } from '@nitida/client';
+import { View } from '@egonitida/client';
 import { Effect, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Cubes from '#src/cubes.ts';

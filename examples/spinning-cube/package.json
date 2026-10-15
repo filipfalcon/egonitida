@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/example-spinning-cube",
+  "name": "@egonitida/example-spinning-cube",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
-    "@nitida/client": "*",
-    "@nitida/core": "*",
+    "@egonitida/client": "*",
+    "@egonitida/core": "*",
     "effect": "4.0.0",
     "three": "0.186.1"
   },

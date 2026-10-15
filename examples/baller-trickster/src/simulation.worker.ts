@@ -1,6 +1,6 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, State, WorkerTransport } from '@nitida/core';
-import { Beside } from '@nitida/devtools';
+import { Host, State, WorkerTransport } from '@egonitida/core';
+import { Beside } from '@egonitida/devtools';
 import { Effect } from 'effect';
 import { build } from 'virtual:nitida/build';
 import * as Baller from '#src/baller.ts';

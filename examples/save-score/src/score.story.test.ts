@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Pointing, Story, State } from '@nitida/core';
+import { Pointing, Story, State } from '@egonitida/core';
 import { Option } from 'effect';
 import * as Score from '#src/score.ts';
 

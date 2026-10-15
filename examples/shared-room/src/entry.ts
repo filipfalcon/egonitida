@@ -1,8 +1,8 @@
-import { Devices, Drawing, KeyboardAndMouse, View, Viewport } from '@nitida/client';
-import { Client } from '@nitida/core';
-import { Prediction } from '@nitida/client/experimental';
-import { SocketTransport } from '@nitida/core/experimental';
-import { Room } from '@nitida/server/experimental';
+import { Devices, Drawing, KeyboardAndMouse, View, Viewport } from '@egonitida/client';
+import { Client } from '@egonitida/core';
+import { Prediction } from '@egonitida/client/experimental';
+import { SocketTransport } from '@egonitida/core/experimental';
+import { Room } from '@egonitida/server/experimental';
 import * as stylex from '@stylexjs/stylex';
 import { Effect, Option, Schema } from 'effect';
 import * as Socket from 'effect/socket/Socket';

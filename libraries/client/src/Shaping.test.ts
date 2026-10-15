@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, Shape, State } from '@nitida/core';
+import { Component, Shape, State } from '@egonitida/core';
 import { Effect, Option, Schema } from 'effect';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as Three from 'three/webgpu';

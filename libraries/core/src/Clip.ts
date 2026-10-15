@@ -2,7 +2,7 @@ import type * as Joint from '#src/Joint.ts';
 import * as Pose from '#src/Pose.ts';
 
 /**
- * A clip as poses, as plain data: a figure's poses at its keys, read from her model's file as the game is built (`?clips`, through `@nitida/vite-plugin`), so a step reads a trick authored as a clip, such as a step-over, as surely as a view: the clip gives the pose, and a reach can put the foot right onto the ball. Between its keys, it goes along the joints' turns, as `Pose.between` does.
+ * A clip as poses, as plain data: a figure's poses at its keys, read from her model's file as the game is built (`?clips`, through `@egonitida/vite-plugin`), so a step reads a trick authored as a clip, such as a step-over, as surely as a view: the clip gives the pose, and a reach can put the foot right onto the ball. Between its keys, it goes along the joints' turns, as `Pose.between` does.
  */
 
 /** A clip: how many seconds it lasts, and its poses at its keys, the seconds into it of each in order. */

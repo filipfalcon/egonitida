@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/client",
+  "name": "@egonitida/client",
   "private": true,
   "type": "module",
   "imports": {
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
-    "@nitida/core": "*",
+    "@egonitida/core": "*",
     "effect": "4.0.0",
     "three": "0.186.1"
   },

@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/devtools-mcp",
+  "name": "@egonitida/devtools-mcp",
   "private": true,
   "bin": {
     "nitida-devtools-mcp": "./src/main.ts"
@@ -14,13 +14,13 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0",
-    "@nitida/devtools": "*",
+    "@egonitida/devtools": "*",
     "effect": "4.0.0",
     "ws": "8.22.0"
   },
   "devDependencies": {
-    "@nitida/core": "*",
-    "@nitida/vite-plugin": "*",
+    "@egonitida/core": "*",
+    "@egonitida/vite-plugin": "*",
     "@types/ws": "8.18.2"
   }
 }

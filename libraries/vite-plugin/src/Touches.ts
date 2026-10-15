@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import type { Touch } from '@nitida/core';
+import type { Touch } from '@egonitida/core';
 import { Result, Schema } from 'effect';
 import type { Loading } from '#src/Bones.ts';
 import { chunksOf, sanitized } from '#src/Bones.ts';

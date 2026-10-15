@@ -1,4 +1,4 @@
-import { Game, type Host, State } from '@nitida/core';
+import { Game, type Host, State } from '@egonitida/core';
 import { Duration, Effect, Option, Schema, type Scope, Stream } from 'effect';
 
 /**

@@ -1,4 +1,4 @@
-import type { State } from '@nitida/core';
+import type { State } from '@egonitida/core';
 import { Context, Effect, Option } from 'effect';
 
 /**
@@ -91,7 +91,7 @@ export class Haptics extends Context.Service<
     /** Sets how the triggers the player of `entity` holds push back, until they are set again. */
     readonly triggers: (entity: State.Entity, triggers: Triggers) => Effect.Effect<void>;
   }
->()('@nitida/client/Haptics') {}
+>()('@egonitida/client/Haptics') {}
 
 /** Whether `a` and `b` push back alike. */
 const sameTrigger = (a: Trigger, b: Trigger): boolean => {

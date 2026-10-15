@@ -1,4 +1,4 @@
-import { type Client, Pointing, type State } from '@nitida/core';
+import { type Client, Pointing, type State } from '@egonitida/core';
 import { Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import type * as Drawing from '#src/Drawing.ts';

@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/server",
+  "name": "@egonitida/server",
   "private": true,
   "type": "module",
   "imports": {
@@ -10,7 +10,7 @@
     "./experimental": "./src/experimental.ts"
   },
   "dependencies": {
-    "@nitida/core": "*",
+    "@egonitida/core": "*",
     "effect": "4.0.0"
   }
 }

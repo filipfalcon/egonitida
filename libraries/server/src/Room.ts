@@ -1,5 +1,5 @@
-import { Host } from '@nitida/core';
-import { Transport } from '@nitida/core/internal';
+import { Host } from '@egonitida/core';
+import { Transport } from '@egonitida/core/internal';
 import { type Cause, Effect, Exit, Option, Queue, Schema, Scope, Semaphore, Stream } from 'effect';
 
 /**

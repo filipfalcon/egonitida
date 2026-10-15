@@ -32,7 +32,7 @@ A game's state holds entities and their components. Systems and rules step the g
 The smallest game is a cube that turns: one component, one system, one domain.
 
 ```ts
-import { Component, Domain, Game, System, State } from '@nitida/core';
+import { Component, Domain, Game, System, State } from '@egonitida/core';
 import { Schema } from 'effect';
 
 export const Spin = Component.make(
@@ -77,7 +77,7 @@ export const [state, cube] = State.spawn(State.empty({ seed: 1 }), [
 A view draws every entity that has a `Spin`. It lives in its own module, so the server never imports Three.js:
 
 ```ts
-import { View } from '@nitida/client';
+import { View } from '@egonitida/client';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Cube from '#src/cube.ts';
@@ -199,7 +199,7 @@ npm run dev
 Serve one example on its own:
 
 ```bash
-npm run dev -w @nitida/example-horde
+npm run dev -w @egonitida/example-horde
 ```
 
 ## Contributing

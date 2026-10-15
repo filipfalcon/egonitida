@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { type Clip, type Joint, Pose, Quaternion } from '@nitida/core';
+import { type Clip, type Joint, Pose, Quaternion } from '@egonitida/core';
 import { Option, Result, Schema } from 'effect';
 import * as Bones from '#src/Bones.ts';
 import * as Joints from '#src/Joints.ts';

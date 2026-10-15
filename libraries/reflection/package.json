@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/reflection",
+  "name": "@egonitida/reflection",
   "private": true,
   "type": "module",
   "imports": {

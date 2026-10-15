@@ -1,6 +1,6 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@nitida/core';
-import { Beside } from '@nitida/devtools';
+import { Host, WorkerTransport, State } from '@egonitida/core';
+import { Beside } from '@egonitida/devtools';
 import { Effect, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { build } from 'virtual:nitida/build';

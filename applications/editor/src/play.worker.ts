@@ -1,6 +1,6 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@nitida/core';
-import { Beside, Debugger } from '@nitida/devtools';
+import { Host, WorkerTransport, State } from '@egonitida/core';
+import { Beside, Debugger } from '@egonitida/devtools';
 import { Effect, Option } from 'effect';
 import { build } from 'virtual:nitida/build';
 import * as Playing from '#src/playing.ts';

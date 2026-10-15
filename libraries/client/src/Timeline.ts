@@ -1,5 +1,5 @@
-import type { Component } from '@nitida/core';
-import { State } from '@nitida/core';
+import type { Component } from '@egonitida/core';
+import { State } from '@egonitida/core';
 import { Option } from 'effect';
 import * as Interpolate from '#src/Interpolate.ts';
 

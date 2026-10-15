@@ -1,4 +1,4 @@
-import { Game, State } from '@nitida/core';
+import { Game, State } from '@egonitida/core';
 import * as Body from '#src/body.ts';
 import * as Horde from '#src/horde.ts';
 import * as Survivor from '#src/survivor.ts';

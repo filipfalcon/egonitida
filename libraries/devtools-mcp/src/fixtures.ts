@@ -1,9 +1,9 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Component, Domain, Game, Host, System, State } from '@nitida/core';
-import { Bridge, Inspect, Page, Relay, Rewind } from '@nitida/devtools';
-import { Listener } from '@nitida/vite-plugin';
+import { Component, Domain, Game, Host, System, State } from '@egonitida/core';
+import { Bridge, Inspect, Page, Relay, Rewind } from '@egonitida/devtools';
+import { Listener } from '@egonitida/vite-plugin';
 import { Effect, Option, Queue, Schema, Stream } from 'effect';
 
 /**

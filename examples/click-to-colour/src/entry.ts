@@ -9,9 +9,9 @@ import {
   Tab,
   View,
   Viewport,
-} from '@nitida/client';
-import { Client, WorkerTransport } from '@nitida/core';
-import { Bridge, Page } from '@nitida/devtools';
+} from '@egonitida/client';
+import { Client, WorkerTransport } from '@egonitida/core';
+import { Bridge, Page } from '@egonitida/devtools';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Colour from '#src/colour.ts';

@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/example-shared-room",
+  "name": "@egonitida/example-shared-room",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
     "dev": "vp dev"
   },
   "dependencies": {
-    "@nitida/client": "*",
-    "@nitida/core": "*",
-    "@nitida/server": "*",
+    "@egonitida/client": "*",
+    "@egonitida/core": "*",
+    "@egonitida/server": "*",
     "@stylexjs/stylex": "0.19.1",
     "effect": "4.0.0",
     "three": "0.186.1"

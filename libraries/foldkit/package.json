@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/foldkit",
+  "name": "@egonitida/foldkit",
   "private": true,
   "type": "module",
   "imports": {
@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
-    "@nitida/client": "*",
-    "@nitida/core": "*",
+    "@egonitida/client": "*",
+    "@egonitida/core": "*",
     "@stylexjs/stylex": "0.19.1",
     "effect": "4.0.0",
     "foldkit": "0.168.0",

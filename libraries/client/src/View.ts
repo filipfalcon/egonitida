@@ -1,4 +1,4 @@
-import { type Component, State } from '@nitida/core';
+import { type Component, State } from '@egonitida/core';
 import { Effect, Exit, Fiber, Option, Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import type * as Drawing from '#src/Drawing.ts';

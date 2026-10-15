@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from '@effect/vitest';
-import { Relay } from '@nitida/devtools';
+import { Relay } from '@egonitida/devtools';
 import { Effect, Exit, Scope } from 'effect';
 import WebSocket from 'ws';
 import * as Listener from '#src/Listener.ts';

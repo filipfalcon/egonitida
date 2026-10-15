@@ -1,4 +1,4 @@
-import { type Client, type Component, Random, State } from '@nitida/core';
+import { type Client, type Component, Random, State } from '@egonitida/core';
 import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Timeline from '#src/Timeline.ts';
 

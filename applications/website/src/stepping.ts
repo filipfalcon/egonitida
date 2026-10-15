@@ -1,5 +1,5 @@
-import { type Client, type Host } from '@nitida/core';
-import { Rewind } from '@nitida/devtools';
+import { type Client, type Host } from '@egonitida/core';
+import { Rewind } from '@egonitida/devtools';
 import { Effect, Match, Schema, type Scope, Stream } from 'effect';
 
 /**

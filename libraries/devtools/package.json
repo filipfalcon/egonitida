@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/devtools",
+  "name": "@egonitida/devtools",
   "private": true,
   "type": "module",
   "imports": {
@@ -10,7 +10,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@nitida/core": "*",
+    "@egonitida/core": "*",
     "effect": "4.0.0"
   }
 }

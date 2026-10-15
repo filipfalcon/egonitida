@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Devices } from '@nitida/client';
+import { Devices } from '@egonitida/client';
 import * as Steering from '#src/steering.ts';
 
 /** What the player steers with `keys` held. */

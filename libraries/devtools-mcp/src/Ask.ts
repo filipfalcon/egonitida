@@ -1,4 +1,4 @@
-import { type Inspect, Page, Relay } from '@nitida/devtools';
+import { type Inspect, Page, Relay } from '@egonitida/devtools';
 import { Data, Duration, Effect, Option, Schema } from 'effect';
 import WebSocket from 'ws';
 

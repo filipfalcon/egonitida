@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Game, Host, Domain, System, State } from '@nitida/core';
-import { Transport } from '@nitida/core/internal';
+import { Client, Component, Game, Host, Domain, System, State } from '@egonitida/core';
+import { Transport } from '@egonitida/core/internal';
 import { Effect, Option, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Drawing from '#src/Drawing.ts';

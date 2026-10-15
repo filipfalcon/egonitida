@@ -1,4 +1,4 @@
-import type { Game, State } from '@nitida/core';
+import type { Game, State } from '@egonitida/core';
 import { Effect, Option, Schema } from 'effect';
 import type * as Recording from '#src/Recording.ts';
 import { encoderOf } from '#src/Recording.ts';

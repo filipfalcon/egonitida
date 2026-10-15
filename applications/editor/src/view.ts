@@ -1,5 +1,5 @@
-import { Styled } from '@nitida/foldkit';
-import { Inspector } from '@nitida/reflection';
+import { Styled } from '@egonitida/foldkit';
+import { Inspector } from '@egonitida/reflection';
 import * as stylex from '@stylexjs/stylex';
 import { Option, Schema } from 'effect';
 import type { Document, Html, HtmlBuilder } from 'foldkit/html';

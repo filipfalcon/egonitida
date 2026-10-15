@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Haptics, Lighting, Scene } from '@nitida/client';
-import { Story, State } from '@nitida/core';
+import { Haptics, Lighting, Scene } from '@egonitida/client';
+import { Story, State } from '@egonitida/core';
 import { Effect } from 'effect';
 import * as Body from '#src/body.ts';
 import * as Game from '#src/game.ts';

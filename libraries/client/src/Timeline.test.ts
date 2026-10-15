@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, State } from '@nitida/core';
+import { Component, State } from '@egonitida/core';
 import { Option, Schema } from 'effect';
 import * as Timeline from '#src/Timeline.ts';
 

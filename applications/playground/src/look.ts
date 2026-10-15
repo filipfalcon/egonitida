@@ -1,4 +1,4 @@
-import { Controls } from '@nitida/client';
+import { Controls } from '@egonitida/client';
 
 /**
  * Looking around: how far the player turned to look, by the right stick or the arrow keys, the pad's way first. It changes only how the cubes are drawn for them, every frame, so it is the client's alone: never the game's state, and never the page's Model, which changes only when the player does something once. The stage plays it on every frame it draws, from the controls it reads then.

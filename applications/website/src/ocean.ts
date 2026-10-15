@@ -1,4 +1,4 @@
-import { Component, Domain, Game, Maths, Pointing, Rule, State, System } from '@nitida/core';
+import { Component, Domain, Game, Maths, Pointing, Rule, State, System } from '@egonitida/core';
 import { Option, Schema } from 'effect';
 
 /**

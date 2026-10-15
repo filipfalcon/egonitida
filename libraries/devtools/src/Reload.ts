@@ -1,4 +1,4 @@
-import { Host } from '@nitida/core';
+import { Host } from '@egonitida/core';
 import { Effect, Option, type Scope } from 'effect';
 
 /**

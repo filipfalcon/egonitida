@@ -1,4 +1,4 @@
-import { Action, Component, Domain, Event, Maths, Rule, State, System } from '@nitida/core';
+import { Action, Component, Domain, Event, Maths, Rule, State, System } from '@egonitida/core';
 import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 

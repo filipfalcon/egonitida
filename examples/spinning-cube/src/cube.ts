@@ -1,4 +1,4 @@
-import { Component, Domain, Game, System, State } from '@nitida/core';
+import { Component, Domain, Game, System, State } from '@egonitida/core';
 import { Schema } from 'effect';
 
 /**

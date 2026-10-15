@@ -1,4 +1,4 @@
-import type { State } from '@nitida/core';
+import type { State } from '@egonitida/core';
 import { Effect, Schema, Stream } from 'effect';
 import type { ManagedResource } from 'foldkit';
 import type * as Session from '#src/Session.ts';

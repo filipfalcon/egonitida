@@ -1,4 +1,4 @@
-import type { Inspect } from '@nitida/devtools';
+import type { Inspect } from '@egonitida/devtools';
 import { Effect, Schema } from 'effect';
 import { McpSchema, Tool, Toolkit } from 'effect/ai';
 import * as Ask from '#src/Ask.ts';

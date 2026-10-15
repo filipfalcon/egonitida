@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, type State } from '@nitida/core';
-import { Transport } from '@nitida/core/internal';
+import { Client, type State } from '@egonitida/core';
+import { Transport } from '@egonitida/core/internal';
 import { Effect, Option, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 import * as Fixtures from '#src/fixtures.ts';

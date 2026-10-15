@@ -1,5 +1,5 @@
-import { Posing, Ragdolling, View } from '@nitida/client';
-import { Ball, Chain, Reach } from '@nitida/core';
+import { Posing, Ragdolling, View } from '@egonitida/client';
+import { Ball, Chain, Reach } from '@egonitida/core';
 import { Array, Effect, Option } from 'effect';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as Three from 'three/webgpu';

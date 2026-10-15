@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Scene, View } from '@nitida/client';
-import { Story, State } from '@nitida/core';
+import { Scene, View } from '@egonitida/client';
+import { Story, State } from '@egonitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Glance from '#src/glance.ts';

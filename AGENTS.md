@@ -33,7 +33,7 @@ When designing something new, ask first whether it is part of x, u, f, or h: the
 
 ## The rules
 
-A rule is a type where it can be, a lint rule (`@nitida/oxlint-plugin`) where it cannot, and written here only where neither can tell. A lint message says what to do instead; do that, rather than silencing it.
+A rule is a type where it can be, a lint rule (`@egonitida/oxlint-plugin`) where it cannot, and written here only where neither can tell. A lint message says what to do instead; do that, rather than silencing it.
 
 **Types.** No `any`, no `as`, no non-null `!`: prove a type where a value is made, never claim it where it is used. `as const` is no claim, only a literal kept as written, and is fine. Absence is `Option`, so what only one entity holds, such as a game's progress, is `Array.head` of a query, an `Option`; modes are tagged unions, never boolean flags beside nullable fields. Hot code indexes plainly and checks for `undefined`; nothing anywhere uses sentinels such as `-1`.
 

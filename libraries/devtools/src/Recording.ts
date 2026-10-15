@@ -1,4 +1,4 @@
-import { type Event, Game, type Host, type State } from '@nitida/core';
+import { type Event, Game, type Host, type State } from '@egonitida/core';
 import { Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 import * as Version from '#src/Version.ts';

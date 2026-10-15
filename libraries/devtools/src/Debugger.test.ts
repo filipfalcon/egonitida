@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client } from '@nitida/core';
-import { Transport } from '@nitida/core/internal';
+import { Client } from '@egonitida/core';
+import { Transport } from '@egonitida/core/internal';
 import { Effect } from 'effect';
 import * as Debugger from '#src/Debugger.ts';
 import * as Fixtures from '#src/fixtures.ts';

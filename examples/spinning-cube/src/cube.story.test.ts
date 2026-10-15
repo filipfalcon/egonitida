@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Story } from '@nitida/core';
+import { Story } from '@egonitida/core';
 import * as Cube from '#src/cube.ts';
 
 it('turns a cube once every four seconds', () => {

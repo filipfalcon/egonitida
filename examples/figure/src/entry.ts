@@ -1,6 +1,6 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Drawing, Hearing, View, Viewport } from '@nitida/client';
-import { Client, WorkerTransport } from '@nitida/core';
+import { Drawing, Hearing, View, Viewport } from '@egonitida/client';
+import { Client, WorkerTransport } from '@egonitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as FigureControls from '#src/controls.ts';

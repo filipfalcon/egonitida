@@ -1,4 +1,4 @@
-import { Angle } from '@nitida/core';
+import { Angle } from '@egonitida/core';
 import { Option, Schema, SchemaAST } from 'effect';
 
 /**

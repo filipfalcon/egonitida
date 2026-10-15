@@ -1,4 +1,4 @@
-import type { Session } from '@nitida/foldkit';
+import type { Session } from '@egonitida/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import * as Dom from 'foldkit/dom';

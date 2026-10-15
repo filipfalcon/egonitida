@@ -1,6 +1,6 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@nitida/core';
-import { Beside } from '@nitida/devtools';
+import { Host, WorkerTransport, State } from '@egonitida/core';
+import { Beside } from '@egonitida/devtools';
 import { Effect } from 'effect';
 import { build } from 'virtual:nitida/build';
 import * as Colour from '#src/colour.ts';

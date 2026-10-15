@@ -1,6 +1,6 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Drawing } from '@nitida/client';
-import { Client, type Game, WorkerTransport } from '@nitida/core';
+import { Drawing } from '@egonitida/client';
+import { Client, type Game, WorkerTransport } from '@egonitida/core';
 import { Duration, Effect, Option, Schema, type Scope, Stream } from 'effect';
 import type { WorkerError } from 'effect/workers/WorkerError';
 import type { ManagedResource } from 'foldkit';

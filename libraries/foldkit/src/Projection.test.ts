@@ -9,7 +9,7 @@ import {
   System,
   WorkerTransport,
   State,
-} from '@nitida/core';
+} from '@egonitida/core';
 import { Effect, Option, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Held from '#src/Held.ts';

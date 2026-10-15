@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/oxlint-plugin",
+  "name": "@egonitida/oxlint-plugin",
   "private": true,
   "type": "module",
   "imports": {

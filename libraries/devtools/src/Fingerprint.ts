@@ -1,4 +1,4 @@
-import type { Game, State } from '@nitida/core';
+import type { Game, State } from '@egonitida/core';
 import { Option, Schema } from 'effect';
 
 /**

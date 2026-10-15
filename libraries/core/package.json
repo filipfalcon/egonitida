@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/core",
+  "name": "@egonitida/core",
   "private": true,
   "type": "module",
   "imports": {

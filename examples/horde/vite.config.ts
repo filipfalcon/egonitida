@@ -1,4 +1,4 @@
-import { Build, Devtools } from '@nitida/vite-plugin';
+import { Build, Devtools } from '@egonitida/vite-plugin';
 import { defineConfig } from 'vite-plus';
 
 // In development, the server is the way to the horde's host for the tools on this machine, such as an MCP server.

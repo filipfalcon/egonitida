@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Pointing, Story, State } from '@nitida/core';
+import { Pointing, Story, State } from '@egonitida/core';
 import { Option } from 'effect';
 import * as Editing from '#src/editing.ts';
 import * as Objects from '#src/objects.ts';

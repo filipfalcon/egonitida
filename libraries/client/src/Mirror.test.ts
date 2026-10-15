@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from '@effect/vitest';
-import { type Client, Component, Pointing, State } from '@nitida/core';
+import { type Client, Component, Pointing, State } from '@egonitida/core';
 import { Effect, Option, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Drawing from '#src/Drawing.ts';

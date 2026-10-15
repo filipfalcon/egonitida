@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
-import { Controls, View, type Viewport } from '@nitida/client';
+import { Controls, View, type Viewport } from '@egonitida/client';
 import {
   Component,
   Domain,
@@ -11,7 +11,7 @@ import {
   System,
   WorkerTransport,
   State,
-} from '@nitida/core';
+} from '@egonitida/core';
 import { Context, Effect, Option, Queue, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Three from 'three/webgpu';

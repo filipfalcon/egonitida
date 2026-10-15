@@ -1,5 +1,15 @@
-import { Action, Client, Component, Domain, Game, Host, Rule, System, State } from '@nitida/core';
-import { Transport } from '@nitida/core/internal';
+import {
+  Action,
+  Client,
+  Component,
+  Domain,
+  Game,
+  Host,
+  Rule,
+  System,
+  State,
+} from '@egonitida/core';
+import { Transport } from '@egonitida/core/internal';
 import { Effect, Exit, Schema, Scope } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Recording from '#src/Recording.ts';

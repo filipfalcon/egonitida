@@ -1,4 +1,4 @@
-import { View } from '@nitida/client';
+import { View } from '@egonitida/client';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Editing from '#src/editing.ts';

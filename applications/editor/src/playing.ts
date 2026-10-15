@@ -1,4 +1,4 @@
-import { Domain, Game, Pointing, Rule, State } from '@nitida/core';
+import { Domain, Game, Pointing, Rule, State } from '@egonitida/core';
 import { Option, Schema } from 'effect';
 import * as Objects from '#src/objects.ts';
 

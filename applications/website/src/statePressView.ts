@@ -1,4 +1,4 @@
-import { Styled } from '@nitida/foldkit';
+import { Styled } from '@egonitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Match, Option } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';

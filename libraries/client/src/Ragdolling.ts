@@ -1,4 +1,4 @@
-import type { Ragdoll } from '@nitida/core';
+import type { Ragdoll } from '@egonitida/core';
 import { Data, Effect } from 'effect';
 import * as Three from 'three/webgpu';
 

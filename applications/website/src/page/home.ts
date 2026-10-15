@@ -1,4 +1,4 @@
-import { Styled } from '@nitida/foldkit';
+import { Styled } from '@egonitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Option } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';
@@ -257,7 +257,7 @@ const START: ReadonlyArray<{ readonly text: string; readonly command: string }> 
   { text: 'Install, with Node 24.15 or later and npm 12:', command: 'npm install' },
   { text: 'Format, lint, and type-check everything:', command: 'npm run check' },
   { text: 'Run every test:', command: 'npm test' },
-  { text: 'Serve one example on its own:', command: 'npm run dev -w @nitida/example-horde' },
+  { text: 'Serve one example on its own:', command: 'npm run dev -w @egonitida/example-horde' },
 ];
 
 /** The home page: the ocean with what Nitida is over it, then a game whole, what its structure buys, what it is built on, when to use something else, and how to start. */

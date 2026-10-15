@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Story, State } from '@nitida/core';
+import { Story, State } from '@egonitida/core';
 import { Option } from 'effect';
 import * as Press from '#src/press.ts';
 

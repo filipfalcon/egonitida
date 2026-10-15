@@ -1,6 +1,6 @@
-import { Tab, Viewport } from '@nitida/client';
-import { Bridge, Page } from '@nitida/devtools';
-import { Session, Stage } from '@nitida/foldkit';
+import { Tab, Viewport } from '@egonitida/client';
+import { Bridge, Page } from '@egonitida/devtools';
+import { Session, Stage } from '@egonitida/foldkit';
 import { Effect, Option, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';

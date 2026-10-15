@@ -1,4 +1,4 @@
-import { type Host, State } from '@nitida/core';
+import { type Host, State } from '@egonitida/core';
 import { Effect, Option, type Scope } from 'effect';
 import * as Bridge from '#src/Bridge.ts';
 import * as Debugger from '#src/Debugger.ts';

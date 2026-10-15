@@ -1,6 +1,14 @@
-import { Clicking, Controls, type Devices, Hearing, Mirror, View, Viewport } from '@nitida/client';
+import {
+  Clicking,
+  Controls,
+  type Devices,
+  Hearing,
+  Mirror,
+  View,
+  Viewport,
+} from '@egonitida/client';
 import { Data, type Duration, Effect, Option, Queue, Schema, type Scope, Stream } from 'effect';
-import type { Action, Client, Component, Input } from '@nitida/core';
+import type { Action, Client, Component, Input } from '@egonitida/core';
 import type { ManagedResource } from 'foldkit';
 import type * as Session from '#src/Session.ts';
 

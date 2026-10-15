@@ -1,5 +1,5 @@
 {
-  "jsPlugins": [{ "name": "nitida", "specifier": "@nitida/oxlint-plugin" }],
+  "jsPlugins": [{ "name": "nitida", "specifier": "@egonitida/oxlint-plugin" }],
   "rules": {
     "nitida/pure-steps": "error",
     "nitida/no-nullable-components": "error",

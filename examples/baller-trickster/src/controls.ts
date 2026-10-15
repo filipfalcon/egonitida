@@ -1,5 +1,5 @@
-import { Controls } from '@nitida/client';
-import type { Component } from '@nitida/core';
+import { Controls } from '@egonitida/client';
+import type { Component } from '@egonitida/core';
 import * as Baller from '#src/baller.ts';
 
 /**

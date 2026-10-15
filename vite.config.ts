@@ -1,5 +1,5 @@
 import { recommended } from '@effect/tsgo/oxlint-presets';
-import nitida from '@nitida/oxlint-plugin/recommended.json' with { type: 'json' };
+import nitida from '@egonitida/oxlint-plugin/recommended.json' with { type: 'json' };
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({

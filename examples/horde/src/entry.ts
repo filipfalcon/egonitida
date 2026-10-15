@@ -11,9 +11,9 @@ import {
   Tab,
   View,
   Viewport,
-} from '@nitida/client';
-import { Client, WorkerTransport } from '@nitida/core';
-import { Bridge, Page, Rewind } from '@nitida/devtools';
+} from '@egonitida/client';
+import { Client, WorkerTransport } from '@egonitida/core';
+import { Bridge, Page, Rewind } from '@egonitida/devtools';
 import { Effect, Option, type Scope, Stream } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import * as Three from 'three/webgpu';

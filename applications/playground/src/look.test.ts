@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Controls, Devices } from '@nitida/client';
+import { Controls, Devices } from '@egonitida/client';
 import * as Look from '#src/look.ts';
 
 /** The devices with nothing held but `keys`. */

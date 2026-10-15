@@ -1,6 +1,6 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport } from '@nitida/core';
-import { Beside } from '@nitida/devtools';
+import { Host, WorkerTransport } from '@egonitida/core';
+import { Beside } from '@egonitida/devtools';
 import { Effect } from 'effect';
 import { build } from 'virtual:nitida/build';
 import * as Beginning from '#src/beginning.ts';

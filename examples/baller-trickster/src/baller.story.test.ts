@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Chain, type Component, Game, Pose, Quaternion, State, Story } from '@nitida/core';
+import { Chain, type Component, Game, Pose, Quaternion, State, Story } from '@egonitida/core';
 import { Option } from 'effect';
 import * as Baller from '#src/baller.ts';
 import * as Body from '#src/body.ts';

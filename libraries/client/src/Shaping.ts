@@ -1,4 +1,4 @@
-import { Shape } from '@nitida/core';
+import { Shape } from '@egonitida/core';
 import { Data, Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 

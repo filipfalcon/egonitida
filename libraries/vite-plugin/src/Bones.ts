@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { Quaternion } from '@nitida/core';
+import { Quaternion } from '@egonitida/core';
 import { Option, Result, Schema } from 'effect';
 
 /**

@@ -1,5 +1,5 @@
 {
-  "name": "@nitida/website",
+  "name": "@egonitida/website",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,22 +14,22 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
+    "@egonitida/client": "*",
+    "@egonitida/core": "*",
+    "@egonitida/devtools": "*",
+    "@egonitida/foldkit": "*",
     "@foldkit/markdown": "0.14.3",
     "@fontsource/unbounded": "5.3.0",
-    "@nitida/client": "*",
-    "@nitida/core": "*",
-    "@nitida/devtools": "*",
-    "@nitida/foldkit": "*",
     "@stylexjs/stylex": "0.19.1",
     "effect": "4.0.0",
     "foldkit": "0.168.0",
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@egonitida/vite-plugin": "*",
     "@foldkit/devtools": "0.168.0",
     "@foldkit/ui": "0.168.0",
     "@foldkit/vite-plugin": "0.27.1",
-    "@nitida/vite-plugin": "*",
     "@stylexjs/unplugin": "0.19.1",
     "@types/three": "0.186.0"
   }

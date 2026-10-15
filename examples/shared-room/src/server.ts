@@ -1,5 +1,5 @@
-import { Room } from '@nitida/server/experimental';
-import { State } from '@nitida/core';
+import { Room } from '@egonitida/server/experimental';
+import { State } from '@egonitida/core';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import { Effect, Option, Schema, Scope } from 'effect';
 import { HttpServerRequest } from 'effect/http/HttpServerRequest';

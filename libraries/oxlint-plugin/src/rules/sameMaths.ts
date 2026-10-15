@@ -85,8 +85,8 @@ export const sameMaths: Rule = {
             data: {
               call: `\`${name}\``,
               instead: IN_MATHS.has(function_)
-                ? `Use \`Maths.${function_}\` from \`@nitida/core\`, which every engine works out alike.`
-                : 'Work it out with `Maths`, from `@nitida/core`, and exact arithmetic, which every engine works out alike.',
+                ? `Use \`Maths.${function_}\` from \`@egonitida/core\`, which every engine works out alike.`
+                : 'Work it out with `Maths`, from `@egonitida/core`, and exact arithmetic, which every engine works out alike.',
             },
           });
         }

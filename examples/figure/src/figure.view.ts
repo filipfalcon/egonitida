@@ -1,5 +1,5 @@
-import { Shaping, View } from '@nitida/client';
-import { Shape } from '@nitida/core';
+import { Shaping, View } from '@egonitida/client';
+import { Shape } from '@egonitida/core';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Figure from '#src/figure.ts';

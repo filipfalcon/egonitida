@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { Relay } from '@nitida/devtools';
+import { Relay } from '@egonitida/devtools';
 import { Effect, Option, Schema } from 'effect';
 
 /**

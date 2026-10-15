@@ -1,5 +1,5 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { WorkerTransport, State } from '@nitida/core';
+import { WorkerTransport, State } from '@egonitida/core';
 import { Effect } from 'effect';
 import * as Figure from '#src/figure.ts';
 

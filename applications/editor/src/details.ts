@@ -1,5 +1,5 @@
-import { Styled } from '@nitida/foldkit';
-import type { Inspector } from '@nitida/reflection';
+import { Styled } from '@egonitida/foldkit';
+import type { Inspector } from '@egonitida/reflection';
 import * as stylex from '@stylexjs/stylex';
 import type { Html, HtmlBuilder } from 'foldkit/html';
 // Relative, as StyleX finds variables by the path of the module that defines them.

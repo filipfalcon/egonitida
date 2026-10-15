@@ -62,7 +62,7 @@ export interface Bone {
   readonly turn: Quaternion.Quaternion;
 }
 
-/** A figure's bones as its model was made, by name, such as `@nitida/vite-plugin` reads them from a model's file. */
+/** A figure's bones as its model was made, by name, such as `@egonitida/vite-plugin` reads them from a model's file. */
 export type Bones = Readonly<Record<string, Bone>>;
 
 /** A dial turning the morph target `target`, or one of the two opposed targets `less` and `more`. */

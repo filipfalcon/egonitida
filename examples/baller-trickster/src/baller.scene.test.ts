@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Scene } from '@nitida/client';
-import { Game, Pose, State, Story } from '@nitida/core';
+import { Scene } from '@egonitida/client';
+import { Game, Pose, State, Story } from '@egonitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';

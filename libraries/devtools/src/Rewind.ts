@@ -1,4 +1,4 @@
-import type { Client, Host, State } from '@nitida/core';
+import type { Client, Host, State } from '@egonitida/core';
 import { Data, Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Recording from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';

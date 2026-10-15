@@ -1,6 +1,6 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport } from '@nitida/core';
-import { Beside, Debugger } from '@nitida/devtools';
+import { Host, WorkerTransport } from '@egonitida/core';
+import { Beside, Debugger } from '@egonitida/devtools';
 import { Effect } from 'effect';
 import { build } from 'virtual:nitida/build';
 import * as Press from '#src/press.ts';

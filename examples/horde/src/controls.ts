@@ -1,4 +1,4 @@
-import { Controls, type Devices } from '@nitida/client';
+import { Controls, type Devices } from '@egonitida/client';
 import { Option } from 'effect';
 
 /**

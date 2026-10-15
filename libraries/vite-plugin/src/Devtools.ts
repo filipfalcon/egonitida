@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Bridge, Relay } from '@nitida/devtools';
-import { Server } from '@nitida/devtools-mcp';
+import { Bridge, Relay } from '@egonitida/devtools';
+import { Server } from '@egonitida/devtools-mcp';
 import { Effect, Exit, Option, Schema, Scope } from 'effect';
 import { type HotChannelClient, type Plugin, searchForWorkspaceRoot } from 'vite';
 import * as Banner from '#src/Banner.ts';

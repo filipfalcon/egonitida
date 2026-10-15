@@ -1,4 +1,4 @@
-import { Client, Game, type Host, type Rule, type State } from '@nitida/core';
+import { Client, Game, type Host, type Rule, type State } from '@egonitida/core';
 import { Data, Effect, Option, Result, Schema, type Scope } from 'effect';
 import * as Log from '#src/Log.ts';
 import type * as Rewind from '#src/Rewind.ts';

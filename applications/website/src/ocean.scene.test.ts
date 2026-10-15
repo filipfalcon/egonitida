@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Scene } from '@nitida/client';
-import { Story, State } from '@nitida/core';
+import { Scene } from '@egonitida/client';
+import { Story, State } from '@egonitida/core';
 import { Effect, Option } from 'effect';
 import * as Ocean from '#src/ocean.ts';
 import * as OceanView from '#src/ocean.view.ts';
