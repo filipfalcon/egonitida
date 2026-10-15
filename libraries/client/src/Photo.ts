@@ -10,11 +10,15 @@ import {
   cross,
   dot,
   float,
+  floatBitsToUint,
   instanceIndex,
   int,
   max,
+  min,
   mix,
   normalize,
+  packSnorm2x16,
+  packUnorm4x8,
   screenUV,
   select,
   sin,
@@ -22,12 +26,15 @@ import {
   storage,
   texture,
   uint,
+  uintBitsToFloat,
   uniform,
+  uvec4,
   vec2,
   vec3,
   vec4,
 } from 'three/tsl';
 import * as Three from 'three/webgpu';
+import * as Denoiser from '#src/Denoiser.ts';
 import * as HairTracer from '#src/HairTracer.ts';
 import * as PathTracer from '#src/PathTracer.ts';
 import * as SceneTracer from '#src/SceneTracer.ts';
@@ -85,6 +92,7 @@ export const batched = (
 export interface Developing {
   readonly toneMapping: Three.ToneMapping;
   readonly exposure: number;
+  readonly denoised: boolean;
 }
 
 /** How a photograph is developed, as `told`, the rest as `renderer` puts out its frames: so a photograph told nothing looks as the viewport does, and one told a curve keeps highlights the viewport clips. */
@@ -94,6 +102,7 @@ export const developingOf = (
 ): Developing => ({
   toneMapping: told.toneMapping ?? renderer.toneMapping,
   exposure: told.exposure ?? renderer.toneMappingExposure,
+  denoised: told.denoised ?? false,
 });
 
 /** How many numbers each picture's placing takes: the two rows of what moves a place in the picture to where its photograph samples it, four numbers each, the fourth nothing. */
@@ -201,18 +210,19 @@ export const take = (
     const size = renderer.getDrawingBufferSize(new Three.Vector2());
     const width = Math.max(Math.floor(size.x), 1);
     const height = Math.max(Math.floor(size.y), 1);
-    const sums = new Three.StorageBufferAttribute(new Float32Array(width * height * 4), 4);
-    const summing = storage(sums, 'vec4', width * height);
-    const reading = storage(sums, 'vec4', width * height).toReadOnly();
+    // Every pixel's light added up and how many paths, and, after them all, what the last batch wrote last.
+    const count = width * height;
+    const sums = new Three.StorageBufferAttribute(new Float32Array((count + 1) * 4), 4);
+    const summing = storage(sums, 'vec4', count + 1);
+    const reading = storage(sums, 'vec4', count + 1).toReadOnly();
+    const guides = new Three.StorageBufferAttribute(new Uint32Array(count * Denoiser.GUIDES), 4);
+    const guiding = storage(guides, 'uvec4', count);
 
     camera.updateMatrixWorld();
     const cameraWorld = uniform(camera.matrixWorld.clone());
     const projectionInverse = uniform(camera.projectionMatrixInverse.clone());
     const frame = uniform(0, 'uint');
     const firstPixel = uniform(0, 'uint');
-    // Written last by every batch, and read back, which waits for the graphics device to finish the batch.
-    const finished = new Three.StorageBufferAttribute(new Uint32Array(4), 1);
-    const finishing = storage(finished, 'uint', 4);
     const up = vec3(...lighting.up);
     const down = vec3(...lighting.down);
     const suns = Array.from({ length: SUNS }, (_, index) => {
@@ -240,6 +250,10 @@ export const take = (
       const way = normalize(cameraWorld.mul(vec4(seen.xyz.div(seen.w), 0)).xyz).toVar();
       const light = vec3(0).toVar();
       const carried = vec3(1).toVar();
+      // What the camera first met: its colour, which way it faces, and how far it lies, nothing where it met nothing.
+      const firstColour = vec3(1).toVar();
+      const firstFacing = vec3(0, 0, 1).toVar();
+      const firstLying = float(0).toVar();
       Loop(BOUNCES, ({ i }) => {
         const {
           met,
@@ -313,6 +327,11 @@ export const take = (
           .xyz.mul(select(glowing.x.greaterThan(0.5), glowPainted, vec3(1)));
         light.addAssign(carried.mul(glow));
         const point = from.add(way.mul(met.x)).toVar();
+        If(int(i).equal(0), () => {
+          firstColour.assign(colour);
+          firstFacing.assign(select(surface, shadingNormal, normal));
+          firstLying.assign(met.x);
+        });
         If(surface.not().and(dot(along, along).greaterThan(0.5)), () => {
           // Hair, as `HairScattering` scatters light: in the strand's own frame, along it, across it, and toward where it is seen from.
           const material = device.placed.node.element(base.add(5));
@@ -436,10 +455,34 @@ export const take = (
       });
       const before = summing.element(pixel);
       before.assign(select(frame.equal(0), vec4(light, 1), before.add(vec4(light, 1))));
+      // For a denoiser: what the camera first met, and every path's brightness squared, added up.
+      const guide = guiding.element(pixel);
+      const bright = light.dot(vec3(0.2126, 0.7152, 0.0722));
+      const squared = bright.mul(bright);
+      guide.assign(
+        uvec4(
+          new Three.ConvertNode<'uint'>(packUnorm4x8(vec4(min(firstColour, vec3(1)), 1)), 'uint'),
+          new Three.ConvertNode<'uint'>(packSnorm2x16(Denoiser.folded(firstFacing)), 'uint'),
+          new Three.ConvertNode<'uint'>(floatBitsToUint(firstLying), 'uint'),
+          new Three.ConvertNode<'uint'>(
+            floatBitsToUint(
+              select(
+                frame.equal(0),
+                squared,
+                new Three.ConvertNode<'float'>(uintBitsToFloat(guide.w), 'float').add(squared),
+              ),
+            ),
+            'uint',
+          ),
+        ),
+      );
       If(instanceIndex.equal(0), () => {
-        finishing.element(0).assign(frame.add(1));
+        summing.element(count).assign(vec4(float(frame.add(1))));
       });
-    })().compute(width * height);
+    })().compute(count);
+    const denoiser = Denoiser.make(renderer, { width, height, sums, guides });
+    // Shown smoothed once a whole pass has been followed, if the photograph is developed so.
+    const smoothed = uniform(0, 'uint');
 
     // The paths so far averaged, for each pixel of the canvas.
     const developed = new Three.MeshBasicNodeMaterial();
@@ -447,15 +490,25 @@ export const take = (
       .mul(width)
       .add(uint(screenUV.x.mul(width).floor()));
     const sum = reading.element(pixelAt);
-    developed.colorNode = sum.xyz.div(max(sum.w, 1));
+    developed.colorNode = select(
+      smoothed.equal(1),
+      denoiser.developed(pixelAt),
+      sum.xyz.div(max(sum.w, 1)),
+    );
     const quad = new Three.QuadMesh(developed);
     yield* Effect.addFinalizer(() => Effect.sync(() => developed.dispose()));
 
     // The batch to follow next, and whether the graphics device is still following the last.
-    const total = width * height;
-    const kept = { batches: batchesOf(width), following: false };
+    const total = count;
+    const kept = { batches: batchesOf(width), following: false, smoothing: false };
     return {
       develop: Effect.sync(() => {
+        // Smoothed after every whole pass, before the next batch follows.
+        if (!kept.following && kept.smoothing) {
+          kept.smoothing = false;
+          denoiser.run();
+          smoothed.value = 1;
+        }
         if (!kept.following) {
           const { batches } = kept;
           frame.value = batches.pass;
@@ -464,9 +517,10 @@ export const take = (
           const started = performance.now();
           // The renderer is ready, so it computes at once and gives back no promise.
           void renderer.compute(follow, Math.min(batches.size, total - batches.first));
-          void renderer.getArrayBufferAsync(finished).then(
+          void renderer.getArrayBufferAsync(sums, null, count * 16, 16).then(
             () => {
               kept.batches = batched(batches, { width, total, took: performance.now() - started });
+              kept.smoothing = developing.denoised && kept.batches.pass > batches.pass;
               kept.following = false;
             },
             () => {

@@ -108,9 +108,9 @@ const main = Effect.gen(function* () {
               onNone: () =>
                 Effect.gen(function* () {
                   const scope = yield* Scope.make();
-                  // Developed on a neutral curve, so what the sun lights brightest keeps its colour rather than clipping to white.
+                  // Developed on a neutral curve, so what the sun lights brightest keeps its colour rather than clipping to white, and its noise smoothed away.
                   const photo = yield* Scope.provide(
-                    Photo.take(viewport, { toneMapping: Three.NeutralToneMapping }),
+                    Photo.take(viewport, { toneMapping: Three.NeutralToneMapping, denoised: true }),
                     scope,
                   );
                   return Option.some({ photo, scope });

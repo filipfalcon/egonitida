@@ -39,20 +39,23 @@ describe('Photo.placingsOf', () => {
 });
 
 describe('Photo.developingOf', () => {
-  it('develops a photograph as the renderer puts out its frames, unless told otherwise', () => {
+  it('develops a photograph as the renderer puts out its frames, its noise left as it is, unless told otherwise', () => {
     const renderer = { toneMapping: Three.NoToneMapping, toneMappingExposure: 1.5 };
 
     expect(Photo.developingOf(renderer, {})).toEqual({
       toneMapping: Three.NoToneMapping,
       exposure: 1.5,
+      denoised: false,
     });
     expect(Photo.developingOf(renderer, { toneMapping: Three.NeutralToneMapping })).toEqual({
       toneMapping: Three.NeutralToneMapping,
       exposure: 1.5,
+      denoised: false,
     });
-    expect(Photo.developingOf(renderer, { exposure: 2 })).toEqual({
+    expect(Photo.developingOf(renderer, { exposure: 2, denoised: true })).toEqual({
       toneMapping: Three.NoToneMapping,
       exposure: 2,
+      denoised: true,
     });
   });
 });
