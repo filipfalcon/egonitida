@@ -241,7 +241,14 @@ export const take = (
       const light = vec3(0).toVar();
       const carried = vec3(1).toVar();
       Loop(BOUNCES, ({ i }) => {
-        const { met, normal, uv, along } = SceneTracer.traceFacing(device, from, way, float(FAR));
+        const {
+          met,
+          normal,
+          uv,
+          along,
+          across,
+          down: downward,
+        } = SceneTracer.traceFacing(device, from, way, float(FAR));
         const placed = int(met.y).toVar();
         If(placed.lessThan(0), () => {
           light.addAssign(carried.mul(mix(down, up, way.y.mul(0.5).add(0.5))));
@@ -268,6 +275,29 @@ export const take = (
         const finished = texture(finishLayers, placedIn(finishLayer.add(flat.pictures.length)))
           .depth(finishLayer)
           .level(int(0));
+        // Which way a surface faces where a relief tilts it, as Three's normal map does: across and down its picture, and out of it.
+        const relief = device.placed.node.element(base.add(7)).toVar();
+        const reliefLayer = int(relief.y);
+        const tilt = texture(finishLayers, placedIn(reliefLayer.add(flat.pictures.length)))
+          .depth(reliefLayer)
+          .level(int(0))
+          .xyz.mul(2)
+          .sub(1);
+        const tilted = vec3(tilt.xy.mul(relief.zw), tilt.z);
+        const acrossFlat = normalize(across.sub(normal.mul(dot(normal, across))));
+        const downFlat = normalize(downward.sub(normal.mul(dot(normal, downward))));
+        const reliefNormal = normalize(
+          acrossFlat.mul(tilted.x).add(downFlat.mul(tilted.y)).add(normal.mul(tilted.z)),
+        ).toVar();
+        // Never tilted away from where it is seen from, which no surface seen could face.
+        const shadingNormal = select(
+          relief.x
+            .greaterThan(0.5)
+            .and(dot(across, across).greaterThan(0.5))
+            .and(dot(reliefNormal, way).lessThan(0)),
+          reliefNormal,
+          normal,
+        );
         const roughBy = select(painting.z.mod(2).greaterThan(0.5), finished.y, float(1));
         const metalBy = select(painting.z.greaterThan(1.5), finished.z, float(1));
         const colour = device.placed.node
@@ -326,8 +356,8 @@ export const take = (
             ),
           );
         }).Else(() => {
-          const facing = normal.toVar();
-          const at = point.add(facing.mul(AWAY)).toVar();
+          const facing = shadingNormal.toVar();
+          const at = point.add(normal.mul(AWAY)).toVar();
           // The surface's own frame: two ways square to the way it faces, and that way.
           const helper = select(facing.x.abs().greaterThan(0.9), vec3(0, 1, 0), vec3(1, 0, 0));
           const first = normalize(cross(helper, facing)).toVar();

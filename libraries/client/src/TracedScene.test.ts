@@ -418,8 +418,8 @@ describe('what a traced scene holds of how its shapes are made', () => {
     casts: true,
     material,
   });
-  const materialOf = (flat: TracedScene.Flat) =>
-    Array.from(flat.placed.slice(TracedScene.PLACED - 8, TracedScene.PLACED));
+  /** The eight numbers of what the first placed shape is made of. */
+  const materialOf = (flat: TracedScene.Flat) => Array.from(flat.placed.slice(20, 28));
 
   it('holds a surface as rough and as metal as it is', () => {
     const flat = TracedScene.flatten(
@@ -653,6 +653,23 @@ describe('a scene gathered with how its surfaces face and its pictures', () => {
     // Both its roughness and its metalness painted, by the first of the finishes.
     expect(finishOf([0, 0, 0])).toEqual([3, 0]);
     expect(finishOf([3, 0, 0])).toEqual([1, 0]);
+  });
+
+  it('gathers the picture a material’s relief is painted with, and how far it tilts the surface', () => {
+    const relief = new Three.Texture();
+    const scene = new Three.Scene();
+    const material = new Three.MeshStandardMaterial({ normalMap: relief });
+    material.normalScale.set(0.5, -0.5);
+    const bumpy = new Three.Mesh(new Three.BoxGeometry(1, 1, 1), material);
+    bumpy.position.z = -5;
+    scene.add(bumpy);
+
+    const flat = TracedScene.gathering().gather(scene, camera);
+    const hit = Option.getOrThrow(TracedScene.trace(flat, [0, 0, 0], [0, 0, -1], 100));
+    const base = hit.placed * TracedScene.PLACED;
+
+    expect(flat.finishes).toEqual([relief]);
+    expect(Array.from(flat.placed.slice(base + 28, base + 32))).toEqual([1, 0, 0.5, -0.5]);
   });
 
   it('faces a mesh bent each frame as its corners turn, smoothly between them', () => {

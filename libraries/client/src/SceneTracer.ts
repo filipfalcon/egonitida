@@ -356,7 +356,7 @@ export const trace = (
   return vec2(best, float(hit));
 };
 
-/** What the ray from `origin` going `direction` meets first in `device` before `far`, as `trace` finds it, which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, where it lies in the picture that paints it, and which way a strand it meets runs, root toward tip, or nothing for a triangle, as `TracedScene.trace` works them out: weighed between what the corners of the triangle it meets say, where they say it, and as the triangle itself faces where they do not; up and nowhere where it meets nothing. */
+/** What the ray from `origin` going `direction` meets first in `device` before `far`, as `trace` finds it, which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, where it lies in the picture that paints it, which way a strand it meets runs, root toward tip, or nothing for a triangle, and which ways across a triangle its picture runs, across and down, or nothing where it has no picture, as `TracedScene.trace` works them out: weighed between what the corners of the triangle it meets say, where they say it, and as the triangle itself faces where they do not; up and nowhere where it meets nothing. */
 export const traceFacing = (
   device: OnDevice,
   origin: Three.Node<'vec3'>,
@@ -367,6 +367,8 @@ export const traceFacing = (
   readonly normal: Three.Node<'vec3'>;
   readonly uv: Three.Node<'vec2'>;
   readonly along: Three.Node<'vec3'>;
+  readonly across: Three.Node<'vec3'>;
+  readonly down: Three.Node<'vec3'>;
 } => {
   const { best, hit, item, metFrom, metAlong } = walk(device, origin, direction, far, 'Anything');
   const at = item.mul(TRIANGLE_GROUPS);
@@ -417,18 +419,31 @@ export const traceFacing = (
   const row2 = device.placed.node.element(base.add(2)).xyz;
   const turned = normalize(row0.mul(local.x).add(row1.mul(local.y)).add(row2.mul(local.z)));
   const facing = select(dot(turned, direction).greaterThan(0), turned.negate(), turned);
-  // A strand's way into the scene by what places it: the inverse of the rows, by their cross products, its determinant keeping which way it runs.
-  const placedWay = cross(row1, row2)
-    .mul(ba.x)
-    .add(cross(row2, row0).mul(ba.y))
-    .add(cross(row0, row1).mul(ba.z));
+  // A way into the scene by what places it: the inverse of the rows, by their cross products, its determinant keeping which way it runs.
   const determinant = dot(row0, cross(row1, row2));
-  const runs = normalize(placedWay).mul(select(determinant.lessThan(0), float(-1), float(1)));
+  const intoScene = (way: Three.Node<'vec3'>) =>
+    normalize(
+      cross(row1, row2)
+        .mul(way.x)
+        .add(cross(row2, row0).mul(way.y))
+        .add(cross(row0, row1).mul(way.z)),
+    ).mul(select(determinant.lessThan(0), float(-1), float(1)));
+  const runs = intoScene(ba);
+  // Which ways across the triangle its picture runs, across and down: as Three works them out where a mesh holds no tangents.
+  const acrossPicture = vec2(n2.w.sub(n0.w), rest.y.sub(n0.w)).toVar();
+  const downPicture = vec2(rest.x.sub(n1.w), rest.z.sub(n1.w)).toVar();
+  const area = acrossPicture.x.mul(downPicture.y).sub(acrossPicture.y.mul(downPicture.x)).toVar();
+  const pictured = smooth.and(first.w.lessThan(0.5)).and(area.abs().greaterThan(1e-12));
+  const perArea = float(1).div(select(area.abs().greaterThan(1e-12), area, float(1)));
+  const acrossWay = ba.mul(downPicture.y).sub(ca.mul(downPicture.x)).mul(perArea);
+  const downWay = ca.mul(acrossPicture.x).sub(ba.mul(acrossPicture.y)).mul(perArea);
   return {
     met: vec2(best, float(hit)),
     normal: select(hit.greaterThanEqual(0), facing, vec3(0, 1, 0)),
     uv: select(hit.greaterThanEqual(0), uv, vec2(0)),
     along: select(hit.greaterThanEqual(0).and(first.w.greaterThan(0.5)), runs, vec3(0)),
+    across: select(hit.greaterThanEqual(0).and(pictured), intoScene(acrossWay), vec3(0)),
+    down: select(hit.greaterThanEqual(0).and(pictured), intoScene(downWay), vec3(0)),
   };
 };
 
