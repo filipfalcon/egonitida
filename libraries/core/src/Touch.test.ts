@@ -26,20 +26,22 @@ const leg: Shape.Bones = {
 const joints: Joint.Joints = {
   thigh: {
     kind: 'Hinge',
-    axes: { flex: { x: -1, y: 0, z: 0 }, abduct: Option.none(), twist: Option.none() },
-    swing: { flex: [degrees(-20), degrees(120)], abduct: Option.none() },
-    twist: Option.none(),
+    motions: {
+      flex: { axis: { x: -1, y: 0, z: 0 }, range: [degrees(-20), degrees(120)], rest: 0 },
+    },
+    order: ['flex'],
     depends: [],
-    follows: Option.none(),
+    follows: [],
+    measures: {},
     flesh: Option.none(),
   },
   calf: {
     kind: 'Hinge',
-    axes: { flex: { x: -1, y: 0, z: 0 }, abduct: Option.none(), twist: Option.none() },
-    swing: { flex: [degrees(-5), degrees(140)], abduct: Option.none() },
-    twist: Option.none(),
+    motions: { flex: { axis: { x: -1, y: 0, z: 0 }, range: [degrees(-5), degrees(140)], rest: 0 } },
+    order: ['flex'],
     depends: [],
-    follows: Option.none(),
+    follows: [],
+    measures: {},
     flesh: Option.some({ radius: 0.05, length: 0.4, mass: 2.5 }),
   },
 };
@@ -63,7 +65,7 @@ const touches: Touch.Touches = {
 /** The leg swung forward from the hip by `angle` degrees. */
 const swung = (angle: number): Pose.Pose => ({
   ...Pose.rest,
-  turns: { thigh: { flex: degrees(angle), abduct: 0, twist: 0 } },
+  turns: { thigh: { flex: degrees(angle) } },
 });
 
 describe('Touch.of', () => {

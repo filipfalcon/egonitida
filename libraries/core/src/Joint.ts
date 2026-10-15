@@ -2,86 +2,82 @@ import { Option } from 'effect';
 import type * as Ray from '#src/Ray.ts';
 
 /**
- * A figure's joints as plain data: how each bone turns on the one above it and how far, as anatomy has it, read from her model's file as the game is built (`?joints`, through `@lightocean/vite-plugin`). A joint swings about one axis, a hinge such as a knee, or two, a saddle such as a wrist or a ball such as a hip, within an elliptic cone of four semi-axes; and may twist about the bone, within a range. A limit may depend on another joint's angle, as a two-joint muscle makes it: the hamstrings let the hip bend less while the knee is straight. A joint may follow another rather than be driven, as the shoulder blade follows the arm. Angles are in radians and axes in the bone's own frame as the model was made; a step and a view read them alike.
+ * A figure's joints as plain data, as anatomy has them: how each bone turns on the one above it and how far, read from her model's file as the game is built (`?joints`, through `@lightocean/vite-plugin`). A joint turns by its motions, each named as anatomy names it, such as a knee's `flex` and `rotate` or an ankle's `dorsiflex`, about an axis in the bone's own frame as made, within a range; its turn is the product of its motions' turns in its `order`, the last turning a direction first, so its axes may be oblique, as anatomical axes often are. Every value is anatomical: nothing is the anatomical position, and `rest` is the value as the model was made. A limit may depend on another joint's motion, as a two-joint muscle makes it, its table giving the bound outright; a motion may follow another joint's motion, or a measure of how a bone lies, such as the arm's elevation the shoulder blade turns up by, its table's value added to the motion's own. Angles are in radians; a step and a view read them alike.
  */
 
-/** A joint's axes: bending, the first way it swings; abducting, the second; and twisting, about the bone. */
-export type Axis = 'flex' | 'abduct' | 'twist';
+/** How a joint turns: a ball, a hinge, or a saddle, driven; a follower, turned only as it follows; a link of a chain, such as a ponytail's, swung; or free, as a pelvis is, which stands and turns as the whole figure does. */
+export type Kind = 'Ball' | 'Hinge' | 'Saddle' | 'Follower' | 'Chain' | 'Free';
 
-/** The least and the most a joint turns about an axis, in radians. */
+/** The least and the most of a motion, in radians. */
 export type Range = readonly [min: number, max: number];
 
-/** A table to read between, its rows `[x, y]` in order of `x`. */
+/** A table to read between, its rows `[x, y]` in order of `x`, in radians. */
 export type Table = ReadonlyArray<readonly [number, number]>;
 
-/** How a joint swings: about one axis, a hinge; about two, a saddle, which does not twist on its own, or a ball, which does. */
-export type Kind = 'Hinge' | 'Saddle' | 'Ball';
-
-/** One end of one of a joint's ranges. */
-export interface Limit {
-  readonly axis: Axis;
-  readonly end: 'min' | 'max';
+/** One of a joint's motions: the axis it turns about, of length one, in the bone's own frame as made, positive the way it is named; its range, anatomically; and its value as the model was made. */
+export interface Motion {
+  readonly axis: Ray.Point;
+  readonly range: Range;
+  readonly rest: number;
 }
 
-/** A limit that depends on another joint's angle: as `table` reads at the angle of `on`. */
+/** A motion of a joint, by the joint's bone and the motion's name. */
+export interface Of {
+  readonly bone: string;
+  readonly motion: string;
+}
+
+/** A limit that depends on another joint's motion: the end `end` of the motion `motion`, as `table` reads at the value of `on`, outright. */
 export interface Depends {
-  readonly limit: Limit;
-  readonly on: { readonly joint: string; readonly axis: Axis };
+  readonly motion: string;
+  readonly end: 'min' | 'max';
+  readonly on: Of;
   readonly table: Table;
 }
 
-/** A joint, or one axis of it, that follows another rather than being driven: its axis `sets` turned as `table` reads at the angle of `joint` about `axis`. */
+/** A motion that follows: the joint's own motion `motion`, to whose value `table`'s value at `on` is added; `on` a motion of a joint, or a measure of a bone, by its name in place of a motion's. */
 export interface Follows {
-  readonly joint: string;
-  readonly axis: Axis;
-  readonly sets: Axis;
+  readonly motion: string;
+  readonly on: Of;
   readonly table: Table;
 }
 
-/** The flesh about a bone that bears weight: a capsule along it, `radius` round and `length` long from where it stands, and the mass of the segment, in kilograms. */
+/** A measure of how a bone lies: the angle, from nothing to π, between the bone's own +y and `direction` in the frame of the bone `from`, such as the arm's elevation, down the trunk; and its value as the model was made. */
+export interface Measure {
+  readonly from: string;
+  readonly direction: Ray.Point;
+  readonly rest: number;
+}
+
+/** The flesh about a bone that bears weight: a capsule from where the bone stands along its own +y, `radius` round and `length` long, and the mass of the segment, in kilograms. */
 export interface Flesh {
   readonly radius: number;
   readonly length: number;
   readonly mass: number;
 }
 
-/** A joint: how it swings and twists, about which of the bone's axes, how far, what its limits depend on, what it follows, and the flesh about it. */
+/** A joint: how it turns, its motions by name, the order their turns make its turn in, what its limits depend on, what its motions follow, what it measures, and the flesh about it. */
 export interface Joint {
   readonly kind: Kind;
-  readonly axes: {
-    readonly flex: Ray.Point;
-    readonly abduct: Option.Option<Ray.Point>;
-    readonly twist: Option.Option<Ray.Point>;
-  };
-  readonly swing: { readonly flex: Range; readonly abduct: Option.Option<Range> };
-  readonly twist: Option.Option<Range>;
+  readonly motions: Readonly<Record<string, Motion>>;
+  readonly order: ReadonlyArray<string>;
   readonly depends: ReadonlyArray<Depends>;
-  readonly follows: Option.Option<Follows>;
+  readonly follows: ReadonlyArray<Follows>;
+  readonly measures: Readonly<Record<string, Measure>>;
   readonly flesh: Option.Option<Flesh>;
 }
 
 /** A figure's joints, by the names of their bones. */
 export type Joints = Readonly<Record<string, Joint>>;
 
-/** How a joint is turned: about each of its axes, in radians. */
-export interface Angles {
-  readonly flex: number;
-  readonly abduct: number;
-  readonly twist: number;
-}
+/** How a joint is turned: each of its motions' values, anatomically, in radians; a motion not named is at its rest, as the model was made. */
+export type Angles = Readonly<Record<string, number>>;
 
-/** Each joint's angles, by the names of their bones: a joint not named is as the model was made. */
+/** Each joint's angles, by the names of their bones: a joint not named is as made. */
 export type Turns = Readonly<Record<string, Angles>>;
 
-/** Not turned at all. */
-export const still: Angles = { flex: 0, abduct: 0, twist: 0 };
-
-/** A joint's limits at some pose: how far it swings each way, and twists, if it does. */
-export interface Limits {
-  readonly flex: Range;
-  readonly abduct: Option.Option<Range>;
-  readonly twist: Option.Option<Range>;
-}
+/** A joint's limits at a pose: each motion's range, by name. */
+export type Limits = Readonly<Record<string, Range>>;
 
 /** What `table` reads at `x`: between the two rows about it, along the line between them, and as its first or last row beyond its ends; nothing for a table of no rows. */
 export const along = (table: Table, x: number): number => {
@@ -107,37 +103,31 @@ export const along = (table: Table, x: number): number => {
   return last[1];
 };
 
-/** The angle of `turns` about `axis` of the joint `joint`; nothing for one not turned. */
-export const angleOf = (turns: Turns, joint: string, axis: Axis): number =>
-  (turns[joint] ?? still)[axis];
-
-/** `range` with its end `end` set to `value`. */
-const withEnd = (range: Range, end: 'min' | 'max', value: number): Range =>
-  end === 'min' ? [value, range[1]] : [range[0], value];
+/** The value of the motion `motion` of the joint `bone` in `turns`: as named, or its rest; nothing for a motion no joint of `joints` has. */
+export const valueOf = (joints: Joints, turns: Turns, { bone, motion }: Of): number =>
+  turns[bone]?.[motion] ?? joints[bone]?.motions[motion]?.rest ?? 0;
 
 /**
- * The limits of the joint `name` of `joints` at `turns`: as it was made, each limit that depends on another joint's angle read from its table at that angle. What is no joint turns no way.
+ * The limits of the joint `name` of `joints` at `turns`: each motion's range as it was made, each bound that depends on another joint's motion read from its table at that motion's value, outright. What is no joint has no motions.
  */
 export const limitsAt = (joints: Joints, turns: Turns, name: string): Limits => {
   const joint = joints[name];
   if (joint === undefined) {
-    return { flex: [0, 0], abduct: Option.none(), twist: Option.none() };
+    return {};
   }
-  return joint.depends.reduce<Limits>(
-    (limits, { limit, on, table }) => {
-      const value = along(table, angleOf(turns, on.joint, on.axis));
-      return limit.axis === 'flex'
-        ? { ...limits, flex: withEnd(limits.flex, limit.end, value) }
-        : limit.axis === 'abduct'
-          ? {
-              ...limits,
-              abduct: Option.map(limits.abduct, (range) => withEnd(range, limit.end, value)),
-            }
-          : {
-              ...limits,
-              twist: Option.map(limits.twist, (range) => withEnd(range, limit.end, value)),
-            };
-    },
-    { flex: joint.swing.flex, abduct: joint.swing.abduct, twist: joint.twist },
+  const limits: Record<string, Range> = Object.fromEntries(
+    Object.entries(joint.motions).map(([motion, { range }]) => [motion, range]),
   );
+  for (const { motion, end, on, table } of joint.depends) {
+    const range = limits[motion];
+    if (range !== undefined) {
+      const value = along(table, valueOf(joints, turns, on));
+      limits[motion] = end === 'min' ? [value, range[1]] : [range[0], value];
+    }
+  }
+  return limits;
 };
+
+/** Whether the joint `name` of `joints` has the motion `motion`. */
+export const hasMotion = (joints: Joints, name: string, motion: string): boolean =>
+  Option.isSome(Option.fromNullishOr(joints[name]?.motions[motion]));

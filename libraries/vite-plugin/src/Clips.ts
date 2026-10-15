@@ -264,6 +264,8 @@ export const read = (bytes: Uint8Array): Result.Result<Clip.Clips, string> =>
               const keys = [...new Set(channels.flatMap(({ times }) => times))].sort(
                 (a, b) => a - b,
               );
+              // Each key's turns read from the key's before, so a joint's motions go on as they went.
+              let previous: Joint.Turns = {};
               const poses = keys.map((seconds): Pose.Pose => {
                 const turns: Record<string, Joint.Angles> = {};
                 let figureAt = { x: 0, y: 0, z: 0 };
@@ -280,6 +282,7 @@ export const read = (bytes: Uint8Array): Result.Result<Clip.Clips, string> =>
                     turns[bone] = Pose.anglesOf(
                       joint,
                       Quaternion.multiply(Quaternion.invert(made.value.turn), quaternionOf(value)),
+                      previous[bone] ?? {},
                     );
                   } else if (topmost(bone) && channel.path === 'translation') {
                     // Moved from where it was made, in the model's space: the whole figure, with it.
@@ -304,6 +307,7 @@ export const read = (bytes: Uint8Array): Result.Result<Clip.Clips, string> =>
                     figureTurn = Quaternion.multiply(turned, figureTurn);
                   }
                 }
+                previous = turns;
                 return { at: figureAt, turn: figureTurn, turns };
               });
               clips[name] = {

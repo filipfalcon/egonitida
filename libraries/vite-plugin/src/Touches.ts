@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { Quaternion, type Touch } from '@lightocean/core';
+import type { Touch } from '@lightocean/core';
 import { Result, Schema } from 'effect';
 import type { Loading } from '#src/Bones.ts';
 import { chunksOf, sanitized } from '#src/Bones.ts';
 
 /**
- * A model's touch points, read from its file as the game is built: a module importing `./figure.glb?touches` is given them as `Touch.Touches`, every node named `touch-<part>` below a bone, with the radius and the way its surface faces its glTF `extras.touch` writes, where it stands and which way it faces in its bone's own frame, by the name of its part. A touch point below no bone, or written as none is, fails the build, saying why.
+ * A model's touch points, read from its file as the game is built: a module importing `./figure.glb?touches` is given them as `Touch.Touches`, every node named `touch-<part>` below a bone, with the radius and the way its surface faces its glTF `extras.touch` writes, where it stands and which way it faces in its bone's own frame, by the name of its part; the node's own rotation, which an exporter adds, turns nothing. A touch point below no bone, or written as none is, fails the build, saying why.
  */
 
 /** What an import asks of a model's file to be given its touch points: `?touches`, among whatever other queries the development server adds to it. */
@@ -34,9 +34,6 @@ const Gltf = Schema.Struct({
         name: Schema.optional(Schema.String),
         children: Schema.optional(Schema.Array(Schema.Int)),
         translation: Schema.optional(Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite])),
-        rotation: Schema.optional(
-          Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite, Schema.Finite]),
-        ),
         extras: Schema.optional(Schema.Struct({ touch: Schema.optional(Schema.Unknown) })),
       }),
     ),
@@ -45,7 +42,7 @@ const Gltf = Schema.Struct({
 });
 
 /**
- * The touch points of the binary glTF `bytes`: every node named `touch-<part>` whose parent is a bone, in the order of its nodes, standing where its translation puts it in its bone's frame, its surface facing as its extras write, turned by its rotation; or why they cannot be read.
+ * The touch points of the binary glTF `bytes`: every node named `touch-<part>` whose parent is a bone, in the order of its nodes, standing where its translation puts it in its bone's frame, its surface facing as its extras write, in the bone's frame too; or why they cannot be read.
  */
 export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Read>, string> =>
   Result.flatMap(chunksOf(bytes), ({ json }) =>
@@ -76,13 +73,11 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Read>, stri
             return Result.fail(`the touch point ${part} is not written as a touch point is`);
           }
           const [x = 0, y = 0, z = 0] = node.translation ?? [];
-          const [qx = 0, qy = 0, qz = 0, qw = 1] = node.rotation ?? [];
+          // Written in the bone's frame; the node's own rotation, which an exporter adds, turns it not.
           const [nx, ny, nz] = written.success.normal;
           const long = Math.sqrt(nx * nx + ny * ny + nz * nz);
-          const normal = Quaternion.rotate(
-            { x: qx, y: qy, z: qz, w: qw },
-            long === 0 ? { x: nx, y: ny, z: nz } : { x: nx / long, y: ny / long, z: nz / long },
-          );
+          const normal =
+            long === 0 ? { x: nx, y: ny, z: nz } : { x: nx / long, y: ny / long, z: nz / long };
           read.push({
             part,
             point: {

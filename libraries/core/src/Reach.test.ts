@@ -31,38 +31,51 @@ const leg: Shape.Bones = {
   ball: bone('subtalar', 0, 0.15),
 };
 
-/** A joint of `kind` bending about `flex`, within `range` degrees. */
-const hinge = (
-  flex: { x: number; y: number; z: number },
+/** A motion about `axis`, within `range` degrees, at rest as made. */
+const motion = (
+  axis: { x: number; y: number; z: number },
   range: readonly [number, number],
+): Joint.Motion => ({ axis, range: [degrees(range[0]), degrees(range[1])], rest: 0 });
+
+/** A joint of `kind` with `motions`, turned in the order they are named, and the flesh weighing `mass`, if any. */
+const joint = (
+  kind: Joint.Kind,
+  motions: Readonly<Record<string, Joint.Motion>>,
+  mass = 0,
 ): Joint.Joint => ({
-  kind: 'Hinge',
-  axes: { flex, abduct: Option.none(), twist: Option.none() },
-  swing: { flex: [degrees(range[0]), degrees(range[1])], abduct: Option.none() },
-  twist: Option.none(),
+  kind,
+  motions,
+  order: Object.keys(motions),
   depends: [],
-  follows: Option.none(),
-  flesh: Option.none(),
+  follows: [],
+  measures: {},
+  flesh: mass === 0 ? Option.none() : Option.some({ radius: 0.1, length: 0.2, mass }),
 });
 
-/** The leg's joints: a hip bending forward as it grows, every way; a knee bending back; an ankle pointing the toes down as it grows, 20° up to 50° down; and a subtalar joint rolling the foot in and out. */
-const joints: Joint.Joints = {
-  thigh: {
-    kind: 'Ball',
-    axes: {
-      flex: { x: -1, y: 0, z: 0 },
-      abduct: Option.some({ x: 0, y: 0, z: 1 }),
-      twist: Option.some({ x: 0, y: 1, z: 0 }),
+/** A hinge flexing about `axis`, within `range` degrees, its flesh weighing `mass`. */
+const hinge = (
+  axis: { x: number; y: number; z: number },
+  range: readonly [number, number],
+  mass = 0,
+) => joint('Hinge', { flex: motion(axis, range) }, mass);
+
+/** A hip flexing the leg forward, abducting it, and rotating it, its flesh weighing `mass`. */
+const hipOf = (mass = 0) =>
+  joint(
+    'Ball',
+    {
+      flex: motion({ x: -1, y: 0, z: 0 }, [-20, 120]),
+      abduct: motion({ x: 0, y: 0, z: 1 }, [-30, 45]),
+      rotate: motion({ x: 0, y: 1, z: 0 }, [-40, 45]),
     },
-    swing: { flex: [degrees(-20), degrees(120)], abduct: Option.some([degrees(-30), degrees(45)]) },
-    twist: Option.some([degrees(-40), degrees(45)]),
-    depends: [],
-    follows: Option.none(),
-    flesh: Option.none(),
-  },
+    mass,
+  );
+
+const joints: Joint.Joints = {
+  thigh: hipOf(),
   calf: hinge({ x: 1, y: 0, z: 0 }, [-5, 140]),
-  foot: hinge({ x: 1, y: 0, z: 0 }, [-20, 50]),
-  subtalar: hinge({ x: 0, y: 0, z: 1 }, [-15, 30]),
+  foot: joint('Hinge', { dorsiflex: motion({ x: -1, y: 0, z: 0 }, [-50, 20]) }),
+  subtalar: joint('Hinge', { invert: motion({ x: 0, y: 0, z: 1 }, [-15, 30]) }),
 };
 
 describe('Reach.limb', () => {
@@ -101,7 +114,7 @@ describe('Reach.limb', () => {
     const knee = off(placed['calf']?.at ?? hip);
     const side = off(swivel);
     expect(knee.x * side.x + knee.y * side.y + knee.z * side.z).toBeGreaterThan(0);
-    expect(reached.pose.turns['calf']?.flex ?? 0).toBeGreaterThan(0);
+    expect(reached.pose.turns['calf']?.['flex'] ?? 0).toBeGreaterThan(0);
   });
 
   it('turns the ankle and the subtalar joint to face the instep as asked, within their limits, saying how far short', () => {
@@ -118,7 +131,8 @@ describe('Reach.limb', () => {
       },
     });
 
-    expect(reached.pose.turns['foot']?.flex).toBeCloseTo(degrees(50), 9);
+    // The toes pointed down as far as they go.
+    expect(reached.pose.turns['foot']?.['dorsiflex']).toBeCloseTo(degrees(-50), 9);
     expect(reached.facingShort).toBeCloseTo(degrees(40), 6);
   });
 
@@ -135,34 +149,6 @@ describe('Reach.limb', () => {
   });
 });
 
-/** A ball joint about x, z, and y, its ranges in degrees: bending, abducting, and twisting. */
-const ball = (
-  flex: readonly [number, number],
-  abduct: readonly [number, number],
-  twist: readonly [number, number],
-  axes: {
-    flex: Joint.Joint['axes']['flex'];
-    abduct: Joint.Joint['axes']['flex'];
-    twist: Joint.Joint['axes']['flex'];
-  } = {
-    flex: { x: 1, y: 0, z: 0 },
-    abduct: { x: 0, y: 0, z: 1 },
-    twist: { x: 0, y: 1, z: 0 },
-  },
-  mass = 0,
-): Joint.Joint => ({
-  kind: 'Ball',
-  axes: { flex: axes.flex, abduct: Option.some(axes.abduct), twist: Option.some(axes.twist) },
-  swing: {
-    flex: [degrees(flex[0]), degrees(flex[1])],
-    abduct: Option.some([degrees(abduct[0]), degrees(abduct[1])]),
-  },
-  twist: Option.some([degrees(twist[0]), degrees(twist[1])]),
-  depends: [],
-  follows: Option.none(),
-  flesh: mass === 0 ? Option.none() : Option.some({ radius: 0.1, length: 0.2, mass }),
-});
-
 /** A trunk standing up the y axis, facing +z: a pelvis, a lumbar and a thoracic segment, two of the neck, the head, and an eye. */
 const trunk: Shape.Bones = {
   pelvis: bone(undefined, 1),
@@ -175,47 +161,53 @@ const trunk: Shape.Bones = {
 };
 
 /** The trunk's joints: the lumbar spine bending far and hardly turning, the thoracic spine turning, the neck turning half at each of its joints, and an eye looking 35° either way, 30° up and 45° down. */
+/** A segment of the spine flexing forward, bending to her left, and turning to her left, within ranges in degrees. */
+const segment = (
+  flex: readonly [number, number],
+  bend: readonly [number, number],
+  turn: readonly [number, number],
+) =>
+  joint('Ball', {
+    flex: motion({ x: 1, y: 0, z: 0 }, flex),
+    bend: motion({ x: 0, y: 0, z: -1 }, bend),
+    turn: motion({ x: 0, y: 1, z: 0 }, turn),
+  });
+
 const spinal: Joint.Joints = {
-  spine_01: ball([-10, 30], [-10, 10], [-2, 2]),
-  spine_02: ball([-10, 20], [-15, 15], [-20, 20]),
-  neck_01: ball([-30, 25], [-20, 20], [-37.5, 37.5]),
-  neck_02: ball([-5, 5], [-5, 5], [-37.5, 37.5]),
-  eye: ball([-30, 45], [-35, 35], [0, 0], {
-    flex: { x: 1, y: 0, z: 0 },
-    abduct: { x: 0, y: 1, z: 0 },
-    twist: { x: 0, y: 0, z: 1 },
+  spine_01: segment([-10, 30], [-10, 10], [-2, 2]),
+  spine_02: segment([-10, 20], [-15, 15], [-20, 20]),
+  neck_01: segment([-30, 25], [-20, 20], [-37.5, 37.5]),
+  neck_02: segment([-5, 5], [-5, 5], [-37.5, 37.5]),
+  eye: joint('Ball', {
+    out: motion({ x: 0, y: 1, z: 0 }, [-35, 35]),
+    up: motion({ x: -1, y: 0, z: 0 }, [-45, 30]),
   }),
 };
 
 describe('Reach.spine', () => {
   it('spreads a turn and a bend over the spine as far as each segment turns and bends', () => {
-    const reached = Reach.spine(spinal, Pose.rest, {
+    const reached = Reach.spine(trunk, spinal, Pose.rest, {
       joints: ['spine_01', 'spine_02'],
-      turn: degrees(11),
-      bend: degrees(25),
-      side: 0,
+      motions: { turn: degrees(11), flex: degrees(25) },
     });
 
-    expect(reached.pose.turns['spine_01']?.twist).toBeCloseTo(degrees(1), 9);
-    expect(reached.pose.turns['spine_02']?.twist).toBeCloseTo(degrees(10), 9);
-    expect(reached.pose.turns['spine_01']?.flex).toBeCloseTo(degrees(15), 9);
-    expect(reached.pose.turns['spine_02']?.flex).toBeCloseTo(degrees(10), 9);
-    expect(reached.short.turn).toBeCloseTo(0, 12);
-    expect(reached.short.bend).toBeCloseTo(0, 12);
-    expect(reached.short.side).toBeCloseTo(0, 12);
+    expect(reached.pose.turns['spine_01']?.['turn']).toBeCloseTo(degrees(1), 9);
+    expect(reached.pose.turns['spine_02']?.['turn']).toBeCloseTo(degrees(10), 9);
+    expect(reached.pose.turns['spine_01']?.['flex']).toBeCloseTo(degrees(15), 9);
+    expect(reached.pose.turns['spine_02']?.['flex']).toBeCloseTo(degrees(10), 9);
+    expect(reached.short['turn']).toBeCloseTo(0, 12);
+    expect(reached.short['flex']).toBeCloseTo(0, 12);
   });
 
   it('turns every segment as far as it turns, and says how far short, for a turn beyond them all', () => {
-    const reached = Reach.spine(spinal, Pose.rest, {
+    const reached = Reach.spine(trunk, spinal, Pose.rest, {
       joints: ['spine_01', 'spine_02'],
-      turn: degrees(-30),
-      bend: 0,
-      side: 0,
+      motions: { turn: degrees(-30) },
     });
 
-    expect(reached.pose.turns['spine_01']?.twist).toBeCloseTo(degrees(-2), 9);
-    expect(reached.pose.turns['spine_02']?.twist).toBeCloseTo(degrees(-20), 9);
-    expect(reached.short.turn).toBeCloseTo(degrees(8), 9);
+    expect(reached.pose.turns['spine_01']?.['turn']).toBeCloseTo(degrees(-2), 9);
+    expect(reached.pose.turns['spine_02']?.['turn']).toBeCloseTo(degrees(-20), 9);
+    expect(reached.short['turn']).toBeCloseTo(degrees(8), 9);
   });
 });
 
@@ -230,7 +222,7 @@ describe('Reach.look', () => {
   it('looks with the eyes alone at what lies within their reach', () => {
     const reached = Reach.look(trunk, spinal, Pose.rest, ask({ x: 0.5, y: 1.7, z: 1.5 }));
 
-    expect(reached.pose.turns['neck_01']?.twist ?? 0).toBeCloseTo(0, 9);
+    expect(reached.pose.turns['neck_01']?.['turn'] ?? 0).toBeCloseTo(0, 9);
     expect(reached.short).toBeLessThan(1e-6);
   });
 
@@ -243,12 +235,12 @@ describe('Reach.look', () => {
       ask({ x: 2 * Math.sin(away), y: 1.7, z: 0.08 + 2 * Math.cos(away) }),
     );
 
-    const first = reached.pose.turns['neck_01']?.twist ?? 0;
-    const second = reached.pose.turns['neck_02']?.twist ?? 0;
+    const first = reached.pose.turns['neck_01']?.['turn'] ?? 0;
+    const second = reached.pose.turns['neck_02']?.['turn'] ?? 0;
     expect(first).toBeGreaterThan(degrees(10));
     expect(first).toBeCloseTo(second, 9);
     // As far as they go, but for how far the head's turn carries them aside.
-    expect(reached.pose.turns['eye']?.abduct ?? 0).toBeGreaterThan(degrees(33));
+    expect(reached.pose.turns['eye']?.['out'] ?? 0).toBeGreaterThan(degrees(33));
     expect(reached.short).toBeLessThan(1e-3);
   });
 });
@@ -264,25 +256,14 @@ describe('Reach.balance', () => {
     calf_r: { ...bone('thigh_r', 0.5), at: { x: -0.1, y: 0.5, z: 0 } },
     foot_r: { ...bone('calf_r', 0), at: { x: -0.1, y: 0, z: 0 } },
   };
-  const hipJoint = ball(
-    [-20, 120],
-    [-30, 45],
-    [-40, 45],
-    {
-      flex: { x: -1, y: 0, z: 0 },
-      abduct: { x: 0, y: 0, z: 1 },
-      twist: { x: 0, y: 1, z: 0 },
-    },
-    7,
-  );
   const legs: Joint.Joints = {
-    pelvis: ball([-10, 10], [-10, 10], [-10, 10], undefined, 12),
-    thigh_l: hipJoint,
+    pelvis: joint('Free', {}, 12),
+    thigh_l: hipOf(7),
     calf_l: {
       ...hinge({ x: 1, y: 0, z: 0 }, [-5, 140]),
       flesh: Option.some({ radius: 0.05, length: 0.2, mass: 3 }),
     },
-    thigh_r: hipJoint,
+    thigh_r: hipOf(7),
     calf_r: {
       ...hinge({ x: 1, y: 0, z: 0 }, [-5, 140]),
       flesh: Option.some({ radius: 0.05, length: 0.2, mass: 3 }),

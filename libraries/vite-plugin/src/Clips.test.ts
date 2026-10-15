@@ -73,9 +73,12 @@ const leg = (interpolation = 'LINEAR') => {
           extras: {
             joint: {
               kind: 'ball',
-              axes: { flex: [1, 0, 0], abduct: [0, 0, 1], twist: [0, 1, 0] },
-              swing: { flex: [-20, 120], abduct: [-30, 45] },
-              twist: [-40, 45],
+              motions: {
+                flex: { axis: [1, 0, 0], range: [-20, 120], rest: 0 },
+                abduct: { axis: [0, 0, 1], range: [-30, 45], rest: 0 },
+                rotate: { axis: [0, 1, 0], range: [-40, 45], rest: 0 },
+              },
+              order: ['flex', 'abduct', 'rotate'],
             },
           },
         },
@@ -84,7 +87,11 @@ const leg = (interpolation = 'LINEAR') => {
           translation: [0, -0.5, 0],
           children: [3],
           extras: {
-            joint: { kind: 'hinge', axes: { flex: [1, 0, 0] }, swing: { flex: [-5, 140] } },
+            joint: {
+              kind: 'hinge',
+              motions: { flex: { axis: [1, 0, 0], range: [-5, 140], rest: 0 } },
+              order: ['flex'],
+            },
           },
         },
         { name: 'foot', translation: [0, -0.5, 0] },
@@ -127,8 +134,8 @@ describe('Clips.read', () => {
   });
 
   it('reads each joint’s turn at each key as its angles, from how the bone was made', () => {
-    expect(kick?.poses[0]?.turns['calf']?.flex).toBeCloseTo(0, 6);
-    expect(kick?.poses[1]?.turns['calf']?.flex).toBeCloseTo(degrees(90), 6);
+    expect(kick?.poses[0]?.turns['calf']?.['flex']).toBeCloseTo(0, 6);
+    expect(kick?.poses[1]?.turns['calf']?.['flex']).toBeCloseTo(degrees(90), 6);
   });
 
   it('reads the topmost joint moved as the whole figure standing elsewhere', () => {

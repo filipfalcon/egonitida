@@ -6,7 +6,7 @@ import { Result } from 'effect';
 import { glb } from '#src/fixtures.ts';
 import * as Touches from '#src/Touches.ts';
 
-/** A foot carrying touch points as nodes below its bone: an instep atop it, facing up, and a heel turned half about the upright, facing ahead in its own frame, so back in the foot's. */
+/** A foot carrying touch points as nodes below its bone: an instep atop it, facing up, and a heel facing back, its node turned as an exporter turns one, which turns not the way it faces. */
 const foot = (extra: ReadonlyArray<unknown> = []) =>
   glb({
     asset: { version: '2.0' },
@@ -20,8 +20,8 @@ const foot = (extra: ReadonlyArray<unknown> = []) =>
       {
         name: 'touch-heel_l',
         translation: [0, 0.02, -0.06],
-        rotation: [0, 1, 0, 0],
-        extras: { touch: { radius: 0.03, normal: [0, 0, 1] } },
+        rotation: [0.587, 0, 0, 0.809],
+        extras: { touch: { radius: 0.03, normal: [0, 0, -1] } },
       },
       ...extra,
     ],

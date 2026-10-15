@@ -50,7 +50,7 @@ const leg = () => {
   mesh.name = 'leg';
   mesh.updateMorphTargets();
   mesh.userData = {
-    correctives: [{ target: KNEE_FIX, joint: 'calf', axis: 'flex', from: 30, full: 120 }],
+    correctives: [{ target: KNEE_FIX, joint: 'calf', motion: 'flex', from: 30, full: 120 }],
   };
   mesh.add(root);
   const model = new Three.Group();
@@ -59,24 +59,34 @@ const leg = () => {
   return model;
 };
 
-/** The leg's joints: a hip turning every way, and a knee bending about the line across it. */
+/** A motion about `axis`, within `range` degrees, at rest as made. */
+const motion = (
+  axis: { x: number; y: number; z: number },
+  range: readonly [number, number],
+): Joint.Motion => ({ axis, range: [degrees(range[0]), degrees(range[1])], rest: 0 });
+
+/** The leg's joints: a hip flexing, abducting, and rotating, and a knee flexing about the line across it. */
 const joints: Joint.Joints = {
   thigh: {
     kind: 'Ball',
-    axes: { flex: ACROSS, abduct: Option.some(AHEAD), twist: Option.some(ALONG) },
-    swing: { flex: [degrees(-20), degrees(120)], abduct: Option.some([degrees(-30), degrees(45)]) },
-    twist: Option.some([degrees(-40), degrees(45)]),
+    motions: {
+      flex: motion(ACROSS, [-20, 120]),
+      abduct: motion(AHEAD, [-30, 45]),
+      rotate: motion(ALONG, [-40, 45]),
+    },
+    order: ['flex', 'abduct', 'rotate'],
     depends: [],
-    follows: Option.none(),
+    follows: [],
+    measures: {},
     flesh: Option.none(),
   },
   calf: {
     kind: 'Hinge',
-    axes: { flex: ACROSS, abduct: Option.none(), twist: Option.some(ALONG) },
-    swing: { flex: [degrees(-5), degrees(140)], abduct: Option.none() },
-    twist: Option.some([0, 0]),
+    motions: { flex: motion(ACROSS, [-5, 140]) },
+    order: ['flex'],
     depends: [],
-    follows: Option.none(),
+    follows: [],
+    measures: {},
     flesh: Option.none(),
   },
 };
@@ -124,8 +134,8 @@ const kicking: Pose.Pose = {
   at: { x: 0, y: 0, z: 0.5 },
   turn: Quaternion.about(ALONG, Math.PI / 2),
   turns: {
-    thigh: { flex: degrees(40), abduct: degrees(10), twist: degrees(15) },
-    calf: { flex: degrees(90), abduct: 0, twist: 0 },
+    thigh: { flex: degrees(40), abduct: degrees(10), rotate: degrees(15) },
+    calf: { flex: degrees(90) },
   },
 };
 
@@ -179,7 +189,7 @@ describe('Posed.pose', () => {
       const posed = yield* Posing.fit(model, joints);
       const mesh = model.getObjectByName('leg');
       const weightAt = (bent: number) => {
-        posed.pose({ ...Pose.rest, turns: { calf: { flex: degrees(bent), abduct: 0, twist: 0 } } });
+        posed.pose({ ...Pose.rest, turns: { calf: { flex: degrees(bent) } } });
         return mesh instanceof Three.Mesh ? mesh.morphTargetInfluences?.[0] : undefined;
       };
 
@@ -199,7 +209,7 @@ describe('Posed.pose', () => {
         const posed = yield* Posing.fit(model, joints);
         const bentKnee = {
           ...Pose.rest,
-          turns: { calf: { flex: degrees(90), abduct: 0, twist: 0 } },
+          turns: { calf: { flex: degrees(90) } },
         };
 
         posed.pose(bentKnee, { calf: 0 });
@@ -210,7 +220,7 @@ describe('Posed.pose', () => {
         expect(apart(untouched, Pose.place(made, joints, Pose.rest)['foot'])).toBeLessThan(1e-6);
         const half = Pose.place(made, joints, {
           ...Pose.rest,
-          turns: { calf: { flex: degrees(45), abduct: 0, twist: 0 } },
+          turns: { calf: { flex: degrees(45) } },
         });
         expect(apart(halfway, half['foot'])).toBeLessThan(1e-6);
       }),
@@ -222,7 +232,7 @@ describe('Posed.pose', () => {
       const posed = yield* Posing.fit(model, joints);
       const bentKnee = {
         ...Pose.rest,
-        turns: { calf: { flex: degrees(90), abduct: 0, twist: 0 } },
+        turns: { calf: { flex: degrees(90) } },
       };
 
       posed.pose(bentKnee, { calf: 0.5 });

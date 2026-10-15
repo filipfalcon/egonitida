@@ -7,10 +7,10 @@ import type * as Ray from '#src/Ray.ts';
 import type * as Shape from '#src/Shape.ts';
 
 /**
- * Reaching: a pose turned so a limb's end comes to a point, and faces a way, within its joints' limits, as a footballer puts her foot on the ball. It is worked out in a fixed amount of work, analytically where it can be, so a step's cost is known, with `Maths`, so every host comes to the same pose; and it says how far short it fell, for a target out of reach or a turn beyond a joint.
+ * Reaching: a pose turned so a limb's end comes to a point, and faces a way, within its joints' limits, as a footballer puts her foot on the ball; a trunk's turn spread over the spine; a look; and a figure balanced over the foot she stands on. It is worked out in a fixed amount of work, analytically where it can be, so a step's cost is known, with `Maths`, so every host comes to the same pose; and it says how far short it fell, for a target out of reach or a turn beyond a joint.
  */
 
-/** A surface of a limb to face a way: `normal`, in the frame of the bone `bone`, turned toward `toward`, in the model's space, by the joints `turning`, in order, as far as their limits let them. */
+/** A surface of a limb to face a way: `normal`, in the frame of the bone `bone`, turned toward `toward`, in the model's space, by every motion of the joints `turning`, in order, as far as their limits let them. */
 export interface Facing {
   readonly bone: string;
   readonly normal: Ray.Point;
@@ -18,11 +18,12 @@ export interface Facing {
   readonly turning: ReadonlyArray<string>;
 }
 
-/** A limb asked to reach: from the joint `root`, such as a hip, through the joint of the bone above `end`, such as a knee, to `end`, such as an ankle, brought to `to`; its middle joint bending toward `swivel`, a point, if given; and a surface of it facing as `facing` says, if given. All in the model's space. */
+/** A limb asked to reach: from the joint `root`, such as a hip, through the joint of the bone above `end`, such as a knee, bending by its motion `bend`, `flex` unless named, to `end`, such as an ankle, brought to `to`; its middle joint lying toward `swivel`, a point, if given; and a surface of it facing as `facing` says, if given. All in the model's space. */
 export interface Limb {
   readonly root: string;
   readonly end: string;
   readonly to: Ray.Point;
+  readonly bend?: string | undefined;
   readonly swivel?: Ray.Point | undefined;
   readonly facing?: Facing | undefined;
 }
@@ -58,18 +59,37 @@ const unit = (a: Ray.Point): Ray.Point => {
 /** `angle` brought within a half turn either way. */
 const wrapped = (angle: number) => Maths.atan2(Maths.sin(angle), Maths.cos(angle));
 
+/** `pose` with the motion `motion` of the joint `name` at `value`. */
+const setting = (pose: Pose.Pose, name: string, motion: string, value: number): Pose.Pose => ({
+  ...pose,
+  turns: { ...pose.turns, [name]: { ...pose.turns[name], [motion]: value } },
+});
+
 /** `pose` with the joint `name` turned to `angles`. */
 const turning = (pose: Pose.Pose, name: string, angles: Joint.Angles): Pose.Pose => ({
   ...pose,
-  turns: { ...pose.turns, [name]: angles },
+  turns: { ...pose.turns, [name]: { ...pose.turns[name], ...angles } },
 });
 
 /** The angles of `name` in `pose`. */
-const anglesIn = (pose: Pose.Pose, name: string) => pose.turns[name] ?? Joint.still;
+const anglesIn = (pose: Pose.Pose, name: string): Joint.Angles => pose.turns[name] ?? {};
 
-/** The frame a joint turns in, in the model's space: its bone's turn less its own joint's turn, where its axes lie. */
-const frameOf = (placed: Pose.Placed, joint: Joint.Joint, angles: Joint.Angles) =>
-  Quaternion.multiply(placed.turn, Quaternion.invert(Pose.turnOf(joint, angles)));
+/** The axis of the motion `motion` of `joint`, its bone placed as `placed` and turned as `angles` says, in the model's space: turned by the frame the joint turns in and by the motions before it in the joint's order, so a turn of that motion alone is a turn about it. */
+const axisOf = (
+  joint: Joint.Joint,
+  placed: Pose.Placed,
+  angles: Joint.Angles,
+  motion: string,
+): Option.Option<Ray.Point> => {
+  const own = joint.motions[motion];
+  if (own === undefined) {
+    return Option.none();
+  }
+  const frame = Quaternion.multiply(placed.turn, Quaternion.invert(Pose.turnOf(joint, angles)));
+  const before = joint.order.slice(0, joint.order.indexOf(motion));
+  const prefix = Pose.turnOf({ ...joint, order: before }, angles);
+  return Option.some(unit(Quaternion.rotate(Quaternion.multiply(frame, prefix), own.axis)));
+};
 
 /** How far `value` lies outside `range`. */
 const outside = (value: number, [min, max]: Joint.Range) =>
@@ -79,7 +99,7 @@ const outside = (value: number, [min, max]: Joint.Range) =>
 const within = (value: number, [min, max]: Joint.Range) => Math.min(Math.max(value, min), max);
 
 /**
- * The bend of the hinge `middle` that brings the end of the limb from `root` through it to `distance` from the root's joint: analytically, the bend about the hinge's own axis, however it lies, of the two that do so the one its limits allow, or else the one nearer them, clamped; at full stretch, or folded, for a distance beyond what the limb reaches.
+ * The value of the motion `bend` of the joint `middle` that brings the end of the limb from `root` through it to `distance` from the root's joint: analytically, the turn about that motion's own axis, however it lies, of the two that do so the one its limits allow, or else the one nearer them, clamped; at full stretch, or folded, for a distance beyond what the limb reaches.
  */
 const bendFor = (
   bones: Shape.Bones,
@@ -87,37 +107,42 @@ const bendFor = (
   pose: Pose.Pose,
   names: { readonly root: string; readonly middle: string; readonly end: string },
   middle: Joint.Joint,
+  bend: string,
   distance: number,
 ) => {
-  const angles = anglesIn(pose, names.middle);
-  const straight = turning(pose, names.middle, { ...angles, flex: 0 });
-  const placed = Pose.place(bones, joints, straight);
+  const motion = middle.motions[bend];
+  const current = Joint.valueOf(joints, pose.turns, { bone: names.middle, motion: bend });
+  if (motion === undefined) {
+    return current;
+  }
+  const atRest = setting(pose, names.middle, bend, motion.rest);
+  const placed = Pose.place(bones, joints, atRest);
   const hip = placed[names.root];
   const knee = placed[names.middle];
   const foot = placed[names.end];
-  if (hip === undefined || knee === undefined || foot === undefined) {
-    return angles.flex;
+  const axis =
+    knee === undefined ? Option.none() : axisOf(middle, knee, anglesIn(atRest, names.middle), bend);
+  if (hip === undefined || knee === undefined || foot === undefined || Option.isNone(axis)) {
+    return current;
   }
-  const axis = unit(
-    Quaternion.rotate(frameOf(knee, middle, { ...angles, flex: 0 }), middle.axes.flex),
-  );
   const g = less(knee.at, hip.at);
   const v = less(foot.at, knee.at);
-  const along = times(axis, dot(v, axis));
+  const along = times(axis.value, dot(v, axis.value));
   const square = less(v, along);
-  // |end − root|² = |g|² + |v|² + 2 (g·v∥ + b cos φ + c sin φ).
+  // |end − root|² = |g|² + |v|² + 2 (g·v∥ + b cos φ + c sin φ), φ the turn from rest.
   const a = dot(g, along);
   const b = dot(g, square);
-  const c = dot(g, cross(axis, square));
+  const c = dot(g, cross(axis.value, square));
   const reach = Maths.hypot(b, c);
   if (reach === 0) {
-    return angles.flex;
+    return current;
   }
   const e = (distance * distance - dot(g, g) - dot(v, v)) / 2 - a;
   const spread = Maths.acos(Math.min(Math.max(e / reach, -1), 1));
   const centre = Maths.atan2(c, b);
-  const range = Joint.limitsAt(joints, pose.turns, names.middle).flex;
-  const [first, second] = [wrapped(centre + spread), wrapped(centre - spread)];
+  const range = Joint.limitsAt(joints, pose.turns, names.middle)[bend] ?? motion.range;
+  const first = motion.rest + wrapped(centre + spread);
+  const second = motion.rest + wrapped(centre - spread);
   const firstOut = outside(first, range);
   const secondOut = outside(second, range);
   const chosen =
@@ -125,14 +150,14 @@ const bendFor = (
       ? first
       : secondOut < firstOut
         ? second
-        : Math.abs(first - angles.flex) <= Math.abs(second - angles.flex)
+        : Math.abs(first - current) <= Math.abs(second - current)
           ? first
           : second;
   return within(chosen, range);
 };
 
 /**
- * The turn of the joint `root` that brings the limb's end from where it is to `to`: the shortest turn of the whole limb about the root's joint onto the line to it, then about that line until its middle joint lies toward `swivel`, if given; as the root's own angles.
+ * The angles of the joint `root` that bring the limb's end from where it is to `to`: the shortest turn of the whole limb about the root's joint onto the line to it, then about that line until its middle joint lies toward `swivel`, if given; read back as the root's motions' values.
  */
 const aimFor = (
   bones: Shape.Bones,
@@ -177,7 +202,7 @@ const aimFor = (
     Quaternion.multiply(Quaternion.multiply(own, Quaternion.invert(hip.turn)), swivelled),
     hip.turn,
   );
-  return Pose.anglesOf(root, turned);
+  return Pose.anglesOf(root, turned, angles);
 };
 
 /** The way the surface `facing` faces now, in the model's space, at `pose`. */
@@ -187,7 +212,7 @@ const facingNow = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, fa
 };
 
 /**
- * `pose` with the joints of `facing` turned, in order, a fixed number of passes, each about each of its swing axes as far toward facing as asked as its limits let it, analytically for that axis.
+ * `pose` with the joints of `facing` turned, in order, a fixed number of passes, each of their motions in their order, as far toward facing as asked as its limits let it, analytically for that motion's axis.
  */
 const faced = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, facing: Facing) => {
   const toward = unit(facing.toward);
@@ -195,26 +220,22 @@ const faced = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, facing
   for (let pass = 0; pass < FACING_PASSES; pass++) {
     for (const name of facing.turning) {
       const joint = joints[name];
-      const placed = Pose.place(bones, joints, now)[name];
-      if (joint === undefined || placed === undefined) {
+      if (joint === undefined) {
         continue;
       }
-      // Each way it swings, as a hinge about that axis alone, toward facing as asked.
-      const swings: ReadonlyArray<readonly [Joint.Axis, Ray.Point]> = [
-        ['flex', joint.axes.flex],
-        ...Option.toArray(Option.map(joint.axes.abduct, (axis) => ['abduct', axis] as const)),
-      ];
-      for (const [axisName, local] of swings) {
-        const angles = anglesIn(now, name);
-        const frame = frameOf(Pose.place(bones, joints, now)[name] ?? placed, joint, angles);
-        const axis = unit(Quaternion.rotate(frame, local));
+      for (const motion of joint.order) {
+        const placed = Pose.place(bones, joints, now)[name];
+        const axis =
+          placed === undefined ? Option.none() : axisOf(joint, placed, anglesIn(now, name), motion);
+        const range = Joint.limitsAt(joints, now.turns, name)[motion];
+        if (Option.isNone(axis) || range === undefined) {
+          continue;
+        }
         const normal = facingNow(bones, joints, now, facing);
-        const square = less(normal, times(axis, dot(normal, axis)));
-        const turn = Maths.atan2(dot(cross(axis, normal), toward), dot(square, toward));
-        const limits = Joint.limitsAt(joints, now.turns, name);
-        const range =
-          axisName === 'flex' ? limits.flex : Option.getOrElse(limits.abduct, () => limits.flex);
-        now = turning(now, name, { ...angles, [axisName]: within(angles[axisName] + turn, range) });
+        const square = less(normal, times(axis.value, dot(normal, axis.value)));
+        const turn = Maths.atan2(dot(cross(axis.value, normal), toward), dot(square, toward));
+        const value = Joint.valueOf(joints, now.turns, { bone: name, motion });
+        now = setting(now, name, motion, within(value + turn, range));
       }
     }
   }
@@ -222,7 +243,7 @@ const faced = (bones: Shape.Bones, joints: Joint.Joints, pose: Pose.Pose, facing
 };
 
 /**
- * `pose` with the limb `ask` names reaching: its middle joint bent so its end lies as far from its root's joint as `ask.to`, analytically, about the hinge's own axis; its root's joint turned to bring the end onto the point, and about the line to it so the middle joint lies toward `ask.swivel`; the pose clamped to every joint's limits; and then the joints `ask.facing` names turned to face its surface as asked. Says how far the end fell short of the point, and the surface of facing as asked. A limb whose joints the bones and joints do not make, a root, a middle joint whose parent it is, and an end below that, is left as it is.
+ * `pose` with the limb `ask` names reaching: its middle joint bent by its bending motion so its end lies as far from its root's joint as `ask.to`, analytically, about that motion's own axis; its root's joint turned to bring the end onto the point, and about the line to it so the middle joint lies toward `ask.swivel`; the pose clamped to every joint's limits; and then the joints `ask.facing` names turned to face its surface as asked. Says how far the end fell short of the point, and the surface of facing as asked. A limb whose joints the bones and joints do not make, a root, a middle joint whose parent it is, and an end below that, is left as it is.
  */
 export const limb = (
   bones: Shape.Bones,
@@ -252,13 +273,17 @@ export const limb = (
     return { pose, short: shortOf(pose), facingShort: 0 };
   }
   const names = { root: ask.root, middle: middleName, end: ask.end };
+  const bend = ask.bend ?? 'flex';
   const hip = Pose.place(bones, joints, pose)[ask.root];
   const distance = hip === undefined ? 0 : length(less(ask.to, hip.at));
-  const bent = turning(pose, middleName, {
-    ...anglesIn(pose, middleName),
-    flex: bendFor(bones, joints, pose, names, middle, distance),
-  });
+  const bent = setting(
+    pose,
+    middleName,
+    bend,
+    bendFor(bones, joints, pose, names, middle, bend, distance),
+  );
   const aimed = Pose.clamp(
+    bones,
     joints,
     turning(bent, ask.root, aimFor(bones, joints, bent, names, root, ask)),
   );
@@ -266,7 +291,7 @@ export const limb = (
   if (facing === undefined) {
     return { pose: aimed, short: shortOf(aimed), facingShort: 0 };
   }
-  const turned = Pose.clamp(joints, faced(bones, joints, aimed, facing));
+  const turned = Pose.clamp(bones, joints, faced(bones, joints, aimed, facing));
   const normal = facingNow(bones, joints, turned, facing);
   return {
     pose: turned,
@@ -275,71 +300,70 @@ export const limb = (
   };
 };
 
-/** How far a trunk is asked to turn about its length, bend forward, and lean to the side, in radians, each spread over its joints. */
+/** A trunk asked to turn: each motion, by its name, such as `turn`, `flex`, or `bend`, to a total, anatomically, in radians, spread over the joints `joints`. */
 export interface Trunk {
   readonly joints: ReadonlyArray<string>;
-  readonly turn: number;
-  readonly bend: number;
-  readonly side: number;
+  readonly motions: Readonly<Record<string, number>>;
 }
 
-/** A trunk's pose reached: the pose, and how far short of each it fell, in radians. */
+/** A trunk's pose reached: the pose, and how far short of each motion's total it fell, in radians, by the motion's name. */
 export interface Spread {
   readonly pose: Pose.Pose;
-  readonly short: { readonly turn: number; readonly bend: number; readonly side: number };
+  readonly short: Readonly<Record<string, number>>;
 }
 
-/** How far the joint `name` turns about `axis` toward the sign of `asked`, at `pose`: what its range lets it, nothing for a way it does not turn. */
+/** How far the joint `name` turns by `motion` toward the sign of `asked`, at `pose`: what its range lets it, from nothing; nothing for a motion it does not have. */
 const reachOf = (
   joints: Joint.Joints,
   pose: Pose.Pose,
   name: string,
-  axis: Joint.Axis,
+  motion: string,
   asked: number,
 ) => {
-  const limits = Joint.limitsAt(joints, pose.turns, name);
-  const range =
-    axis === 'flex' ? Option.some(limits.flex) : axis === 'abduct' ? limits.abduct : limits.twist;
-  return Option.match(range, {
-    onNone: () => 0,
-    onSome: ([min, max]) => (asked >= 0 ? Math.max(max, 0) : Math.max(-min, 0)),
-  });
+  const range = Joint.limitsAt(joints, pose.turns, name)[motion];
+  return range === undefined ? 0 : asked >= 0 ? Math.max(range[1], 0) : Math.max(-range[0], 0);
 };
 
 /**
- * `pose` with a trunk's turn, bend, and lean spread over `ask.joints`, each segment taking a share as large as how far it turns that way, as the spine spreads them: the lumbar spine bends far and hardly turns, the thoracic spine turns. Those axes of those joints are set, the rest left as they are, and the pose clamped. Asked beyond them all, each turns as far as it does, and it says how far short.
+ * `pose` with a trunk's motions spread over `ask.joints`, each segment taking a share of each motion's total as large as how far it turns that way, as the spine spreads them: the lumbar spine flexes far and hardly turns, the thoracic spine turns. Those motions of those joints are set, the rest left as they are, and the pose clamped. Asked beyond them all, each turns as far as it does, and it says how far short of each.
  */
-export const spine = (joints: Joint.Joints, pose: Pose.Pose, ask: Trunk): Spread => {
-  const asked: ReadonlyArray<readonly [Joint.Axis, number]> = [
-    ['twist', ask.turn],
-    ['flex', ask.bend],
-    ['abduct', ask.side],
-  ];
+export const spine = (
+  bones: Shape.Bones,
+  joints: Joint.Joints,
+  pose: Pose.Pose,
+  ask: Trunk,
+): Spread => {
   let turns = pose.turns;
-  for (const [axis, total] of asked) {
-    const reaches = ask.joints.map((name) => reachOf(joints, pose, name, axis, total));
+  for (const [motion, total] of Object.entries(ask.motions)) {
+    const reaches = ask.joints.map((name) => reachOf(joints, pose, name, motion, total));
     const all = reaches.reduce((sum, reach) => sum + reach, 0);
     ask.joints.forEach((name, at) => {
+      if (!Joint.hasMotion(joints, name, motion)) {
+        return;
+      }
       const reach = reaches[at] ?? 0;
       const share =
         all === 0 ? 0 : Math.abs(total) >= all ? Math.sign(total) * reach : (total * reach) / all;
-      turns = { ...turns, [name]: { ...(turns[name] ?? Joint.still), [axis]: share } };
+      turns = { ...turns, [name]: { ...turns[name], [motion]: share } };
     });
   }
-  const clamped = Pose.clamp(joints, { ...pose, turns });
-  const reached = (axis: Joint.Axis) =>
-    ask.joints.reduce((sum, name) => sum + Joint.angleOf(clamped.turns, name, axis), 0);
+  const clamped = Pose.clamp(bones, joints, { ...pose, turns });
+  const reached = (motion: string) =>
+    ask.joints
+      .filter((name) => Joint.hasMotion(joints, name, motion))
+      .reduce((sum, name) => sum + Joint.valueOf(joints, clamped.turns, { bone: name, motion }), 0);
   return {
     pose: clamped,
-    short: {
-      turn: Math.abs(ask.turn - reached('twist')),
-      bend: Math.abs(ask.bend - reached('flex')),
-      side: Math.abs(ask.side - reached('abduct')),
-    },
+    short: Object.fromEntries(
+      Object.entries(ask.motions).map(([motion, total]) => [
+        motion,
+        Math.abs(total - reached(motion)),
+      ]),
+    ),
   };
 };
 
-/** Where to look, and with what: the point `at`, in the model's space; the eyes, their `forward` the way each looks in its own frame; and the joints of the neck, from the one nearest the body, which turn the head for what the eyes cannot reach. */
+/** Where to look, and with what: the point `at`, in the model's space; the eyes, `forward` the way each looks in its own frame; and the joints of the neck, from the one nearest the body, which turn the head for what the eyes cannot reach. */
 export interface Look {
   readonly at: Ray.Point;
   readonly eyes: ReadonlyArray<string>;
@@ -360,7 +384,7 @@ const LOOK_PASSES = 3;
 const angleBetween = (a: Ray.Point, b: Ray.Point) =>
   Maths.acos(Math.min(Math.max(dot(unit(a), unit(b)), -1), 1));
 
-/** How far `eye` looks short of `at` at `pose`, and the way it looks and the way to the point, in the model's space. */
+/** How far `eye` looks short of `ask.at` at `pose`, the way it looks, and the way to the point, in the model's space. */
 const gazeOf = (
   bones: Shape.Bones,
   joints: Joint.Joints,
@@ -374,11 +398,11 @@ const gazeOf = (
   }
   const looking = unit(Quaternion.rotate(placed.turn, ask.forward));
   const toward = unit(less(ask.at, placed.at));
-  return Option.some({ placed, looking, toward, short: angleBetween(looking, toward) });
+  return Option.some({ looking, toward, short: angleBetween(looking, toward) });
 };
 
 /**
- * `pose` with the eyes looking at `ask.at`: the eyes first, as far as they turn; then, for what they cannot reach, the neck, its turn, bend, and lean spread over its joints as `spine` spreads them, the head carrying the eyes along; and the eyes again, a fixed number of passes. Says how far short the eyes fell.
+ * `pose` with the eyes looking at `ask.at`: the eyes first, as far as they turn; then, for what they cannot reach, the neck, its turn read as the motions of the joint nearest the body and spread over the neck's joints as `spine` spreads them, the head carrying the eyes along; and the eyes again, a fixed number of passes. Says how far short the eyes fell.
  */
 export const look = (
   bones: Shape.Bones,
@@ -389,68 +413,67 @@ export const look = (
   const [eye] = ask.eyes;
   const [base] = ask.neck;
   const eyesOn = (now: Pose.Pose) =>
-    ask.eyes.reduce((looked, name) => {
-      const gaze = gazeOf(bones, joints, looked, name, ask);
-      return Option.match(gaze, {
-        onNone: () => looked,
-        onSome: ({ toward }) =>
-          Pose.clamp(
-            joints,
-            faced(bones, joints, looked, {
-              bone: name,
-              normal: ask.forward,
-              toward,
-              turning: [name],
-            }),
-          ),
-      });
-    }, now);
+    ask.eyes.reduce(
+      (looked, name) =>
+        Option.match(gazeOf(bones, joints, looked, name, ask), {
+          onNone: () => looked,
+          onSome: ({ toward }) =>
+            Pose.clamp(
+              bones,
+              joints,
+              faced(bones, joints, looked, {
+                bone: name,
+                normal: ask.forward,
+                toward,
+                turning: [name],
+              }),
+            ),
+        }),
+      now,
+    );
   let now = eyesOn(pose);
   for (let pass = 0; pass < LOOK_PASSES && eye !== undefined && base !== undefined; pass++) {
     const gaze = gazeOf(bones, joints, now, eye, ask);
     const baseJoint = joints[base];
     const basePlaced = Pose.place(bones, joints, now)[base];
-    if (Option.isNone(gaze) || baseJoint === undefined || basePlaced === undefined) {
-      break;
-    }
-    if (gaze.value.short < 1e-9) {
+    if (
+      Option.isNone(gaze) ||
+      baseJoint === undefined ||
+      basePlaced === undefined ||
+      gaze.value.short < 1e-9
+    ) {
       break;
     }
     // What the eyes cannot reach, the neck turns: the whole turn from where they look to the point, less as far as they still turn.
     const whole = Quaternion.between(gaze.value.looking, gaze.value.toward);
-    const ahead = eyesOn(now);
-    const left = Option.match(gazeOf(bones, joints, ahead, eye, ask), {
+    const left = Option.match(gazeOf(bones, joints, eyesOn(now), eye, ask), {
       onNone: () => 0,
       onSome: ({ short }) => short,
     });
-    const share = gaze.value.short === 0 ? 0 : left / gaze.value.short;
-    const neckTurn = Quaternion.slerp(Quaternion.identity, whole, share);
-    // In the frame the neck turns in, as its turn about its length, its bend, and its lean.
-    const frame = frameOf(basePlaced, baseJoint, anglesIn(now, base));
-    const local = Quaternion.multiply(
+    const neckTurn = Quaternion.slerp(Quaternion.identity, whole, left / gaze.value.short);
+    // That turn in the frame the neck turns in, after its own, read as its motions' values.
+    const baseAngles = anglesIn(now, base);
+    const ownTurn = Pose.turnOf(baseJoint, baseAngles);
+    const frame = Quaternion.multiply(basePlaced.turn, Quaternion.invert(ownTurn));
+    const own = Quaternion.multiply(
       Quaternion.multiply(Quaternion.invert(frame), neckTurn),
-      frame,
+      Quaternion.multiply(frame, ownTurn),
     );
-    const twistAxis = Option.getOrElse(baseJoint.axes.twist, () => ({ x: 0, y: 1, z: 0 }));
-    const { swing, twist } = Quaternion.swingTwist(local, twistAxis);
-    const twisted = Quaternion.axisAngle(twist);
-    const swung = Quaternion.axisAngle(swing);
-    const along = (axis: Ray.Point, of: { axis: Ray.Point; angle: number }) =>
-      of.angle * dot(of.axis, axis);
-    const sum = (axis: Joint.Axis) =>
-      ask.neck.reduce((total, name) => total + Joint.angleOf(now.turns, name, axis), 0);
-    now = spine(joints, now, {
-      joints: ask.neck,
-      turn: sum('twist') + along(twistAxis, twisted),
-      bend: sum('flex') + along(baseJoint.axes.flex, swung),
-      side:
-        sum('abduct') +
-        Option.match(baseJoint.axes.abduct, {
-          onNone: () => 0,
-          onSome: (axis) => along(axis, swung),
-        }),
-    }).pose;
-    now = eyesOn(now);
+    const read = Pose.anglesOf(baseJoint, own, baseAngles);
+    const motions = Object.fromEntries(
+      Object.keys(baseJoint.motions).map((motion) => {
+        const added =
+          (read[motion] ?? 0) - Joint.valueOf(joints, now.turns, { bone: base, motion });
+        const sum = ask.neck
+          .filter((name) => Joint.hasMotion(joints, name, motion))
+          .reduce(
+            (total, name) => total + Joint.valueOf(joints, now.turns, { bone: name, motion }),
+            0,
+          );
+        return [motion, sum + added];
+      }),
+    );
+    now = eyesOn(spine(bones, joints, now, { joints: ask.neck, motions }).pose);
   }
   const short = ask.eyes.reduce(
     (most, name) =>
@@ -466,9 +489,13 @@ export const look = (
   return { pose: now, short };
 };
 
-/** A figure asked to stand over one foot: the limb she stands on, from its root's joint to the foot. */
+/** A figure asked to stand over one foot: the limb she stands on, from its root's joint to the foot, bending by its motion `bend`, `flex` unless named. */
 export interface Balance {
-  readonly stance: { readonly root: string; readonly end: string };
+  readonly stance: {
+    readonly root: string;
+    readonly end: string;
+    readonly bend?: string | undefined;
+  };
 }
 
 /** How many times the figure is moved over her standing foot, and that foot reached back to where it stood: enough for her legs' turning to settle. */
@@ -493,10 +520,7 @@ export const balance = (
     if (Option.isNone(centre)) {
       return now;
     }
-    const across = {
-      x: planted.at.x - centre.value.x,
-      z: planted.at.z - centre.value.z,
-    };
+    const across = { x: planted.at.x - centre.value.x, z: planted.at.z - centre.value.z };
     const placed = Pose.place(bones, joints, now);
     const hip = placed[ask.stance.root];
     const middle = Option.getOrUndefined(

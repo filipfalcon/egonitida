@@ -10,11 +10,11 @@ const degrees = (angle: number) => (angle * Math.PI) / 180;
 const joints: Joint.Joints = {
   calf: {
     kind: 'Hinge',
-    axes: { flex: { x: 1, y: 0, z: 0 }, abduct: Option.none(), twist: Option.none() },
-    swing: { flex: [degrees(-5), degrees(140)], abduct: Option.none() },
-    twist: Option.none(),
+    motions: { flex: { axis: { x: 1, y: 0, z: 0 }, range: [degrees(-5), degrees(140)], rest: 0 } },
+    order: ['flex'],
     depends: [],
-    follows: Option.none(),
+    follows: [],
+    measures: {},
     flesh: Option.none(),
   },
 };
@@ -23,7 +23,7 @@ const joints: Joint.Joints = {
 const kneeAt = (angle: number, rise = 0): Pose.Pose => ({
   ...Pose.rest,
   at: { x: 0, y: rise, z: 0 },
-  turns: { calf: { flex: degrees(angle), abduct: 0, twist: 0 } },
+  turns: { calf: { flex: degrees(angle) } },
 });
 
 /** A kick: the knee bent 90° at its start, straight a fifth of a second in, and bent 30° at its end, half a second in. */
@@ -35,7 +35,7 @@ const kick: Clip.Clip = {
 
 describe('Clip.at', () => {
   it('poses a clip as its keys say, between them along their turns', () => {
-    const bent = (seconds: number) => Clip.at(joints, kick, seconds).turns['calf']?.flex ?? NaN;
+    const bent = (seconds: number) => Clip.at(joints, kick, seconds).turns['calf']?.['flex'] ?? NaN;
 
     expect(bent(0)).toBeCloseTo(degrees(90), 12);
     expect(bent(0.1)).toBeCloseTo(degrees(45), 12);
@@ -44,8 +44,8 @@ describe('Clip.at', () => {
   });
 
   it('holds its first pose before it and its last after it', () => {
-    expect(Clip.at(joints, kick, -1).turns['calf']?.flex).toBeCloseTo(degrees(90), 12);
-    expect(Clip.at(joints, kick, 3).turns['calf']?.flex).toBeCloseTo(degrees(30), 12);
+    expect(Clip.at(joints, kick, -1).turns['calf']?.['flex']).toBeCloseTo(degrees(90), 12);
+    expect(Clip.at(joints, kick, 3).turns['calf']?.['flex']).toBeCloseTo(degrees(30), 12);
   });
 
   it('poses a clip of no keys at rest', () => {

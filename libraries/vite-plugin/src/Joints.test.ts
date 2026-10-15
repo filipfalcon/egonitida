@@ -10,15 +10,17 @@ import * as Joints from '#src/Joints.ts';
 /** Degrees, as radians. */
 const degrees = (angle: number) => (angle * Math.PI) / 180;
 
-/** A knee as the model carries it: a hinge bending about the line across it, its twist nothing straight and 40° out and 30° in at 90° bent. */
+/** A knee as the model writes it: a hinge flexing, made bent 2°, and rotating as it bends, nothing straight and 30° in and 40° out at 90°. */
 const knee = {
   kind: 'hinge',
-  axes: { flex: [2, 0, 0], twist: [0, 1, 0] },
-  swing: { flex: [-5, 140] },
-  twist: [0, 0],
+  motions: {
+    flex: { axis: [-2, 0, 0], range: [-5, 140], rest: 2 },
+    rotate: { axis: [0, 1, 0], range: [0, 0], rest: 0 },
+  },
+  order: ['flex', 'rotate'],
   depends: [
     {
-      limit: 'twist.max',
+      limit: 'rotate.max',
       on: 'calf_l.flex',
       table: [
         [0, 0],
@@ -26,7 +28,7 @@ const knee = {
       ],
     },
     {
-      limit: 'twist.min',
+      limit: 'rotate.min',
       on: 'calf_l.flex',
       table: [
         [0, 0],
@@ -34,15 +36,18 @@ const knee = {
       ],
     },
   ],
-  follows: null,
+  follows: [],
 };
 
-/** A hip as the model carries it: a ball, which the hamstrings let bend only 80° with the knee straight. */
+/** A hip as the model writes it: flexing, abducting, and rotating, which the hamstrings let flex only 80° with the knee straight; and an elevation it measures, down from the root. */
 const hip = {
   kind: 'ball',
-  axes: { flex: [1, 0, 0], abduct: [0, 0, 1], twist: [0, 1, 0] },
-  swing: { flex: [-20, 120], abduct: [-30, 45] },
-  twist: [-40, 45],
+  motions: {
+    flex: { axis: [1, 0, 0], range: [-20, 120], rest: 0 },
+    abduct: { axis: [0, 0, -1], range: [-30, 45], rest: 0 },
+    rotate: { axis: [0, 1, 0], range: [-40, 45], rest: 0 },
+  },
+  order: ['flex', 'abduct', 'rotate'],
   depends: [
     {
       limit: 'flex.max',
@@ -54,7 +59,38 @@ const hip = {
       ],
     },
   ],
-  follows: null,
+  follows: [],
+  measures: { elevation: { from: 'root', direction: [0, -1, 0], rest: 10 } },
+};
+
+/** The hip, its limits depending on nothing, for a leg whose knee is another joint. */
+const hipAlone = { ...hip, depends: [] };
+
+/** A clavicle as the model writes it: elevating and protracting about axes not square to one another. */
+const clavicle = {
+  kind: 'ball',
+  motions: {
+    elevate: { axis: [0, 0, 1], range: [-10, 35], rest: 0 },
+    protract: { axis: [0.3, 0.95, 0.1], range: [-25, 15], rest: 0 },
+  },
+  order: ['elevate', 'protract'],
+};
+
+/** A twist bone as the model writes it: rotating only as it follows, taking half its parent's rotation back. */
+const twist = {
+  kind: 'follower',
+  motions: { rotate: { axis: [0, 1, 0], range: [0, 0], rest: 0 } },
+  order: ['rotate'],
+  follows: [
+    {
+      motion: 'rotate',
+      on: 'thigh_l.rotate',
+      table: [
+        [-180, 90],
+        [180, -90],
+      ],
+    },
+  ],
 };
 
 /** A leg whose bones carry `joints` and `flesh` as their extras, by name, the root none. */
@@ -82,6 +118,9 @@ const leg = (
 const whyNot = (bytes: Uint8Array) =>
   Result.match(Joints.read(bytes), { onFailure: (reason) => reason, onSuccess: () => 'read' });
 
+/** `knee` with its motion `flex` written as `flex`. */
+const kneeFlexing = (flex: unknown) => ({ ...knee, motions: { ...knee.motions, flex } });
+
 describe('Joints.read', () => {
   const read = Result.getOrThrow(
     Joints.read(
@@ -94,23 +133,31 @@ describe('Joints.read', () => {
     expect(read.map(({ name }) => name)).toEqual(['thigh_l', 'calf_l']);
   });
 
-  it('reads a knee as a hinge from −5° to 140°, its axes of length one, in radians', () => {
+  it('reads each motion of a joint, its axis of length one, its range and rest in radians, in its order', () => {
     const calf = joint('calf_l');
 
     expect(calf?.kind).toBe('Hinge');
-    expect(calf?.swing.flex[0]).toBeCloseTo(degrees(-5), 12);
-    expect(calf?.swing.flex[1]).toBeCloseTo(degrees(140), 12);
-    expect(calf?.axes.flex).toEqual({ x: 1, y: 0, z: 0 });
-    expect(calf?.axes.abduct).toEqual(Option.none());
+    expect(calf?.order).toEqual(['flex', 'rotate']);
+    expect(calf?.motions['flex']?.axis).toEqual({ x: -1, y: 0, z: 0 });
+    expect(calf?.motions['flex']?.range[1]).toBeCloseTo(degrees(140), 12);
+    expect(calf?.motions['flex']?.rest).toBeCloseTo(degrees(2), 12);
   });
 
   it('reads what a limit depends on, its table in radians', () => {
     const [max] = joint('calf_l')?.depends ?? [];
 
-    expect(max?.limit).toEqual({ axis: 'twist', end: 'max' });
-    expect(max?.on).toEqual({ joint: 'calf_l', axis: 'flex' });
-    expect(max?.table[1]?.[0]).toBeCloseTo(degrees(90), 12);
+    expect(max?.motion).toBe('rotate');
+    expect(max?.end).toBe('max');
+    expect(max?.on).toEqual({ bone: 'calf_l', motion: 'flex' });
     expect(max?.table[1]?.[1]).toBeCloseTo(degrees(40), 12);
+  });
+
+  it('reads what a joint measures, its rest in radians', () => {
+    const elevation = joint('thigh_l')?.measures['elevation'];
+
+    expect(elevation?.from).toBe('root');
+    expect(elevation?.direction).toEqual({ x: 0, y: -1, z: 0 });
+    expect(elevation?.rest).toBeCloseTo(degrees(10), 12);
   });
 
   it('reads the flesh about a bone, and none where it carries none', () => {
@@ -118,23 +165,22 @@ describe('Joints.read', () => {
     expect(joint('thigh_l')?.flesh).toEqual(Option.none());
   });
 
-  it('reads what a joint follows, the axis it sets the one it follows unless it says', () => {
-    const blade = {
-      ...hip,
-      depends: [],
-      follows: {
-        joint: 'thigh_l',
-        axis: 'flex',
-        table: [
-          [30, 0],
-          [180, 50],
-        ],
-      },
-    };
-    const [, scapula] = Result.getOrThrow(Joints.read(leg({ thigh_l: hip, calf_l: blade })));
+  it('reads what a motion follows, by the motion it sets', () => {
+    const [, follower] = Result.getOrThrow(Joints.read(leg({ thigh_l: hipAlone, calf_l: twist })));
 
-    expect(Option.map(scapula?.joint.follows ?? Option.none(), ({ sets }) => sets)).toEqual(
-      Option.some('flex'),
+    expect(follower?.joint.kind).toBe('Follower');
+    expect(follower?.joint.follows[0]?.motion).toBe('rotate');
+    expect(follower?.joint.follows[0]?.on).toEqual({ bone: 'thigh_l', motion: 'rotate' });
+  });
+
+  it('reads axes that are not square to one another as they are written', () => {
+    const [, oblique] = Result.getOrThrow(
+      Joints.read(leg({ thigh_l: hipAlone, calf_l: clavicle })),
+    );
+
+    expect(oblique?.joint.motions['protract']?.axis.y).toBeCloseTo(
+      0.95 / Math.hypot(0.3, 0.95, 0.1),
+      12,
     );
   });
 });
@@ -142,47 +188,54 @@ describe('Joints.read', () => {
 describe('a joint the reader refuses', () => {
   it('is of no kind it knows', () => {
     expect(whyNot(leg({ calf_l: { ...knee, kind: 'pivot' } }))).toBe(
-      'the joint of calf_l is no hinge, saddle, or ball as written',
+      'the joint of calf_l is of no kind a joint is: pivot',
     );
   });
 
-  it('turns about axes that are not square to one another', () => {
-    expect(whyNot(leg({ calf_l: { ...knee, axes: { flex: [1, 0, 0], twist: [1, 1, 0] } } }))).toBe(
-      'the axes of the joint of calf_l are not square to one another',
-    );
-  });
-
-  it('swings a second way as a hinge, or not as a saddle or a ball', () => {
+  it('turns about no axis, or within a range the wrong way round', () => {
     expect(
-      whyNot(leg({ calf_l: { ...knee, swing: { flex: [-5, 140], abduct: [-10, 10] } } })),
-    ).toBe('the joint of calf_l is a hinge, which swings one way, yet abducts');
-    expect(whyNot(leg({ thigh_l: { ...hip, swing: { flex: [-20, 120] } } }))).toBe(
-      'the joint of thigh_l is a ball, which swings two ways, yet has no abduction axis or range',
+      whyNot(leg({ calf_l: kneeFlexing({ axis: [0, 0, 0], range: [-5, 140], rest: 0 }) })),
+    ).toBe('the motion flex of calf_l turns about no axis');
+    expect(
+      whyNot(leg({ calf_l: kneeFlexing({ axis: [1, 0, 0], range: [140, -5], rest: 0 }) })),
+    ).toBe('the motion flex of calf_l ranges from more than it ranges to');
+  });
+
+  it('turns in an order that is not every motion of it once', () => {
+    expect(whyNot(leg({ calf_l: { ...knee, order: ['flex'] } }))).toBe(
+      'the order of calf_l is not every motion of it once',
     );
   });
 
-  it('has a range whose least is more than its most', () => {
-    expect(whyNot(leg({ calf_l: { ...knee, swing: { flex: [140, -5] } } }))).toBe(
-      'the joint of calf_l bends from more than it bends to',
-    );
-  });
-
-  it('depends on, or follows, what is no joint, or no axis of one', () => {
+  it('depends on, or follows, what is no motion or measure of a joint', () => {
     expect(
       whyNot(
         leg({
-          calf_l: { ...knee, depends: [{ limit: 'twist.max', on: 'ankle_l.flex', table: [] }] },
+          calf_l: { ...knee, depends: [{ limit: 'rotate.max', on: 'ankle_l.flex', table: [] }] },
         }),
       ),
-    ).toBe('the joint of calf_l depends on ankle_l, which is no joint');
+    ).toBe('calf_l depends on ankle_l.flex, which is no motion of a joint');
     expect(
       whyNot(
         leg({
-          thigh_l: hip,
-          calf_l: { ...knee, follows: { joint: 'thigh_l', axis: 'elevation', table: [] } },
+          thigh_l: hipAlone,
+          calf_l: { ...twist, follows: [{ motion: 'rotate', on: 'thigh_l.lift', table: [] }] },
         }),
       ),
-    ).toBe('the joint of calf_l follows elevation of thigh_l, which is no axis of a joint');
+    ).toBe('calf_l follows thigh_l.lift, which is no motion or measure of a joint');
+  });
+
+  it('measures from what is no bone', () => {
+    expect(
+      whyNot(
+        leg({
+          thigh_l: {
+            ...hipAlone,
+            measures: { elevation: { from: 'spine_04', direction: [0, -1, 0], rest: 0 } },
+          },
+        }),
+      ),
+    ).toBe('the measure elevation of thigh_l is from spine_04, which is no bone');
   });
 });
 
@@ -225,8 +278,7 @@ describe('Joints.plugin', () => {
     );
 
     expect(source).toContain("import { Option } from 'effect';");
-    expect(source).toContain('"calf_l": {');
-    expect(source).toContain("kind: 'Hinge'");
+    expect(source).toContain('"calf_l":');
     expect(watched).toEqual([file]);
   });
 });

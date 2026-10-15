@@ -6,7 +6,7 @@ import type { Loading } from '#src/Bones.ts';
 import { chunksOf, sanitized } from '#src/Bones.ts';
 
 /**
- * A model's joints, read from its file as the game is built: a module importing `./figure.glb?joints` is given them as `Joint.Joints`, each bone that carries a joint in its glTF `extras.joint` by its name, with the flesh about it from its `extras.flesh`, so a step reads the figure's anatomy from the model itself, never copied out of it. Angles are written in degrees and read as radians; axes, in the bone's own frame, are brought to length one. A joint the reader cannot make sense of fails the build, saying why: a kind it does not know, axes that are not square to one another, a hinge that abducts, a range the wrong way round, or what it depends on or follows that is no joint, or no axis of one.
+ * A model's joints, read from its file as the game is built: a module importing `./figure.glb?joints` is given them as `Joint.Joints`, each bone that carries a joint in its glTF `extras.joint` by its name, with the flesh about it from its `extras.flesh`, so a step reads the figure's anatomy from the model itself, never copied out of it. A joint's motions are named as the model names them, each about an axis in the bone's own frame, oblique or not, turned in the order it writes. Angles are written in degrees and read as radians; axes are brought to length one. A joint the reader cannot make sense of fails the build, saying why: a kind it does not know, a motion about no axis or ranging the wrong way, an order that is not every motion once, or a limit, a follower, or a measure that names what is not there.
  */
 
 /** What an import asks of a model's file to be given its joints: `?joints`, among whatever other queries the development server adds to it. */
@@ -19,29 +19,30 @@ export interface Read {
 }
 
 const Vector = Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite]);
-const Range = Schema.Tuple([Schema.Finite, Schema.Finite]);
-const Rows = Schema.Array(Schema.Tuple([Schema.Finite, Schema.Finite]));
+const Pair = Schema.Tuple([Schema.Finite, Schema.Finite]);
+const Rows = Schema.Array(Pair);
 
 /** A joint as a model's file writes it, in degrees. */
 const Written = Schema.Struct({
   kind: Schema.String,
-  axes: Schema.Struct({
-    flex: Vector,
-    abduct: Schema.optional(Vector),
-    twist: Schema.optional(Vector),
-  }),
-  swing: Schema.Struct({ flex: Range, abduct: Schema.optional(Range) }),
-  twist: Schema.optional(Schema.NullOr(Range)),
+  motions: Schema.Record(
+    Schema.String,
+    Schema.Struct({ axis: Vector, range: Pair, rest: Schema.optional(Schema.Finite) }),
+  ),
+  order: Schema.Array(Schema.String),
   depends: Schema.optional(
     Schema.Array(Schema.Struct({ limit: Schema.String, on: Schema.String, table: Rows })),
   ),
   follows: Schema.optional(
-    Schema.NullOr(
+    Schema.Array(Schema.Struct({ motion: Schema.String, on: Schema.String, table: Rows })),
+  ),
+  measures: Schema.optional(
+    Schema.Record(
+      Schema.String,
       Schema.Struct({
-        joint: Schema.String,
-        axis: Schema.String,
-        sets: Schema.optional(Schema.String),
-        table: Rows,
+        from: Schema.String,
+        direction: Vector,
+        rest: Schema.optional(Schema.Finite),
       }),
     ),
   ),
@@ -69,131 +70,142 @@ const Gltf = Schema.Struct({
 });
 
 const KINDS: Readonly<Record<string, Joint.Kind>> = {
+  ball: 'Ball',
   hinge: 'Hinge',
   saddle: 'Saddle',
-  ball: 'Ball',
+  follower: 'Follower',
+  chain: 'Chain',
+  free: 'Free',
 };
-const AXES: ReadonlyArray<Joint.Axis> = ['flex', 'abduct', 'twist'];
-
-/** Whether `name` is one of a joint's axes. */
-const isAxis = (name: string): name is Joint.Axis => AXES.some((axis) => axis === name);
 
 /** Degrees, as radians. */
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
-
-/** A range in degrees, in radians. */
-const rangeOf = ([min, max]: readonly [number, number]): Joint.Range => [
-  radians(min),
-  radians(max),
-];
 
 /** A table of degrees, in radians. */
 const tableOf = (rows: ReadonlyArray<readonly [number, number]>): Joint.Table =>
   rows.map(([x, y]) => [radians(x), radians(y)] as const);
 
-/** `[x, y, z]` brought to length one; as it is, if it has none. */
+/** `[x, y, z]` brought to length one; none, if it has no length. */
 const unit = ([x, y, z]: readonly [number, number, number]) => {
   const length = Math.sqrt(x * x + y * y + z * z);
-  return length === 0 ? { x, y, z } : { x: x / length, y: y / length, z: z / length };
-};
-
-/** Whether two directions of length one are square to one another, within a thousandth. */
-const square = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
-  Math.abs(a.x * b.x + a.y * b.y + a.z * b.z) <= 1e-3;
-
-/** `joint` and `axis` of `written`, `joint.axis`; none for anything else. */
-const jointAxis = (written: string): Option.Option<{ joint: string; axis: string }> => {
-  const at = written.lastIndexOf('.');
-  return at <= 0
+  return length === 0
     ? Option.none()
-    : Option.some({ joint: written.slice(0, at), axis: written.slice(at + 1) });
+    : Option.some({ x: x / length, y: y / length, z: z / length });
 };
 
-/** The joint of the bone `name` as `written`, or why it cannot be read. */
+/** `first` and `second` of `written`, `first.second`, split at its last dot; none for anything else. */
+const dotted = (written: string): Option.Option<{ first: string; second: string }> => {
+  const at = written.lastIndexOf('.');
+  return at <= 0 || at === written.length - 1
+    ? Option.none()
+    : Option.some({ first: written.slice(0, at), second: written.slice(at + 1) });
+};
+
+/** The joint of the bone `name` as `written`, its references not yet checked, or why it cannot be read. */
 const jointOf = (
   name: string,
   written: Written,
 ): Result.Result<Omit<Joint.Joint, 'flesh'>, string> => {
-  const of = `the joint of ${name}`;
   const kind = KINDS[written.kind];
   if (kind === undefined) {
-    return Result.fail(`${of} is no hinge, saddle, or ball as written`);
+    return Result.fail(`the joint of ${name} is of no kind a joint is: ${written.kind}`);
   }
-  const flex = unit(written.axes.flex);
-  const abduct = Option.map(Option.fromNullishOr(written.axes.abduct), unit);
-  const twist = Option.map(Option.fromNullishOr(written.axes.twist), unit);
-  const axes = [flex, ...Option.toArray(abduct), ...Option.toArray(twist)];
-  if (axes.some((a, at) => axes.some((b, other) => other > at && !square(a, b)))) {
-    return Result.fail(`the axes of ${of} are not square to one another`);
+  const motions: Record<string, Joint.Motion> = {};
+  for (const [motion, { axis, range, rest }] of Object.entries(written.motions)) {
+    const direction = unit(axis);
+    if (Option.isNone(direction)) {
+      return Result.fail(`the motion ${motion} of ${name} turns about no axis`);
+    }
+    if (range[0] > range[1]) {
+      return Result.fail(`the motion ${motion} of ${name} ranges from more than it ranges to`);
+    }
+    motions[motion] = {
+      axis: direction.value,
+      range: [radians(range[0]), radians(range[1])],
+      rest: radians(rest ?? 0),
+    };
   }
-  const abductRange = Option.fromNullishOr(written.swing.abduct);
-  if (kind === 'Hinge' && (Option.isSome(abduct) || Option.isSome(abductRange))) {
-    return Result.fail(`${of} is a hinge, which swings one way, yet abducts`);
-  }
-  if (kind !== 'Hinge' && (Option.isNone(abduct) || Option.isNone(abductRange))) {
-    return Result.fail(
-      `${of} is a ${written.kind}, which swings two ways, yet has no abduction axis or range`,
-    );
-  }
-  const twistRange = Option.fromNullishOr(written.twist);
-  if (Option.isSome(twistRange) && Option.isNone(twist)) {
-    return Result.fail(`${of} twists, yet has no axis to twist about`);
-  }
-  if (kind === 'Ball' && Option.isNone(twistRange)) {
-    return Result.fail(`${of} is a ball, which twists, yet has no twist range`);
-  }
-  const ranges: ReadonlyArray<readonly [string, Option.Option<readonly [number, number]>]> = [
-    ['bends', Option.some(written.swing.flex)],
-    ['abducts', abductRange],
-    ['twists', twistRange],
-  ];
-  const backwards = ranges.find(([, range]) => Option.exists(range, ([min, max]) => min > max));
-  if (backwards !== undefined) {
-    return Result.fail(`${of} ${backwards[0]} from more than it ${backwards[0]} to`);
+  const names = Object.keys(motions);
+  if (
+    written.order.length !== names.length ||
+    new Set(written.order).size !== names.length ||
+    written.order.some((motion) => motions[motion] === undefined)
+  ) {
+    return Result.fail(`the order of ${name} is not every motion of it once`);
   }
   const depends: Array<Joint.Depends> = [];
   for (const { limit, on, table } of written.depends ?? []) {
-    const [axis, end] = limit.split('.');
-    const by = jointAxis(on);
-    if (axis === undefined || !isAxis(axis) || (end !== 'min' && end !== 'max')) {
-      return Result.fail(`${of} has a limit ${limit}, which is no axis's least or most`);
+    const bound = dotted(limit);
+    const source = dotted(on);
+    if (
+      Option.isNone(bound) ||
+      motions[bound.value.first] === undefined ||
+      (bound.value.second !== 'min' && bound.value.second !== 'max')
+    ) {
+      return Result.fail(`${name} limits ${limit}, which is no end of a motion of it`);
     }
-    if (Option.isNone(by) || !isAxis(by.value.axis)) {
-      return Result.fail(`${of} depends on ${on}, which is no axis of a joint`);
+    if (Option.isNone(source)) {
+      return Result.fail(`${name} depends on ${on}, which is no motion of a joint`);
     }
     depends.push({
-      limit: { axis, end },
-      on: { joint: by.value.joint, axis: by.value.axis },
+      motion: bound.value.first,
+      end: bound.value.second,
+      on: { bone: source.value.first, motion: source.value.second },
       table: tableOf(table),
     });
   }
-  const follows = Option.fromNullishOr(written.follows);
-  if (Option.isSome(follows)) {
-    const { joint, axis, sets } = follows.value;
-    if (!isAxis(axis)) {
-      return Result.fail(`${of} follows ${axis} of ${joint}, which is no axis of a joint`);
+  const follows: Array<Joint.Follows> = [];
+  for (const { motion, on, table } of written.follows ?? []) {
+    const source = dotted(on);
+    if (motions[motion] === undefined) {
+      return Result.fail(`${name} follows by ${motion}, which is no motion of it`);
     }
-    if (sets !== undefined && !isAxis(sets)) {
-      return Result.fail(`${of} sets ${sets} as it follows, which is no axis of a joint`);
+    if (Option.isNone(source)) {
+      return Result.fail(`${name} follows ${on}, which is no motion or measure of a joint`);
+    }
+    follows.push({
+      motion,
+      on: { bone: source.value.first, motion: source.value.second },
+      table: tableOf(table),
+    });
+  }
+  const measures: Record<string, Joint.Measure> = {};
+  for (const [measure, { from, direction, rest }] of Object.entries(written.measures ?? {})) {
+    const way = unit(direction);
+    if (Option.isNone(way)) {
+      return Result.fail(`the measure ${measure} of ${name} is toward no direction`);
+    }
+    measures[measure] = { from, direction: way.value, rest: radians(rest ?? 0) };
+  }
+  return Result.succeed({ kind, motions, order: written.order, depends, follows, measures });
+};
+
+/** Why what the joints of `read` name is not there among them and `bones`, if anything they name is not. */
+const missing = (read: ReadonlyArray<Read>, bones: ReadonlySet<string>): Option.Option<string> => {
+  const joints = new Map(read.map(({ name, joint }) => [name, joint]));
+  for (const { name, joint } of read) {
+    for (const { on } of joint.depends) {
+      if (joints.get(on.bone)?.motions[on.motion] === undefined) {
+        return Option.some(
+          `${name} depends on ${on.bone}.${on.motion}, which is no motion of a joint`,
+        );
+      }
+    }
+    for (const { on } of joint.follows) {
+      const source = joints.get(on.bone);
+      if (source?.motions[on.motion] === undefined && source?.measures[on.motion] === undefined) {
+        return Option.some(
+          `${name} follows ${on.bone}.${on.motion}, which is no motion or measure of a joint`,
+        );
+      }
+    }
+    for (const [measure, { from }] of Object.entries(joint.measures)) {
+      if (!bones.has(from)) {
+        return Option.some(`the measure ${measure} of ${name} is from ${from}, which is no bone`);
+      }
     }
   }
-  return Result.succeed({
-    kind,
-    axes: { flex, abduct, twist },
-    swing: { flex: rangeOf(written.swing.flex), abduct: Option.map(abductRange, rangeOf) },
-    twist: Option.map(twistRange, rangeOf),
-    depends,
-    follows: Option.flatMap(follows, ({ joint, axis, sets, table }) =>
-      isAxis(axis)
-        ? Option.some({
-            joint,
-            axis,
-            sets: sets !== undefined && isAxis(sets) ? sets : axis,
-            table: tableOf(table),
-          })
-        : Option.none(),
-    ),
-  });
+  return Option.none();
 };
 
 /**
@@ -206,6 +218,7 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Read>, stri
       (gltf) => {
         const nodes = gltf.nodes ?? [];
         const skinned = new Set((gltf.skins ?? []).flatMap(({ joints }) => joints));
+        const bones = new Set([...skinned].map((index) => sanitized(nodes[index]?.name ?? '')));
         const read: Array<Read> = [];
         for (const [index, node] of nodes.entries()) {
           const carried = node.extras?.joint;
@@ -217,11 +230,10 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Read>, stri
           if (Result.isFailure(written)) {
             return Result.fail(`the joint of ${name} is not written as a joint is`);
           }
-          const flesh = Option.fromNullishOr(node.extras?.flesh);
-          const fleshRead = Option.map(flesh, (carriedFlesh) =>
+          const flesh = Option.map(Option.fromNullishOr(node.extras?.flesh), (carriedFlesh) =>
             Schema.decodeUnknownResult(Flesh)(carriedFlesh),
           );
-          if (Option.isSome(fleshRead) && Result.isFailure(fleshRead.value)) {
+          if (Option.isSome(flesh) && Result.isFailure(flesh.value)) {
             return Result.fail(`the flesh of ${name} is not written as flesh is`);
           }
           const joint = jointOf(name, written.success);
@@ -230,66 +242,23 @@ export const read = (bytes: Uint8Array): Result.Result<ReadonlyArray<Read>, stri
           }
           read.push({
             name,
-            joint: {
-              ...joint.success,
-              flesh: Option.flatMap(fleshRead, (result) => Result.getSuccess(result)),
-            },
+            joint: { ...joint.success, flesh: Option.flatMap(flesh, Result.getSuccess) },
           });
         }
-        const names = new Set(read.map(({ name }) => name));
-        for (const { name, joint } of read) {
-          const absent = [
-            ...joint.depends.map(({ on }) => on.joint),
-            ...Option.toArray(Option.map(joint.follows, ({ joint: followed }) => followed)),
-          ].find((other) => !names.has(other));
-          if (absent !== undefined) {
-            return Result.fail(`the joint of ${name} depends on ${absent}, which is no joint`);
-          }
-        }
-        return Result.succeed(read);
+        return Option.match(missing(read, bones), {
+          onNone: () => Result.succeed(read),
+          onSome: Result.fail,
+        });
       },
     ),
   );
 
-/** `point` as code. */
-const pointCode = ({ x, y, z }: { x: number; y: number; z: number }) =>
-  `{ x: ${x}, y: ${y}, z: ${z} }`;
-
-/** `option` as code, what it holds as `code` writes it. */
-const optionCode = <A>(option: Option.Option<A>, code: (value: A) => string) =>
-  Option.match(option, {
+/** `joint` as code: what it is as JSON, and its flesh, an Option. */
+const jointCode = ({ flesh, ...joint }: Joint.Joint) =>
+  `{ ...${JSON.stringify(joint)}, flesh: ${Option.match(flesh, {
     onNone: () => 'Option.none()',
-    onSome: (value) => `Option.some(${code(value)})`,
-  });
-
-/** A pair of numbers as code. */
-const pairCode = ([a, b]: readonly [number, number]) => `[${a}, ${b}]`;
-
-/** A table as code. */
-const tableCode = (table: Joint.Table) => `[${table.map(pairCode).join(', ')}]`;
-
-/** `joint` as code. */
-const jointCode = (joint: Joint.Joint) =>
-  [
-    '{',
-    `kind: '${joint.kind}',`,
-    `axes: { flex: ${pointCode(joint.axes.flex)}, abduct: ${optionCode(joint.axes.abduct, pointCode)}, twist: ${optionCode(joint.axes.twist, pointCode)} },`,
-    `swing: { flex: ${pairCode(joint.swing.flex)}, abduct: ${optionCode(joint.swing.abduct, pairCode)} },`,
-    `twist: ${optionCode(joint.twist, pairCode)},`,
-    `depends: [${joint.depends
-      .map(
-        ({ limit, on, table }) =>
-          `{ limit: { axis: '${limit.axis}', end: '${limit.end}' }, on: { joint: ${JSON.stringify(on.joint)}, axis: '${on.axis}' }, table: ${tableCode(table)} }`,
-      )
-      .join(', ')}],`,
-    `follows: ${optionCode(
-      joint.follows,
-      ({ joint: followed, axis, sets, table }) =>
-        `{ joint: ${JSON.stringify(followed)}, axis: '${axis}', sets: '${sets}', table: ${tableCode(table)} }`,
-    )},`,
-    `flesh: ${optionCode(joint.flesh, ({ radius, length, mass }) => `{ radius: ${radius}, length: ${length}, mass: ${mass} }`)},`,
-    '}',
-  ].join(' ');
+    onSome: (value) => `Option.some(${JSON.stringify(value)})`,
+  })} }`;
 
 /** The source of the module that gives `joints`, read from the file `file`, as `Joint.Joints`. */
 export const sourceOf = (file: string, joints: ReadonlyArray<Read>): string =>

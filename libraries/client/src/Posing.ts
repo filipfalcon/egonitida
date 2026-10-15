@@ -6,11 +6,11 @@ import * as Three from 'three/webgpu';
  * A model posed by a figure's pose, as the game works it out, y = h(x): each bone of a joint turned from how it was made by the joint's angles, the bones with no parent bone placed and turned as the whole figure is, and each corrective shape a mesh names weighed by how far its joint turns, so a bent knee keeps its crease. Only how bones turn changes, and where the topmost stand, so a model `Shaping` shaped is posed as she is shaped. It poses the model every frame, after `Animating`, over what that posed by a weight, for a bone and all below it, so a game poses her legs by reaching and her arms by a clip. It is the drawing's twin of `Pose.place`: a bone is drawn where that places it.
  */
 
-/** A corrective shape a mesh names in its extras (`userData.correctives`): its morph target, weighed from nothing at `from` degrees of the joint's turn about `axis` to whole at `full`. */
+/** A corrective shape a mesh names in its extras (`userData.correctives`): its morph target, weighed from nothing at `from` degrees of the joint's motion `motion`, anatomically, to whole at `full`, either way. */
 export interface Corrective {
   readonly target: string;
   readonly joint: string;
-  readonly axis: Joint.Axis;
+  readonly motion: string;
   readonly from: number;
   readonly full: number;
 }
@@ -75,8 +75,15 @@ export class Posed {
   readonly model: Three.Object3D;
   readonly #fitted: ReadonlyArray<Fitted>;
   readonly #fixes: ReadonlyArray<Fix>;
+  readonly #joints: Joint.Joints;
 
-  constructor(model: Three.Object3D, fitted: ReadonlyArray<Fitted>, fixes: ReadonlyArray<Fix>) {
+  constructor(
+    model: Three.Object3D,
+    joints: Joint.Joints,
+    fitted: ReadonlyArray<Fitted>,
+    fixes: ReadonlyArray<Fix>,
+  ) {
+    this.#joints = joints;
     this.model = model;
     this.#fitted = fitted;
     this.#fixes = fixes;
@@ -108,7 +115,7 @@ export class Posed {
       }
       Option.match(fitted.joint, {
         onNone: () => own.identity(),
-        onSome: (joint) => asThree(own, Pose.turnOf(joint, pose.turns[fitted.name] ?? Joint.still)),
+        onSome: (joint) => asThree(own, Pose.turnOf(joint, pose.turns[fitted.name] ?? {})),
       });
       turned.copy(fitted.madeTurn).multiply(own);
       if (fitted.root) {
@@ -130,7 +137,13 @@ export class Posed {
       wrote.written = true;
     }
     for (const { corrective, influences, index } of this.#fixes) {
-      const angle = (Joint.angleOf(pose.turns, corrective.joint, corrective.axis) * 180) / Math.PI;
+      const angle =
+        (Joint.valueOf(this.#joints, pose.turns, {
+          bone: corrective.joint,
+          motion: corrective.motion,
+        }) *
+          180) /
+        Math.PI;
       const span = corrective.full - corrective.from;
       const rising =
         span === 0 ? (angle >= corrective.full ? 1 : 0) : (angle - corrective.from) / span;
@@ -150,8 +163,8 @@ const isCorrective = (value: unknown): value is Corrective =>
   typeof value.target === 'string' &&
   'joint' in value &&
   typeof value.joint === 'string' &&
-  'axis' in value &&
-  (value.axis === 'flex' || value.axis === 'abduct' || value.axis === 'twist') &&
+  'motion' in value &&
+  typeof value.motion === 'string' &&
   'from' in value &&
   typeof value.from === 'number' &&
   'full' in value &&
@@ -216,5 +229,5 @@ export const fit = (model: Three.Object3D, joints: Joint.Joints): Effect.Effect<
         wrote: { turn: new Three.Quaternion(), at: new Three.Vector3(), written: false },
       });
     });
-    return Effect.succeed(new Posed(model, fitted, fixes));
+    return Effect.succeed(new Posed(model, joints, fitted, fixes));
   });
