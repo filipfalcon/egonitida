@@ -78,10 +78,11 @@ export const held = (capacity: number): Held => {
   };
 };
 
-/** The flat scene on the graphics device: its shapes' nodes, their triangles, the placed shapes, their nodes, and how many are placed. */
+/** The flat scene on the graphics device: its shapes' nodes, their triangles and what their corners say, the placed shapes, their nodes, and how many are placed. */
 export interface OnDevice {
   readonly shapeNodes: Held;
   readonly triangles: Held;
+  readonly corners: Held;
   readonly placed: Held;
   readonly placedNodes: Held;
   readonly placedCount: Three.UniformNode<'int', number>;
@@ -93,12 +94,14 @@ export interface OnDevice {
 export const onDevice = (): OnDevice => {
   const shapeNodes = held(64);
   const triangles = held(256);
+  const corners = held(256);
   const placed = held(64);
   const placedNodes = held(64);
   const placedCount = uniform(0, 'int');
   return {
     shapeNodes,
     triangles,
+    corners,
     placed,
     placedNodes,
     placedCount,
@@ -106,6 +109,7 @@ export const onDevice = (): OnDevice => {
       const grew = [
         shapeNodes.write(flat.shapeNodes),
         triangles.write(flat.triangles),
+        corners.write(flat.corners),
         placed.write(flat.placed),
         placedNodes.write(flat.placedNodes),
       ].some(Boolean);
@@ -352,13 +356,17 @@ export const trace = (
   return vec2(best, float(hit));
 };
 
-/** What the ray from `origin` going `direction` meets first in `device` before `far`, as `trace` finds it, and which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, as `TracedScene.trace` works it out; up where it meets nothing. */
+/** What the ray from `origin` going `direction` meets first in `device` before `far`, as `trace` finds it, which way its surface faces there, in the scene, of length one, turned back toward where the ray came from, and where it lies in the picture that paints it, as `TracedScene.trace` works them out: weighed between what the corners of the triangle it meets say, where they say it, and as the triangle itself faces where they do not; up and nowhere where it meets nothing. */
 export const traceFacing = (
   device: OnDevice,
   origin: Three.Node<'vec3'>,
   direction: Three.Node<'vec3'>,
   far: Three.Node<'float'>,
-): { readonly met: Three.Node<'vec2'>; readonly normal: Three.Node<'vec3'> } => {
+): {
+  readonly met: Three.Node<'vec2'>;
+  readonly normal: Three.Node<'vec3'>;
+  readonly uv: Three.Node<'vec2'>;
+} => {
   const { best, hit, item, metFrom, metAlong } = walk(device, origin, direction, far, 'Anything');
   const at = item.mul(TRIANGLE_GROUPS);
   const first = device.triangles.node.element(at);
@@ -367,11 +375,39 @@ export const traceFacing = (
   const c = device.triangles.node.element(at.add(2)).xyz;
   const point = metFrom.add(metAlong.mul(best));
   const ba = b.sub(a);
+  const ca = c.sub(a);
   const share = clamp(dot(point.sub(a), ba).div(dot(ba, ba).max(LEAST)), 0, 1);
+  // What the corners say: which way each faces, the picture's places in the fourths and the last group, and whether they say it.
+  const said = item.mul(TracedScene.CORNERS / 4);
+  const n0 = device.corners.node.element(said);
+  const n1 = device.corners.node.element(said.add(1));
+  const n2 = device.corners.node.element(said.add(2));
+  const rest = device.corners.node.element(said.add(3));
+  const smooth = rest.w.greaterThan(0.5).and(first.w.lessThan(0.5));
+  // How much each corner weighs where the ray met the triangle.
+  const towards = point.sub(a);
+  const d00 = dot(ba, ba);
+  const d01 = dot(ba, ca);
+  const d11 = dot(ca, ca);
+  const d20 = dot(towards, ba);
+  const d21 = dot(towards, ca);
+  const below = d00.mul(d11).sub(d01.mul(d01)).toVar();
+  const second = select(below.equal(0), float(0), d11.mul(d20).sub(d01.mul(d21)).div(below));
+  const third = select(below.equal(0), float(0), d00.mul(d21).sub(d01.mul(d20)).div(below));
+  const weight = float(1).sub(second).sub(third);
+  const weighed = n0.xyz.mul(weight).add(n1.xyz.mul(second)).add(n2.xyz.mul(third));
   const local = select(
     first.w.greaterThan(0.5),
     point.sub(a).sub(ba.mul(share)),
-    cross(ba, c.sub(a)),
+    select(smooth, weighed, cross(ba, ca)),
+  );
+  const uv = select(
+    smooth,
+    vec2(
+      n0.w.mul(weight).add(n2.w.mul(second)).add(rest.y.mul(third)),
+      n1.w.mul(weight).add(rest.x.mul(second)).add(rest.z.mul(third)),
+    ),
+    vec2(0),
   );
   // Into the scene by the transpose of the rows that turn the scene into the shape's space.
   const base = select(hit.greaterThanEqual(0), hit, int(0)).mul(PLACED_GROUPS);
@@ -383,6 +419,7 @@ export const traceFacing = (
   return {
     met: vec2(best, float(hit)),
     normal: select(hit.greaterThanEqual(0), facing, vec3(0, 1, 0)),
+    uv: select(hit.greaterThanEqual(0), uv, vec2(0)),
   };
 };
 

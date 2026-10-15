@@ -19,8 +19,10 @@ import {
   sin,
   sqrt,
   storage,
+  texture,
   uint,
   uniform,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl';
@@ -47,6 +49,62 @@ export interface Photo {
   readonly samples: Effect.Effect<number>;
 }
 
+/** How many numbers each picture's placing takes: the two rows of what moves a place in the picture to where its photograph samples it, four numbers each, the fourth nothing. */
+export const PLACING = 8;
+
+/** How many pixels across, and down, each picture is laid in the photograph's pictures: every one the same, as layers of one texture are. */
+const PICTURE = 1024;
+
+/**
+ * Where a place in each of `pictures` lies in the layer the photograph lays it in, as Three samples it: moved by the picture's offset, repeat, and turn, and upside down where Three turns the picture so, the layer holding the picture top row first.
+ */
+export const placingsOf = (pictures: ReadonlyArray<Three.Texture>): Float32Array => {
+  const placings = new Float32Array(Math.max(pictures.length, 1) * PLACING);
+  pictures.forEach((picture, index) => {
+    picture.updateMatrix();
+    // Three keeps its matrices by columns.
+    const e = picture.matrix.elements;
+    const across = [e[0] ?? 0, e[3] ?? 0, e[6] ?? 0];
+    const down = [e[1] ?? 0, e[4] ?? 0, e[7] ?? 0];
+    const upright = picture.flipY ? [-(down[0] ?? 0), -(down[1] ?? 0), 1 - (down[2] ?? 0)] : down;
+    placings.set([...across, 0, ...upright, 0], index * PLACING);
+  });
+  return placings;
+};
+
+/** Whether `image` is something a canvas can draw. */
+const isDrawable = (image: unknown): image is CanvasImageSource =>
+  (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) ||
+  (typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement) ||
+  (typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement) ||
+  (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas);
+
+/** `pictures` laid as the layers of one texture, each drawn to the same size, white where a picture holds nothing a canvas can draw, so the colour it paints is left as it is; one white layer where there are none. */
+const layersOf = (pictures: ReadonlyArray<Three.Texture>): Three.DataArrayTexture => {
+  const count = Math.max(pictures.length, 1);
+  const pixels = new Uint8Array(PICTURE * PICTURE * 4 * count).fill(255);
+  const canvas = new OffscreenCanvas(PICTURE, PICTURE);
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  pictures.forEach((picture, index) => {
+    const image: unknown = picture.image;
+    if (context === null || !isDrawable(image)) {
+      return;
+    }
+    context.clearRect(0, 0, PICTURE, PICTURE);
+    context.drawImage(image, 0, 0, PICTURE, PICTURE);
+    pixels.set(context.getImageData(0, 0, PICTURE, PICTURE).data, index * PICTURE * PICTURE * 4);
+  });
+  const layers = new Three.DataArrayTexture(pixels, PICTURE, PICTURE, count);
+  layers.colorSpace = Three.SRGBColorSpace;
+  layers.wrapS = Three.RepeatWrapping;
+  layers.wrapT = Three.RepeatWrapping;
+  layers.magFilter = Three.LinearFilter;
+  layers.minFilter = Three.LinearFilter;
+  layers.generateMipmaps = false;
+  layers.needsUpdate = true;
+  return layers;
+};
+
 /** A number from a number, mixed as PCG mixes it: a stream of them, one from the last, as random as the graphics device has. */
 const mixed = (value: Three.Node<'uint'>) => {
   const state = value.mul(747796405).add(2891336453);
@@ -65,8 +123,16 @@ export const take = (viewport: {
   Effect.gen(function* () {
     const { renderer, scene, camera } = viewport;
     const device = SceneTracer.onDevice();
-    device.write(TracedScene.gathering().gather(scene, camera));
+    const flat = TracedScene.gathering().gather(scene, camera);
+    device.write(flat);
     const lighting = PathTracer.lightingOf(scene);
+    const layers = layersOf(flat.pictures);
+    const placings = storage(
+      new Three.StorageBufferAttribute(placingsOf(flat.pictures), 4),
+      'vec4',
+      Math.max(flat.pictures.length, 1) * (PLACING / 4),
+    ).toReadOnly();
+    yield* Effect.addFinalizer(() => Effect.sync(() => layers.dispose()));
 
     const size = renderer.getDrawingBufferSize(new Three.Vector2());
     const width = Math.max(Math.floor(size.x), 1);
@@ -107,14 +173,26 @@ export const take = (viewport: {
       const light = vec3(0).toVar();
       const carried = vec3(1).toVar();
       Loop(BOUNCES, () => {
-        const { met, normal } = SceneTracer.traceFacing(device, from, way, float(FAR));
+        const { met, normal, uv } = SceneTracer.traceFacing(device, from, way, float(FAR));
         const placed = int(met.y).toVar();
         If(placed.lessThan(0), () => {
           light.addAssign(carried.mul(mix(down, up, way.y.mul(0.5).add(0.5))));
           Break();
         });
         const base = placed.mul(TracedScene.PLACED / 4);
-        const colour = device.placed.node.element(base.add(3)).xyz.toVar();
+        const painting = device.placed.node.element(base.add(6)).toVar();
+        // Its colour, times its picture's where a picture paints it.
+        const layer = int(painting.y);
+        const place = vec3(uv, float(1));
+        const placedUv = vec2(
+          dot(placings.element(layer.mul(PLACING / 4)).xyz, place),
+          dot(placings.element(layer.mul(PLACING / 4).add(1)).xyz, place),
+        );
+        const painted = texture(layers, placedUv).depth(layer).level(int(0)).xyz;
+        const colour = device.placed.node
+          .element(base.add(3))
+          .xyz.mul(select(painting.x.greaterThan(0.5), painted, vec3(1)))
+          .toVar();
         const glow = device.placed.node.element(base.add(4)).xyz;
         const facing = normal.toVar();
         const at = from.add(way.mul(met.x)).add(facing.mul(AWAY)).toVar();
