@@ -348,3 +348,57 @@ describe('a scene traced for its shadows', () => {
     expect(Option.map(casting, ({ distance }) => distance)).toEqual(Option.some(4.5));
   });
 });
+
+describe('strands as rays meet them', () => {
+  /** One strand of two points, along x from -1 to 1, two tenths wide. */
+  const strand = TracedScene.strandsOf(
+    new Float32Array([-1, 0, 0, 1, 0, 0]),
+    new Float32Array([0.2, 0.2]),
+    2,
+  );
+  const placedAt = (shape: number, matrix = new Three.Matrix4()): TracedScene.Placed => ({
+    shape,
+    matrix,
+    colour: [1, 1, 1],
+    emissive: [0, 0, 0],
+    casts: true,
+  });
+  const alone = TracedScene.flatten([strand], [placedAt(0)]);
+  const hit = (
+    flat: TracedScene.Flat,
+    origin: readonly [number, number, number],
+    direction: readonly [number, number, number],
+  ) => Option.map(TracedScene.trace(flat, origin, direction, 100), ({ distance }) => distance);
+
+  it('meets a strand from beside it, at its surface', () => {
+    expect(hit(alone, [0, 0, 5], [0, 0, -1])).toEqual(Option.some(expect.closeTo(4.9, 6)));
+  });
+
+  it('meets a strand at its end, as round as it is wide', () => {
+    expect(hit(alone, [3, 0, 0], [-1, 0, 0])).toEqual(Option.some(expect.closeTo(1.9, 6)));
+  });
+
+  it('passes a strand by beside it', () => {
+    expect(hit(alone, [0, 0.2, 5], [0, 0, -1])).toEqual(Option.none());
+  });
+
+  it('meets a strand where it is placed, along a ray of any length', () => {
+    const raised = TracedScene.flatten(
+      [strand],
+      [placedAt(0, new Three.Matrix4().makeTranslation(0, 1, 0))],
+    );
+
+    // Two units a step: the surface half as many steps away.
+    expect(hit(raised, [0, 1, 5], [0, 0, -2])).toEqual(Option.some(expect.closeTo(2.45, 6)));
+  });
+
+  it('meets a strand before a triangle behind it, and the triangle where no strand is', () => {
+    const wall = TracedScene.shapeOf(new Float32Array([-5, -5, -1, 5, -5, -1, 0, 5, -1]));
+    const both = TracedScene.flatten([strand, wall], [placedAt(0), placedAt(1)]);
+    const shapeHit = (origin: readonly [number, number, number]) =>
+      Option.map(TracedScene.trace(both, origin, [0, 0, -1], 100), ({ distance }) => distance);
+
+    expect(shapeHit([0, 0, 5])).toEqual(Option.some(expect.closeTo(4.9, 6)));
+    expect(shapeHit([0, 2, 5])).toEqual(Option.some(expect.closeTo(6, 6)));
+  });
+});

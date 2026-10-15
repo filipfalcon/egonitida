@@ -6,29 +6,75 @@ import * as Bvh from '#src/Bvh.ts';
  * A scene as rays are traced through it, in two levels, as ray-tracing hardware holds one: each shape's triangles in a hierarchy of its own, built once and kept while the shape stays as it is, and a hierarchy over the placed shapes, built anew each frame from where they stand now, so what moves costs only the small one. Everything lies flat in arrays of four numbers at a time, as a shader reads them, each hierarchy threaded for a walk with no stack, and `trace` walks them here just as the shader does, so what the shader finds can be told against it.
  */
 
-/** How many numbers each triangle takes: its three corners, four numbers each, the fourth unused. */
+/** How many numbers each triangle, or each link of a strand, takes: a triangle's three corners, four numbers each, the fourth nothing; a link's start, four numbers, the fourth a whole, which tells it from a triangle; its end, four numbers, the fourth how far about the line between them it reaches; and four more of nothing. */
 export const TRIANGLE = 12;
 
 /** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, and the light it gives off and whether it casts a shadow, 1 or 0. */
 export const PLACED = 20;
 
-/** A shape's triangles, in its own space, and their hierarchy. */
-export interface Shape {
+/** A shape rays meet, in its own space, with its hierarchy: of triangles, such as a body's skin, or of strands, such as its hair. */
+export type Shape = Triangles | Strands;
+
+/** A shape of triangles: three corners of three numbers each a triangle. */
+export interface Triangles {
+  readonly _tag: 'Triangles';
   readonly positions: Float32Array;
   readonly hierarchy: Bvh.Hierarchy;
 }
 
+/** A shape of strands, as round as they are wide, as each link of them lies: where it starts, where it ends, and how far about that line it reaches, seven numbers a link. */
+export interface Strands {
+  readonly _tag: 'Strands';
+  readonly segments: Float32Array;
+  readonly hierarchy: Bvh.Hierarchy;
+}
+
+/** How many triangles, or links of strands, `shape` holds. */
+export const countOf = (shape: Shape): number =>
+  shape._tag === 'Triangles' ? shape.positions.length / 9 : shape.segments.length / 7;
+
 /** A shape's triangles, three corners of three numbers each a triangle, in its own space, with their hierarchy built over them. */
-export const shapeOf = (positions: Float32Array): Shape => ({
+export const shapeOf = (positions: Float32Array): Triangles => ({
+  _tag: 'Triangles',
   positions,
   hierarchy: Bvh.build(Bvh.trianglesBoxes(positions), positions.length / 9),
 });
 
 /** Moves a shape's triangles to `positions`, its hierarchy refitted rather than built anew: for a shape whose triangles moved but stay together, such as a body bent by its bones. */
-export const moved = (shape: Shape, positions: Float32Array): Shape => {
+export const moved = (shape: Triangles, positions: Float32Array): Triangles => {
   const hierarchy = { nodes: shape.hierarchy.nodes.slice(), order: shape.hierarchy.order };
   Bvh.refit(hierarchy, Bvh.trianglesBoxes(positions));
-  return { positions, hierarchy };
+  return { _tag: 'Triangles', positions, hierarchy };
+};
+
+/** Strands through `points`, three numbers a point, `points` of them each, as wide at each point as `widths` says, in their own space, each link from a point to the next as wide as the two ends are on average, with their hierarchy built over them. */
+export const strandsOf = (
+  points: Float32Array,
+  widths: Float32Array,
+  perStrand: number,
+): Strands => {
+  const count = points.length / 3;
+  const links: Array<number> = [];
+  for (let point = 0; point < count; point += 1) {
+    if (point % perStrand === perStrand - 1) {
+      continue;
+    }
+    links.push(
+      points[point * 3] ?? 0,
+      points[point * 3 + 1] ?? 0,
+      points[point * 3 + 2] ?? 0,
+      points[point * 3 + 3] ?? 0,
+      points[point * 3 + 4] ?? 0,
+      points[point * 3 + 5] ?? 0,
+      ((widths[point] ?? 0) + (widths[point + 1] ?? 0)) / 4,
+    );
+  }
+  const segments = new Float32Array(links);
+  return {
+    _tag: 'Strands',
+    segments,
+    hierarchy: Bvh.build(Bvh.segmentsBoxes(segments), segments.length / 7),
+  };
 };
 
 /** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, and whether it casts a shadow. */
@@ -59,13 +105,14 @@ export const flattenShapes = (
 } => {
   const threads = shapes.map(({ hierarchy }) => Bvh.threaded(hierarchy));
   const nodeCount = threads.reduce((sum, thread) => sum + thread.length, 0);
-  const triangleCount = shapes.reduce((sum, { positions }) => sum + positions.length / 9, 0);
+  const triangleCount = shapes.reduce((sum, shape) => sum + countOf(shape), 0);
   const shapeNodes = new Float32Array(nodeCount);
   const triangles = new Float32Array(triangleCount * TRIANGLE);
   const roots: Array<number> = [];
   let nodeAt = 0;
   let triangleAt = 0;
-  shapes.forEach(({ positions, hierarchy }, index) => {
+  shapes.forEach((shape, index) => {
+    const { hierarchy } = shape;
     const thread = threads[index] ?? new Float32Array(0);
     const firstNode = nodeAt / Bvh.THREADED;
     roots.push(firstNode);
@@ -78,11 +125,20 @@ export const flattenShapes = (
       shapeNodes[at + 8] = (shapeNodes[at + 8] ?? 0) + triangleAt;
     }
     for (let at = 0; at < hierarchy.order.length; at += 1) {
-      const triangle = hierarchy.order[at] ?? 0;
+      const item = hierarchy.order[at] ?? 0;
+      const base = (triangleAt + at) * TRIANGLE;
+      if (shape._tag === 'Strands') {
+        for (let axis = 0; axis < 3; axis += 1) {
+          triangles[base + axis] = shape.segments[item * 7 + axis] ?? 0;
+          triangles[base + 4 + axis] = shape.segments[item * 7 + 3 + axis] ?? 0;
+        }
+        triangles[base + 3] = 1;
+        triangles[base + 7] = shape.segments[item * 7 + 6] ?? 0;
+        continue;
+      }
       for (let corner = 0; corner < 3; corner += 1) {
         for (let axis = 0; axis < 3; axis += 1) {
-          triangles[(triangleAt + at) * TRIANGLE + corner * 4 + axis] =
-            positions[triangle * 9 + corner * 3 + axis] ?? 0;
+          triangles[base + corner * 4 + axis] = shape.positions[item * 9 + corner * 3 + axis] ?? 0;
         }
       }
     }
@@ -127,7 +183,10 @@ export const flattenPlaced = (
   readonly placedNodes: Float32Array;
   readonly count: number;
 } => {
-  const kept = placed.filter(({ shape }) => (shapes[shape]?.positions.length ?? 0) > 0);
+  const kept = placed.filter(({ shape }) => {
+    const one = shapes[shape];
+    return one !== undefined && countOf(one) > 0;
+  });
   const boxes = new Float32Array(
     kept.flatMap(({ shape, matrix }) => {
       const hierarchy = shapes[shape]?.hierarchy;
@@ -205,6 +264,54 @@ const inverted = (
   inverseOf(direction[2]),
 ];
 
+/** How far along the ray from `origin` going `direction`, as long as `direction` is, it meets the link of a strand starting at `at` of `triangles`, a capsule about the line from its start to its end, if it does: by Quílez's test, its round ends as spheres. */
+const meetsLink = (
+  triangles: Float32Array,
+  at: number,
+  origin: readonly [number, number, number],
+  direction: readonly [number, number, number],
+) => {
+  const long = Math.hypot(direction[0], direction[1], direction[2]);
+  if (long === 0) {
+    return Infinity;
+  }
+  const way = [direction[0] / long, direction[1] / long, direction[2] / long];
+  const a = [triangles[at] ?? 0, triangles[at + 1] ?? 0, triangles[at + 2] ?? 0];
+  const b = [triangles[at + 4] ?? 0, triangles[at + 5] ?? 0, triangles[at + 6] ?? 0];
+  const radius = triangles[at + 7] ?? 0;
+  const dot = (u: ReadonlyArray<number>, v: ReadonlyArray<number>) =>
+    (u[0] ?? 0) * (v[0] ?? 0) + (u[1] ?? 0) * (v[1] ?? 0) + (u[2] ?? 0) * (v[2] ?? 0);
+  const ba = [0, 1, 2].map((axis) => (b[axis] ?? 0) - (a[axis] ?? 0));
+  const oa = [0, 1, 2].map((axis) => (origin[axis] ?? 0) - (a[axis] ?? 0));
+  const baba = dot(ba, ba);
+  const bard = dot(ba, way);
+  const baoa = dot(ba, oa);
+  const rdoa = dot(way, oa);
+  const oaoa = dot(oa, oa);
+  const sideA = baba - bard * bard;
+  const sideB = baba * rdoa - baoa * bard;
+  const sideC = baba * oaoa - baoa * baoa - radius * radius * baba;
+  const side = sideB * sideB - sideA * sideC;
+  // Along its side, where the ray is not along the line itself; past either end, the nearer of its round ends.
+  const alongSide = (() => {
+    if (sideA <= 1e-12 || side < 0) {
+      return Infinity;
+    }
+    const t = (-sideB - Math.sqrt(side)) / sideA;
+    const along = baoa + t * bard;
+    return along > 0 && along < baba ? t : Infinity;
+  })();
+  const roundEnd = (end: ReadonlyArray<number>) => {
+    const from = [0, 1, 2].map((axis) => (origin[axis] ?? 0) - (end[axis] ?? 0));
+    const endB = dot(way, from);
+    const round = endB * endB - (dot(from, from) - radius * radius);
+    return round > 0 ? -endB - Math.sqrt(round) : Infinity;
+  };
+  const found = Math.min(alongSide, roundEnd(a), roundEnd(b));
+  const distance = found / long;
+  return distance > NEAREST ? distance : Infinity;
+};
+
 /** How far along the ray from `origin` going `direction` it meets the triangle at `triangle` of `triangles`, if it does: by Möller and Trumbore's test. */
 const meets = (
   triangles: Float32Array,
@@ -213,6 +320,9 @@ const meets = (
   direction: readonly [number, number, number],
 ) => {
   const at = triangle * TRIANGLE;
+  if ((triangles[at + 3] ?? 0) === 1) {
+    return meetsLink(triangles, at, origin, direction);
+  }
   const a = [triangles[at] ?? 0, triangles[at + 1] ?? 0, triangles[at + 2] ?? 0];
   const e1 = [0, 1, 2].map((axis) => (triangles[at + 4 + axis] ?? 0) - (a[axis] ?? 0));
   const e2 = [0, 1, 2].map((axis) => (triangles[at + 8 + axis] ?? 0) - (a[axis] ?? 0));
@@ -402,9 +512,9 @@ const versionOf = (geometry: Three.BufferGeometry) =>
 export const gathering = (): Gathering => {
   const built = new WeakMap<
     Three.BufferGeometry,
-    { readonly shape: Shape; readonly version: string }
+    { readonly shape: Triangles; readonly version: string }
   >();
-  const posed = new WeakMap<Three.Mesh, Shape>();
+  const posed = new WeakMap<Three.Mesh, Triangles>();
   const laid: {
     shapes: ReadonlyArray<Shape>;
     flat: ReturnType<typeof flattenShapes>;

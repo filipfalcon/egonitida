@@ -299,6 +299,22 @@ export const trianglesBoxes = (positions: Float32Array): Float32Array => {
   return boxes;
 };
 
+/** The boxes of the links of strands `segments`, seven numbers a link: where it starts, where it ends, and how far about that line it reaches, six numbers a box. */
+export const segmentsBoxes = (segments: Float32Array): Float32Array => {
+  const count = segments.length / 7;
+  const boxes = new Float32Array(count * 6);
+  for (let segment = 0; segment < count; segment += 1) {
+    const radius = segments[segment * 7 + 6] ?? 0;
+    for (let axis = 0; axis < 3; axis += 1) {
+      const a = segments[segment * 7 + axis] ?? 0;
+      const b = segments[segment * 7 + 3 + axis] ?? 0;
+      boxes[segment * 6 + axis] = Math.min(a, b) - radius;
+      boxes[segment * 6 + 3 + axis] = Math.max(a, b) + radius;
+    }
+  }
+  return boxes;
+};
+
 /** How many numbers each node of a threaded hierarchy takes: its least corner and the node after all it holds, its greatest corner and how many items it holds at a leaf, and the first of them. */
 export const THREADED = 12;
 
