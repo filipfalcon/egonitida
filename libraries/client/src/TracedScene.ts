@@ -9,7 +9,7 @@ import * as Bvh from '#src/Bvh.ts';
 /** How many numbers each triangle, or each link of a strand, takes: a triangle's three corners, four numbers each, the fourth nothing; a link's start, four numbers, the fourth a whole, which tells it from a triangle; its end, four numbers, the fourth how far about the line between them it reaches; and four more of nothing. */
 export const TRIANGLE = 12;
 
-/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0 or hair 1, how rough it is, how metal, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts. */
+/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0 or hair 1, how rough it is, how metal, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts, or, for a surface, whether a picture paints it, 1 or 0, and which of the scene's pictures. */
 export const PLACED = 28;
 
 /** What a placed shape is made of, as light meets it: a surface, as rough and as metal as it is, from nothing to a whole; or hair, taking light in as `absorption` says for every strand's width it goes through, as rough along it as it is, its cuticle tilted as far as `tilt` says, in radians, bending light as `ior` says. */
@@ -102,7 +102,7 @@ export const strandsOf = (
   };
 };
 
-/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, and what it is made of, `matte` unless said. */
+/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, what it is made of, `matte` unless said, and which of the scene's pictures paints its colour, if any, as its corners say where they lie in it. */
 export interface Placed {
   readonly shape: number;
   readonly matrix: Three.Matrix4;
@@ -110,9 +110,10 @@ export interface Placed {
   readonly emissive: readonly [number, number, number];
   readonly casts: boolean;
   readonly material?: Material;
+  readonly picture?: number;
 }
 
-/** The scene laid flat: every shape's hierarchy one after another, their triangles in the order their leaves name them, the placed shapes in the order the top hierarchy's leaves name them, and that hierarchy. */
+/** The scene laid flat: every shape's hierarchy one after another, their triangles in the order their leaves name them and what their corners say beside them, the placed shapes in the order the top hierarchy's leaves name them, and that hierarchy; and the pictures that paint them. */
 export interface Flat {
   readonly shapeNodes: Float32Array;
   readonly triangles: Float32Array;
@@ -120,6 +121,7 @@ export interface Flat {
   readonly placed: Float32Array;
   readonly placedNodes: Float32Array;
   readonly placedCount: number;
+  readonly pictures: ReadonlyArray<Three.Texture>;
 }
 
 /** Lays `shapes` flat, their nodes naming where their children and triangles lie among all of them. */
@@ -257,7 +259,8 @@ export const flattenPlaced = (
     flat.set([...one.emissive, one.casts ? 1 : 0], base + 16);
     const material = one.material ?? matte;
     if (material._tag === 'Surface') {
-      flat.set([0, material.roughness, material.metalness, 0, 0, 0, 0, 0], base + 20);
+      const painted = one.picture === undefined ? [0, 0] : [1, one.picture];
+      flat.set([0, material.roughness, material.metalness, 0, ...painted, 0, 0], base + 20);
     } else {
       flat.set(
         [1, material.roughness, 0, material.ior, ...material.absorption, material.tilt],
@@ -268,8 +271,12 @@ export const flattenPlaced = (
   return { placed: flat, placedNodes: Bvh.threaded(hierarchy), count: kept.length };
 };
 
-/** `shapes` placed as `placed`, laid flat. */
-export const flatten = (shapes: ReadonlyArray<Shape>, placed: ReadonlyArray<Placed>): Flat => {
+/** `shapes` placed as `placed`, painted by `pictures`, laid flat. */
+export const flatten = (
+  shapes: ReadonlyArray<Shape>,
+  placed: ReadonlyArray<Placed>,
+  pictures: ReadonlyArray<Three.Texture> = [],
+): Flat => {
   const { shapeNodes, triangles, corners, roots } = flattenShapes(shapes);
   const top = flattenPlaced(shapes, roots, placed);
   return {
@@ -279,6 +286,7 @@ export const flatten = (shapes: ReadonlyArray<Shape>, placed: ReadonlyArray<Plac
     placed: top.placed,
     placedNodes: top.placedNodes,
     placedCount: top.count,
+    pictures,
   };
 };
 
@@ -624,16 +632,63 @@ export interface Gathering {
 const vertex = new Three.Vector3();
 const instance = new Three.Matrix4();
 
-/** The triangles `mesh` draws, three corners of three numbers each, in its own space: as its geometry holds them, or posed as its bones and morphs bend them now when `posed`. */
-const trianglesOf = (mesh: Three.Mesh, posed: boolean): Float32Array => {
+const facing = new Three.Vector3();
+const bent = new Three.Vector3();
+const posedFacing = new Three.Vector4();
+
+/** Which way `mesh` faces at its corner `at`, in its own space, into `target`: as its geometry says, or turned as its morphs and bones bend it now when `posed`, as Three turns it to draw it. */
+const meshFacingAt = (
+  mesh: Three.Mesh,
+  at: number,
+  normal: Three.BufferAttribute | Three.InterleavedBufferAttribute,
+  posed: boolean,
+  target: Three.Vector3,
+) => {
+  target.fromBufferAttribute(normal, at);
+  if (!posed) {
+    return target;
+  }
+  const morphs = mesh.geometry.morphAttributes['normal'];
+  const influences = mesh.morphTargetInfluences;
+  if (morphs !== undefined && influences !== undefined) {
+    const relative = mesh.geometry.morphTargetsRelative;
+    const sum = bent.set(0, 0, 0);
+    morphs.forEach((morph, index) => {
+      const influence = influences[index] ?? 0;
+      if (influence !== 0) {
+        const moved = facing.fromBufferAttribute(morph, at);
+        sum.addScaledVector(relative ? moved : moved.sub(target), influence);
+      }
+    });
+    target.add(sum);
+  }
+  if (mesh instanceof Three.SkinnedMesh) {
+    // A way, not a point: turned by the bones, never moved.
+    mesh.applyBoneTransform(at, posedFacing.set(target.x, target.y, target.z, 0));
+    target.set(posedFacing.x, posedFacing.y, posedFacing.z);
+  }
+  return target.normalize();
+};
+
+/** The triangles `mesh` draws, three corners of three numbers each, in its own space, and what their corners say where its geometry says which way they face: as its geometry holds them, or posed as its bones and morphs bend them now when `posed`. */
+const drawnOf = (
+  mesh: Three.Mesh,
+  posed: boolean,
+): { readonly positions: Float32Array; readonly corners: Corners | undefined } => {
   const geometry = mesh.geometry;
   const position = geometry.getAttribute('position');
+  const normal: Three.BufferAttribute | Three.InterleavedBufferAttribute | undefined =
+    geometry.attributes['normal'];
+  const uv: Three.BufferAttribute | Three.InterleavedBufferAttribute | undefined =
+    geometry.attributes['uv'];
   const index = geometry.getIndex();
   const available = index === null ? position.count : index.count;
   const start = Math.max(geometry.drawRange.start, 0);
   const end = Math.min(available, start + geometry.drawRange.count);
   const corners = Math.max(Math.floor((end - start) / 3) * 3, 0);
   const positions = new Float32Array(corners * 3);
+  const normals = new Float32Array(normal === undefined ? 0 : corners * 3);
+  const uvs = new Float32Array(normal === undefined ? 0 : corners * 2);
   for (let corner = 0; corner < corners; corner += 1) {
     const at = index === null ? start + corner : index.getX(start + corner);
     if (posed) {
@@ -644,8 +699,16 @@ const trianglesOf = (mesh: Three.Mesh, posed: boolean): Float32Array => {
     positions[corner * 3] = vertex.x;
     positions[corner * 3 + 1] = vertex.y;
     positions[corner * 3 + 2] = vertex.z;
+    if (normal !== undefined) {
+      meshFacingAt(mesh, at, normal, posed, vertex);
+      normals[corner * 3] = vertex.x;
+      normals[corner * 3 + 1] = vertex.y;
+      normals[corner * 3 + 2] = vertex.z;
+      uvs[corner * 2] = uv === undefined ? 0 : uv.getX(at);
+      uvs[corner * 2 + 1] = uv === undefined ? 0 : uv.getY(at);
+    }
   }
-  return positions;
+  return { positions, corners: normal === undefined ? undefined : { normals, uvs } };
 };
 
 /** The material `mesh` draws its first triangles with. */
@@ -675,6 +738,12 @@ const surfaceOf = (material: Three.Material): Material => {
   };
 };
 
+/** The picture `material` paints its colour with, if any. */
+const pictureOf = (material: Three.Material): Option.Option<Three.Texture> => {
+  const map: unknown = Reflect.get(material, 'map');
+  return map instanceof Three.Texture ? Option.some(map) : Option.none();
+};
+
 /** How bright `material` gives off its light, once if it says not. */
 const emissiveIntensityOf = (material: Three.Material): number => {
   const intensity: unknown = Reflect.get(material, 'emissiveIntensity');
@@ -691,9 +760,18 @@ const writes = (attribute: Three.BufferAttribute | Three.InterleavedBufferAttrib
     ? attribute.data.version
     : attribute.version;
 
-/** How far a geometry has changed: its positions' and its index's versions, and what it draws of them. */
+/** How far a geometry has changed: its positions', facings', picture places' and index's versions, and what it draws of them. */
 const versionOf = (geometry: Three.BufferGeometry) =>
-  `${writes(geometry.getAttribute('position'))}:${geometry.getIndex()?.version ?? -1}:${geometry.drawRange.start}:${geometry.drawRange.count}`;
+  [
+    ...['position', 'normal', 'uv'].map((name) => {
+      const attribute: Three.BufferAttribute | Three.InterleavedBufferAttribute | undefined =
+        geometry.attributes[name];
+      return attribute === undefined ? 'none' : writes(attribute);
+    }),
+    geometry.getIndex()?.version ?? 'none',
+    geometry.drawRange.start,
+    geometry.drawRange.count,
+  ].join(':');
 
 /** A gathering of scenes for rays, which keeps the shapes it built while they stay as they are. */
 export const gathering = (): Gathering => {
@@ -710,13 +788,13 @@ export const gathering = (): Gathering => {
   /** The shape `mesh` draws now: kept, posed anew, or built for a geometry that changed. */
   const drawnShapeOf = (mesh: Three.Mesh): Shape => {
     if (isPosed(mesh)) {
-      const positions = trianglesOf(mesh, true);
+      const { positions, corners } = drawnOf(mesh, true);
       const before = posed.get(mesh);
       // Bent but the same triangles, it is refitted; with others, built anew.
       const shape =
         before !== undefined && before.positions.length === positions.length
-          ? moved(before, positions)
-          : shapeOf(positions);
+          ? moved(before, positions, corners)
+          : shapeOf(positions, corners);
       posed.set(mesh, shape);
       return shape;
     }
@@ -725,7 +803,8 @@ export const gathering = (): Gathering => {
     if (kept !== undefined && kept.version === version) {
       return kept.shape;
     }
-    const shape = shapeOf(trianglesOf(mesh, false));
+    const { positions, corners } = drawnOf(mesh, false);
+    const shape = shapeOf(positions, corners);
     built.set(mesh.geometry, { shape, version });
     return shape;
   };
@@ -736,6 +815,8 @@ export const gathering = (): Gathering => {
       const shapes: Array<Shape> = [];
       const indices = new Map<Shape, number>();
       const placed: Array<Placed> = [];
+      const pictures: Array<Three.Texture> = [];
+      const layers = new Map<Three.Texture, number>();
       scene.traverseVisible((object) => {
         if (!(object instanceof Three.Mesh) || !object.layers.test(camera.layers)) {
           return;
@@ -756,28 +837,38 @@ export const gathering = (): Gathering => {
           colourOf(material, 'emissive', emissiveIntensityOf(material)),
           () => [0, 0, 0] as const,
         );
+        const painted = Option.map(pictureOf(material), (painting) => {
+          const layer = layers.get(painting) ?? pictures.length;
+          if (layer === pictures.length) {
+            layers.set(painting, layer);
+            pictures.push(painting);
+          }
+          return layer;
+        });
+        const placing = (matrix: Three.Matrix4): Placed => {
+          const plain = {
+            shape: index,
+            matrix,
+            colour,
+            emissive,
+            casts: object.castShadow,
+            material: surfaceOf(material),
+          };
+          return Option.match(painted, {
+            onNone: () => plain,
+            onSome: (picture) => ({ ...plain, picture }),
+          });
+        };
         if (object instanceof Three.InstancedMesh) {
           for (let at = 0; at < object.count; at += 1) {
             object.getMatrixAt(at, instance);
-            placed.push({
-              shape: index,
-              matrix: new Three.Matrix4().multiplyMatrices(object.matrixWorld, instance),
-              colour,
-              emissive,
-              casts: object.castShadow,
-              material: surfaceOf(material),
-            });
+            placed.push(
+              placing(new Three.Matrix4().multiplyMatrices(object.matrixWorld, instance)),
+            );
           }
           return;
         }
-        placed.push({
-          shape: index,
-          matrix: object.matrixWorld.clone(),
-          colour,
-          emissive,
-          casts: object.castShadow,
-          material: surfaceOf(material),
-        });
+        placed.push(placing(object.matrixWorld.clone()));
       });
       // The shapes are laid flat again only when they changed: a moving scene of shapes that stay as they are lays only what is placed.
       const same =
@@ -795,6 +886,7 @@ export const gathering = (): Gathering => {
         placed: top.placed,
         placedNodes: top.placedNodes,
         placedCount: top.count,
+        pictures,
       };
     },
   };

@@ -563,3 +563,53 @@ describe('a triangle’s corners as a ray meets it between them', () => {
     expect(hit.uv).toEqual([0, 0]);
   });
 });
+
+describe('a scene gathered with how its surfaces face and its pictures', () => {
+  const camera = new Three.PerspectiveCamera();
+
+  it('gathers how a mesh’s corners face and where they lie in its picture, and the picture its material paints', () => {
+    const picture = new Three.Texture();
+    const scene = new Three.Scene();
+    const box = new Three.Mesh(
+      new Three.BoxGeometry(1, 1, 1),
+      new Three.MeshStandardMaterial({ map: picture }),
+    );
+    box.position.z = -5;
+    scene.add(box);
+
+    const flat = TracedScene.gathering().gather(scene, camera);
+    const hit = Option.getOrThrow(TracedScene.trace(flat, [0.2, 0.1, 0], [0, 0, -1], 100));
+
+    expect(hit.normal[2]).toBeCloseTo(1, 6);
+    expect(hit.uv[0]).toBeCloseTo(0.7, 6);
+    expect(hit.uv[1]).toBeCloseTo(0.6, 6);
+    expect(flat.pictures).toEqual([picture]);
+    // A surface painted with the first picture.
+    expect(flat.placed[hit.placed * TracedScene.PLACED + 24]).toBe(1);
+    expect(flat.placed[hit.placed * TracedScene.PLACED + 25]).toBe(0);
+  });
+
+  it('faces a mesh bent each frame as its corners turn, smoothly between them', () => {
+    const geometry = new Three.SphereGeometry(1, 32, 16);
+    geometry.morphAttributes['position'] = [
+      new Three.Float32BufferAttribute(
+        new Float32Array(geometry.getAttribute('position').count * 3),
+        3,
+      ),
+    ];
+    const ball = new Three.Mesh(geometry, new Three.MeshStandardMaterial());
+    ball.morphTargetInfluences = [0];
+    ball.position.z = -5;
+    const scene = new Three.Scene();
+    scene.add(ball);
+
+    const flat = TracedScene.gathering().gather(scene, camera);
+    // Met off its middle, a sphere faces out from its centre there.
+    const hit = Option.getOrThrow(TracedScene.trace(flat, [0.5, 0.3, 0], [0, 0, -1], 100));
+    const out = new Three.Vector3(0.5, 0.3, 5 - hit.distance).normalize();
+
+    expect(hit.normal[0] * out.x + hit.normal[1] * out.y + hit.normal[2] * out.z).toBeGreaterThan(
+      0.9995,
+    );
+  });
+});
