@@ -208,15 +208,12 @@ export const carried = (
   return at;
 };
 
-/** The pull of each guide's weight away from how it hung as groomed: straight down, less straight down turned as the bone carrying most of its root has turned since it was made, nothing as that bone stands as made. Nothing for a guide down a ponytail: the bones carrying it, which a chain swings, hang it under its weight already. */
-const pullsOf = (
+/** How far the bone carrying most of each strand's root has turned since it was made, one for each strand of `strands`, with those `carriers`; no turn where no bone it names carries it. */
+const rootTurns = (
   strands: Strands,
   carriers: ReadonlyArray<Carrier | undefined>,
-): ReadonlyArray<Ray.Point> =>
+): ReadonlyArray<Quaternion.Quaternion> =>
   Array.from({ length: strands.scalp + strands.ponytail }, (_, strand) => {
-    if (strand >= strands.scalp) {
-      return { x: 0, y: 0, z: 0 };
-    }
     const root = strand * strands.points;
     let heaviest: Carrier | undefined;
     let most = 0;
@@ -228,10 +225,26 @@ const pullsOf = (
         most = weight;
       }
     }
-    if (heaviest === undefined) {
+    return heaviest === undefined ? Quaternion.identity : heaviest.turn;
+  });
+
+/** How far the bone carrying most of each strand's root has turned since it was `made`, as `placing` places it now, one for each strand of `strands`: the turn its drawn strands keep their places beside it by. */
+export const turnsOf = (
+  strands: Strands,
+  made: Shape.Bones,
+  placing: Pose.Placer,
+): ReadonlyArray<Quaternion.Quaternion> => rootTurns(strands, carriersOf(strands, made, placing));
+
+/** The pull of each guide's weight away from how it hung as groomed, as `turns` say each root's bone has turned: straight down, less straight down turned as that bone has, nothing as it stands as made. Nothing for a guide down a ponytail: the bones carrying it, which a chain swings, hang it under its weight already. */
+const pullsOf = (
+  strands: Strands,
+  turns: ReadonlyArray<Quaternion.Quaternion>,
+): ReadonlyArray<Ray.Point> =>
+  turns.map((turn, strand) => {
+    if (strand >= strands.scalp) {
       return { x: 0, y: 0, z: 0 };
     }
-    const hung = Quaternion.rotate(heaviest.turn, DOWN);
+    const hung = Quaternion.rotate(turn, DOWN);
     return { x: DOWN.x - hung.x, y: DOWN.y - hung.y, z: DOWN.z - hung.z };
   });
 
@@ -307,7 +320,7 @@ export const step = (
 ): Body => {
   const carriers = carriersOf(strands, made, placing);
   const target = carried(strands, made, placing);
-  const pulls = pullsOf(strands, carriers);
+  const pulls = pullsOf(strands, rootTurns(strands, carriers));
   const lengths = lengthsOf(strands);
   const steps = Math.max(Math.round(seconds / SUBSTEP), 1);
   const each = seconds / steps;
@@ -413,3 +426,70 @@ export const capsulesOf = (
       },
     ];
   });
+
+/** Strands to draw: how many points each has, how many lie over the scalp, coming first, and how many down a ponytail, after them, and where each point stood as made, three numbers each. */
+export interface Drawn {
+  readonly points: number;
+  readonly scalp: number;
+  readonly ponytail: number;
+  readonly at: ReadonlyArray<number>;
+}
+
+/**
+ * Where each point of the strands `drawn` is drawn, three numbers each, as `guides` swing to `now`, the bone carrying each guide's root turned as `turns` say since it was made, each drawn strand following its guides as `bound` says: at each guide, as far along it as the point is along its own strand, its place beside that guide as made turned as the guide's root has turned, weighted as the strand follows each. A strand drawn among guides hanging as made is drawn as it was made. A drawing works out the same on the graphics device, every frame.
+ */
+export const follow = (
+  guides: Strands,
+  now: ReadonlyArray<number>,
+  turns: ReadonlyArray<Quaternion.Quaternion>,
+  drawn: Drawn,
+  bound: ReadonlyArray<Bound>,
+): ReadonlyArray<number> => {
+  const at: Array<number> = [];
+  const strands = drawn.scalp + drawn.ponytail;
+  const lastGuide = guides.points - 1;
+  for (let strand = 0; strand < strands; strand++) {
+    const follows = bound[strand];
+    for (let index = 0; index < drawn.points; index++) {
+      const point = strand * drawn.points + index;
+      const madeX = drawn.at[point * 3] ?? 0;
+      const madeY = drawn.at[point * 3 + 1] ?? 0;
+      const madeZ = drawn.at[point * 3 + 2] ?? 0;
+      // As far along its guides as it is along its own strand.
+      const along = drawn.points > 1 ? (index / (drawn.points - 1)) * lastGuide : 0;
+      const below = Math.min(Math.floor(along), Math.max(lastGuide - 1, 0));
+      const share = along - below;
+      const above = Math.min(below + 1, lastGuide);
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      let total = 0;
+      (follows?.guides ?? []).forEach((guide, which) => {
+        const weight = follows?.weights[which] ?? 0;
+        if (weight <= 0) {
+          return;
+        }
+        const from = (guide * guides.points + below) * 3;
+        const to = (guide * guides.points + above) * 3;
+        const lerp = (values: ReadonlyArray<number>, axis: number) =>
+          (values[from + axis] ?? 0) +
+          ((values[to + axis] ?? 0) - (values[from + axis] ?? 0)) * share;
+        const beside = Quaternion.rotate(turns[guide] ?? Quaternion.identity, {
+          x: madeX - lerp(guides.at, 0),
+          y: madeY - lerp(guides.at, 1),
+          z: madeZ - lerp(guides.at, 2),
+        });
+        x += weight * (lerp(now, 0) + beside.x);
+        y += weight * (lerp(now, 1) + beside.y);
+        z += weight * (lerp(now, 2) + beside.z);
+        total += weight;
+      });
+      if (total > 0) {
+        at.push(x / total, y / total, z / total);
+      } else {
+        at.push(madeX, madeY, madeZ);
+      }
+    }
+  }
+  return at;
+};

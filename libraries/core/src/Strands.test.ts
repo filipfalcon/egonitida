@@ -303,3 +303,63 @@ describe('Strands.capsulesOf', () => {
     );
   });
 });
+
+describe('Strands.follow', () => {
+  /** Two guides, two points each, a decimetre apart across, hanging a decimetre down; and a strand of three points drawn between them, following both alike. */
+  const two: Strands.Strands = {
+    points: 2,
+    scalp: 2,
+    ponytail: 0,
+    at: [-0.05, 1.7, 0.1, -0.05, 1.6, 0.1, 0.05, 1.7, 0.1, 0.05, 1.6, 0.1],
+    width: [0, 0, 0, 0],
+    stiffness: [1, 1, 1, 1],
+    random: [0, 0],
+    bones: ['head'],
+    joints: Array.from({ length: 16 }, () => 0),
+    weights: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+  };
+  const drawn = { points: 3, scalp: 1, ponytail: 0, at: [0, 1.7, 0.1, 0, 1.65, 0.1, 0, 1.6, 0.1] };
+  const between: ReadonlyArray<Strands.Bound> = [{ guides: [0, 1], weights: [0.5, 0.5] }];
+  const unturned = [Quaternion.identity, Quaternion.identity];
+
+  it('is drawn as it was made while its guides hang as made', () => {
+    const at = Strands.follow(two, two.at, unturned, drawn, between);
+
+    drawn.at.forEach((value, index) => expect(at[index]).toBeCloseTo(value, 12));
+  });
+
+  it('moves as its guides move', () => {
+    const moved = two.at.map((value, index) => value + (index % 3 === 0 ? 0.2 : 0));
+    const at = Strands.follow(two, moved, unturned, drawn, between);
+
+    for (let point = 0; point < 3; point++) {
+      expect(apart(pointOf(at, point), pointOf(drawn.at, point))).toBeCloseTo(0.2, 12);
+    }
+  });
+
+  it('bends as its guides bend, along them as far as it is along itself', () => {
+    // Both guides' tips swung a decimetre back: the strand's middle, halfway down, half as far.
+    const bent = two.at.map((value, index) => (index === 5 || index === 11 ? value - 0.1 : value));
+    const at = Strands.follow(two, bent, unturned, drawn, between);
+
+    expect(pointOf(at, 2).z).toBeCloseTo(0, 12);
+    expect(pointOf(at, 1).z).toBeCloseTo(0.05, 12);
+  });
+
+  it('keeps its place beside its guides turned as the bone carrying their roots has turned', () => {
+    // Guides carried by the head turned a quarter about +y: the strand, beside them, turns with them.
+    const turn = Quaternion.about({ x: 0, y: 1, z: 0 }, Math.PI / 2);
+    const head = { at: { x: 0, y: 1.6, z: 0 }, turn };
+    const placing: Pose.Placer = (name) => (name === 'head' ? head : undefined);
+    const carried = Strands.carried(two, made, placing);
+    const one: ReadonlyArray<Strands.Bound> = [{ guides: [0], weights: [1] }];
+
+    const at = Strands.follow(two, carried, Strands.turnsOf(two, made, placing), drawn, one);
+
+    // Made five centimetres to the guide's right, along +x; turned, five centimetres along -z of it.
+    const guideRoot = pointOf(carried, 0);
+    expect(
+      apart(pointOf(at, 0), { x: guideRoot.x, y: guideRoot.y, z: guideRoot.z - 0.05 }),
+    ).toBeLessThan(1e-12);
+  });
+});
