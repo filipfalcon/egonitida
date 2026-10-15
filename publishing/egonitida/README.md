@@ -12,8 +12,11 @@ npx egonitida
 
 ## Requirements
 
-- **Operating system:** macOS, Linux, or Windows.
-- **Node.js 24.15 or newer**, with npm, which provides `npx`.
+| Requirement      | Supported                |
+| ---------------- | ------------------------ |
+| Operating system | macOS, Linux, or Windows |
+| Node.js          | 24.x, from 24.15         |
+| npm              | 12.x                     |
 
 ## Links
 
