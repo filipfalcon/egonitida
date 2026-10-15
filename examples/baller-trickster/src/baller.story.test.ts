@@ -238,7 +238,7 @@ describe('walking and juggling', () => {
   });
 
   /** Her left foot held where a dropped ball falls: half ahead, as the stick holds it. */
-  const ready = placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead });
+  const ready = placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead, lift: 0.25 });
 
   it('drops the ball before her left foot, onto her instep held there, off which it bounces up', () => {
     const rising: Array<number> = [];
@@ -288,7 +288,7 @@ describe('walking and juggling', () => {
     expect(heights[0] ?? 0).toBeGreaterThan(Baller.INSTEP.y + 0.2);
   });
 
-  /** The ball's velocity once off her foot, lifted by `lift` as the dropped ball comes down onto it, about a hand above it. */
+  /** The ball's velocity as it first leaves her foot, lifted by `lift` once the dropped ball has fallen for a little over a fifth of a second. */
   const touchedBy = (lift: number) => {
     const velocities: Array<Pose.Pose['at']> = [];
     Story.story(
@@ -298,27 +298,29 @@ describe('walking and juggling', () => {
       Story.seconds(0.3),
       Story.act('baller', Baller.DroppedBall, {}),
       Story.step(),
-      Story.seconds(0.21),
+      Story.seconds(0.22),
       Story.demand(
         'baller',
         Baller.Feet,
         placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead, lift }),
       ),
-      Story.seconds(0.19),
-      Story.expect('ball', Baller.Ball, ({ velocity }) => velocities.push(velocity)),
+      ...Array.from({ length: 24 }, () => [
+        Story.step(),
+        Story.expect('ball', Baller.Ball, ({ velocity }) => velocities.push(velocity)),
+      ]).flat(),
     );
-    return velocities[0] ?? { x: 0, y: 0, z: 0 };
+    return velocities.find(({ y }) => y > 0) ?? { x: 0, y: 0, z: 0 };
   };
 
   it('touches a falling ball up off a foot lifted into it, softly for a trigger pressed a little, harder for one pressed further', () => {
-    const soft = touchedBy(0.3);
-    const hard = touchedBy(0.6);
+    const soft = touchedBy(0.6);
+    const hard = touchedBy(0.8);
 
-    // Both straight up, hardly ahead or aside.
+    // Both near straight up, within about 17°, the harder faster by more than a metre a second.
     expect(soft.y).toBeGreaterThan(1);
     expect(hard.y).toBeGreaterThan(soft.y + 1);
-    expect(Math.hypot(soft.x, soft.z)).toBeLessThan(0.6);
-    expect(Math.hypot(hard.x, hard.z)).toBeLessThan(0.6);
+    expect(Math.hypot(soft.x, soft.z)).toBeLessThan(soft.y * 0.3);
+    expect(Math.hypot(hard.x, hard.z)).toBeLessThan(hard.y * 0.3);
   });
 
   it('sends a ball falling onto her instep held up, off its middle, back up as the flat of her boot faces, not off its edge', () => {

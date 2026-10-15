@@ -66,7 +66,7 @@ const flatInstep = (suffix: string): Pose.Pose['at'] => {
 const FLAT_INSTEP = { l: flatInstep('l'), r: flatInstep('r') };
 
 /** Where over her left instep a ball is dropped, from where she stands: ahead of her standing foot, where a stick held half ahead puts it, clear of her shin and her hand, and how high, in metres. */
-export const DROP_AHEAD = 0.35;
+export const DROP_AHEAD = 0.4;
 export const DROP_HEIGHT = 0.6;
 
 const Point = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, z: Schema.Finite });
@@ -112,14 +112,14 @@ export const Kickoff = Component.make(
   { owner: 'rules', network: 'server' },
 );
 
-/** How her ponytail swings: hanging from her head in five links, springing back toward how it hung as made, a little, and bending no further than 70° from it. */
+/** How her ponytail swings: hanging from her hair tie in five links, springing back toward how it hung as made, a little, and bending no further than 70° from it. */
 export const ponytail = Chain.plan(
   Body.bones,
   ['ponytail_01', 'ponytail_02', 'ponytail_03', 'ponytail_04', 'ponytail_05'],
   { stiffness: 3, limit: (70 * Math.PI) / 180, damping: 0.03 },
 );
 
-/** Her ponytail as her client sees it, swinging from her head as she moves: only the client draws it, so it is its alone, stepped after every step, never sent. */
+/** Her ponytail as her client sees it, swinging from her hair tie as she moves: only the client draws it, so it is its alone, stepped after every step, never sent. */
 export const Hair = Component.make('Hair', Schema.Struct({ body: Chain.Body }), {
   owner: 'simulation',
   network: 'local',
@@ -471,7 +471,7 @@ const play = System.make({
   },
 });
 
-/** Her ponytail swings from her head as the step poses her: tied to it where it was made, the rest trailing as she moves. */
+/** Her ponytail swings from her hair tie as the step poses her: tied to it where it was made, the rest trailing as she moves. */
 const swingHair = System.make({
   name: 'swingHair',
   reads: [Aim, Spot],
@@ -479,17 +479,18 @@ const swingHair = System.make({
   emits: [],
   run: (context) => {
     for (const [baller, aim, spot] of context.query(Aim, Spot)) {
-      const head = Pose.placer(Body.bones, Body.joints, poseOf(aim, spot))('head');
-      if (head === undefined) {
+      const placing = Pose.placer(Body.bones, Body.joints, poseOf(aim, spot));
+      const tie = Option.getOrUndefined(Option.map(ponytail.from, placing));
+      if (tie === undefined) {
         continue;
       }
       context.set(
         baller,
         Hair,
         Option.match(context.get(baller, Hair), {
-          onNone: () => ({ body: Chain.start(ponytail, head) }),
+          onNone: () => ({ body: Chain.start(ponytail, tie) }),
           onSome: ({ body }) => ({
-            body: Chain.step(ponytail, body, context.time.secondsPerStep, head),
+            body: Chain.step(ponytail, body, context.time.secondsPerStep, tie),
           }),
         }),
       );
