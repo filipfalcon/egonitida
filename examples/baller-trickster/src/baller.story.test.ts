@@ -289,6 +289,20 @@ describe('her hair', () => {
     expect(furthest).toBeLessThan(0.03);
   });
 
+  it('keeps her body as her client draws it after every step, posed as she stands and looking at the ball', () => {
+    const now = stepped(joined, 1);
+    const aim = Option.getOrThrow(State.get(now, baller, Baller.Aim));
+    const spot = Option.getOrThrow(State.get(now, baller, Baller.Spot));
+    const ball = Option.map(State.get(now, Baller.ball, Baller.Ball), ({ at }) => at);
+    const kept = Option.getOrThrow(State.get(now, baller, Baller.Posture));
+    const drawnHead = Pose.place(Body.bones, Body.joints, kept)['head']?.at;
+    const lookingHead = Pose.place(Body.bones, Body.joints, Baller.drawnPoseOf(aim, spot, ball))[
+      'head'
+    ]?.at;
+
+    expect(apart(drawnHead, lookingHead ?? Body.standing.left)).toBeCloseTo(0, 9);
+  });
+
   it('hangs from her head as it is drawn, turned to look at the ball', () => {
     const aim = Option.getOrThrow(State.get(joined, baller, Baller.Aim));
     const spot = Option.getOrThrow(State.get(joined, baller, Baller.Spot));

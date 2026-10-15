@@ -136,12 +136,18 @@ export const HAIR_COLLIDES = [
   'upperarm_r',
 ];
 
-/** Her hair as her client sees it, swinging as she moves: her ponytail's chain, swinging from her hair tie, and her hair's guides, tied to her head and down her ponytail. Only the client draws it, so it is its alone, stepped after every step, never sent. */
+/** Her hair as her client sees it, swinging as she moves: her ponytail's chain, swinging from her hair tie, and her hair's guides, tied to her head and down her ponytail. Only the client draws it, so it is its alone, stepped after every step, never sent; and drawn as the last step left it, never worked out between two, as the body it hangs from is. */
 export const Hair = Component.make(
   'Hair',
-  Schema.Struct({ body: Chain.Body, guides: Strands.Body }),
+  Schema.Struct({ body: Chain.Body, guides: Strands.Body }).annotate({ interpolate: 'previous' }),
   { owner: 'simulation', network: 'local' },
 );
+
+/** Her whole body as her client draws it, as `drawnPoseOf` poses it after every step: worked out once a step, where her hair is swung from it too, and drawn as the last step left it, never worked out again between two. */
+export const Posture = Component.make('Posture', Pose.Pose.annotate({ interpolate: 'previous' }), {
+  owner: 'simulation',
+  network: 'local',
+});
 
 /** Her feet at rest, where they stand. */
 export const idle: Component.ValueOf<typeof Feet> = {
@@ -543,18 +549,20 @@ export const hairPlacing = (pose: Pose.Pose, ponytailBody: Chain.Body): Pose.Pla
   return (name) => swung(name) ?? posed(name);
 };
 
-/** Her hair swings as she is drawn, looking at the ball: her ponytail from her hair tie, tied to it where it was made, the rest trailing as she moves; and her hair's guides, tied where her head and her ponytail hold them, kept out of her head, neck, back, and shoulders. */
+/** Her body is posed as she is drawn, looking at the ball, and kept for her drawing; and her hair swings from it: her ponytail from her hair tie, tied to it where it was made, the rest trailing as she moves; and her hair's guides, tied where her head and her ponytail hold them, kept out of her head, neck, back, and shoulders. */
 const swingHair = System.make({
   name: 'swingHair',
   reads: [Aim, Spot, Ball],
-  writes: [Hair],
+  writes: [Hair, Posture],
   emits: [],
   run: (context) => {
     const seconds = context.time.secondsPerStep;
     const [first] = context.query(Ball);
     const ball = Option.map(Option.fromNullishOr(first), ([, flying]) => flying.at);
     for (const [baller, aim, spot] of context.query(Aim, Spot)) {
-      const posed = Pose.placer(Body.bones, Body.joints, drawnPoseOf(aim, spot, ball));
+      const looking = drawnPoseOf(aim, spot, ball);
+      context.set(baller, Posture, looking);
+      const posed = Pose.placer(Body.bones, Body.joints, looking);
       const tie = Option.getOrUndefined(Option.map(ponytail.from, posed));
       if (tie === undefined) {
         continue;
@@ -588,7 +596,7 @@ const swingHair = System.make({
 export const domain = Domain.make({
   name: 'Baller',
   requires: [],
-  components: [Feet, Walk, Spot, Aim, Ball, Kickoff, Hair],
+  components: [Feet, Walk, Spot, Aim, Ball, Kickoff, Hair, Posture],
   actions: [ReplacedBall, DroppedBall],
   events: [],
   systems: [play],

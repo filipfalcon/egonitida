@@ -107,6 +107,35 @@ describe('the baller drawn', () => {
     }),
   );
 
+  it.effect('draws her body as her client last posed it, not working it out again', () =>
+    Effect.gen(function* () {
+      const [joined, baller] = Baller.join(Baller.state);
+      const swung = Game.stepLocal(Baller.game, joined, { tick: 1 });
+      // Her client posed her with her left foot far ahead of where her feet are headed now.
+      const kicking = Baller.poseOf({
+        left: { x: Body.standing.left.x, y: 0.3, z: 0.6 },
+        right: Body.standing.right,
+      });
+      const draft = State.draft(swung);
+      State.write(draft, baller, Baller.Posture, kicking);
+      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.start);
+
+      yield* scene.show(State.finish(draft));
+
+      const placed = Pose.place(Body.bones, Body.joints, kicking)['foot_l']?.at;
+      const foot = Option.flatMap(scene.find(views.ballers, baller), (drawn) =>
+        drawnAt(drawn, 'foot_l'),
+      );
+      expect(
+        Option.map(foot, (at) =>
+          placed === undefined
+            ? Infinity
+            : at.distanceTo(new Three.Vector3(placed.x, placed.y, placed.z)),
+        ),
+      ).toEqual(Option.some(expect.closeTo(0, 5)));
+    }),
+  );
+
   it.effect('draws her hair after her guides as her client swings them', () =>
     Effect.gen(function* () {
       const [joined, baller] = Baller.join(Baller.state);

@@ -1,6 +1,6 @@
 import { Hairing, Posing, Ragdolling, View } from '@egonitida/client';
 import { Ball, Chain, Strands } from '@egonitida/core';
-import { Array, Effect, Option } from 'effect';
+import { Effect } from 'effect';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';
@@ -8,7 +8,7 @@ import * as Body from '#src/body.ts';
 import type * as Camera from '#src/camera.ts';
 
 /**
- * The baller drawn as her model, posed every frame as the step poses her, from where her feet are headed, so she is drawn where the simulation decides what touches the ball; her eyes, and her head after them, on the ball, which only the drawing needs; her ponytail swinging as her client steps it, and her hair drawn as strands after the guides it swings; the ball; and the camera, about her where the player turns it. Her model is loaded by the page and given to the views, so a test gives one of its own.
+ * The baller drawn as her model, posed every frame as her client last posed her, after the step, from where her feet are headed, so she is drawn where the simulation decides what touches the ball; her eyes, and her head after them, on the ball, which only the drawing needs; her ponytail swinging as her client steps it, and her hair drawn as strands after the guides it swings; the ball; and the camera, about her where the player turns it. Her model is loaded by the page and given to the views, so a test gives one of its own.
  */
 
 /** How her ponytail's bones are aimed at the points it swings as: each at the next. */
@@ -84,10 +84,10 @@ export const camera = View.rig(
 );
 
 /**
- * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her feet are headed where she stands, looking at the ball, her ponytail swinging, her hair drawn as strands, every one of them unless `strands` says every how many to draw; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
+ * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her client last posed her, her ponytail swinging, her hair drawn as strands, every one of them unless `strands` says every how many to draw; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
  */
 export const make = <E>(model: Effect.Effect<Three.Object3D, E>, strands = 1) => {
-  const ballers = View.each([Baller.Aim, Baller.Spot, Baller.Hair], {
+  const ballers = View.each([Baller.Posture, Baller.Hair], {
     acquire: () =>
       Effect.gen(function* () {
         const copy = clone(yield* model);
@@ -97,10 +97,9 @@ export const make = <E>(model: Effect.Effect<Three.Object3D, E>, strands = 1) =>
           yield* Hairing.fit(copy, Body.hair, { cards: CARDS, every: strands }),
         );
       }).pipe(Effect.orDie),
-    draw: (drawn, held, frame) => {
-      // Her eyes on the ball, and her head after them, as her hair swings from it.
-      const ball = Option.map(Array.head(frame.query(Baller.Ball)), ([, { at }]) => at);
-      const looked = Baller.drawnPoseOf(held(Baller.Aim), held(Baller.Spot), ball);
+    draw: (drawn, held) => {
+      // Her body as her client posed it, her eyes on the ball, as her hair swings from it.
+      const looked = held(Baller.Posture);
       drawn.posed.pose(looked);
       const swung = held(Baller.Hair);
       drawn.hair.pose(Chain.points(Baller.ponytail, swung.body), 1);
