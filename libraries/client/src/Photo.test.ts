@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
+import { Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Photo from '#src/Photo.ts';
 
@@ -39,23 +40,26 @@ describe('Photo.placingsOf', () => {
 });
 
 describe('Photo.developingOf', () => {
-  it('develops a photograph as the renderer puts out its frames, its noise left as it is, unless told otherwise', () => {
+  it('develops a photograph as the renderer puts out its frames, its noise left as it is and never done, unless told otherwise', () => {
     const renderer = { toneMapping: Three.NoToneMapping, toneMappingExposure: 1.5 };
 
     expect(Photo.developingOf(renderer, {})).toEqual({
       toneMapping: Three.NoToneMapping,
       exposure: 1.5,
       denoised: false,
+      samples: Option.none(),
     });
     expect(Photo.developingOf(renderer, { toneMapping: Three.NeutralToneMapping })).toEqual({
       toneMapping: Three.NeutralToneMapping,
       exposure: 1.5,
       denoised: false,
+      samples: Option.none(),
     });
-    expect(Photo.developingOf(renderer, { exposure: 2, denoised: true })).toEqual({
+    expect(Photo.developingOf(renderer, { exposure: 2, denoised: true, samples: 64 })).toEqual({
       toneMapping: Three.NoToneMapping,
       exposure: 2,
       denoised: true,
+      samples: Option.some(64),
     });
   });
 });
@@ -84,5 +88,46 @@ describe('Photo.batched', () => {
 
     expect(tiny.size).toBe(width);
     expect(whole).toEqual({ pass: 1, first: 0, size: total });
+  });
+});
+
+describe('Photo.viewOf', () => {
+  it('moves as its camera moves, turns, or changes its lens, and not otherwise', () => {
+    const camera = new Three.PerspectiveCamera(50, 1.5, 0.1, 100);
+    camera.position.set(0, 1.6, 3);
+    camera.updateMatrixWorld();
+    const seen = Photo.viewOf(camera);
+
+    camera.updateMatrixWorld();
+    const still = Photo.viewOf(camera);
+    camera.position.x += 0.01;
+    camera.updateMatrixWorld();
+    const moved = Photo.viewOf(camera);
+    camera.position.x -= 0.01;
+    camera.rotation.y = 0.1;
+    camera.updateMatrixWorld();
+    const turned = Photo.viewOf(camera);
+    camera.rotation.y = 0;
+    camera.fov = 40;
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    const zoomed = Photo.viewOf(camera);
+
+    expect(Photo.moved(seen, still)).toBe(false);
+    expect(Photo.moved(seen, moved)).toBe(true);
+    expect(Photo.moved(seen, turned)).toBe(true);
+    expect(Photo.moved(seen, zoomed)).toBe(true);
+  });
+});
+
+describe('Photo.smoothsAfter', () => {
+  it('smooths a photograph after a pass as many as a power of two, and after its last, ever less often', () => {
+    const smoothed = Array.from({ length: 40 }, (_, at) => at + 1).filter((pass) =>
+      Photo.smoothsAfter(pass, Option.some(24)),
+    );
+
+    expect(smoothed).toEqual([1, 2, 4, 8, 16, 24, 32]);
+    expect(Photo.smoothsAfter(64, Option.none())).toBe(true);
+    expect(Photo.smoothsAfter(65, Option.none())).toBe(false);
   });
 });

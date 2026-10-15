@@ -5,7 +5,7 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';
 import * as Body from '#src/body.ts';
-import type * as Camera from '#src/camera.ts';
+import * as Camera from '#src/camera.ts';
 
 /**
  * The baller drawn as her model, posed every frame as her client last posed her, after the step, from where her feet are headed, so she is drawn where the simulation decides what touches the ball; her eyes, and her head after them, on the ball, which only the drawing needs; her ponytail swinging as her client steps it, and her hair drawn as strands after the guides it swings; the ball; and the camera, about her where the player turns it. Her model is loaded by the page and given to the views, so a test gives one of its own.
@@ -67,10 +67,23 @@ export const balls = View.each([Baller.Ball], {
 export const LOOKS_AT = { x: 0, y: 0.75, z: 0.3 };
 export const DISTANCE = 2.6;
 
-/** The camera, about the player's baller where the player turned it, following her as she walks: behind her as it starts, around to her left as it turns that way, and up as it rises, always looking at where her feet work the ball. */
+/** The camera, about the player's baller where the player turned it, following her as she walks: behind her as it starts, around to her left as it turns that way, and up as it rises, always looking at where her feet work the ball, through a lens as wide as a camera's to begin with; or, as a photograph is taken, floating where the player floats it, looking as they turn it, through the lens they zoom. */
 export const camera = View.rig(
   [Baller.Spot],
-  (looking, held, _frame, _drawn, orbit: Camera.Orbit) => {
+  (looking, held, _frame, _drawn, viewpoint: Camera.Viewpoint) => {
+    const lens = viewpoint._tag === 'Floating' ? viewpoint.floating.lens : Camera.LENS;
+    if (looking instanceof Three.PerspectiveCamera && looking.fov !== lens) {
+      looking.fov = lens;
+      looking.updateProjectionMatrix();
+    }
+    if (viewpoint._tag === 'Floating') {
+      const { at } = viewpoint.floating;
+      const way = Camera.lookingOf(viewpoint.floating);
+      looking.position.set(at.x, at.y, at.z);
+      looking.lookAt(at.x + way.x, at.y + way.y, at.z + way.z);
+      return;
+    }
+    const { orbit } = viewpoint;
     const spot = held(Baller.Spot);
     const at = { x: LOOKS_AT.x + spot.x, y: LOOKS_AT.y, z: LOOKS_AT.z + spot.z };
     const level = Math.cos(orbit.up) * DISTANCE;

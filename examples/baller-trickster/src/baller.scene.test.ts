@@ -86,7 +86,7 @@ describe('the baller drawn', () => {
         }),
         Story.seconds(0.5),
       );
-      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.start);
+      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.looking);
 
       // Her ponytail as her client steps it, after the step.
       yield* scene.show(Game.stepLocal(Baller.game, kicked.state, { tick: kicked.state.tick }));
@@ -118,7 +118,7 @@ describe('the baller drawn', () => {
       });
       const draft = State.draft(swung);
       State.write(draft, baller, Baller.Posture, kicking);
-      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.start);
+      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.looking);
 
       yield* scene.show(State.finish(draft));
 
@@ -139,7 +139,7 @@ describe('the baller drawn', () => {
   it.effect('draws her hair after her guides as her client swings them', () =>
     Effect.gen(function* () {
       const [joined, baller] = Baller.join(Baller.state);
-      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.start);
+      const scene = yield* Scene.make(views.views, Option.some(baller), () => Camera.looking);
       const swung = Game.stepLocal(Baller.game, Game.stepLocal(Baller.game, joined, { tick: 1 }), {
         tick: 2,
       });
@@ -162,7 +162,7 @@ describe('the baller drawn', () => {
 
   it.effect('draws the ball where it is', () =>
     Effect.gen(function* () {
-      const scene = yield* Scene.make(views.views, Option.none(), () => Camera.start);
+      const scene = yield* Scene.make(views.views, Option.none(), () => Camera.looking);
 
       yield* scene.show(Baller.state);
 
@@ -178,12 +178,12 @@ describe('the baller drawn', () => {
     () =>
       Effect.gen(function* () {
         const [joined, baller] = Baller.join(Baller.state);
-        const orbit = { current: Camera.start };
+        const orbit: { current: Camera.Viewpoint } = { current: Camera.looking };
         const scene = yield* Scene.make(views.views, Option.some(baller), () => orbit.current);
 
         yield* scene.show(joined);
         const behind = scene.camera.position.clone();
-        orbit.current = { ...Camera.start, around: Math.PI / 2 };
+        orbit.current = { _tag: 'Orbiting', orbit: { ...Camera.start, around: Math.PI / 2 } };
         yield* scene.show(joined);
         const left = scene.camera.position.clone();
 
@@ -193,6 +193,34 @@ describe('the baller drawn', () => {
         const ahead = new Three.Vector3();
         scene.camera.getWorldDirection(ahead);
         expect(ahead.x).toBeLessThan(0);
+      }),
+  );
+
+  it.effect(
+    'floats where the player floats it as a photograph is taken, looking as it is turned, through its lens',
+    () =>
+      Effect.gen(function* () {
+        const [joined, baller] = Baller.join(Baller.state);
+        const floating: Camera.Viewpoint = {
+          _tag: 'Floating',
+          floating: { at: { x: 1, y: 2, z: 3 }, heading: 0, pitch: 0, lens: 30 },
+        };
+        const viewpoint: { current: Camera.Viewpoint } = { current: floating };
+        const scene = yield* Scene.make(views.views, Option.some(baller), () => viewpoint.current);
+
+        yield* scene.show(joined);
+        const at = scene.camera.position.clone();
+        const ahead = scene.camera.getWorldDirection(new Three.Vector3());
+        const lens = scene.camera instanceof Three.PerspectiveCamera ? scene.camera.fov : 0;
+        viewpoint.current = Camera.looking;
+        yield* scene.show(joined);
+        const orbiting = scene.camera instanceof Three.PerspectiveCamera ? scene.camera.fov : 0;
+
+        expect(at.distanceTo(new Three.Vector3(1, 2, 3))).toBeCloseTo(0, 6);
+        expect(ahead.z).toBeCloseTo(1, 6);
+        expect(lens).toBeCloseTo(30, 6);
+        // Back about her, through the lens a camera has to begin with.
+        expect(orbiting).toBeCloseTo(Camera.LENS, 6);
       }),
   );
 });

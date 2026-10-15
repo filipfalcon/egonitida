@@ -3,7 +3,7 @@ import type { Component } from '@egonitida/core';
 import * as Baller from '#src/baller.ts';
 
 /**
- * How the baller is played, with a pad first: the left stick places her left foot and the right stick her right, ahead and back, out and in; the triggers lift them; Triangle, or R, puts the ball back, and Square, or F, drops it onto her left foot; the directional pad, or the arrow keys, walk her; Create, or P, takes a photograph of her, path traced, and puts it away again. Held in, L3 or R3, a stick turns the camera about her instead, its foot holding where it was. On a keyboard, WASD place her left foot and IJKL her right, Q and U lift them, and the left and right Shift keys turn the camera by them.
+ * How the baller is played, with a pad first: the left stick places her left foot and the right stick her right, ahead and back, out and in; the triggers lift them; Triangle, or R, puts the ball back, and Square, or F, drops it onto her left foot; the directional pad, or the arrow keys, walk her; Create, or P, takes a photograph of her, path traced, and puts it away again. Held in, L3 or R3, a stick turns the camera about her instead, its foot holding where it was. On a keyboard, WASD place her left foot and IJKL her right, Q and U lift them, and the left and right Shift keys turn the camera by them. While a photograph is taken, the same controls float the camera instead, as `Camera.float` says, the bumpers, or + and -, zooming it.
  */
 
 /** Her feet and the ball, as controls. */
@@ -23,6 +23,8 @@ export const bindings = {
   rightCamera: Controls.button({ pad: 'RightStick', key: 'ShiftRight' }),
   drop: Controls.button({ pad: 'West', key: 'KeyF' }),
   photograph: Controls.button({ pad: 'Select', key: 'KeyP' }),
+  zoomIn: Controls.button({ pad: 'RightBumper', key: 'Equal' }),
+  zoomOut: Controls.button({ pad: 'LeftBumper', key: 'Minus' }),
   walkAhead: Controls.button({ pad: 'Up', key: 'ArrowUp' }),
   walkBack: Controls.button({ pad: 'Down', key: 'ArrowDown' }),
   walkLeft: Controls.button({ pad: 'Left', key: 'ArrowLeft' }),

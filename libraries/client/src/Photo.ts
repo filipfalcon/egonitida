@@ -1,4 +1,4 @@
-import { Effect, type Scope } from 'effect';
+import { Effect, Option, type Scope } from 'effect';
 import {
   Break,
   Fn,
@@ -54,11 +54,24 @@ const SUNS = 2;
 const AWAY = 1e-4;
 const FAR = 1e6;
 
-/** A photograph being developed: paths followed through the next rows of its pixels, once the graphics device has followed those before, added to them and drawn on the viewport's canvas; and how many paths have been followed through every pixel so far. */
+/** A photograph being developed: paths followed through the next rows of its pixels, once the graphics device has followed those before, added to them and drawn on the viewport's canvas, started anew from wherever its camera settles after it moves, the viewport drawn meanwhile; and how many paths have been followed through every pixel so far. */
 export interface Photo {
   readonly develop: Effect.Effect<void>;
   readonly samples: Effect.Effect<number>;
 }
+
+/** How long, in milliseconds, a camera stays still before a photograph starts anew from where it looks: while it moves, and until the first pass from there is followed, the viewport draws instead. */
+export const SETTLING = 200;
+
+/** Where `camera` looks from and how: its place and turn in the scene, and its lens, as sixteen numbers each. */
+export const viewOf = (camera: Three.Camera): ReadonlyArray<number> => [
+  ...camera.matrixWorld.elements,
+  ...camera.projectionMatrix.elements,
+];
+
+/** Whether a camera looks from `now` other than from `before`, as `viewOf` gives them. */
+export const moved = (before: ReadonlyArray<number>, now: ReadonlyArray<number>): boolean =>
+  before.length !== now.length || before.some((value, index) => value !== now[index]);
 
 /** How long, in milliseconds, the graphics device is given to follow each batch of paths: short enough that it never falls behind what it is asked, nor keeps the page from drawing. */
 export const BUDGET = 25;
@@ -93,17 +106,26 @@ export interface Developing {
   readonly toneMapping: Three.ToneMapping;
   readonly exposure: number;
   readonly denoised: boolean;
+  readonly samples: Option.Option<number>;
 }
+
+/** How a photograph is told to be developed: as `Developing` says, every part of it unless told otherwise, its paths through every pixel as many as `samples`, if told, after which it is done. */
+export type Told = Partial<Omit<Developing, 'samples'>> & { readonly samples?: number };
 
 /** How a photograph is developed, as `told`, the rest as `renderer` puts out its frames: so a photograph told nothing looks as the viewport does, and one told a curve keeps highlights the viewport clips. */
 export const developingOf = (
   renderer: { readonly toneMapping: Three.ToneMapping; readonly toneMappingExposure: number },
-  told: Partial<Developing>,
+  told: Told,
 ): Developing => ({
   toneMapping: told.toneMapping ?? renderer.toneMapping,
   exposure: told.exposure ?? renderer.toneMappingExposure,
   denoised: told.denoised ?? false,
+  samples: Option.fromNullishOr(told.samples),
 });
+
+/** Whether a photograph developed denoised is smoothed after its `pass`th pass: after a power of two of them, and after its last, if it has one, so it changes ever less often as it grows finer, and not at all once it is done. */
+export const smoothsAfter = (pass: number, samples: Option.Option<number>): boolean =>
+  (pass > 0 && (pass & (pass - 1)) === 0) || Option.contains(samples, pass);
 
 /** How many numbers each picture's placing takes: the two rows of what moves a place in the picture to where its photograph samples it, four numbers each, the fourth nothing. */
 export const PLACING = 8;
@@ -179,8 +201,9 @@ export const take = (
     readonly renderer: Three.WebGPURenderer;
     readonly scene: Three.Scene;
     readonly camera: Three.PerspectiveCamera;
+    readonly render: Effect.Effect<void>;
   },
-  told: Partial<Developing> = {},
+  told: Told = {},
 ): Effect.Effect<Photo, never, Scope.Scope> =>
   Effect.gen(function* () {
     const { renderer, scene, camera } = viewport;
@@ -500,41 +523,90 @@ export const take = (
 
     // The batch to follow next, and whether the graphics device is still following the last.
     const total = count;
-    const kept = { batches: batchesOf(width), following: false, smoothing: false };
+    // Which view it is developed from: started anew, every batch before it is let go of.
+    const kept = {
+      batches: batchesOf(width),
+      following: false,
+      smoothing: false,
+      view: viewOf(camera),
+      stillSince: Number.NEGATIVE_INFINITY,
+      started: 0,
+    };
+    /** Starts the photograph anew from where `camera` looks now. */
+    const lookAnew = (view: ReadonlyArray<number>) => {
+      kept.view = view;
+      kept.stillSince = performance.now();
+      kept.started += 1;
+      kept.batches = batchesOf(width);
+      kept.smoothing = false;
+      smoothed.value = 0;
+      cameraWorld.value.copy(camera.matrixWorld);
+      projectionInverse.value.copy(camera.projectionMatrixInverse);
+    };
+    /** Follows the next batch, once the last is followed, and draws the photograph, once a whole pass is: whether it drew it. */
+    const developOnce = Effect.sync(() => {
+      // Smoothed after every whole pass, before the next batch follows.
+      if (!kept.following && kept.smoothing) {
+        kept.smoothing = false;
+        denoiser.run();
+        smoothed.value = 1;
+      }
+      // Done once it has followed as many passes as it was told to.
+      const done = Option.exists(developing.samples, (samples) => kept.batches.pass >= samples);
+      if (!kept.following && !done) {
+        const { batches } = kept;
+        frame.value = batches.pass;
+        firstPixel.value = batches.first;
+        kept.following = true;
+        const started = performance.now();
+        const view = kept.started;
+        // The renderer is ready, so it computes at once and gives back no promise.
+        void renderer.compute(follow, Math.min(batches.size, total - batches.first));
+        void renderer.getArrayBufferAsync(sums, null, count * 16, 16).then(
+          () => {
+            // A batch of a view looked away from counts for nothing.
+            if (view === kept.started) {
+              kept.batches = batched(batches, {
+                width,
+                total,
+                took: performance.now() - started,
+              });
+              kept.smoothing =
+                developing.denoised &&
+                kept.batches.pass > batches.pass &&
+                smoothsAfter(kept.batches.pass, developing.samples);
+            }
+            kept.following = false;
+          },
+          () => {
+            kept.following = false;
+          },
+        );
+      }
+      if (kept.batches.pass === 0) {
+        return false;
+      }
+      // Put out as the photograph is developed, the renderer left as it puts out the viewport's frames.
+      const { toneMapping, toneMappingExposure } = renderer;
+      renderer.toneMapping = developing.toneMapping;
+      renderer.toneMappingExposure = developing.exposure;
+      quad.render(renderer);
+      renderer.toneMapping = toneMapping;
+      renderer.toneMappingExposure = toneMappingExposure;
+      return true;
+    });
     return {
-      develop: Effect.sync(() => {
-        // Smoothed after every whole pass, before the next batch follows.
-        if (!kept.following && kept.smoothing) {
-          kept.smoothing = false;
-          denoiser.run();
-          smoothed.value = 1;
+      develop: Effect.suspend(() => {
+        camera.updateMatrixWorld();
+        const view = viewOf(camera);
+        if (moved(kept.view, view)) {
+          lookAnew(view);
         }
-        if (!kept.following) {
-          const { batches } = kept;
-          frame.value = batches.pass;
-          firstPixel.value = batches.first;
-          kept.following = true;
-          const started = performance.now();
-          // The renderer is ready, so it computes at once and gives back no promise.
-          void renderer.compute(follow, Math.min(batches.size, total - batches.first));
-          void renderer.getArrayBufferAsync(sums, null, count * 16, 16).then(
-            () => {
-              kept.batches = batched(batches, { width, total, took: performance.now() - started });
-              kept.smoothing = developing.denoised && kept.batches.pass > batches.pass;
-              kept.following = false;
-            },
-            () => {
-              kept.following = false;
-            },
-          );
+        // Moving, nothing is followed; until a whole pass is followed from where it looks, the viewport is drawn instead.
+        if (performance.now() - kept.stillSince < SETTLING) {
+          return viewport.render;
         }
-        // Put out as the photograph is developed, the renderer left as it puts out the viewport's frames.
-        const { toneMapping, toneMappingExposure } = renderer;
-        renderer.toneMapping = developing.toneMapping;
-        renderer.toneMappingExposure = developing.exposure;
-        quad.render(renderer);
-        renderer.toneMapping = toneMapping;
-        renderer.toneMappingExposure = toneMappingExposure;
+        return Effect.flatMap(developOnce, (shown) => (shown ? Effect.void : viewport.render));
       }),
       samples: Effect.sync(() => kept.batches.pass),
     };

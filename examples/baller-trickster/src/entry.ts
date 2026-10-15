@@ -10,9 +10,12 @@ import * as Camera from '#src/camera.ts';
 import * as BallerControls from '#src/controls.ts';
 import * as Model from '#src/model.ts';
 
-// The page: joins the local server in a worker as a baller, sends where the sticks place her feet every frame, puts the ball back at a press, and draws her and the ball at every frame the display shows, from where the player turns the camera about her; or, while a photograph of her is taken, develops it instead, path traced, finer every frame.
+// The page: joins the local server in a worker as a baller, sends where the sticks place her feet every frame, puts the ball back at a press, and draws her and the ball at every frame the display shows, from where the player turns the camera about her; or, while a photograph of her is taken, holds that moment still and develops it instead, path traced, finer every frame, anew from wherever the player turns the camera.
 /** The id the devtools know this page's host by, kept by the tab across reloads, and given to its worker as its name: so the page can say which host it draws, and the worker finds the state kept for the tab. */
 const host = Tab.id('baller-trickster');
+
+/** How many paths a photograph follows through every pixel before it is done. */
+const SAMPLES = 64;
 
 const main = Effect.gen(function* () {
   const canvas = document.querySelector('canvas');
@@ -25,9 +28,13 @@ const main = Effect.gen(function* () {
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
   const viewport = yield* Viewport.make(canvas, Viewport.sharp);
   const model = yield* Effect.cached(Model.load);
-  // A photograph being developed, and the scope it is let go of with, while one is.
+  // A photograph being developed, the scope it is let go of with, and the moment it is of, drawn still meanwhile so the camera can move about it, while one is.
   const photographing: {
-    current: Option.Option<{ readonly photo: Photo.Photo; readonly scope: Scope.Closeable }>;
+    current: Option.Option<{
+      readonly photo: Photo.Photo;
+      readonly scope: Scope.Closeable;
+      readonly moment: Drawing.Frame;
+    }>;
   } = {
     current: Option.none(),
   };
@@ -54,16 +61,27 @@ const main = Effect.gen(function* () {
         }),
     });
   }
-  const played = {
+  // While a photograph is taken, the camera floats free, and the controls float it rather than play her.
+  const played: {
+    controls: BallerControls.Read;
+    feet: typeof Baller.idle;
+    orbit: Camera.Orbit;
+    floating: Option.Option<Camera.Floating>;
+  } = {
     controls: Controls.start(BallerControls.bindings),
     feet: Baller.idle,
     orbit: Camera.start,
+    floating: Option.none(),
   };
   const views = yield* View.make(
     // Every fourth strand of her hair while the game is worked on, so the machine working on it keeps up; every one when it is played.
     BallerView.make(model, import.meta.env.DEV ? 4 : 1).views,
     Option.some({ camera: viewport.camera, player: client.entity }),
-    () => played.orbit,
+    (): Camera.Viewpoint =>
+      Option.match(played.floating, {
+        onNone: () => ({ _tag: 'Orbiting', orbit: played.orbit }),
+        onSome: (floating) => ({ _tag: 'Floating', floating }),
+      }),
   );
   const ground = new Three.Mesh(
     new Three.PlaneGeometry(20, 20),
@@ -74,7 +92,7 @@ const main = Effect.gen(function* () {
   const sun = new Three.DirectionalLight(0xffffff, 1.5);
   sun.position.set(2, 4, -3);
   viewport.scene.add(sun);
-  hud.textContent = [
+  const help = [
     'left stick or WASD: left foot',
     'right stick or IJKL: right foot',
     'triggers or Q and U: lift them',
@@ -82,8 +100,19 @@ const main = Effect.gen(function* () {
     'Triangle or R: the ball back',
     'Square or F: the ball dropped onto her foot',
     'directional pad or arrows: walk',
-    'Create or P: a photograph, path traced',
+    'Create or P: a photograph, path traced, and back',
+    'in a photograph: left stick or WASD floats the camera, right stick or IJKL turns it,',
+    '  triggers or Q and U lower and raise it, bumpers or - and + zoom it',
   ].join('\n');
+  hud.textContent = help;
+  // The help, and while a photograph is developed, how far it has come, written only as it changes.
+  const shown = { text: help };
+  const tell = (text: string) => {
+    if (text !== shown.text) {
+      shown.text = text;
+      hud.textContent = text;
+    }
+  };
 
   yield* viewport.loop((seconds) =>
     Option.match(drawing.frame(seconds), {
@@ -91,36 +120,84 @@ const main = Effect.gen(function* () {
       onSome: (frame) =>
         Effect.gen(function* () {
           played.controls = Controls.read(BallerControls.bindings, hearing.read(), played.controls);
-          played.feet = BallerControls.feetOf(played.controls, played.feet);
-          played.orbit = Camera.orbit(played.controls, played.orbit, seconds);
+          const playing = Option.isNone(played.floating);
+          if (playing) {
+            played.feet = BallerControls.feetOf(played.controls, played.feet);
+            played.orbit = Camera.orbit(played.controls, played.orbit, seconds);
+          } else {
+            played.floating = Option.map(played.floating, (floating) =>
+              Camera.float(played.controls, floating, seconds),
+            );
+          }
+          // Her feet held where they were, and her standing still, while the camera floats.
           yield* client.send([
             Baller.Feet.of(played.feet),
-            Baller.Walk.of(BallerControls.walkOf(played.controls)),
+            Baller.Walk.of(playing ? BallerControls.walkOf(played.controls) : { x: 0, y: 0 }),
           ]);
-          if (BallerControls.replaced(played.controls)) {
+          if (playing && BallerControls.replaced(played.controls)) {
             yield* client.act(Baller.ReplacedBall, {});
           }
-          if (BallerControls.dropped(played.controls)) {
+          if (playing && BallerControls.dropped(played.controls)) {
             yield* client.act(Baller.DroppedBall, {});
           }
+          yield* views.frame(
+            Option.match(photographing.current, {
+              onNone: () => frame,
+              onSome: ({ moment }) => moment,
+            }),
+          );
           if (BallerControls.photographed(played.controls)) {
             photographing.current = yield* Option.match(photographing.current, {
               onNone: () =>
                 Effect.gen(function* () {
                   const scope = yield* Scope.make();
-                  // Developed on a neutral curve, so what the sun lights brightest keeps its colour rather than clipping to white, and its noise smoothed away.
+                  // Developed on a neutral curve, so what the sun lights brightest keeps its colour rather than clipping to white, its noise smoothed away, and done after so many samples.
                   const photo = yield* Scope.provide(
-                    Photo.take(viewport, { toneMapping: Three.NeutralToneMapping, denoised: true }),
+                    Photo.take(viewport, {
+                      toneMapping: Three.NeutralToneMapping,
+                      denoised: true,
+                      samples: SAMPLES,
+                    }),
                     scope,
                   );
-                  return Option.some({ photo, scope });
+                  // Floating from where the camera stands, looking where it looks.
+                  const { camera } = viewport;
+                  played.floating = Option.some(
+                    Camera.floatingFrom(
+                      camera.position,
+                      camera.getWorldDirection(new Three.Vector3()),
+                      camera.fov,
+                    ),
+                  );
+                  return Option.some({ photo, scope, moment: frame });
                 }),
-              onSome: ({ scope }) => Effect.as(Scope.close(scope, Exit.void), Option.none()),
+              onSome: ({ scope }) =>
+                Effect.as(
+                  Effect.andThen(
+                    Scope.close(scope, Exit.void),
+                    Effect.sync(() => {
+                      played.floating = Option.none();
+                    }),
+                  ),
+                  Option.none(),
+                ),
             });
           }
-          yield* views.frame(frame);
         }),
-    }).pipe(Effect.andThen(drawn)),
+    }).pipe(
+      Effect.andThen(drawn),
+      Effect.andThen(
+        Option.match(photographing.current, {
+          onNone: () => Effect.sync(() => tell(help)),
+          onSome: ({ photo }) =>
+            Effect.map(photo.samples, (samples) =>
+              tell(
+                `${help}\n\nphotograph: ${Math.min(samples, SAMPLES)} of ${SAMPLES} samples${samples >= SAMPLES ? ', done' : ''}`,
+              ),
+            ),
+        }),
+      ),
+    ),
   );
   return yield* Effect.never;
 }).pipe(
