@@ -62,7 +62,7 @@ const relayFor = (relays: ReadonlyArray<Relay.Record>, host: Option.Option<strin
           () =>
             new Failed({
               reason:
-                'no development server with the Nitida devtools plugin is running in this workspace',
+                'no development server with the EgoNitida devtools plugin is running in this workspace',
             }),
         ),
       ),

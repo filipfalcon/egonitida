@@ -1,13 +1,13 @@
-# Working on Nitida
+# Working on EgoNitida
 
-Nitida is an engine for real-time web applications and games: entities and their components, held in a state that systems and rules step at a fixed rate on a server, and drawn by views on clients. Why it is built this way is in [docs/architecture.md](docs/architecture.md); this file is how to work in it.
+EgoNitida is an engine for real-time web applications and games: entities and their components, held in a state that systems and rules step at a fixed rate on a server, and drawn by views on clients. Why it is built this way is in [docs/architecture.md](docs/architecture.md); this file is how to work in it.
 
 ## Before you write
 
 - Read the exemplar files below for the kind of code you are about to write, and follow them.
 - When an API's behaviour matters, read its source rather than guessing: the engine's own in `libraries/`, and Effect's and Three.js's installed sources under `node_modules`.
 - Write the test first. A behaviour is done when its test passed after failing.
-- The skills in `skills/` walk through the common work: `nitida` to start, `generate-domain` for a new domain, and `audit-game` to review a game against these rules.
+- The skills in `skills/` walk through the common work: `egonitida` to start, `generate-domain` for a new domain, and `audit-game` to review a game against these rules.
 
 ## Checking
 
@@ -83,9 +83,9 @@ A view's `draw` changes only the object its view built, from the frame and the p
 
 ## A running game
 
-- With a game's development server running and its page open, the `nitida-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `nitida_hosts` and `nitida_describe`; read the state with `nitida_state`, `nitida_compare`, and `nitida_log`; suspend and step time with `nitida_suspend` and `nitida_step` to look closely, and resume it with `nitida_resume`; and play, as one player or many, with `nitida_join`, `nitida_demand`, and `nitida_act`.
-- Check a change on the running game yourself rather than asking the person to: suspend time, step, and read what came of it, and see how it looks with `nitida_screenshot`, after `nitida_seek` to see the past. Asking them is for what neither tells, such as how it feels to play.
-- What you find by playing becomes a test: `nitida_story` writes a stretch as the source of a story test. Keep the expectations that tell the behaviour, drop the rest, and name the entities for what they are.
+- With a game's development server running and its page open, the `egonitida-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `egonitida_hosts` and `egonitida_describe`; read the state with `egonitida_state`, `egonitida_compare`, and `egonitida_log`; suspend and step time with `egonitida_suspend` and `egonitida_step` to look closely, and resume it with `egonitida_resume`; and play, as one player or many, with `egonitida_join`, `egonitida_demand`, and `egonitida_act`.
+- Check a change on the running game yourself rather than asking the person to: suspend time, step, and read what came of it, and see how it looks with `egonitida_screenshot`, after `egonitida_seek` to see the past. Asking them is for what neither tells, such as how it feels to play.
+- What you find by playing becomes a test: `egonitida_story` writes a stretch as the source of a story test. Keep the expectations that tell the behaviour, drop the rest, and name the entities for what they are.
 - A game serves its host this way through `Devtools.plugin()` in its Vite config, `Beside.host` in its worker, and `Page.serve` in its page, in development.
 
 ## Commits

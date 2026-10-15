@@ -1,5 +1,5 @@
-# Welcome to Nitida
+# Welcome to EgoNitida
 
-Nitida is an engine for building real-time 3D applications and games on the web.
+EgoNitida is an engine for building real-time 3D applications and games on the web.
 
-## Why Nitida
+## Why EgoNitida

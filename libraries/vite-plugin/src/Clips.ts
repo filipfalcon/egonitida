@@ -337,7 +337,7 @@ export interface Plugin {
  * The plugin that gives a module importing a model's file with `?clips` its clips as poses; given to a game's Vite config, to its workers' (`worker.plugins`), and so to its tests. It loads before Vite's own, which would give the file's URL instead. A file it cannot read fails the build, saying why.
  */
 export const plugin = (): Plugin => ({
-  name: 'nitida:clips',
+  name: 'egonitida:clips',
   enforce: 'pre',
   load(id) {
     const at = id.indexOf('?');

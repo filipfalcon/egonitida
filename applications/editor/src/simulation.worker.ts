@@ -2,7 +2,7 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Host, WorkerTransport, State } from '@egonitida/core';
 import { Beside } from '@egonitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:nitida/build';
+import { build } from 'virtual:egonitida/build';
 import * as Editing from '#src/editing.ts';
 
 // The local server: the document being edited, a state stepped off the main thread. A page that joins is an editor, whose edits are its actions. In development it goes on from the document kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.

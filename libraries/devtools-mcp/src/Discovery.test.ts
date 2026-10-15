@@ -8,7 +8,7 @@ import * as Discovery from '#src/Discovery.ts';
 
 /** A workspace with a package in it, and a way to keep a relay's record in it. */
 const workspace = Effect.gen(function* () {
-  const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-workspace-')));
+  const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'egonitida-workspace-')));
   const inside = join(root, 'examples', 'horde', 'src');
   const records = join(root, ...Relay.RECORDS);
   yield* Effect.promise(() => mkdir(inside, { recursive: true }));
@@ -41,7 +41,7 @@ describe('finding the relays', () => {
 
   it.effect('finds none outside any workspace that keeps records', () =>
     Effect.gen(function* () {
-      const elsewhere = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-none-')));
+      const elsewhere = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'egonitida-none-')));
 
       expect(yield* Discovery.relays(elsewhere)).toEqual([]);
     }),

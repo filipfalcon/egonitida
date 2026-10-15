@@ -767,7 +767,7 @@ export const view = defineView<Model, Message>((model, h) => {
       ],
     ),
     h.figcaption(Styled.attributes(h, styles.caption), [
-      'A state is one globe and everything on it: a tree, a volcano, a dragon, and a warrior, each an entity holding its components. A step never reworks a globe. It stamps a new one from the last, and the counter and the dial on the press turn to its tick and its random counter. Every earlier state stays as it was. The press is a Nitida game itself, running in a worker beside this page with its time held: each click asks it for one step, and a click on an earlier globe sends it back there, to step on from it exactly as it did before.',
+      'A state is one globe and everything on it: a tree, a volcano, a dragon, and a warrior, each an entity holding its components. A step never reworks a globe. It stamps a new one from the last, and the counter and the dial on the press turn to its tick and its random counter. Every earlier state stays as it was. The press is a EgoNitida game itself, running in a worker beside this page with its time held: each click asks it for one step, and a click on an earlier globe sends it back there, to step on from it exactly as it did before.',
     ]),
   ]);
 });

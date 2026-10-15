@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 /**
- * Which build of a game's code runs, for what is recorded of it to say: the module `virtual:nitida/build` exports `build`, an id the game's host is given explicitly (`Host.Options.build`). A production build has an id of its own; while serving, the id changes with every change to a module the importer of `build` runs, such as the game's code in its worker, and only then, so a recording begins a segment with every new build of the game and none for a change to the page alone.
+ * Which build of a game's code runs, for what is recorded of it to say: the module `virtual:egonitida/build` exports `build`, an id the game's host is given explicitly (`Host.Options.build`). A production build has an id of its own; while serving, the id changes with every change to a module the importer of `build` runs, such as the game's code in its worker, and only then, so a recording begins a segment with every new build of the game and none for a change to the page alone.
  */
 
 /** The module a game imports its build from. */
-export const MODULE = 'virtual:nitida/build';
+export const MODULE = 'virtual:egonitida/build';
 
 const RESOLVED = `\0${MODULE}`;
 
@@ -48,7 +48,7 @@ export interface HotUpdate<M extends Imported> {
   readonly modules: ReadonlyArray<M>;
 }
 
-/** The parts of a Vite plugin this one has, typed by themselves, so a game whose Vite is another copy, as a game linking Nitida from its own repository, takes it as a plugin of its own. */
+/** The parts of a Vite plugin this one has, typed by themselves, so a game whose Vite is another copy, as a game linking EgoNitida from its own repository, takes it as a plugin of its own. */
 export interface Plugin {
   readonly name: string;
   resolveId(id: string): string | undefined;
@@ -60,7 +60,7 @@ export interface Plugin {
 export const plugin = (): Plugin => {
   const build = { id: started };
   return {
-    name: 'nitida:build',
+    name: 'egonitida:build',
     resolveId: (id) => (id === MODULE ? RESOLVED : undefined),
     load: (id) => (id === RESOLVED ? sourceOf(build.id) : undefined),
     handleHotUpdate: <M extends Imported>({ server, modules }: HotUpdate<M>) => {

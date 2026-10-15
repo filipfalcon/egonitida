@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/Splash.png" alt="Nitida, a real-time 3D engine: a dark-haired woman in a laurel crown and red silk looks back over her shoulder at a torchlit Roman festival of roses beneath a full moon.">
+  <img src="docs/Splash.png" alt="EgoNitida, a real-time 3D engine: a dark-haired woman in a laurel crown and red silk looks back over her shoulder at a torchlit Roman festival of roses beneath a full moon.">
 </p>
 
 <p align="center">
@@ -7,9 +7,9 @@
 </p>
 
 <p align="center">
-  <a href="https://x.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=x&logoColor=white" alt="Nitida on X: @egonitida"></a>
-  <a href="https://www.instagram.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-E4405F?logo=instagram&logoColor=white" alt="Nitida on Instagram: @egonitida"></a>
-  <a href="https://www.threads.net/@egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=threads&logoColor=white" alt="Nitida on Threads: @egonitida"></a>
+  <a href="https://x.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=x&logoColor=white" alt="EgoNitida on X: @egonitida"></a>
+  <a href="https://www.instagram.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-E4405F?logo=instagram&logoColor=white" alt="EgoNitida on Instagram: @egonitida"></a>
+  <a href="https://www.threads.net/@egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=threads&logoColor=white" alt="EgoNitida on Threads: @egonitida"></a>
 </p>
 
 <h3 align="center">Build games agents understand.</h3>
@@ -20,12 +20,12 @@
 
 ---
 
-Nitida is an engine for real-time web applications and games. Your game is data: every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.
+EgoNitida is an engine for real-time web applications and games. Your game is data: every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.
 
 A game's state holds entities and their components. Systems and rules step the game at a fixed rate on a host, which is a Web Worker for one player or a Cloudflare Durable Object for many. Views draw it on clients with Three.js on WebGPU. The page around it is Foldkit.
 
 > [!WARNING]
-> Nitida is not published yet. It stays private until its architecture is built and Border, the first game on it, runs on it. Names and signatures may still change.
+> EgoNitida is not published yet. It stays private until its architecture is built and Border, the first game on it, runs on it. Names and signatures may still change.
 
 ## A game
 
@@ -128,7 +128,7 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 - **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same state and the same input give the same next state, which is what rewinding, recordings, and the determinism check in development rest on.
 - **One shape for one player and many.** A singleplayer game runs its server in a Web Worker. The same game can be hosted for players across a network in a Durable Object; that hosting is experimental, and prediction for it is planned.
 - **Effects at the edges.** Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the game, such as saving a score.
-- **Tools for agents.** In development, the `nitida-devtools` MCP server lets an agent read the state of the running game, suspend and step time, play as one player or several, take screenshots, and turn what it played into a test.
+- **Tools for agents.** In development, the `egonitida-devtools` MCP server lets an agent read the state of the running game, suspend and step time, play as one player or several, take screenshots, and turn what it played into a test.
 
 ## Built on
 
@@ -172,7 +172,7 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 
 ## Running it
 
-Nitida needs Node 24.15 or later and npm 12.
+EgoNitida needs Node 24.15 or later and npm 12.
 
 ```bash
 npm install
@@ -210,4 +210,4 @@ Why the engine is built this way, and what comes next, is in [`docs/architecture
 
 ## License
 
-Nitida is released under the MIT License. The full terms are in the [LICENSE](LICENSE) file at the root of this repository. Unless stated otherwise, every contribution submitted to this project is licensed under the same terms.
+EgoNitida is released under the MIT License. The full terms are in the [LICENSE](LICENSE) file at the root of this repository. Unless stated otherwise, every contribution submitted to this project is licensed under the same terms.

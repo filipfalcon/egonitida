@@ -2,7 +2,7 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Host, WorkerTransport } from '@egonitida/core';
 import { Beside } from '@egonitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:nitida/build';
+import { build } from 'virtual:egonitida/build';
 import * as Beginning from '#src/beginning.ts';
 import * as Glance from '#src/glance.ts';
 import * as Stepping from '#src/stepping.ts';

@@ -3,7 +3,7 @@ import { Option } from 'effect';
 import * as Url from 'foldkit/url';
 import * as Route from '#src/route.ts';
 
-const SITE = 'https://nitida.dev';
+const SITE = 'https://egonitida.com';
 
 /** The route `path` of the site leads to. */
 const routeAt = (path: string) =>

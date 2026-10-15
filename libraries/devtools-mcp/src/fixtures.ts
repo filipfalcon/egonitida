@@ -52,7 +52,7 @@ export const served = (names: ReadonlyArray<string>, directory?: string) =>
   Effect.gen(function* () {
     const relay = yield* Relay.make;
     const kept =
-      directory ?? (yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-relay-'))));
+      directory ?? (yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'egonitida-relay-'))));
     const listening = yield* Listener.listen(relay, { directory: kept });
     for (const name of names) {
       const setup = {

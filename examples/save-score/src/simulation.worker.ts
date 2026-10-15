@@ -3,7 +3,7 @@ import { Host, WorkerTransport, State } from '@egonitida/core';
 import { Beside } from '@egonitida/devtools';
 import { Effect, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
-import { build } from 'virtual:nitida/build';
+import { build } from 'virtual:egonitida/build';
 import * as Score from '#src/score.ts';
 import * as Scores from '#src/scores.ts';
 

@@ -2,7 +2,7 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Host, WorkerTransport, State } from '@egonitida/core';
 import { Beside } from '@egonitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:nitida/build';
+import { build } from 'virtual:egonitida/build';
 import * as Game from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 

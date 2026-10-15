@@ -42,9 +42,9 @@ describe('the MCP server over HTTP', () => {
         ),
       );
 
-      expect(greeting).toContain('nitida-devtools');
-      expect(listed).toContain('nitida_hosts');
-      expect(listed).toContain('nitida_screenshot');
+      expect(greeting).toContain('egonitida-devtools');
+      expect(listed).toContain('egonitida_hosts');
+      expect(listed).toContain('egonitida_screenshot');
     }).pipe(Effect.scoped),
   );
 

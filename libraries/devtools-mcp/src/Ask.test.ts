@@ -56,7 +56,7 @@ describe('asking a relay', () => {
 
       expect(refused).toEqual(
         Option.some(
-          'no development server with the Nitida devtools plugin is running in this workspace',
+          'no development server with the EgoNitida devtools plugin is running in this workspace',
         ),
       );
     }),

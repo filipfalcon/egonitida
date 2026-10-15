@@ -41,7 +41,7 @@ export const make = (options: {
     const outline = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const made = new Three.Box3Helper(new Three.Box3(), 0xffffff);
-        made.name = 'nitida:mirror';
+        made.name = 'egonitida:mirror';
         made.visible = false;
         options.scene.add(made);
         return made;

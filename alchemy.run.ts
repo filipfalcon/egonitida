@@ -6,7 +6,7 @@ import Scores, { ScoresKV } from './examples/save-score/src/server.ts';
 import SharedRooms from './examples/shared-room/src/server.ts';
 
 export default Alchemy.Stack(
-  'Nitida',
+  'EgoNitida',
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),

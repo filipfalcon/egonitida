@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import * as Listener from '#src/Listener.ts';
 
 /** A directory of its own, for a test's records. */
-const directory = Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-listener-')));
+const directory = Effect.promise(() => mkdtemp(join(tmpdir(), 'egonitida-listener-')));
 
 /** What a tool connecting to `url` hears first after sending `message`, or how its connection failed. */
 const ask = (url: string, message: unknown) =>

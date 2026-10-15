@@ -29,12 +29,12 @@ const packageAt = (root: string) => {
 const who = Schema.encodeSync(Bridge.ToHost)({ _tag: 'Who' });
 
 /**
- * The development server as the way to a game's hosts: the hosts, such as the worker each page starts, reach it on its own channel and say hello, and the tools on this machine, such as an MCP server, reach it on a loopback port of its own with the token its record holds. A relay between them hands each request to its host and each answer to whoever asked. The record is kept under the workspace's `node_modules/.nitida/relays`, where a tool started anywhere in the workspace finds it. The server also serves the MCP server itself over HTTP at its own path, and once it is up, says in a banner what it serves and where both are reached.
+ * The development server as the way to a game's hosts: the hosts, such as the worker each page starts, reach it on its own channel and say hello, and the tools on this machine, such as an MCP server, reach it on a loopback port of its own with the token its record holds. A relay between them hands each request to its host and each answer to whoever asked. The record is kept under the workspace's `node_modules/.egonitida/relays`, where a tool started anywhere in the workspace finds it. The server also serves the MCP server itself over HTTP at its own path, and once it is up, says in a banner what it serves and where both are reached.
  *
  * It runs only while serving, never in a build or under Vitest.
  */
 export const plugin = (): Plugin => ({
-  name: 'nitida:devtools',
+  name: 'egonitida:devtools',
   apply: 'serve',
   configureServer: (server) => {
     if (process.env['VITEST'] !== undefined) {
@@ -118,7 +118,7 @@ export const plugin = (): Plugin => ({
         ),
         Effect.catch(({ reason }) =>
           Effect.sync(() => {
-            server.config.logger.warn(`Nitida devtools relay did not start: ${reason}`);
+            server.config.logger.warn(`EgoNitida devtools relay did not start: ${reason}`);
             banner.devtools = Option.some(Option.none());
             sayBanner();
           }),

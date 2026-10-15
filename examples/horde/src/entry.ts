@@ -139,7 +139,7 @@ const main = Effect.gen(function* () {
   const app: Chroma.App = {
     title: 'Horde',
     description: 'Survive the horde, lit by how much health is left.',
-    author: { name: 'Nitida', contact: 'https://github.com/filipfalcon/nitida' },
+    author: { name: 'EgoNitida', contact: 'https://github.com/filipfalcon/egonitida' },
     category: 'game',
   };
   yield* listen('keydown', (event) => {

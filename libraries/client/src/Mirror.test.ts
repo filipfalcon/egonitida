@@ -91,7 +91,7 @@ describe('the mirror of a scene', () => {
   it.effect('outlines the entity a button stands for while it has focus', () =>
     Effect.gen(function* () {
       const { state, scene, show, buttons } = yield* mirrored;
-      const outline = () => scene.children.find((child) => child.name === 'nitida:mirror');
+      const outline = () => scene.children.find((child) => child.name === 'egonitida:mirror');
 
       buttons()[1]?.focus();
       yield* show(state, Option.some(Timeline.still(state)));

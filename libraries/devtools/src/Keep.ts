@@ -25,7 +25,7 @@ export const memory = (): Store => {
   };
 };
 
-const DATABASE = 'nitida-devtools';
+const DATABASE = 'egonitida-devtools';
 const VERSION = 2;
 const STATES = 'states';
 

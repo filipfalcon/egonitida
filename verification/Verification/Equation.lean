@@ -1,5 +1,5 @@
 /-!
-The equation Nitida rests on, x′ = f(x, u): a state, the input that enters a step from outside it, and the step that turns both into the next state.
+The equation EgoNitida rests on, x′ = f(x, u): a state, the input that enters a step from outside it, and the step that turns both into the next state.
 -/
 
 /-- A game as the equation x′ = f(x, u): its step turns a state and an input into the next state. -/

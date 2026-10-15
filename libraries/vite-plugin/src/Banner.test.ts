@@ -9,12 +9,12 @@ describe('the banner', () => {
         name: '@egonitida/editor',
         version: Option.some('0.1.0'),
         devtools: Option.some('ws://127.0.0.1:56190/'),
-        mcp: Option.some('http://127.0.0.1:5173/__nitida/mcp'),
+        mcp: Option.some('http://127.0.0.1:5173/__egonitida/mcp'),
       }),
     ).toEqual([
       '@egonitida/editor | v0.1.0',
       'DevTools: ws://127.0.0.1:56190/',
-      'MCP: http://127.0.0.1:5173/__nitida/mcp',
+      'MCP: http://127.0.0.1:5173/__egonitida/mcp',
     ]);
   });
 

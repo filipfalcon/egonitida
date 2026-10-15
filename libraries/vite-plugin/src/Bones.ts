@@ -260,7 +260,7 @@ export interface Plugin {
  * The plugin that gives a module importing a model's file with `?bones` its bones; given to a game's Vite config, to its workers' (`worker.plugins`), which are built on their own, and so to its tests. It loads before Vite's own, which would give the file's URL instead. A file it cannot read fails the build, saying why.
  */
 export const plugin = (): Plugin => ({
-  name: 'nitida:bones',
+  name: 'egonitida:bones',
   enforce: 'pre',
   load(id) {
     const at = id.indexOf('?');

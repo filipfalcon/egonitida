@@ -8,14 +8,14 @@ import * as Tools from '#src/Tools.ts';
  */
 
 /** Where a development server serves the MCP server over HTTP. */
-export const PATH = '/__nitida/mcp';
+export const PATH = '/__egonitida/mcp';
 
 /** What the server says it is to a client. */
 const INFO: Parameters<typeof McpServer.layerStdio>[0] = {
-  name: 'nitida-devtools',
+  name: 'egonitida-devtools',
   version: '0.0.0',
   description:
-    'A running Nitida game, as its development server serves it: what it is made of, its state at any tick kept, its log, time, playing it, and what its page shows.',
+    'A running EgoNitida game, as its development server serves it: what it is made of, its state at any tick kept, its log, time, playing it, and what its page shows.',
   protocols: [
     McpProtocol.v2025_11_25,
     McpProtocol.v2025_06_18,

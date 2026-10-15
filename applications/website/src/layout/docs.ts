@@ -223,7 +223,7 @@ export const view = (model: Model, page: DocsPage, h: HtmlBuilder<Message>): Htm
   return h.div(Styled.attributes(h, styles.shell), [
     h.a([h.Href(`#${CONTENT_ID}`), ...Styled.attributes(h, styles.skip)], ['Skip to content']),
     h.header(Styled.attributes(h, styles.bar), [
-      h.a([h.Href(homeRouter()), ...Styled.attributes(h, styles.wordmark)], ['Nitida']),
+      h.a([h.Href(homeRouter()), ...Styled.attributes(h, styles.wordmark)], ['EgoNitida']),
       h.nav(
         [h.AriaLabel('Elsewhere'), ...Styled.attributes(h, styles.barLinks)],
         [

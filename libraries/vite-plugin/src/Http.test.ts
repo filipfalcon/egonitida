@@ -31,12 +31,12 @@ describe('a Fetch application mounted on a development server', () => {
       yield* Effect.addFinalizer(() => Effect.sync(() => server.close()));
 
       const response = yield* Effect.promise(() =>
-        fetch(`http://127.0.0.1:${port}/__nitida/mcp`, { method: 'POST', body: 'hello' }),
+        fetch(`http://127.0.0.1:${port}/__egonitida/mcp`, { method: 'POST', body: 'hello' }),
       );
 
       expect(response.status).toBe(201);
       expect(response.headers.get('x-seen')).toBe('yes');
-      expect(yield* Effect.promise(() => response.text())).toBe('POST /__nitida/mcp hello');
+      expect(yield* Effect.promise(() => response.text())).toBe('POST /__egonitida/mcp hello');
     }).pipe(Effect.scoped),
   );
 });

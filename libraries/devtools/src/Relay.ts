@@ -40,7 +40,7 @@ export const Record = Schema.Struct({ url: Schema.String, token: Schema.String, 
 export type Record = typeof Record.Type;
 
 /** Where, under a workspace's root, relays keep their records. */
-export const RECORDS = ['node_modules', '.nitida', 'relays'];
+export const RECORDS = ['node_modules', '.egonitida', 'relays'];
 
 /** A connection to one side, which a relay sends messages to. */
 export interface Peer<Message> {

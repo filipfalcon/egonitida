@@ -1,14 +1,14 @@
 # Key Terms
 
-Nitida speaks a small, precise vocabulary, and every page after this one uses it without stopping to explain. The terms fall into three groups: a game's state and the clock that moves it, the primitives a game is written in, and the places a game runs. A game is made of primitives alone; everything else is what the engine makes of them at run time.
+EgoNitida speaks a small, precise vocabulary, and every page after this one uses it without stopping to explain. The terms fall into three groups: a game's state and the clock that moves it, the primitives a game is written in, and the places a game runs. A game is made of primitives alone; everything else is what the engine makes of them at run time.
 
 ## First Things First
 
-A project in Nitida is a universe full of things, sorted into a few logical groups. Together, those groups are the fundamentals the whole engine is built on.
+A project in EgoNitida is a universe full of things, sorted into a few logical groups. Together, those groups are the fundamentals the whole engine is built on.
 
 ::FirstThingsFirst
 
-A game in Nitida holds a **state** full of things. Each thing is an **entity**, and the data it carries, such as where it stands or how much health it has left, sits in its **components**. The game moves forward in **steps**, a fixed number every second, each replacing its state with the next, and a state's **tick** counts how many steps it took to reach it.
+A game in EgoNitida holds a **state** full of things. Each thing is an **entity**, and the data it carries, such as where it stands or how much health it has left, sits in its **components**. The game moves forward in **steps**, a fixed number every second, each replacing its state with the next, and a state's **tick** counts how many steps it took to reach it.
 
 Each step takes an **input**, everything that enters it from outside the state: the players' **demands** and the **actions**. During each step, **systems** move whatever moves, while **rules** decide what the **actions** and the game's own **events** mean, now and then issuing a **command** for work outside the game. Between steps, **views** draw the result on screen. A **domain** bundles one part of all this, such as a game's weapons, and a **game** is the list of its domains. Finally, a **host** steps the game, and **clients** show it to the players.
 

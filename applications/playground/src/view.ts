@@ -67,7 +67,7 @@ export const measuredText = ({ framesPerSecond, latencyMillis }: Stage.Measured)
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
   const withPad = Option.contains(model.maybeInHand, 'Pad');
   return {
-    title: 'Nitida Playground',
+    title: 'EgoNitida Playground',
     body: h.main(Styled.attributes(h, styles.playground, withPad && styles.noCursor), [
       // The canvas is in the page while the session is joined, and goes with it.
       ...(model.session._tag === 'Joined'

@@ -1,11 +1,11 @@
 ---
 name: generate-domain
-description: Adds a domain to a Nitida game — its components, actions, events, commands, rules, and systems, its views, and its stories and scenes — test first, as the engine's rules require. Use when a game needs new components or new behaviour of its own.
+description: Adds a domain to a EgoNitida game — its components, actions, events, commands, rules, and systems, its views, and its stories and scenes — test first, as the engine's rules require. Use when a game needs new components or new behaviour of its own.
 ---
 
 # Generating a domain
 
-A domain is one part of a game's state: the components it owns, and the actions, events, commands, rules, and systems that change them. This skill adds one, test first. Read the `nitida` skill and the repository's `AGENTS.md` before starting.
+A domain is one part of a game's state: the components it owns, and the actions, events, commands, rules, and systems that change them. This skill adds one, test first. Read the `egonitida` skill and the repository's `AGENTS.md` before starting.
 
 ## 1. Decide what it owns
 
@@ -46,4 +46,4 @@ If it is drawn, write `name.view.ts` after the exemplar views, and `name.scene.t
 
 ## 5. Check
 
-`npm run check` and `npm test` pass, with no test file failing as it loads. If the game has a development server running, play the new behaviour through the `nitida-devtools` MCP tools, and turn what you find into a story with `nitida_story`.
+`npm run check` and `npm test` pass, with no test file failing as it loads. If the game has a development server running, play the new behaviour through the `egonitida-devtools` MCP tools, and turn what you find into a story with `egonitida_story`.

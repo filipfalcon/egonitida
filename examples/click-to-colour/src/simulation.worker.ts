@@ -2,7 +2,7 @@ import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { Host, WorkerTransport, State } from '@egonitida/core';
 import { Beside } from '@egonitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:nitida/build';
+import { build } from 'virtual:egonitida/build';
 import * as Colour from '#src/colour.ts';
 
 // The local server: the cubes' game, stepped off the main thread. A page that joins is whoever clicks: an entity that holds nothing, whom its clicks are from. In development it goes on from the state kept for the tab whatever code changed, as the horde's does, with the devtools beside it, by the id the page named this worker with.

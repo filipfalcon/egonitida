@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "nitida-devtools": {
+    "egonitida-devtools": {
       "command": "node",
       "args": ["libraries/devtools-mcp/src/main.ts"]
     }

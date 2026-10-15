@@ -1,13 +1,13 @@
 {
-  "jsPlugins": [{ "name": "nitida", "specifier": "@egonitida/oxlint-plugin" }],
+  "jsPlugins": [{ "name": "egonitida", "specifier": "@egonitida/oxlint-plugin" }],
   "rules": {
-    "nitida/pure-steps": "error",
-    "nitida/no-nullable-components": "error",
-    "nitida/views-keep-nothing": "error",
-    "nitida/no-index-keys": "error",
-    "nitida/no-three-in-domains": "error",
-    "nitida/redacted-command-secrets": "error",
-    "nitida/same-maths": "error",
+    "egonitida/pure-steps": "error",
+    "egonitida/no-nullable-components": "error",
+    "egonitida/views-keep-nothing": "error",
+    "egonitida/no-index-keys": "error",
+    "egonitida/no-three-in-domains": "error",
+    "egonitida/redacted-command-secrets": "error",
+    "egonitida/same-maths": "error",
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
     "typescript/no-non-null-assertion": "error"

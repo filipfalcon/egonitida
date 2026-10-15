@@ -1,5 +1,5 @@
 /** Where the engine's code is, and where its people talk. */
-export const REPOSITORY = 'https://github.com/filipfalcon/nitida';
+export const REPOSITORY = 'https://github.com/filipfalcon/egonitida';
 export const DISCORD = 'https://discord.gg/F3YkynckH';
 
 /** A file of the repository, as GitHub shows it. */
