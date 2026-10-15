@@ -1,4 +1,5 @@
 import { Option, Schema } from 'effect';
+import * as Maths from '#src/Maths.ts';
 import type * as Ray from '#src/Ray.ts';
 
 /**
@@ -144,7 +145,7 @@ export const start = <P extends string>(
     return { x: x - v.x * SUBSTEP, y: y - v.y * SUBSTEP, z: z - v.z * SUBSTEP };
   });
   const lengths = plan.pairs.map(([a, b]) =>
-    Math.hypot(
+    Maths.hypot(
       read(now, a, 0) - read(now, b, 0),
       read(now, a, 1) - read(now, b, 1),
       read(now, a, 2) - read(now, b, 2),
@@ -210,7 +211,7 @@ const hold = (
   const dx = (p[b * 3] ?? 0) - (p[a * 3] ?? 0);
   const dy = (p[b * 3 + 1] ?? 0) - (p[a * 3 + 1] ?? 0);
   const dz = (p[b * 3 + 2] ?? 0) - (p[a * 3 + 2] ?? 0);
-  const distance = Math.hypot(dx, dy, dz);
+  const distance = Maths.hypot(dx, dy, dz);
   const wa = light[a] ?? 0;
   const wb = light[b] ?? 0;
   if (distance === 0 || wa + wb === 0) {
@@ -235,7 +236,7 @@ const bend = (
   const ux = get(to, 0) - get(from, 0);
   const uy = get(to, 1) - get(from, 1);
   const uz = get(to, 2) - get(from, 2);
-  const u = Math.hypot(ux, uy, uz);
+  const u = Maths.hypot(ux, uy, uz);
   if (u === 0) {
     return;
   }
@@ -259,7 +260,7 @@ const bend = (
   fx -= ax * along;
   fy -= ay * along;
   fz -= az * along;
-  const f = Math.hypot(fx, fy, fz);
+  const f = Maths.hypot(fx, fy, fz);
   if (f === 0) {
     return;
   }
@@ -382,7 +383,7 @@ export const step = <P extends string>(
         }
       }
       const speed =
-        Math.hypot(
+        Maths.hypot(
           (now[index * 3] ?? 0) - (before[index * 3] ?? 0),
           (now[index * 3 + 1] ?? 0) - (before[index * 3 + 1] ?? 0),
           (now[index * 3 + 2] ?? 0) - (before[index * 3 + 2] ?? 0),

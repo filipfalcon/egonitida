@@ -9,6 +9,7 @@ export * as Event from '#src/Event.ts';
 export * as Game from '#src/Game.ts';
 export * as Host from '#src/Host.ts';
 export * as Input from '#src/Input.ts';
+export * as Maths from '#src/Maths.ts';
 export * as Pointing from '#src/Pointing.ts';
 export * as Ragdoll from '#src/Ragdoll.ts';
 export * as Random from '#src/Random.ts';

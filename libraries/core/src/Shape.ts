@@ -1,4 +1,5 @@
 import { Option } from 'effect';
+import * as Maths from '#src/Maths.ts';
 import type * as Ray from '#src/Ray.ts';
 
 /**
@@ -124,7 +125,7 @@ export const mpfb = (options: { readonly by: number }) =>
   });
 
 /** How far apart `a` and `b` are. */
-const apart = (a: Ray.Point, b: Ray.Point) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+const apart = (a: Ray.Point, b: Ray.Point) => Maths.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
 /** How long the offset of the bone `name` of `bones` from its parent was made: nothing for a bone with no parent, or none at all. */
 const offsetOf = (bones: Bones, name: string) => {
