@@ -16,7 +16,7 @@ const post = (body: object, clientId?: string) =>
   });
 
 describe('the MCP server over HTTP', () => {
-  it.live('answers an MCP client at its path, with the same tools as over stdio', () =>
+  it.live('answers an MCP client at its path, with every tool', () =>
     Effect.gen(function* () {
       const { handler: respond, dispose } = Server.web(process.cwd());
       yield* Effect.addFinalizer(() => Effect.promise(dispose));

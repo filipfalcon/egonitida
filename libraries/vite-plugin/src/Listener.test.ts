@@ -88,4 +88,36 @@ describe('a relay listening for tools', () => {
       );
     }),
   );
+
+  it.live(
+    'serves the MCP server, on its own port, to a tool that gives its token, and says where in its record',
+    () =>
+      Effect.gen(function* () {
+        const listening = yield* Listener.listen(yield* Relay.make, {
+          directory: yield* directory,
+          mcp: {
+            path: '/mcp',
+            respond: (request) =>
+              request.text().then((body) => new Response(`answered ${body}`, { status: 200 })),
+          },
+        });
+        const record = JSON.parse(yield* Effect.promise(() => readFile(listening.record, 'utf8')));
+        const post = (headers: Record<string, string>) =>
+          Effect.promise(() =>
+            fetch(record.mcp, { method: 'POST', headers, body: 'ping' }).then(async (response) => ({
+              status: response.status,
+              text: await response.text(),
+            })),
+          );
+
+        const answered = yield* post({ authorization: `Bearer ${listening.token}` });
+        const bare = yield* post({});
+        const wrong = yield* post({ authorization: 'Bearer wrong' });
+
+        expect(record.mcp).toBe(`${listening.url.replace('ws:', 'http:')}mcp`);
+        expect(answered).toEqual({ status: 200, text: 'answered ping' });
+        expect(bare.status).toBe(401);
+        expect(wrong.status).toBe(401);
+      }),
+  );
 });

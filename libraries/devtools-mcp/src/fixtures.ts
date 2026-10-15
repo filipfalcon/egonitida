@@ -1,10 +1,11 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Component, Domain, Game, Host, System, State } from '@egonitida/core';
 import { Bridge, Inspect, Page, Relay, Rewind } from '@egonitida/devtools';
 import { Listener } from '@egonitida/vite-plugin';
 import { Effect, Option, Queue, Schema, Stream } from 'effect';
+import * as Server from '#src/Server.ts';
 
 /**
  * What the MCP server's tests share: a game that counts its steps, and a relay with hosts of it, as a development server would have them.
@@ -47,13 +48,19 @@ export const counting = Game.make({
   ],
 });
 
-/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time suspended, and each drawn by a page whose every shot is one pixel. */
+/** A relay listening for tools, keeping its record in `directory`, a directory of its own unless given, serving the MCP server beside it for the workspace the directory is in, as a development server does, and hosts of the counting game called `names` said hello to it, each over a channel in memory, their time suspended, and each drawn by a page whose every shot is one pixel. */
 export const served = (names: ReadonlyArray<string>, directory?: string) =>
   Effect.gen(function* () {
     const relay = yield* Relay.make;
     const kept =
       directory ?? (yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'egonitida-relay-'))));
-    const listening = yield* Listener.listen(relay, { directory: kept });
+    // The records lie three directories down from the workspace's root.
+    const mcp = Server.web(dirname(dirname(dirname(kept))));
+    yield* Effect.addFinalizer(() => Effect.promise(mcp.dispose));
+    const listening = yield* Listener.listen(relay, {
+      directory: kept,
+      mcp: { path: Server.PATH, respond: mcp.handler },
+    });
     for (const name of names) {
       const setup = {
         game: counting,

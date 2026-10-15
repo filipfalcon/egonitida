@@ -35,8 +35,13 @@ export const FromRelay = Schema.Union([
 ]);
 export type FromRelay = typeof FromRelay.Type;
 
-/** A record of where a relay listens for tools, and the token they give: what a tool reads to reach it. */
-export const Record = Schema.Struct({ url: Schema.String, token: Schema.String, pid: Schema.Int });
+/** A record of where a relay listens for tools, where its development server serves the MCP server to them if it does, the token they give either, and the process serving them: what a tool reads to reach it. */
+export const Record = Schema.Struct({
+  url: Schema.String,
+  mcp: Schema.optionalKey(Schema.String),
+  token: Schema.String,
+  pid: Schema.Int,
+});
 export type Record = typeof Record.Type;
 
 /** Where, under a workspace's root, relays keep their records. */
