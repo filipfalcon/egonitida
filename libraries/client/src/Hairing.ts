@@ -8,7 +8,6 @@ import {
   abs,
   asin,
   atomicAdd,
-  atomicLoad,
   atomicStore,
   cameraProjectionMatrix,
   cameraWorldMatrix,
@@ -794,8 +793,9 @@ export const fit = (
     // The hair about her added up in a grid every frame, as `density` adds it up, before her strands are drawn: each link counted, as long as it is times as wide as it starts, in the voxel it starts in.
     const cells = GRID ** 3;
     const counts = new Three.StorageBufferAttribute(new Uint32Array(cells), 1);
-    // Added to atomically, and so read atomically too, wherever it is read.
+    // Added to atomically as it is added up; read as it stands where strands are placed, which may only read what they are given.
     const counting = storage(counts, 'uint', cells).toAtomic();
+    const standing = storage(counts, 'uint', cells).toReadOnly();
     const grid: Kept = {
       from: uniform(new Three.Vector3()),
       voxel: uniform(0.01),
@@ -821,17 +821,23 @@ export const fit = (
     const emptied = Fn(() => {
       atomicStore(counting.element(instanceIndex), 0);
     })().compute(cells);
+    // Only the strands drawn are added up, each as much more as it stands for of those not drawn, so the hair is as thick.
+    const every = Math.max(Math.round(options.every ?? 1), 1);
+    const keptStrands = Math.ceil(strands / every);
     const added = Fn(() => {
-      const point = int(instanceIndex);
+      const kept = int(instanceIndex);
+      const point = kept.div(pointsDrawn).mul(every).mul(pointsDrawn).add(kept.mod(pointsDrawn));
       If(point.mod(pointsDrawn).notEqual(pointsDrawn.sub(1)), () => {
         const here = placedAt(point);
-        const link = length(placedAt(point.add(1)).sub(here)).mul(drawnMade.node.element(point).w);
+        const link = length(placedAt(point.add(1)).sub(here))
+          .mul(drawnMade.node.element(point).w)
+          .mul(every);
         const { inside, index } = voxelAt(here);
         If(inside, () => {
           atomicAdd(counting.element(index), uint(link.div(COUNTED)));
         });
       });
-    })().compute(position.count);
+    })().compute(keptStrands * hair.drawn.points);
     const addedUp = new Three.ConvertNode<'float'>(
       new EachFrame((renderer) => {
         // Drawing, the renderer is ready, so it computes at once and gives back no promise.
@@ -839,25 +845,24 @@ export const fit = (
       }),
       'float',
     );
-    // Where each point of a strand is, in the model's space, for the light to go from it through the hair.
-    const at = varying(placed, 'vHairAt');
-    /** As `transmittance` has it, every other voxel: from a voxel beyond the point toward the light, each voxel's hair taking light away, for as long as a step a voxel's hair stands for. */
+    /** As `transmittance` has it, every other voxel: from a voxel beyond `from` toward the light, the way `way`, each voxel's hair taking light away, for as long as a step a voxel's hair stands for. */
     // Marched in a function of its own on the graphics device, which a loop needs to be written in.
-    const marched = Fn(([way]: [Three.Node<'vec3'>]) => {
+    const marched = Fn(([from, way]: [Three.Node<'vec3'>, Three.Node<'vec3'>]) => {
       const covered = float(0).toVar();
       Loop(MARCHED, ({ i }) => {
         const { inside, index } = voxelAt(
-          at.add(way.mul(grid.voxel.mul(float(i).mul(STRIDE).add(1)))),
+          from.add(way.mul(grid.voxel.mul(float(i).mul(STRIDE).add(1)))),
         );
         If(inside, () => {
-          covered.addAssign(float(atomicLoad(counting.element(index))).mul(STRIDE));
+          covered.addAssign(float(standing.element(index)).mul(STRIDE));
         });
       });
       return exp(covered.mul(COUNTED).div(grid.voxel.mul(grid.voxel)).negate());
     });
+    // Marched once for each point of a strand, where it is placed, and blended along the strand between them, rather than for every pixel it covers, many times over where strands lie over one another.
     const shadowed: Shadowed = (toLight) => {
       const inWorld = cameraWorldMatrix.mul(vec4(toLight, 0)).xyz;
-      return marched(normalize(modelWorldMatrixInverse.mul(vec4(inWorld, 0)).xyz));
+      return varying(marched(placed, normalize(modelWorldMatrixInverse.mul(vec4(inWorld, 0)).xyz)));
     };
 
     const colour = colourOf(hair.shading);
@@ -897,7 +902,6 @@ export const fit = (
       .y.mul(screenSize.y)
       .mul(0.5);
     // Drawing only every so many strands, each covers as much more, so the hair is as thick.
-    const every = Math.max(Math.round(options.every ?? 1), 1);
     material.opacityNode = clamp(
       width.mul(focal).mul(every).div(positionView.z.negate()),
       0,
