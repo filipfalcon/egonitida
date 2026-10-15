@@ -64,19 +64,21 @@ const model = () => {
   const made = new Three.Group();
   made.add(lines('HairStrands', drawnAt));
   made.add(lines('HairGuides', guides.at));
-  const cards = new Three.Mesh(new Three.BufferGeometry(), new Three.MeshBasicMaterial());
-  cards.name = 'HairCards';
-  made.add(cards);
+  for (const name of ['HairCards', 'ponytail']) {
+    const cards = new Three.Mesh(new Three.BufferGeometry(), new Three.MeshBasicMaterial());
+    cards.name = name;
+    made.add(cards);
+  }
   return made;
 };
 
 describe('Hairing.fit', () => {
   it.effect(
-    'draws her strands after her guides, never culled, and shows neither her guides nor her cards',
+    'draws her strands after her guides, never culled, and shows neither her guides nor the cards named',
     () =>
       Effect.gen(function* () {
         const delivered = model();
-        const haired = yield* Hairing.fit(delivered, hair);
+        const haired = yield* Hairing.fit(delivered, hair, ['HairCards', 'ponytail']);
 
         const strands = delivered.getObjectByName('HairStrands');
         expect(strands?.visible).toBe(true);
@@ -87,6 +89,7 @@ describe('Hairing.fit', () => {
         );
         expect(delivered.getObjectByName('HairGuides')?.visible).toBe(false);
         expect(delivered.getObjectByName('HairCards')?.visible).toBe(false);
+        expect(delivered.getObjectByName('ponytail')?.visible).toBe(false);
         // Each strand on a guide's root follows that guide, as the core binds it from where the model holds its roots.
         const expected = Strands.bind(
           guides,
@@ -137,6 +140,14 @@ describe('Hairing.fit', () => {
 });
 
 describe('Hairing.colourOf', () => {
+  it('is dark brown for hair as dark as the baller’s, seen through twice', () => {
+    const brown = Hairing.colourOf({ ...hair.shading, melanin: 0.9, melaninRedness: 0.42 });
+
+    expect(brown.r).toBeLessThan(0.3);
+    expect(brown.r).toBeGreaterThan(brown.g);
+    expect(brown.g).toBeGreaterThan(brown.b);
+  });
+
   it('is darker the more melanin hair holds, and redder the more of it is red', () => {
     const dark = Hairing.colourOf({ ...hair.shading, melanin: 0.9, melaninRedness: 0 });
     const fair = Hairing.colourOf({ ...hair.shading, melanin: 0.2, melaninRedness: 0 });

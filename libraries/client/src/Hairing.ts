@@ -18,16 +18,15 @@ import {
 import * as Three from 'three/webgpu';
 
 /**
- * A model's hair drawn as strands after the guides a game swings, y = h(x): the model's own strands, the lines `HairStrands`, each point placed every frame on the graphics device as `Strands.follow` places it, along the guides it follows as far as it is along its own strand, beside them as it was made, turned as their roots have turned. The model's guides, the lines `HairGuides`, and its hair as cards, `HairCards`, are not shown. Which guides each strand follows is worked out once, as the drawing is built; each frame the drawing is given only where the guides swing and how their roots have turned.
+ * A model's hair drawn as strands after the guides a game swings, y = h(x): the model's own strands, the lines `HairStrands`, each point placed every frame on the graphics device as `Strands.follow` places it, along the guides it follows as far as it is along its own strand, beside them as it was made, turned as their roots have turned. The model's guides, the lines `HairGuides`, and its hair as cards are not shown. Which guides each strand follows is worked out once, as the drawing is built; each frame the drawing is given only where the guides swing and how their roots have turned.
  */
 
 /** The model has no strands to draw, or not as many as the hair counts, and why. */
 export class Unfitted extends Data.TaggedError('Unfitted')<{ readonly reason: string }> {}
 
-/** The lines of a model its hair is drawn as, the lines of its guides, and its hair as cards, as the model names them. */
+/** The lines of a model its hair is drawn as, and the lines of its guides, as the model names them. */
 const STRANDS = 'HairStrands';
 const GUIDES = 'HairGuides';
-const CARDS = 'HairCards';
 
 /** A buffer of four numbers at a time on the graphics device, `count` groups, which a shader reads. */
 const buffer = (count: number) => {
@@ -47,7 +46,7 @@ const padded = (values: ReadonlyArray<number>, into: Float32Array) => {
 };
 
 /**
- * The colour of hair shaded as `shading` says, seen through once: its melanin, as much of it red as its redness says, taking in light as Chiang's model has eumelanin and pheomelanin take it in, tinted. The drawing's colour until hair is shaded as that model shades it.
+ * The colour of hair shaded as `shading` says, seen through twice, as light that goes into a strand and back out of it is: its melanin, as much of it red as its redness says, taking in light as Chiang's model has eumelanin and pheomelanin take it in, tinted. The drawing's colour until hair is shaded as that model shades it.
  */
 export const colourOf = (shading: Strands.Shading): Three.Color => {
   const concentration = -Math.log(Math.max(1 - shading.melanin, 0.0001));
@@ -55,9 +54,9 @@ export const colourOf = (shading: Strands.Shading): Three.Color => {
   const pheomelanin = concentration * shading.melaninRedness;
   const [red, green, blue] = shading.tint;
   return new Three.Color(
-    red * Math.exp(-(eumelanin * 0.419 + pheomelanin * 0.187)),
-    green * Math.exp(-(eumelanin * 0.697 + pheomelanin * 0.4)),
-    blue * Math.exp(-(eumelanin * 1.37 + pheomelanin * 1.05)),
+    red * Math.exp(-2 * (eumelanin * 0.419 + pheomelanin * 0.187)),
+    green * Math.exp(-2 * (eumelanin * 0.697 + pheomelanin * 0.4)),
+    blue * Math.exp(-2 * (eumelanin * 1.37 + pheomelanin * 1.05)),
   );
 };
 
@@ -117,9 +116,13 @@ export class Haired {
 }
 
 /**
- * `model`'s hair, counted and shaded as `hair` says, drawn as its strands after its guides: the lines `HairStrands` placed on the graphics device each frame as their guides swing, coloured as the hair is shaded, never culled, since where they are drawn is not where they were made; the lines `HairGuides` and the cards `HairCards` not shown. Fails with `Unfitted` if the model has no lines `HairStrands`, or not as many points in them as the hair counts.
+ * `model`'s hair, counted and shaded as `hair` says, drawn as its strands after its guides: the lines `HairStrands` placed on the graphics device each frame as their guides swing, coloured as the hair is shaded, never culled, since where they are drawn is not where they were made; the lines `HairGuides`, and the meshes `cards` names, its hair as cards, `HairCards` unless named otherwise, not shown. Fails with `Unfitted` if the model has no lines `HairStrands`, or not as many points in them as the hair counts.
  */
-export const fit = (model: Three.Object3D, hair: Strands.Hair): Effect.Effect<Haired, Unfitted> =>
+export const fit = (
+  model: Three.Object3D,
+  hair: Strands.Hair,
+  cards: ReadonlyArray<string> = ['HairCards'],
+): Effect.Effect<Haired, Unfitted> =>
   Effect.suspend(() => {
     const drawn = model.getObjectByName(STRANDS);
     if (!(drawn instanceof Three.LineSegments)) {
@@ -215,7 +218,7 @@ export const fit = (model: Three.Object3D, hair: Strands.Hair): Effect.Effect<Ha
     drawn.material = material;
     drawn.frustumCulled = false;
     drawn.visible = true;
-    for (const hidden of [GUIDES, CARDS]) {
+    for (const hidden of [GUIDES, ...cards]) {
       const shown = model.getObjectByName(hidden);
       if (shown !== undefined) {
         shown.visible = false;

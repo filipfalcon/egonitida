@@ -19,6 +19,9 @@ const hair = Ragdolling.make({
   ponytail_04: { toward: 'ponytail_05' },
 });
 
+/** Her hair as cards, as her model has it, which her strands are drawn instead of: over her scalp, and down her ponytail. */
+const CARDS = ['HairCards', 'ponytail'];
+
 /** A baller as drawn: her model, how it is posed, how her ponytail is, and her hair as strands. */
 class Drawn extends Three.Group {
   readonly posed: Posing.Posed;
@@ -91,7 +94,7 @@ export const make = <E>(model: Effect.Effect<Three.Object3D, E>) => {
         return new Drawn(
           yield* Posing.fit(copy, Body.joints),
           yield* Ragdolling.fit(copy, hair),
-          yield* Hairing.fit(copy, Body.hair),
+          yield* Hairing.fit(copy, Body.hair, CARDS),
         );
       }).pipe(Effect.orDie),
     draw: (drawn, held, frame) => {
