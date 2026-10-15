@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",
-    "@effect/platform-node": "4.0.0",
+    "@effect/platform-node": "4.0.3",
     "@effect/tsgo": "0.52.0",
     "@effect/vitest": "4.0.0",
     "@egonitida/oxlint-plugin": "*",
