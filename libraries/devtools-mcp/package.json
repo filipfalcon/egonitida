@@ -1,6 +1,7 @@
 {
   "name": "@egonitida/devtools-mcp",
   "private": true,
+  "license": "MIT",
   "bin": {
     "egonitida-devtools-mcp": "./src/main.ts"
   },

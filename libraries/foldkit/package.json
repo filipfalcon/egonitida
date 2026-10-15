@@ -1,6 +1,7 @@
 {
   "name": "@egonitida/foldkit",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "imports": {
     "#package.json": "./package.json",
