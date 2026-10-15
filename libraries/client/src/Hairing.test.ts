@@ -140,6 +140,26 @@ describe('Hairing.fit', () => {
   );
 });
 
+describe('Hairing.absorptionOf', () => {
+  it('takes light in as Blender’s Principled Hair does: its melanin as eumelanin and pheomelanin, and its tint', () => {
+    const melanin = -Math.log(1 - 0.9);
+    const taken = Hairing.absorptionOf({ ...hair.shading, melanin: 0.9, melaninRedness: 0.42 });
+
+    expect(taken.r).toBeCloseTo(melanin * 0.58 * 0.506 + melanin * 0.42 * 0.343, 12);
+    expect(taken.b).toBeCloseTo(melanin * 0.58 * 1.653 + melanin * 0.42 * 1.924, 12);
+  });
+
+  it('takes in more of what its tint lacks, nothing more for a white tint', () => {
+    const white = Hairing.absorptionOf({ ...hair.shading, tint: [1, 1, 1] });
+    const cyan = Hairing.absorptionOf({ ...hair.shading, tint: [0.5, 1, 1] });
+    const x = hair.shading.radialRoughness;
+    const scale = ((((0.245 * x + 5.574) * x - 10.73) * x + 2.532) * x - 0.215) * x + 5.969;
+
+    expect(cyan.r - white.r).toBeCloseTo((Math.log(0.5) / scale) ** 2, 12);
+    expect(cyan.g).toBeCloseTo(white.g, 12);
+  });
+});
+
 describe('Hairing.colourOf', () => {
   it('is dark brown for hair as dark as the baller’s, seen through twice', () => {
     const brown = Hairing.colourOf({ ...hair.shading, melanin: 0.9, melaninRedness: 0.42 });
@@ -197,6 +217,18 @@ describe('Hairing.lobes', () => {
 
     expect(inner.r).toBeGreaterThan(inner.b);
     expect(sum(inner)).toBeGreaterThan(0);
+  });
+
+  it('scatters light many times within it, softly, its colour, wherever it is lit from', () => {
+    const from = (light: { x: number; y: number; z: number }) =>
+      Hairing.lobes(brown, along, light, toEye).scattered;
+    const side = from({ x: 1, y: 0, z: 0 });
+
+    expect(sum(side)).toBeGreaterThan(0);
+    expect(side.r).toBeGreaterThan(side.g);
+    expect(side.g).toBeGreaterThan(side.b);
+    // Lit from before it, more than from behind it.
+    expect(sum(from(lit(0)))).toBeGreaterThan(sum(from(lit(0, true))));
   });
 
   it('lets less light through and back the darker it is, its surface shining alike', () => {

@@ -66,36 +66,40 @@ export interface Colour {
   readonly b: number;
 }
 
-/** How much light hair shaded as `shading` takes in, red, green, and blue, for every strand's width it goes through: its melanin, as much of it red as its redness says, eumelanin and pheomelanin each taking light in as Chiang's model has them. */
+/** How far a strand rough about it as `around` spreads light across it, as Blender's Principled Hair fits it, which its tint's absorption is worked out by. */
+const roughnessScale = (around: number) =>
+  ((((0.245 * around + 5.574) * around - 10.73) * around + 2.532) * around - 0.215) * around +
+  5.969;
+
+/** How much light hair shaded as `shading` takes in, red, green, and blue, for every strand's width it goes through, as Blender's Principled Hair has it: its melanin, as much of it red as its redness says, eumelanin and pheomelanin each taking light in as Blender has them; and as much more as leaves its tint as it is, white taking in nothing more. */
 export const absorptionOf = (shading: Strands.Shading): Colour => {
   const concentration = -Math.log(Math.max(1 - shading.melanin, 0.0001));
   const eumelanin = concentration * (1 - shading.melaninRedness);
   const pheomelanin = concentration * shading.melaninRedness;
+  const scale = roughnessScale(shading.radialRoughness);
+  const tinted = (part: number) => (Math.log(Math.max(part, 0.0001)) / scale) ** 2;
+  const [red, green, blue] = shading.tint;
   return {
-    r: eumelanin * 0.419 + pheomelanin * 0.187,
-    g: eumelanin * 0.697 + pheomelanin * 0.4,
-    b: eumelanin * 1.37 + pheomelanin * 1.05,
+    r: eumelanin * 0.506 + pheomelanin * 0.343 + tinted(red),
+    g: eumelanin * 0.841 + pheomelanin * 0.733 + tinted(green),
+    b: eumelanin * 1.653 + pheomelanin * 1.924 + tinted(blue),
   };
 };
 
 /**
- * The colour of hair shaded as `shading` says, seen through twice, as light that goes into a strand and back out of it is: its melanin taking light in, tinted. What light about it, coming from everywhere at once, makes of it.
+ * The colour of hair shaded as `shading` says, seen through twice, as light that goes into a strand and back out of it is: as much as it takes in, by its melanin and its tint. What light about it, coming from everywhere at once, makes of it.
  */
 export const colourOf = (shading: Strands.Shading): Three.Color => {
   const taken = absorptionOf(shading);
-  const [red, green, blue] = shading.tint;
-  return new Three.Color(
-    red * Math.exp(-2 * taken.r),
-    green * Math.exp(-2 * taken.g),
-    blue * Math.exp(-2 * taken.b),
-  );
+  return new Three.Color(Math.exp(-2 * taken.r), Math.exp(-2 * taken.g), Math.exp(-2 * taken.b));
 };
 
-/** How light a strand scatters toward the eye comes off it: off its surface, white; through it, coloured by its melanin; and back off its inside, coloured too. */
+/** How light a strand scatters toward the eye comes off it: off its surface, white; through it, coloured by its melanin; back off its inside, coloured too; and scattered many times among strands and within them, softly, its colour. */
 export interface Lobes {
   readonly reflected: Colour;
   readonly transmitted: Colour;
   readonly internal: Colour;
+  readonly scattered: Colour;
 }
 
 type Direction = { readonly x: number; readonly y: number; readonly z: number };
@@ -111,7 +115,7 @@ const spread = (width: number, angle: number) =>
 const fresnel = (facing: number, cosine: number) => facing + (1 - facing) * (1 - cosine) ** 5;
 
 /**
- * How light from the way `toLight` scatters toward the eye, the way `toEye`, off a strand of hair shaded as `shading`, running along `tangent`, each of length one: as Marschner's model has it, in the shape Karis gives it for drawing every frame. Off its surface (R), white, in a cone about the mirror's angle shifted toward the root by twice its cuticle's tilt; through it (TT), coloured by twice the width of melanin it crosses, strongest lit from behind, shifted the other way by the tilt; and back off its inside (TRT), coloured more, shifted by four times the tilt. Each lobe is as narrow as the hair is smooth along it. The graphics device works the same out for every light, every pixel of every strand.
+ * How light from the way `toLight` scatters toward the eye, the way `toEye`, off a strand of hair shaded as `shading`, running along `tangent`, each of length one: as Marschner's model has it, in the shape Karis gives it for drawing every frame. Off its surface (R), white, in a cone about the mirror's angle shifted toward the root by twice its cuticle's tilt; through it (TT), coloured by twice the width of melanin it crosses, strongest lit from behind, shifted the other way by the tilt; back off its inside (TRT), coloured more, shifted by four times the tilt; and many times over among strands and within them, softly, its colour, more lit from before it than from behind. Each lobe is as narrow as the hair is smooth along it. The graphics device works the same out for every light, every pixel of every strand.
  */
 export const lobes = (
   shading: Strands.Shading,
@@ -142,11 +146,10 @@ export const lobes = (
   const width = Math.max(shading.roughness, 0.001) ** 2;
   const along = sinLight + sinEye;
   const taken = absorptionOf(shading);
-  const [red, green, blue] = shading.tint;
   const through = (path: number): Colour => ({
-    r: red * Math.exp(-taken.r * path),
-    g: green * Math.exp(-taken.g * path),
-    b: blue * Math.exp(-taken.b * path),
+    r: Math.exp(-taken.r * path),
+    g: Math.exp(-taken.g * path),
+    b: Math.exp(-taken.b * path),
   });
   const times = (colour: Colour, by: number): Colour => ({
     r: colour.r * by,
@@ -176,7 +179,23 @@ export const lobes = (
       inside,
   );
 
-  return { reflected: { r: reflected, g: reflected, b: reflected }, transmitted, internal };
+  // Many times over, as Karis approximates it: lit as a surface facing the eye across the strand is, wrapped, and as Kajiya and Kay light a strand, its colour seen through twice, softened.
+  const across = Math.sqrt(dotOf(eyeAcross, eyeAcross));
+  const wrapped = across === 0 ? 0.25 : clamped((dotOf(eyeAcross, toLight) / across + 1) / 4);
+  const soft = ((1 - 0.33) * wrapped + 0.33 * (1 - Math.abs(sinLight))) / Math.PI;
+  const seen = colourOf(shading);
+  const scattered = {
+    r: Math.sqrt(seen.r) * soft,
+    g: Math.sqrt(seen.g) * soft,
+    b: Math.sqrt(seen.b) * soft,
+  };
+
+  return {
+    reflected: { r: reflected, g: reflected, b: reflected },
+    transmitted,
+    internal,
+    scattered,
+  };
 };
 
 /** `vector` turned by the quaternion `turn`, its axis in x, y, and z and its angle in w. */
@@ -233,9 +252,8 @@ const scattered = (
   const width = Math.max(shading.roughness, 0.001) ** 2;
   const along = sinLight.add(sinEye);
   const taken = absorptionOf(shading);
-  const [red, green, blue] = shading.tint;
   const through = (path: Three.Node<'float'>) =>
-    vec3(red, green, blue).mul(exp(vec3(taken.r, taken.g, taken.b).mul(path).negate()));
+    exp(vec3(taken.r, taken.g, taken.b).mul(path).negate());
 
   const reflected = spreadOf(cosHalfAround.mul(width * Math.SQRT2), along.add(2 * tilt))
     .mul(cosHalfAround.mul(0.25))
@@ -262,7 +280,16 @@ const scattered = (
       .mul(float(1).sub(inside).mul(float(1).sub(inside)).mul(inside)),
   );
 
-  return transmitted.add(internal).add(reflected);
+  const across = sqrt(dot(eyeAcross, eyeAcross).add(1e-8));
+  const wrapped = saturate(dot(eyeAcross, toLight).div(across).add(1).div(4));
+  const soft = wrapped
+    .mul(1 - 0.33)
+    .add(float(1).sub(abs(sinLight)).mul(0.33))
+    .div(Math.PI);
+  const seen = colourOf(shading);
+  const many = vec3(Math.sqrt(seen.r), Math.sqrt(seen.g), Math.sqrt(seen.b)).mul(soft);
+
+  return transmitted.add(internal).add(reflected).add(many);
 };
 
 /** How a strand is lit: each light scattered off it as `lobes` has it, along the way the strand runs; and the light from everywhere at once taken in and given back as its colour seen through twice. */
@@ -303,7 +330,7 @@ class HairLighting extends Three.LightingModel {
   }
 }
 
-/** Strands drawn as lines, lit as hair is: by `HairLighting`. */
+/** Strands drawn as lines, lit as hair is: by `HairLighting`, facing the eye across each strand for lights that ask which way it faces. */
 class HairMaterial extends Three.LineBasicNodeMaterial {
   readonly #shading: Strands.Shading;
   readonly #tangent: Three.Node<'vec3'>;
@@ -313,6 +340,11 @@ class HairMaterial extends Three.LineBasicNodeMaterial {
     this.lights = true;
     this.#shading = shading;
     this.#tangent = tangent;
+    // A strand has no surface of its own to face a way: lights that ask, such as the sky's, are given the way across it toward the eye.
+    const running = normalize(tangent);
+    this.normalNode = normalize(
+      positionViewDirection.sub(running.mul(dot(running, positionViewDirection))),
+    );
   }
 
   override setupLightingModel(): Three.LightingModel {
