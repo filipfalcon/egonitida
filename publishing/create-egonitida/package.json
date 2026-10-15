@@ -1,0 +1,33 @@
+{
+  "name": "create-egonitida",
+  "version": "0.0.1",
+  "description": "Starts a new game on EgoNitida, an engine for real-time web applications and games: npm create egonitida.",
+  "keywords": [
+    "create",
+    "egonitida",
+    "game-engine",
+    "scaffold"
+  ],
+  "homepage": "https://egonitida.com",
+  "bugs": {
+    "url": "https://github.com/filipfalcon/egonitida/issues"
+  },
+  "license": "MIT",
+  "author": "Filip Falcon",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/filipfalcon/egonitida.git"
+  },
+  "bin": {
+    "create-egonitida": "index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24.15"
+  }
+}

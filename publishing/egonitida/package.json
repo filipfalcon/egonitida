@@ -1,0 +1,30 @@
+{
+  "name": "egonitida",
+  "version": "0.0.1",
+  "description": "EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. The egonitida command serves as the official directory of EgoNitida, listing its current version, website, source code, packages, and social channels.",
+  "keywords": [
+    "egonitida"
+  ],
+  "homepage": "https://egonitida.com",
+  "bugs": {
+    "url": "https://github.com/filipfalcon/egonitida/issues"
+  },
+  "license": "MIT",
+  "author": "Filip Falcon",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/filipfalcon/egonitida.git"
+  },
+  "bin": {
+    "egonitida": "index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24.15"
+  }
+}
