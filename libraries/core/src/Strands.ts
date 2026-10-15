@@ -89,13 +89,28 @@ export const bind = (
     const x = roots[strand * 3] ?? 0;
     const y = roots[strand * 3 + 1] ?? 0;
     const z = roots[strand * 3 + 2] ?? 0;
-    const nearest = (strand < drawn.scalp ? scalpGuides : ponytailGuides)
-      .map((guide) => {
-        const root = guideRoots[guide] ?? { x: 0, y: 0, z: 0 };
-        return { guide, distance: Maths.hypot(root.x - x, root.y - y, root.z - z) };
-      })
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, NEAREST);
+    // The nearest guides of its kind, nearest first, picked in one pass over them by how far they are squared.
+    const kept: Array<number> = [];
+    const squares: Array<number> = [];
+    for (const guide of strand < drawn.scalp ? scalpGuides : ponytailGuides) {
+      const root = guideRoots[guide] ?? { x: 0, y: 0, z: 0 };
+      const across = root.x - x;
+      const up = root.y - y;
+      const along = root.z - z;
+      const square = across * across + up * up + along * along;
+      // After every guide kept as near or nearer, if that is among the nearest.
+      let at = 0;
+      while (at < squares.length && (squares[at] ?? Infinity) <= square) {
+        at++;
+      }
+      if (at < NEAREST) {
+        kept.splice(at, 0, guide);
+        squares.splice(at, 0, square);
+        kept.length = Math.min(kept.length, NEAREST);
+        squares.length = Math.min(squares.length, NEAREST);
+      }
+    }
+    const nearest = kept.map((guide, at) => ({ guide, distance: Math.sqrt(squares[at] ?? 0) }));
     const [first] = nearest;
     if (first !== undefined && first.distance === 0) {
       return {
