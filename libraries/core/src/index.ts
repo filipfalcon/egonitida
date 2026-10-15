@@ -25,6 +25,7 @@ export * as Rule from '#src/Rule.ts';
 export * as Shape from '#src/Shape.ts';
 export * as State from '#src/State.ts';
 export * as Story from '#src/Story.ts';
+export * as Strands from '#src/Strands.ts';
 export * as System from '#src/System.ts';
 export * as Touch from '#src/Touch.ts';
 export * as WorkerTransport from '#src/WorkerTransport.ts';

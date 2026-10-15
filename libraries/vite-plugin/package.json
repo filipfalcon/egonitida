@@ -21,6 +21,9 @@
     "./joints": {
       "types": "./types/joints.d.ts"
     },
+    "./strands": {
+      "types": "./types/strands.d.ts"
+    },
     "./touches": {
       "types": "./types/touches.d.ts"
     }
