@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
-import { Controls, View, type Viewport } from '@lightocean/client';
+import { Controls, View, type Viewport } from '@nitida/client';
 import {
   Component,
   Domain,
@@ -11,7 +11,7 @@ import {
   System,
   WorkerTransport,
   State,
-} from '@lightocean/core';
+} from '@nitida/core';
 import { Context, Effect, Option, Queue, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Three from 'three/webgpu';

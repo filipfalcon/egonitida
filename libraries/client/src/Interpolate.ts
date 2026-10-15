@@ -1,4 +1,4 @@
-import { Angle } from '@lightocean/core';
+import { Angle } from '@nitida/core';
 import { Option, Schema, SchemaAST } from 'effect';
 
 /**

@@ -2,13 +2,13 @@ import { mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from '@effect/vitest';
-import { Relay } from '@lightocean/devtools';
+import { Relay } from '@nitida/devtools';
 import { Effect, Exit, Scope } from 'effect';
 import WebSocket from 'ws';
 import * as Listener from '#src/Listener.ts';
 
 /** A directory of its own, for a test's records. */
-const directory = Effect.promise(() => mkdtemp(join(tmpdir(), 'lightocean-listener-')));
+const directory = Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-listener-')));
 
 /** What a tool connecting to `url` hears first after sending `message`, or how its connection failed. */
 const ask = (url: string, message: unknown) =>

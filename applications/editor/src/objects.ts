@@ -1,5 +1,5 @@
-import { Component, Domain, Event, Pointing, Rule, System } from '@lightocean/core';
-import { Inspector } from '@lightocean/reflection';
+import { Component, Domain, Event, Pointing, Rule, System } from '@nitida/core';
+import { Inspector } from '@nitida/reflection';
 import { Option, Schema } from 'effect';
 
 /**

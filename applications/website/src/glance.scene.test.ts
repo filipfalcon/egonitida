@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Scene, View } from '@lightocean/client';
-import { Story, State } from '@lightocean/core';
+import { Scene, View } from '@nitida/client';
+import { Story, State } from '@nitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Glance from '#src/glance.ts';

@@ -1,10 +1,10 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { Relay } from '@lightocean/devtools';
+import { Relay } from '@nitida/devtools';
 import { Effect, Option, Schema } from 'effect';
 
 /**
- * Where the relays of the development servers running in a workspace are: the records under the nearest `node_modules/.lightocean/relays` from where the tool was started, up to the root, oldest first. A record is left out if it is no record, or its server is gone, as when a server was killed before it could take its record away.
+ * Where the relays of the development servers running in a workspace are: the records under the nearest `node_modules/.nitida/relays` from where the tool was started, up to the root, oldest first. A record is left out if it is no record, or its server is gone, as when a server was killed before it could take its record away.
  */
 
 /** The nearest directory of records at or above `from`. */

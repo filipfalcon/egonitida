@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/vite-plugin",
+  "name": "@nitida/vite-plugin",
   "private": true,
   "type": "module",
   "imports": {
@@ -25,9 +25,9 @@
     }
   },
   "dependencies": {
-    "@lightocean/core": "*",
-    "@lightocean/devtools": "*",
-    "@lightocean/devtools-mcp": "*",
+    "@nitida/core": "*",
+    "@nitida/devtools": "*",
+    "@nitida/devtools-mcp": "*",
     "effect": "4.0.0",
     "ws": "8.22.0"
   },

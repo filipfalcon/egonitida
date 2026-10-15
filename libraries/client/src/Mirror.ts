@@ -1,4 +1,4 @@
-import { type Client, Pointing, type State } from '@lightocean/core';
+import { type Client, Pointing, type State } from '@nitida/core';
 import { Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import type * as Drawing from '#src/Drawing.ts';
@@ -41,7 +41,7 @@ export const make = (options: {
     const outline = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const made = new Three.Box3Helper(new Three.Box3(), 0xffffff);
-        made.name = 'lightocean:mirror';
+        made.name = 'nitida:mirror';
         made.visible = false;
         options.scene.add(made);
         return made;

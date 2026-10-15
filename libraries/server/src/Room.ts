@@ -1,5 +1,5 @@
-import { Host } from '@lightocean/core';
-import { Transport } from '@lightocean/core/internal';
+import { Host } from '@nitida/core';
+import { Transport } from '@nitida/core/internal';
 import { type Cause, Effect, Exit, Option, Queue, Schema, Scope, Semaphore, Stream } from 'effect';
 
 /**

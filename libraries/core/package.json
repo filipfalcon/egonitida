@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/core",
+  "name": "@nitida/core",
   "private": true,
   "type": "module",
   "imports": {

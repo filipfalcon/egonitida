@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { State } from '@lightocean/core';
-import { Transport } from '@lightocean/core/internal';
+import { State } from '@nitida/core';
+import { Transport } from '@nitida/core/internal';
 import { Effect, Option, Queue, Stream } from 'effect';
 import * as Beside from '#src/Beside.ts';
 import type * as Bridge from '#src/Bridge.ts';

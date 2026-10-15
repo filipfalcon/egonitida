@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { State } from '@lightocean/core';
+import { State } from '@nitida/core';
 import { Option } from 'effect';
 import * as Score from '#src/score.ts';
 import { told } from '#src/main.ts';

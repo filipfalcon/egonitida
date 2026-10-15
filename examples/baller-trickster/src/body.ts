@@ -1,4 +1,4 @@
-import type { Pose, Touch } from '@lightocean/core';
+import type { Pose, Touch } from '@nitida/core';
 import madeBones from '#src/footballer.glb?bones';
 import madeJoints from '#src/footballer.glb?joints';
 import madeTouches from '#src/footballer.glb?touches';

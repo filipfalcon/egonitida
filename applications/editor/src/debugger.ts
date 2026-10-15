@@ -1,5 +1,5 @@
-import type { Log } from '@lightocean/devtools';
-import { Styled } from '@lightocean/foldkit';
+import type { Log } from '@nitida/devtools';
+import { Styled } from '@nitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Option, Schema } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';

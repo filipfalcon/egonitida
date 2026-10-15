@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { type Joint, Pose, Quaternion, Shape } from '@lightocean/core';
+import { type Joint, Pose, Quaternion, Shape } from '@nitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Posing from '#src/Posing.ts';

@@ -1,4 +1,4 @@
-import { Component, Domain, Game, System, State } from '@lightocean/core';
+import { Component, Domain, Game, System, State } from '@nitida/core';
 import { Schema } from 'effect';
 
 /**

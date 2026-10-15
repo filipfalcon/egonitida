@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/devtools",
+  "name": "@nitida/devtools",
   "private": true,
   "type": "module",
   "imports": {
@@ -10,7 +10,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@lightocean/core": "*",
+    "@nitida/core": "*",
     "effect": "4.0.0"
   }
 }

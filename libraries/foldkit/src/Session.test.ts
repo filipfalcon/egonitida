@@ -1,15 +1,6 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
 import { describe, expect, it } from '@effect/vitest';
-import {
-  Action,
-  Component,
-  Domain,
-  Game,
-  Host,
-  Rule,
-  WorkerTransport,
-  State,
-} from '@lightocean/core';
+import { Action, Component, Domain, Game, Host, Rule, WorkerTransport, State } from '@nitida/core';
 import { Effect, Option, Ref, Schema, Stream } from 'effect';
 import { ManagedResource } from 'foldkit';
 import * as Held from '#src/Held.ts';

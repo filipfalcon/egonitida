@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { type Clip, type Joint, Pose, Quaternion } from '@lightocean/core';
+import { type Clip, type Joint, Pose, Quaternion } from '@nitida/core';
 import { Option, Result, Schema } from 'effect';
 import * as Bones from '#src/Bones.ts';
 import * as Joints from '#src/Joints.ts';
@@ -337,7 +337,7 @@ export interface Plugin {
  * The plugin that gives a module importing a model's file with `?clips` its clips as poses; given to a game's Vite config, to its workers' (`worker.plugins`), and so to its tests. It loads before Vite's own, which would give the file's URL instead. A file it cannot read fails the build, saying why.
  */
 export const plugin = (): Plugin => ({
-  name: 'lightocean:clips',
+  name: 'nitida:clips',
   enforce: 'pre',
   load(id) {
     const at = id.indexOf('?');

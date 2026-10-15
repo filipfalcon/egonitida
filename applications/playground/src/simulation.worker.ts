@@ -1,8 +1,8 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@lightocean/core';
-import { Beside } from '@lightocean/devtools';
+import { Host, WorkerTransport, State } from '@nitida/core';
+import { Beside } from '@nitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:lightocean/build';
+import { build } from 'virtual:nitida/build';
 import * as Cubes from '#src/cubes.ts';
 
 // The local server: the playground's game, stepped off the main thread. A page that joins is whoever asks for cubes and clicks them: an entity that holds nothing, whom its asks and clicks are from. In development it goes on from the state kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.

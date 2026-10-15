@@ -1,5 +1,5 @@
-import { Viewport } from '@lightocean/client';
-import { Projection, Stage, Styled, type Session } from '@lightocean/foldkit';
+import { Viewport } from '@nitida/client';
+import { Projection, Stage, Styled, type Session } from '@nitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Effect, Match, Option, Schema, Stream } from 'effect';
 import { Command, ManagedResource, Mount, Subscription, type Update } from 'foldkit';

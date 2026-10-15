@@ -1,8 +1,8 @@
-import { Devices, Drawing, KeyboardAndMouse, View, Viewport } from '@lightocean/client';
-import { Client } from '@lightocean/core';
-import { Prediction } from '@lightocean/client/experimental';
-import { SocketTransport } from '@lightocean/core/experimental';
-import { Room } from '@lightocean/server/experimental';
+import { Devices, Drawing, KeyboardAndMouse, View, Viewport } from '@nitida/client';
+import { Client } from '@nitida/core';
+import { Prediction } from '@nitida/client/experimental';
+import { SocketTransport } from '@nitida/core/experimental';
+import { Room } from '@nitida/server/experimental';
 import * as stylex from '@stylexjs/stylex';
 import { Effect, Option, Schema } from 'effect';
 import * as Socket from 'effect/socket/Socket';

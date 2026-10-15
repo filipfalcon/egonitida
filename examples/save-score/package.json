@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/example-save-score",
+  "name": "@nitida/example-save-score",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,10 +12,10 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
-    "@lightocean/client": "*",
-    "@lightocean/core": "*",
-    "@lightocean/devtools": "*",
-    "@lightocean/foldkit": "*",
+    "@nitida/client": "*",
+    "@nitida/core": "*",
+    "@nitida/devtools": "*",
+    "@nitida/foldkit": "*",
     "@stylexjs/stylex": "0.19.1",
     "effect": "4.0.0",
     "foldkit": "0.168.0",
@@ -24,7 +24,7 @@
   "devDependencies": {
     "@foldkit/devtools": "0.168.0",
     "@foldkit/vite-plugin": "0.27.1",
-    "@lightocean/vite-plugin": "*",
+    "@nitida/vite-plugin": "*",
     "@stylexjs/unplugin": "0.19.1",
     "@types/three": "0.186.0",
     "alchemy": "2.0.0-beta.83"

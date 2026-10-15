@@ -1,4 +1,4 @@
-import { Host } from '@lightocean/core';
+import { Host } from '@nitida/core';
 import { Effect, Option, type Scope } from 'effect';
 
 /**

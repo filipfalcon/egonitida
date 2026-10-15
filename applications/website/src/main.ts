@@ -1,4 +1,4 @@
-import type { Session } from '@lightocean/foldkit';
+import type { Session } from '@nitida/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import * as Dom from 'foldkit/dom';
@@ -11,7 +11,7 @@ import * as GlanceStage from '#src/glanceStage.ts';
 import * as StatePress from '#src/statePress.ts';
 
 /**
- * The engine's website: a home page that says what LightOcean is, with an ocean of lights at its top that is a game on the engine, hosted in a worker and drawn on a canvas; and the engine's documentation, whose page of key terms explains a state with the state press. The pages are Foldkit's, and hold nothing of a game's state but whether it is shown.
+ * The engine's website: a home page that says what Nitida is, with an ocean of lights at its top that is a game on the engine, hosted in a worker and drawn on a canvas; and the engine's documentation, whose page of key terms explains a state with the state press. The pages are Foldkit's, and hold nothing of a game's state but whether it is shown.
  */
 
 // MODEL

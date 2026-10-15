@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { State } from '@lightocean/core';
+import { State } from '@nitida/core';
 import { Effect, Fiber, Option } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Recording from '#src/Recording.ts';

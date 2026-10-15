@@ -11,9 +11,9 @@ import {
   Tab,
   View,
   Viewport,
-} from '@lightocean/client';
-import { Client, WorkerTransport } from '@lightocean/core';
-import { Bridge, Page, Rewind } from '@lightocean/devtools';
+} from '@nitida/client';
+import { Client, WorkerTransport } from '@nitida/core';
+import { Bridge, Page, Rewind } from '@nitida/devtools';
 import { Effect, Option, type Scope, Stream } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import * as Three from 'three/webgpu';
@@ -139,7 +139,7 @@ const main = Effect.gen(function* () {
   const app: Chroma.App = {
     title: 'Horde',
     description: 'Survive the horde, lit by how much health is left.',
-    author: { name: 'LightOcean', contact: 'https://github.com/filipfalcon/lightocean' },
+    author: { name: 'Nitida', contact: 'https://github.com/filipfalcon/nitida' },
     category: 'game',
   };
   yield* listen('keydown', (event) => {

@@ -18,7 +18,7 @@ import * as GlanceStage from '#src/glanceStage.ts';
 import * as StatePress from '#src/statePress.ts';
 
 /** `path` of the website, as a URL. */
-const urlOf = (path: string) => Option.getOrThrow(Url.fromString(`https://lightocean.dev${path}`));
+const urlOf = (path: string) => Option.getOrThrow(Url.fromString(`https://nitida.dev${path}`));
 
 /** The page as it opens at the root of the site. */
 const initialModel = initialModelAt(urlOf('/'));
@@ -45,7 +45,7 @@ describe('the website', () => {
       Story.message(
         Message.ClickedLink({ request: UrlRequest.Internal({ url: urlOf('/nowhere') }) }),
       ),
-      Story.Command.expectExact(NavigateInternal({ url: 'https://lightocean.dev/nowhere' })),
+      Story.Command.expectExact(NavigateInternal({ url: 'https://nitida.dev/nowhere' })),
       Story.Command.resolve(NavigateInternal, Message.CompletedNavigateInternal()),
       Story.message(
         Message.ClickedLink({ request: UrlRequest.External({ href: 'https://github.com' }) }),

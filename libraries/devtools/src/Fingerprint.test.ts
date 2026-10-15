@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { State } from '@lightocean/core';
+import { State } from '@nitida/core';
 import { Option } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 import * as Fixtures from '#src/fixtures.ts';

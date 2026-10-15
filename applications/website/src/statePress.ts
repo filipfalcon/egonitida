@@ -1,5 +1,5 @@
-import { State } from '@lightocean/core';
-import { Projection, type Session } from '@lightocean/foldkit';
+import { State } from '@nitida/core';
+import { Projection, type Session } from '@nitida/foldkit';
 import { Effect, Option, Schema, Stream } from 'effect';
 import { Command, ManagedResource, Subscription, type Update } from 'foldkit';
 import * as Dom from 'foldkit/dom';

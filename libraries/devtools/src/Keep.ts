@@ -1,4 +1,4 @@
-import { Game, type Host, State } from '@lightocean/core';
+import { Game, type Host, State } from '@nitida/core';
 import { Duration, Effect, Option, Schema, type Scope, Stream } from 'effect';
 
 /**
@@ -25,7 +25,7 @@ export const memory = (): Store => {
   };
 };
 
-const DATABASE = 'lightocean-devtools';
+const DATABASE = 'nitida-devtools';
 const VERSION = 2;
 const STATES = 'states';
 

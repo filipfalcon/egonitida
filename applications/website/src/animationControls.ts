@@ -1,4 +1,4 @@
-import { Styled } from '@lightocean/foldkit';
+import { Styled } from '@nitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import type { Html, HtmlBuilder } from 'foldkit/html';
 // Relative, as StyleX finds variables by the path of the module that defines them.

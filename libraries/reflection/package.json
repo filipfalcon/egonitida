@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/reflection",
+  "name": "@nitida/reflection",
   "private": true,
   "type": "module",
   "imports": {

@@ -1,8 +1,8 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport } from '@lightocean/core';
-import { Beside, Debugger } from '@lightocean/devtools';
+import { Host, WorkerTransport } from '@nitida/core';
+import { Beside, Debugger } from '@nitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:lightocean/build';
+import { build } from 'virtual:nitida/build';
 import * as Press from '#src/press.ts';
 import * as Stepping from '#src/stepping.ts';
 

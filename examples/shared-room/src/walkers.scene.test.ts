@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Scene } from '@lightocean/client';
-import { Story } from '@lightocean/core';
+import { Scene } from '@nitida/client';
+import { Story } from '@nitida/core';
 import { Effect, Option } from 'effect';
 import * as Walkers from '#src/walkers.ts';
 import * as WalkersView from '#src/walkers.view.ts';

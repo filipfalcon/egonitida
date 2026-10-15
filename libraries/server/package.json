@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/server",
+  "name": "@nitida/server",
   "private": true,
   "type": "module",
   "imports": {
@@ -10,7 +10,7 @@
     "./experimental": "./src/experimental.ts"
   },
   "dependencies": {
-    "@lightocean/core": "*",
+    "@nitida/core": "*",
     "effect": "4.0.0"
   }
 }

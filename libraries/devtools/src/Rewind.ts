@@ -1,4 +1,4 @@
-import type { Client, Host, State } from '@lightocean/core';
+import type { Client, Host, State } from '@nitida/core';
 import { Data, Effect, Option, Schema, type Scope, Stream } from 'effect';
 import * as Recording from '#src/Recording.ts';
 import * as Replay from '#src/Replay.ts';

@@ -42,9 +42,9 @@ describe('the MCP server over HTTP', () => {
         ),
       );
 
-      expect(greeting).toContain('lightocean-devtools');
-      expect(listed).toContain('lightocean_hosts');
-      expect(listed).toContain('lightocean_screenshot');
+      expect(greeting).toContain('nitida-devtools');
+      expect(listed).toContain('nitida_hosts');
+      expect(listed).toContain('nitida_screenshot');
     }).pipe(Effect.scoped),
   );
 

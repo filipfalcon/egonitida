@@ -1,8 +1,8 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@lightocean/core';
-import { Beside } from '@lightocean/devtools';
+import { Host, WorkerTransport, State } from '@nitida/core';
+import { Beside } from '@nitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:lightocean/build';
+import { build } from 'virtual:nitida/build';
 import * as Editing from '#src/editing.ts';
 
 // The local server: the document being edited, a state stepped off the main thread. A page that joins is an editor, whose edits are its actions. In development it goes on from the document kept for the tab whatever code changed, with the devtools beside it, by the id the page named this worker with.

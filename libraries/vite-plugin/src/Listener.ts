@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
 import { join } from 'node:path';
-import { Relay } from '@lightocean/devtools';
+import { Relay } from '@nitida/devtools';
 import { Data, Effect, Option, Schema, type Scope } from 'effect';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 

@@ -6,6 +6,12 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
 </p>
 
+<p align="center">
+  <a href="https://x.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=x&logoColor=white" alt="Nitida on X: @egonitida"></a>
+  <a href="https://www.instagram.com/egonitida"><img src="https://img.shields.io/badge/@egonitida-E4405F?logo=instagram&logoColor=white" alt="Nitida on Instagram: @egonitida"></a>
+  <a href="https://www.threads.net/@egonitida"><img src="https://img.shields.io/badge/@egonitida-000000?logo=threads&logoColor=white" alt="Nitida on Threads: @egonitida"></a>
+</p>
+
 <h3 align="center">Build games agents understand.</h3>
 
 <p align="center">
@@ -14,19 +20,19 @@
 
 ---
 
-LightOcean is an engine for real-time web applications and games. Your game is data: every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.
+Nitida is an engine for real-time web applications and games. Your game is data: every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.
 
 A game's state holds entities and their components. Systems and rules step the game at a fixed rate on a host, which is a Web Worker for one player or a Cloudflare Durable Object for many. Views draw it on clients with Three.js on WebGPU. The page around it is Foldkit.
 
 > [!WARNING]
-> LightOcean is not published yet. It stays private until its architecture is built and Border, the first game on it, runs on it. Names and signatures may still change.
+> Nitida is not published yet. It stays private until its architecture is built and Border, the first game on it, runs on it. Names and signatures may still change.
 
 ## A game
 
 The smallest game is a cube that turns: one component, one system, one domain.
 
 ```ts
-import { Component, Domain, Game, System, State } from '@lightocean/core';
+import { Component, Domain, Game, System, State } from '@nitida/core';
 import { Schema } from 'effect';
 
 export const Spin = Component.make(
@@ -71,7 +77,7 @@ export const [state, cube] = State.spawn(State.empty({ seed: 1 }), [
 A view draws every entity that has a `Spin`. It lives in its own module, so the server never imports Three.js:
 
 ```ts
-import { View } from '@lightocean/client';
+import { View } from '@nitida/client';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Cube from '#src/cube.ts';
@@ -122,7 +128,7 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 - **Determinism.** Systems take randomness and time only from their context; a lint rule enforces it. The same state and the same input give the same next state, which is what rewinding, recordings, and the determinism check in development rest on.
 - **One shape for one player and many.** A singleplayer game runs its server in a Web Worker. The same game can be hosted for players across a network in a Durable Object; that hosting is experimental, and prediction for it is planned.
 - **Effects at the edges.** Steps and frames are plain synchronous code. Effect runs the hosting, the transports, the services, and the commands a rule issues when it needs something done outside the game, such as saving a score.
-- **Tools for agents.** In development, the `lightocean-devtools` MCP server lets an agent read the state of the running game, suspend and step time, play as one player or several, take screenshots, and turn what it played into a test.
+- **Tools for agents.** In development, the `nitida-devtools` MCP server lets an agent read the state of the running game, suspend and step time, play as one player or several, take screenshots, and turn what it played into a test.
 
 ## Built on
 
@@ -166,7 +172,7 @@ The whole example, with the worker and the page that draws it, is in [`examples/
 
 ## Running it
 
-LightOcean needs Node 24.15 or later and npm 12.
+Nitida needs Node 24.15 or later and npm 12.
 
 ```bash
 npm install
@@ -193,7 +199,7 @@ npm run dev
 Serve one example on its own:
 
 ```bash
-npm run dev -w @lightocean/example-horde
+npm run dev -w @nitida/example-horde
 ```
 
 ## Contributing
@@ -204,4 +210,4 @@ Why the engine is built this way, and what comes next, is in [`docs/architecture
 
 ## License
 
-LightOcean is released under the MIT License. The full terms are in the [LICENSE](LICENSE) file at the root of this repository. Unless stated otherwise, every contribution submitted to this project is licensed under the same terms.
+Nitida is released under the MIT License. The full terms are in the [LICENSE](LICENSE) file at the root of this repository. Unless stated otherwise, every contribution submitted to this project is licensed under the same terms.

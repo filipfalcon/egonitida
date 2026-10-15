@@ -1,4 +1,4 @@
-import { Component, Domain, Maths, Rule, System } from '@lightocean/core';
+import { Component, Domain, Maths, Rule, System } from '@nitida/core';
 import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 import * as Survivor from '#src/survivor.ts';

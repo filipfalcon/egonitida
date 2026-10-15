@@ -1,8 +1,8 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@lightocean/core';
-import { Beside, Debugger } from '@lightocean/devtools';
+import { Host, WorkerTransport, State } from '@nitida/core';
+import { Beside, Debugger } from '@nitida/devtools';
 import { Effect, Option } from 'effect';
-import { build } from 'virtual:lightocean/build';
+import { build } from 'virtual:nitida/build';
 import * as Playing from '#src/playing.ts';
 
 // The document playing: a local server of its own, started from the document as the editor had it when Play was pressed, which the page opens this worker with. Whoever joins is a player, whose clicks make the objects react. Stopping ends the worker, and everything that happened while playing with it. The debugger is always beside it, for the editor's page to ask; in development the rest of the devtools are too, by the id the page named this worker with.

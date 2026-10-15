@@ -1,9 +1,9 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Component, Domain, Game, Host, System, State } from '@lightocean/core';
-import { Bridge, Inspect, Page, Relay, Rewind } from '@lightocean/devtools';
-import { Listener } from '@lightocean/vite-plugin';
+import { Component, Domain, Game, Host, System, State } from '@nitida/core';
+import { Bridge, Inspect, Page, Relay, Rewind } from '@nitida/devtools';
+import { Listener } from '@nitida/vite-plugin';
 import { Effect, Option, Queue, Schema, Stream } from 'effect';
 
 /**
@@ -52,7 +52,7 @@ export const served = (names: ReadonlyArray<string>, directory?: string) =>
   Effect.gen(function* () {
     const relay = yield* Relay.make;
     const kept =
-      directory ?? (yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'lightocean-relay-'))));
+      directory ?? (yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-relay-'))));
     const listening = yield* Listener.listen(relay, { directory: kept });
     for (const name of names) {
       const setup = {

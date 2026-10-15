@@ -1,5 +1,5 @@
 import type * as Markdown from '@foldkit/markdown';
-import { Styled } from '@lightocean/foldkit';
+import { Styled } from '@nitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Match, Option } from 'effect';
 import { type Html, inertHtml as h } from 'foldkit/html';

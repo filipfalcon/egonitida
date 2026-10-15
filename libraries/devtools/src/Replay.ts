@@ -1,4 +1,4 @@
-import { Demand, Game, type Host, type Input, State } from '@lightocean/core';
+import { Demand, Game, type Host, type Input, State } from '@nitida/core';
 import { Data, Effect, Option, Result, Schema, type Scope, Stream } from 'effect';
 import * as Fingerprint from '#src/Fingerprint.ts';
 import * as Recording from '#src/Recording.ts';

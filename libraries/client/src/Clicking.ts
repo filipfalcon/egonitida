@@ -1,4 +1,4 @@
-import { type Client, Pointing, State } from '@lightocean/core';
+import { type Client, Pointing, State } from '@nitida/core';
 import { Effect, Option, type Scope, Stream } from 'effect';
 import type * as Three from 'three/webgpu';
 import type * as View from '#src/View.ts';

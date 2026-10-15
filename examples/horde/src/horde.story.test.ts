@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Story, State } from '@lightocean/core';
+import { Story, State } from '@nitida/core';
 import * as Body from '#src/body.ts';
 import * as Horde from '#src/horde.ts';
 import * as Game from '#src/game.ts';

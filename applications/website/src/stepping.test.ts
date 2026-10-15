@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Host, State } from '@lightocean/core';
-import { Debugger } from '@lightocean/devtools';
-import { Transport } from '@lightocean/core/internal';
+import { Client, Host, State } from '@nitida/core';
+import { Debugger } from '@nitida/devtools';
+import { Transport } from '@nitida/core/internal';
 import { Effect } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Press from '#src/press.ts';

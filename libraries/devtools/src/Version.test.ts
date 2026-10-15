@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, Domain, Game } from '@lightocean/core';
+import { Component, Domain, Game } from '@nitida/core';
 import { Option, Schema } from 'effect';
 import * as Version from '#src/Version.ts';
 

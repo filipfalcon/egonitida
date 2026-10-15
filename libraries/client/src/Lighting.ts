@@ -1,4 +1,4 @@
-import type { State } from '@lightocean/core';
+import type { State } from '@nitida/core';
 import { Context, Effect, Option } from 'effect';
 
 /**
@@ -27,7 +27,7 @@ export class Lighting extends Context.Service<
     /** Lights `count` of the player lights of what the player of `entity` holds, such as how much health is left, until they are lit again. */
     readonly players: (entity: State.Entity, count: number) => Effect.Effect<void>;
   }
->()('@lightocean/client/Lighting') {}
+>()('@nitida/client/Lighting') {}
 
 /** Whether `a` and `b` are the same colour. */
 const sameColour = (a: Colour, b: Colour) =>

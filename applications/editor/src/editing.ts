@@ -1,4 +1,4 @@
-import { Action, Component, Domain, Game, Pointing, Rule, State } from '@lightocean/core';
+import { Action, Component, Domain, Game, Pointing, Rule, State } from '@nitida/core';
 import { Option, Schema } from 'effect';
 import * as Objects from '#src/objects.ts';
 

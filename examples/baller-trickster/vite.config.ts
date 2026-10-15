@@ -1,4 +1,4 @@
-import { Bones, Build, Devtools, Joints, Touches } from '@lightocean/vite-plugin';
+import { Bones, Build, Devtools, Joints, Touches } from '@nitida/vite-plugin';
 import { defineConfig } from 'vite-plus';
 
 /** Her bones, her joints, and the parts of her a ball is touched by, read from her model as the game is built. */

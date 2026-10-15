@@ -1,8 +1,8 @@
 {
-  "name": "@lightocean/devtools-mcp",
+  "name": "@nitida/devtools-mcp",
   "private": true,
   "bin": {
-    "lightocean-devtools-mcp": "./src/main.ts"
+    "nitida-devtools-mcp": "./src/main.ts"
   },
   "type": "module",
   "imports": {
@@ -14,13 +14,13 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0",
-    "@lightocean/devtools": "*",
+    "@nitida/devtools": "*",
     "effect": "4.0.0",
     "ws": "8.22.0"
   },
   "devDependencies": {
-    "@lightocean/core": "*",
-    "@lightocean/vite-plugin": "*",
+    "@nitida/core": "*",
+    "@nitida/vite-plugin": "*",
     "@types/ws": "8.18.2"
   }
 }

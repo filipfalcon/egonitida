@@ -1,6 +1,6 @@
 ---
 name: audit-game
-description: Reviews a LightOcean game or application against the engine's rules, reading only — ownership between domains, messages, commands, views, types, styling, tests, and docs — and reports what breaks them with where and why. Use before a push, or when asked whether a game keeps to the rules.
+description: Reviews a Nitida game or application against the engine's rules, reading only — ownership between domains, messages, commands, views, types, styling, tests, and docs — and reports what breaks them with where and why. Use before a push, or when asked whether a game keeps to the rules.
 ---
 
 # Auditing a game

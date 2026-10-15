@@ -1,4 +1,4 @@
-import type { Host } from '@lightocean/core';
+import type { Host } from '@nitida/core';
 import { Effect, type Scope } from 'effect';
 import * as Inspect from '#src/Inspect.ts';
 import type * as Replay from '#src/Replay.ts';

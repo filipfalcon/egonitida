@@ -12,7 +12,7 @@ import {
   System,
   WorkerTransport,
   State,
-} from '@lightocean/core';
+} from '@nitida/core';
 import { Context, Effect, Fiber, Option, Schema, Stream } from 'effect';
 
 const Position = Component.make('Position', Schema.Struct({ x: Schema.Finite }), {

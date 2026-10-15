@@ -1,5 +1,5 @@
-import { Styled } from '@lightocean/foldkit';
-import { Inspector } from '@lightocean/reflection';
+import { Styled } from '@nitida/foldkit';
+import { Inspector } from '@nitida/reflection';
 import * as stylex from '@stylexjs/stylex';
 import type { Html, HtmlBuilder } from 'foldkit/html';
 import { form, viewDetails } from '#src/details.ts';

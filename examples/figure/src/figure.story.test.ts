@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Story } from '@lightocean/core';
+import { Story } from '@nitida/core';
 import * as Figure from '#src/figure.ts';
 
 const [joined, figure] = Figure.join(Figure.state);

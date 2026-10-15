@@ -1,7 +1,7 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Controls, Drawing, Hearing, Tab, View, Viewport } from '@lightocean/client';
-import { Client, WorkerTransport } from '@lightocean/core';
-import { Bridge, Page } from '@lightocean/devtools';
+import { Controls, Drawing, Hearing, Tab, View, Viewport } from '@nitida/client';
+import { Client, WorkerTransport } from '@nitida/core';
+import { Bridge, Page } from '@nitida/devtools';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';

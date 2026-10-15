@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Client, Component, Domain, Game, State } from '@lightocean/core';
-import { SocketTransport } from '@lightocean/core/experimental';
+import { Client, Component, Domain, Game, State } from '@nitida/core';
+import { SocketTransport } from '@nitida/core/experimental';
 import { type Cause, Effect, Option, Queue, References, Schema } from 'effect';
 import * as Socket from 'effect/socket/Socket';
 import * as Room from '#src/Room.ts';

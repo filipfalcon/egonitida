@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/client",
+  "name": "@nitida/client",
   "private": true,
   "type": "module",
   "imports": {
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
-    "@lightocean/core": "*",
+    "@nitida/core": "*",
     "effect": "4.0.0",
     "three": "0.186.1"
   },

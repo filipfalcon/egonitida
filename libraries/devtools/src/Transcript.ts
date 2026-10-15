@@ -1,4 +1,4 @@
-import { Game, Story, type State } from '@lightocean/core';
+import { Game, Story, type State } from '@nitida/core';
 import { Result, Schema } from 'effect';
 import type * as Recording from '#src/Recording.ts';
 import type * as Replay from '#src/Replay.ts';
@@ -210,7 +210,7 @@ export const source = (
 ): string =>
   [
     "import { it } from '@effect/vitest';",
-    "import { Story } from '@lightocean/core';",
+    "import { Story } from '@nitida/core';",
     `import { ${options.game.name} } from '${options.game.from}';`,
     '',
     `it(${quoted(options.title)}, () => {`,

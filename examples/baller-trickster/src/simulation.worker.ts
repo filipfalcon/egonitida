@@ -1,8 +1,8 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, State, WorkerTransport } from '@lightocean/core';
-import { Beside } from '@lightocean/devtools';
+import { Host, State, WorkerTransport } from '@nitida/core';
+import { Beside } from '@nitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:lightocean/build';
+import { build } from 'virtual:nitida/build';
 import * as Baller from '#src/baller.ts';
 
 // The local server: the baller's game, stepped off the main thread, with a baller for every page that joins. In development the devtools run beside it, by the id the page named this worker with, so a tool on this machine can read, step, and play it; it goes on from the state kept for the tab, and a build that cannot take that state up starts afresh, saying why.

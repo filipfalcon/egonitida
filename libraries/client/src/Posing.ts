@@ -1,4 +1,4 @@
-import { Joint, Pose, type Quaternion } from '@lightocean/core';
+import { Joint, Pose, type Quaternion } from '@nitida/core';
 import { Data, Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 

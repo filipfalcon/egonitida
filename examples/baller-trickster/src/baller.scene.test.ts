@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Scene } from '@lightocean/client';
-import { Game, Pose, State, Story } from '@lightocean/core';
+import { Scene } from '@nitida/client';
+import { Game, Pose, State, Story } from '@nitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Baller from '#src/baller.ts';

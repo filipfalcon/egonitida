@@ -1,4 +1,4 @@
-import { Styled } from '@lightocean/foldkit';
+import { Styled } from '@nitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Array, Option } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';
@@ -223,7 +223,7 @@ export const view = (model: Model, page: DocsPage, h: HtmlBuilder<Message>): Htm
   return h.div(Styled.attributes(h, styles.shell), [
     h.a([h.Href(`#${CONTENT_ID}`), ...Styled.attributes(h, styles.skip)], ['Skip to content']),
     h.header(Styled.attributes(h, styles.bar), [
-      h.a([h.Href(homeRouter()), ...Styled.attributes(h, styles.wordmark)], ['LightOcean']),
+      h.a([h.Href(homeRouter()), ...Styled.attributes(h, styles.wordmark)], ['Nitida']),
       h.nav(
         [h.AriaLabel('Elsewhere'), ...Styled.attributes(h, styles.barLinks)],
         [

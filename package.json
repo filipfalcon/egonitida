@@ -1,5 +1,5 @@
 {
-  "name": "lightocean",
+  "name": "nitida",
   "version": "0.0.0",
   "private": true,
   "description": "An engine for web applications, rendered by Three.js on WebGPU and written in Effect.",
@@ -22,7 +22,7 @@
     "@effect/platform-node": "4.0.0",
     "@effect/tsgo": "0.52.0",
     "@effect/vitest": "4.0.0",
-    "@lightocean/oxlint-plugin": "*",
+    "@nitida/oxlint-plugin": "*",
     "@types/node": "26.6.5",
     "alchemy": "2.0.0-beta.83",
     "effect": "4.0.0",

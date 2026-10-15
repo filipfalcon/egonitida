@@ -1,4 +1,4 @@
-import type { Game, State } from '@lightocean/core';
+import type { Game, State } from '@nitida/core';
 import { Effect, Option, Schema } from 'effect';
 import type * as Recording from '#src/Recording.ts';
 import { encoderOf } from '#src/Recording.ts';

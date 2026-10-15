@@ -1,11 +1,11 @@
 ---
-name: lightocean
-description: How a game or an application is built on LightOcean — entities and their components, held in a state a host steps, drawn by views on clients — and where to look before writing any of it. Use before working in a LightOcean repository, or on a game built on it.
+name: nitida
+description: How a game or an application is built on Nitida — entities and their components, held in a state a host steps, drawn by views on clients — and where to look before writing any of it. Use before working in a Nitida repository, or on a game built on it.
 ---
 
-# Working on LightOcean
+# Working on Nitida
 
-LightOcean is an engine for real-time web applications and games. A game's **state** is its entities and the **components** they hold, stepped at a fixed rate by **systems** and **rules** on a **host**, and drawn by **views** on **clients**. Everything that lives in 3D is held in such a state, an application's as much as a game's; the DOM around it is Foldkit's.
+Nitida is an engine for real-time web applications and games. A game's **state** is its entities and the **components** they hold, stepped at a fixed rate by **systems** and **rules** on a **host**, and drawn by **views** on **clients**. Everything that lives in 3D is held in such a state, an application's as much as a game's; the DOM around it is Foldkit's.
 
 ## Read first
 
@@ -27,7 +27,7 @@ LightOcean is an engine for real-time web applications and games. A game's **sta
 
 - Test first: a story (`Story.story`) for behaviour, a scene (`Scene.make`) for what views draw. A behaviour is done when its test passed after failing.
 - `npm run check` and `npm test` both pass before a commit. Read the whole test output, not only its summary: a test file that fails as it loads is easy to miss.
-- With a game's development server running, check the change on the running game through the `lightocean-devtools` MCP tools: read the state, hold and step time, play, and look with a screenshot.
+- With a game's development server running, check the change on the running game through the `nitida-devtools` MCP tools: read the state, hold and step time, play, and look with a screenshot.
 - Commits are Conventional Commits, signed; a change any consumer must follow is marked `!` with a before-and-after table.
 
 ## Where to go next

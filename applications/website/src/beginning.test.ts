@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Host, Story, State } from '@lightocean/core';
+import { Host, Story, State } from '@nitida/core';
 import { Effect } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Beginning from '#src/beginning.ts';

@@ -1,5 +1,5 @@
-import { State } from '@lightocean/core';
-import { Session } from '@lightocean/foldkit';
+import { State } from '@nitida/core';
+import { Session } from '@nitida/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';

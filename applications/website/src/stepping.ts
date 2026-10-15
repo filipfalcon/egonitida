@@ -1,5 +1,5 @@
-import { type Client, type Host } from '@lightocean/core';
-import { Rewind } from '@lightocean/devtools';
+import { type Client, type Host } from '@nitida/core';
+import { Rewind } from '@nitida/devtools';
 import { Effect, Match, Schema, type Scope, Stream } from 'effect';
 
 /**

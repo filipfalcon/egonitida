@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from '@effect/vitest';
-import { type Client, Component, Pointing, State } from '@lightocean/core';
+import { type Client, Component, Pointing, State } from '@nitida/core';
 import { Effect, Option, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Drawing from '#src/Drawing.ts';
@@ -91,7 +91,7 @@ describe('the mirror of a scene', () => {
   it.effect('outlines the entity a button stands for while it has focus', () =>
     Effect.gen(function* () {
       const { state, scene, show, buttons } = yield* mirrored;
-      const outline = () => scene.children.find((child) => child.name === 'lightocean:mirror');
+      const outline = () => scene.children.find((child) => child.name === 'nitida:mirror');
 
       buttons()[1]?.focus();
       yield* show(state, Option.some(Timeline.still(state)));

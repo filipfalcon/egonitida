@@ -1,5 +1,5 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { WorkerTransport, State } from '@lightocean/core';
+import { WorkerTransport, State } from '@nitida/core';
 import { Effect } from 'effect';
 import * as Figure from '#src/figure.ts';
 

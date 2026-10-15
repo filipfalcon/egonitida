@@ -1,6 +1,6 @@
-import { Inspect, Log, Rewind } from '@lightocean/devtools';
-import { Session } from '@lightocean/foldkit';
-import { Pointing } from '@lightocean/core';
+import { Inspect, Log, Rewind } from '@nitida/devtools';
+import { Session } from '@nitida/foldkit';
+import { Pointing } from '@nitida/core';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';

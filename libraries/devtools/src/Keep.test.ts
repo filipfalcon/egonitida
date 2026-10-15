@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
-import { State } from '@lightocean/core';
-import { Transport } from '@lightocean/core/internal';
+import { State } from '@nitida/core';
+import { Transport } from '@nitida/core/internal';
 import { Effect, Option } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Keep from '#src/Keep.ts';

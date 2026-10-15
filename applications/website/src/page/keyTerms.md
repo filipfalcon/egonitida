@@ -1,14 +1,14 @@
 # Key Terms
 
-LightOcean speaks a small, precise vocabulary, and every page after this one uses it without stopping to explain. The terms fall into three groups: a game's state and the clock that moves it, the primitives a game is written in, and the places a game runs. A game is made of primitives alone; everything else is what the engine makes of them at run time.
+Nitida speaks a small, precise vocabulary, and every page after this one uses it without stopping to explain. The terms fall into three groups: a game's state and the clock that moves it, the primitives a game is written in, and the places a game runs. A game is made of primitives alone; everything else is what the engine makes of them at run time.
 
 ## First Things First
 
-A project in LightOcean is a universe full of things, sorted into a few logical groups. Together, those groups are the fundamentals the whole engine is built on.
+A project in Nitida is a universe full of things, sorted into a few logical groups. Together, those groups are the fundamentals the whole engine is built on.
 
 ::FirstThingsFirst
 
-A game in LightOcean holds a **state** full of things. Each thing is an **entity**, and the data it carries, such as where it stands or how much health it has left, sits in its **components**. The game moves forward in **steps**, a fixed number every second, each replacing its state with the next, and a state's **tick** counts how many steps it took to reach it.
+A game in Nitida holds a **state** full of things. Each thing is an **entity**, and the data it carries, such as where it stands or how much health it has left, sits in its **components**. The game moves forward in **steps**, a fixed number every second, each replacing its state with the next, and a state's **tick** counts how many steps it took to reach it.
 
 Each step takes an **input**, everything that enters it from outside the state: the players' **demands** and the **actions**. During each step, **systems** move whatever moves, while **rules** decide what the **actions** and the game's own **events** mean, now and then issuing a **command** for work outside the game. Between steps, **views** draw the result on screen. A **domain** bundles one part of all this, such as a game's weapons, and a **game** is the list of its domains. Finally, a **host** steps the game, and **clients** show it to the players.
 
@@ -58,7 +58,7 @@ A demand is what a player is doing with their controls, such as a stick held to 
 
 A recording of a game is made of segments, one for each version of its code the host played: a reload of new code ends one segment and begins the next. A segment is the state it began at, its version, and, in order, everything that replaced the state after: its steps, each with its input, players joining and leaving, and restores of another state. Everything else follows from them, under that version.
 
-A build is which code of a game runs, as its bundler names it: `@lightocean/vite-plugin` gives each build an id, and a game's worker gives it to its host. With the schema of the state, a hash for each component, it makes up the version a segment holds for. A segment replayed by another version says so before anything else, and where it comes apart is a change of the code, not a game that is not deterministic.
+A build is which code of a game runs, as its bundler names it: `@nitida/vite-plugin` gives each build an id, and a game's worker gives it to its host. With the schema of the state, a hash for each component, it makes up the version a segment holds for. A segment replayed by another version says so before anything else, and where it comes apart is a change of the code, not a game that is not deterministic.
 
 ## Primitives
 

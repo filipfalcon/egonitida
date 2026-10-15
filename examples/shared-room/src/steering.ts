@@ -1,4 +1,4 @@
-import { Controls, type Devices } from '@lightocean/client';
+import { Controls, type Devices } from '@nitida/client';
 
 /**
  * How a walker is steered: by the arrows or WASD, or the left stick on a pad, and what a moment of them comes to in the room's demands.

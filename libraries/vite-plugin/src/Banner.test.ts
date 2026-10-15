@@ -6,15 +6,15 @@ describe('the banner', () => {
   it('says what is served, at which version, and where its devtools and its MCP server are reached', () => {
     expect(
       Banner.lines({
-        name: '@lightocean/editor',
+        name: '@nitida/editor',
         version: Option.some('0.1.0'),
         devtools: Option.some('ws://127.0.0.1:56190/'),
-        mcp: Option.some('http://127.0.0.1:5173/__lightocean/mcp'),
+        mcp: Option.some('http://127.0.0.1:5173/__nitida/mcp'),
       }),
     ).toEqual([
-      '@lightocean/editor | v0.1.0',
+      '@nitida/editor | v0.1.0',
       'DevTools: ws://127.0.0.1:56190/',
-      'MCP: http://127.0.0.1:5173/__lightocean/mcp',
+      'MCP: http://127.0.0.1:5173/__nitida/mcp',
     ]);
   });
 

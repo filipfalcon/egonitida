@@ -1,4 +1,4 @@
-import { type Inspect, Page, Relay } from '@lightocean/devtools';
+import { type Inspect, Page, Relay } from '@nitida/devtools';
 import { Data, Duration, Effect, Option, Schema } from 'effect';
 import WebSocket from 'ws';
 
@@ -62,7 +62,7 @@ const relayFor = (relays: ReadonlyArray<Relay.Record>, host: Option.Option<strin
           () =>
             new Failed({
               reason:
-                'no development server with the LightOcean devtools plugin is running in this workspace',
+                'no development server with the Nitida devtools plugin is running in this workspace',
             }),
         ),
       ),

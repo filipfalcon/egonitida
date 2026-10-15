@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Pointing, Story, State } from '@lightocean/core';
+import { Pointing, Story, State } from '@nitida/core';
 import { Option } from 'effect';
 import * as Ocean from '#src/ocean.ts';
 

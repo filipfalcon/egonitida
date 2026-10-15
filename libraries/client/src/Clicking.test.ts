@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { type Client, Component, Pointing, State } from '@lightocean/core';
+import { type Client, Component, Pointing, State } from '@nitida/core';
 import { Effect, Option, Queue, Schema, Stream } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Clicking from '#src/Clicking.ts';

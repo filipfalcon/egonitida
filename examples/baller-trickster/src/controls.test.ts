@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Controls, Devices } from '@lightocean/client';
+import { Controls, Devices } from '@nitida/client';
 import * as Baller from '#src/baller.ts';
 import * as Camera from '#src/camera.ts';
 import * as BallerControls from '#src/controls.ts';

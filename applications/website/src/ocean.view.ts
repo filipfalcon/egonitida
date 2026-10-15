@@ -1,4 +1,4 @@
-import { View } from '@lightocean/client';
+import { View } from '@nitida/client';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Ocean from '#src/ocean.ts';

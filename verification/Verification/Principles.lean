@@ -5,7 +5,7 @@ import Verification.Composition
 import Verification.Prediction
 
 /-!
-The theorems LightOcean's principles rest on, each stated here again in full, and checked to rest on no axiom beyond Lean's own. A theorem removed, weakened, or proven with `sorry` fails the build here, even where its own file still builds.
+The theorems Nitida's principles rest on, each stated here again in full, and checked to rest on no axiom beyond Lean's own. A theorem removed, weakened, or proven with `sorry` fails the build here, even where its own file still builds.
 -/
 
 /-- The same state and the same input give the same next state. -/

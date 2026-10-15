@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { State } from '@lightocean/core';
+import { State } from '@nitida/core';
 import { Effect } from 'effect';
 import * as Lighting from '#src/Lighting.ts';
 

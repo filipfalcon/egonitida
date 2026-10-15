@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, Domain, Game, Story, System, State } from '@lightocean/core';
+import { Component, Domain, Game, Story, System, State } from '@nitida/core';
 import { Context, Effect, Option, Schema } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Scene from '#src/Scene.ts';

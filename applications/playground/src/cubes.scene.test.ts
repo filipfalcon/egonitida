@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Scene } from '@lightocean/client';
-import { Pointing, Story, State } from '@lightocean/core';
+import { Scene } from '@nitida/client';
+import { Pointing, Story, State } from '@nitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Cubes from '#src/cubes.ts';

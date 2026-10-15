@@ -1,8 +1,8 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@lightocean/core';
-import { Beside } from '@lightocean/devtools';
+import { Host, WorkerTransport, State } from '@nitida/core';
+import { Beside } from '@nitida/devtools';
 import { Effect } from 'effect';
-import { build } from 'virtual:lightocean/build';
+import { build } from 'virtual:nitida/build';
 import * as Game from '#src/game.ts';
 import * as Survivor from '#src/survivor.ts';
 

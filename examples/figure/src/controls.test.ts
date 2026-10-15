@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Devices } from '@lightocean/client';
+import { Devices } from '@nitida/client';
 import { Option } from 'effect';
 import * as FigureControls from '#src/controls.ts';
 

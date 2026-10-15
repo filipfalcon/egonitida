@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Story } from '@lightocean/core';
+import { Story } from '@nitida/core';
 import { Effect, Option, Result } from 'effect';
 import * as Fixtures from '#src/fixtures.ts';
 import * as Rewind from '#src/Rewind.ts';

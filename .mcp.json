@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "lightocean-devtools": {
+    "nitida-devtools": {
       "command": "node",
       "args": ["libraries/devtools-mcp/src/main.ts"]
     }

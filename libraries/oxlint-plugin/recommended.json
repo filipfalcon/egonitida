@@ -1,13 +1,13 @@
 {
-  "jsPlugins": [{ "name": "lightocean", "specifier": "@lightocean/oxlint-plugin" }],
+  "jsPlugins": [{ "name": "nitida", "specifier": "@nitida/oxlint-plugin" }],
   "rules": {
-    "lightocean/pure-steps": "error",
-    "lightocean/no-nullable-components": "error",
-    "lightocean/views-keep-nothing": "error",
-    "lightocean/no-index-keys": "error",
-    "lightocean/no-three-in-domains": "error",
-    "lightocean/redacted-command-secrets": "error",
-    "lightocean/same-maths": "error",
+    "nitida/pure-steps": "error",
+    "nitida/no-nullable-components": "error",
+    "nitida/views-keep-nothing": "error",
+    "nitida/no-index-keys": "error",
+    "nitida/no-three-in-domains": "error",
+    "nitida/redacted-command-secrets": "error",
+    "nitida/same-maths": "error",
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
     "typescript/no-non-null-assertion": "error"

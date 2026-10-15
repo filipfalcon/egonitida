@@ -13,7 +13,7 @@ import {
   State,
   System,
   Touch,
-} from '@lightocean/core';
+} from '@nitida/core';
 import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 

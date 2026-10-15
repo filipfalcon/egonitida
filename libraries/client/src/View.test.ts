@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Component, State } from '@lightocean/core';
+import { Component, State } from '@nitida/core';
 import { Context, Effect, Exit, Option, Schema, Scope } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Drawing from '#src/Drawing.ts';

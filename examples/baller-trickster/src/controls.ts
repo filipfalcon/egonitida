@@ -1,5 +1,5 @@
-import { Controls } from '@lightocean/client';
-import type { Component } from '@lightocean/core';
+import { Controls } from '@nitida/client';
+import type { Component } from '@nitida/core';
 import * as Baller from '#src/baller.ts';
 
 /**

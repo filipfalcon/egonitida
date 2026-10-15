@@ -1,7 +1,7 @@
 import { expect, it } from '@effect/vitest';
-import { Client, Host, Story, State } from '@lightocean/core';
-import { Transport } from '@lightocean/core/internal';
-import { Log, Recording, Replay, Transcript } from '@lightocean/devtools';
+import { Client, Host, Story, State } from '@nitida/core';
+import { Transport } from '@nitida/core/internal';
+import { Log, Recording, Replay, Transcript } from '@nitida/devtools';
 import { Effect, Option, Result } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as Game from '#src/game.ts';

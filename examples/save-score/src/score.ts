@@ -9,7 +9,7 @@ import {
   Rule,
   System,
   State,
-} from '@lightocean/core';
+} from '@nitida/core';
 import { Effect, Option, Schema } from 'effect';
 import { Scores } from '#src/scores.ts';
 

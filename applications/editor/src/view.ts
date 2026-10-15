@@ -1,5 +1,5 @@
-import { Styled } from '@lightocean/foldkit';
-import { Inspector } from '@lightocean/reflection';
+import { Styled } from '@nitida/foldkit';
+import { Inspector } from '@nitida/reflection';
 import * as stylex from '@stylexjs/stylex';
 import { Option, Schema } from 'effect';
 import type { Document, Html, HtmlBuilder } from 'foldkit/html';
@@ -178,7 +178,7 @@ const viewSidePanel = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 /** The editor's page: the outliner, the canvas with Play and Stop, and the details of what is selected or the debugger. */
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: 'LightOcean Editor',
+  title: 'Nitida Editor',
   body: h.div(Styled.attributes(h, styles.editor), [
     viewOutliner(model, h),
     h.main(Styled.attributes(h, styles.stage, !isEditing(model) && styles.playing), [

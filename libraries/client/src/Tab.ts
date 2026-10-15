@@ -12,11 +12,11 @@ export interface Storage {
 export const id = (prefix: string, storage: Storage = sessionStorage): string => {
   const made = `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
   try {
-    const kept = storage.getItem(`lightocean:tab:${prefix}`);
+    const kept = storage.getItem(`nitida:tab:${prefix}`);
     if (kept !== null) {
       return kept;
     }
-    storage.setItem(`lightocean:tab:${prefix}`, made);
+    storage.setItem(`nitida:tab:${prefix}`, made);
     return made;
   } catch {
     return made;

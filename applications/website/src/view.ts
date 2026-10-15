@@ -16,33 +16,33 @@ import { AppRoute } from '#src/route.ts';
 /** The website as its route has it: the page the URL leads to, under that page's title, and a page of the documentation inside its shell. */
 export const view = (model: Model, h: HtmlBuilder<Message>): Document =>
   AppRoute.match(model.route, {
-    Home: () => ({ title: 'LightOcean', body: Home.view(model, h) }),
+    Home: () => ({ title: 'Nitida', body: Home.view(model, h) }),
     Welcome: () => ({
-      title: 'Welcome · LightOcean',
+      title: 'Welcome · Nitida',
       body: Docs.view(model, Welcome, h),
     }),
     Installation: () => ({
-      title: 'Installation · LightOcean',
+      title: 'Installation · Nitida',
       body: Docs.view(model, Installation, h),
     }),
     Foundation: () => ({
-      title: 'Foundation · LightOcean',
+      title: 'Foundation · Nitida',
       body: Docs.view(model, Foundation, h),
     }),
     KeyTerms: () => ({
-      title: 'Key Terms · LightOcean',
+      title: 'Key Terms · Nitida',
       body: Docs.view(model, KeyTerms.view(model, h), h),
     }),
     Principles: () => ({
-      title: 'Principles · LightOcean',
+      title: 'Principles · Nitida',
       body: Docs.view(model, Principles, h),
     }),
     Architecture: () => ({
-      title: 'Architecture · LightOcean',
+      title: 'Architecture · Nitida',
       body: Docs.view(model, Architecture, h),
     }),
     NotFound: ({ path }) => ({
-      title: 'Page not found · LightOcean',
+      title: 'Page not found · Nitida',
       body: Docs.view(model, { content: NotFound.view(path, h), tableOfContents: [] }, h),
     }),
   });

@@ -1,13 +1,13 @@
-# Working on LightOcean
+# Working on Nitida
 
-LightOcean is an engine for real-time web applications and games: entities and their components, held in a state that systems and rules step at a fixed rate on a server, and drawn by views on clients. Why it is built this way is in [docs/architecture.md](docs/architecture.md); this file is how to work in it.
+Nitida is an engine for real-time web applications and games: entities and their components, held in a state that systems and rules step at a fixed rate on a server, and drawn by views on clients. Why it is built this way is in [docs/architecture.md](docs/architecture.md); this file is how to work in it.
 
 ## Before you write
 
 - Read the exemplar files below for the kind of code you are about to write, and follow them.
 - When an API's behaviour matters, read its source rather than guessing: the engine's own in `libraries/`, and Effect's and Three.js's installed sources under `node_modules`.
 - Write the test first. A behaviour is done when its test passed after failing.
-- The skills in `skills/` walk through the common work: `lightocean` to start, `generate-domain` for a new domain, and `audit-game` to review a game against these rules.
+- The skills in `skills/` walk through the common work: `nitida` to start, `generate-domain` for a new domain, and `audit-game` to review a game against these rules.
 
 ## Checking
 
@@ -33,7 +33,7 @@ When designing something new, ask first whether it is part of x, u, f, or h: the
 
 ## The rules
 
-A rule is a type where it can be, a lint rule (`@lightocean/oxlint-plugin`) where it cannot, and written here only where neither can tell. A lint message says what to do instead; do that, rather than silencing it.
+A rule is a type where it can be, a lint rule (`@nitida/oxlint-plugin`) where it cannot, and written here only where neither can tell. A lint message says what to do instead; do that, rather than silencing it.
 
 **Types.** No `any`, no `as`, no non-null `!`: prove a type where a value is made, never claim it where it is used. `as const` is no claim, only a literal kept as written, and is fine. Absence is `Option`, so what only one entity holds, such as a game's progress, is `Array.head` of a query, an `Option`; modes are tagged unions, never boolean flags beside nullable fields. Hot code indexes plainly and checks for `undefined`; nothing anywhere uses sentinels such as `-1`.
 
@@ -83,9 +83,9 @@ A view's `draw` changes only the object its view built, from the frame and the p
 
 ## A running game
 
-- With a game's development server running and its page open, the `lightocean-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `lightocean_hosts` and `lightocean_describe`; read the state with `lightocean_state`, `lightocean_compare`, and `lightocean_log`; suspend and step time with `lightocean_suspend` and `lightocean_step` to look closely, and resume it with `lightocean_resume`; and play, as one player or many, with `lightocean_join`, `lightocean_demand`, and `lightocean_act`.
-- Check a change on the running game yourself rather than asking the person to: suspend time, step, and read what came of it, and see how it looks with `lightocean_screenshot`, after `lightocean_seek` to see the past. Asking them is for what neither tells, such as how it feels to play.
-- What you find by playing becomes a test: `lightocean_story` writes a stretch as the source of a story test. Keep the expectations that tell the behaviour, drop the rest, and name the entities for what they are.
+- With a game's development server running and its page open, the `nitida-devtools` MCP server (in `.mcp.json`) reaches its host. Start with `nitida_hosts` and `nitida_describe`; read the state with `nitida_state`, `nitida_compare`, and `nitida_log`; suspend and step time with `nitida_suspend` and `nitida_step` to look closely, and resume it with `nitida_resume`; and play, as one player or many, with `nitida_join`, `nitida_demand`, and `nitida_act`.
+- Check a change on the running game yourself rather than asking the person to: suspend time, step, and read what came of it, and see how it looks with `nitida_screenshot`, after `nitida_seek` to see the past. Asking them is for what neither tells, such as how it feels to play.
+- What you find by playing becomes a test: `nitida_story` writes a stretch as the source of a story test. Keep the expectations that tell the behaviour, drop the rest, and name the entities for what they are.
 - A game serves its host this way through `Devtools.plugin()` in its Vite config, `Beside.host` in its worker, and `Page.serve` in its page, in development.
 
 ## Commits

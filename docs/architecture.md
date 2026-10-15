@@ -1,10 +1,10 @@
 # Architecture
 
-LightOcean is an engine for web applications in the way Unreal Engine is an engine for games: an editor, a runtime, and a project format that the two share.
+Nitida is an engine for web applications in the way Unreal Engine is an engine for games: an editor, a runtime, and a project format that the two share.
 
 This document records the principles the engine stands on, the decisions taken so far, what is built, and what comes next. It grows alongside the code.
 
-The first game to run on the engine is Border, a first-person browser game in its own repository, which links LightOcean as a package. Its needs are what the principles below were measured against.
+The first game to run on the engine is Border, a first-person browser game in its own repository, which links Nitida as a package. Its needs are what the principles below were measured against.
 
 ## Principles
 
@@ -62,7 +62,7 @@ Seven principles shape every API. Each builds on the ones before it.
 - What a game shows and what it asks of the world outside is a second equation, **y = h(x)**: views and commands read the state and never write it. The game's course does not depend on it, so it is not part of the foundation.
 - The equation is a tool for thinking as much as a definition. Whatever is designed next is first placed in it, and its place decides what it is made as:
 
-| Part     | In the equation | In LightOcean                                        | Made as                                                 |
+| Part     | In the equation | In Nitida                                            | Made as                                                 |
 | -------- | --------------- | ---------------------------------------------------- | ------------------------------------------------------- |
 | x        | the state       | the state: entities and their components             | components (`Component.make`)                           |
 | u        | the input       | the players' demands, and the actions in their order | demand components, `Action.make`, `Command.result`      |
@@ -165,11 +165,11 @@ Everything that lives in 3D, an application as much as what is played, is a game
 ### UI
 
 - Foldkit renders the DOM layer of every application and the editor itself. Forms, text, links, and accessibility come from the DOM, the way Unreal layers UMG over its 3D scene.
-- An application meets its game through `@lightocean/foldkit`, and through three of Foldkit's own mechanisms:
+- An application meets its game through `@nitida/foldkit`, and through three of Foldkit's own mechanisms:
   - A session is a **Managed Resource** (`Session.managed`): joined in a worker while the Model wants it, and left once it does not. Commands reach it through the resource, to take the player's actions, such as asking for a cube.
   - The canvas is in the DOM because `view` puts it there; a **Mount** says when it is, and a **Subscription** (`Stage.stream`) shows the game on it: the game's views every frame, a click as `Pointing.Clicked`, and the accessible mirror beside it. A Mount reaches nothing but its element, never a Managed Resource, so showing the game is a Subscription's work. A Model restored after a reload may say the session is joined before it is again; the stage and every projection then say it is not (`onNotJoined`), which puts the Model right, and they run again once it is joined. While the Model says it is not, `Session.whenJoined` looks whether it already is, as it may be when the stage found it not joined a moment before it was.
   - What the page shows of the state is a **projection** (`Projection.stream`): a value read off the state and its player, described by a schema, and told in a Message only when it changes. The Model holds no more of the state than the DOM shows, so `view` stays a function of the Model and Foldkit's DevTools show what changed in what is shown.
-- Foldkit's DevTools stay in Inspect mode: going back in time is the rewind beside the host, which the page draws. In development an agent reaches both halves: Foldkit's own MCP relay answers for the page's Model and Messages, and `lightocean-devtools` for the game.
+- Foldkit's DevTools stay in Inspect mode: going back in time is the rewind beside the host, which the page draws. In development an agent reaches both halves: Foldkit's own MCP relay answers for the page's Model and Messages, and `nitida-devtools` for the game.
 
 ### API
 
@@ -178,7 +178,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 **State.**
 
 - Modes are tagged unions and absence is `Option`, never a boolean flag beside nullable data. The engine carries both through a component end to end: across the wire, and through interpolation, which holds the earlier value when the tag changes and moves fields within one tag. The rule is for the values of components; a view's description may have optional parameters with defaults.
-- LightOcean has no router of its own: applications and the editor use Foldkit's. Addresses of hosted games, such as a room's id, are branded schemas, parsed and built from one definition, and refused at the Worker before a Durable Object is reached.
+- Nitida has no router of its own: applications and the editor use Foldkit's. Addresses of hosted games, such as a room's id, are branded schemas, parsed and built from one definition, and refused at the Worker before a Durable Object is reached.
 
 **Messages.**
 
@@ -213,11 +213,11 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 - `Story`, in core, steps a game from a state built with named entities, takes actions, and expects components, events, and commands; a command never executes, and the test resolves it with a result. Files are `*.story.test.ts`.
 - `Scene`, in client, plays states through a game's views frame by frame and finds what they drew by view and entity, never by walking the scene graph; outputs such as sounds go through a recording Layer. Files are `*.scene.test.ts`.
 
-**Inspection.** In development the host records a game's first state and, for every step, its input: the demands and the actions, command results among them; everything else follows from them. A log for people and agents adds what each step emitted, issued, and changed, and by which system or rule, and hides the demands unless asked. The debugger rewinds from a keyframe every few steps, keeps a bounded span of time, and draws a past step through the same views. A client's timeline keeps local components with each state, so a presentation of the past shows them as they were, and local systems do not run while it plays. A replay runs beside the game and reports the first step and component where the two diverge. All of it is in `@lightocean/devtools`, which only a development entry imports.
+**Inspection.** In development the host records a game's first state and, for every step, its input: the demands and the actions, command results among them; everything else follows from them. A log for people and agents adds what each step emitted, issued, and changed, and by which system or rule, and hides the demands unless asked. The debugger rewinds from a keyframe every few steps, keeps a bounded span of time, and draws a past step through the same views. A client's timeline keeps local components with each state, so a presentation of the past shows them as they were, and local systems do not run while it plays. A replay runs beside the game and reports the first step and component where the two diverge. All of it is in `@nitida/devtools`, which only a development entry imports.
 
-**Agents.** `@lightocean/devtools-mcp` lets an agent read a game's schema and its map of changes, query any step's state, read the log, and compare steps; and, on a local server, suspend time, act as a player through the game's own schemas, step, and turn what it did into a `Story` test. Secrets never enter the state, which travels to clients; credentials stay in the services of Layers, and a secret in a command's arguments is `Schema.Redacted`.
+**Agents.** `@nitida/devtools-mcp` lets an agent read a game's schema and its map of changes, query any step's state, read the log, and compare steps; and, on a local server, suspend time, act as a player through the game's own schemas, step, and turn what it did into a `Story` test. Secrets never enter the state, which travels to clients; credentials stay in the services of Layers, and a secret in a command's arguments is `Schema.Redacted`.
 
-**Enforcement.** A rule is a type where it can be, a lint rule where it cannot, and written down only where neither can tell. `@lightocean/oxlint-plugin` has one rule per convention a type cannot hold, scoped by the call its code sits in rather than by file name, with a message that says what to do instead, and with a fixture it must fail on and one it must pass. The first rules: no `Math.random`, `Date.now`, `performance.now`, `crypto`, or Effect inside a system's or rule's `run` or a view's `draw`; no nullable or optional fields in a component's schema; no `let` or mutable closures in a view; no key derived from an index; no Three.js outside a `.view` module; secrets in commands' arguments are `Schema.Redacted`. CI runs `vp check` and `vp test` on every pull request.
+**Enforcement.** A rule is a type where it can be, a lint rule where it cannot, and written down only where neither can tell. `@nitida/oxlint-plugin` has one rule per convention a type cannot hold, scoped by the call its code sits in rather than by file name, with a message that says what to do instead, and with a fixture it must fail on and one it must pass. The first rules: no `Math.random`, `Date.now`, `performance.now`, `crypto`, or Effect inside a system's or rule's `run` or a view's `draw`; no nullable or optional fields in a component's schema; no `let` or mutable closures in a view; no key derived from an index; no Three.js outside a `.view` module; secrets in commands' arguments are `Schema.Redacted`. CI runs `vp check` and `vp test` on every pull request.
 
 **Conventions.**
 
@@ -232,7 +232,7 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 - `examples/` is the curriculum and the end-to-end tests at once; each example adds one idea: a spinning cube, click to colour, Pong for two, a small horde, saving a score, and Pong over the network. A feature lands with its example.
 - Code in documentation comes from compiled, type-checked snippets, except short sketches in design documents of what does not exist yet. Prose leads with its claim, and headings are labels.
-- The agent skills live in `skills/`: `lightocean` frames how a game is built and where to read first, `generate-domain` adds a domain test first, and `audit-game` reviews a game against the rules, reading only. They lean on `AGENTS.md` and its exemplar files rather than code of their own. Agents read the sources of Effect and Three.js in `node_modules`, pinned by the lockfile.
+- The agent skills live in `skills/`: `nitida` frames how a game is built and where to read first, `generate-domain` adds a domain test first, and `audit-game` reviews a game against the rules, reading only. They lean on `AGENTS.md` and its exemplar files rather than code of their own. Agents read the sources of Effect and Three.js in `node_modules`, pinned by the lockfile.
 
 **Mods, a direction.** A mod is a domain loaded while the game runs, from outside it: it requires the game's domains, owns only its own components, and reaches the game's only through the events and shared components those domains declare, which make up the game's modding interface without anyone writing one. What types check for a domain today, a game checks when it loads a mod. The first mods are data, not code: rules made in the editor, which the engine carries out as declared actions and which need no sandbox. Mods as code wait on loading code at run time, a sandbox on the server, determinism no lint can hold for code it never saw, and versions; none of it is planned yet.
 
@@ -240,20 +240,20 @@ Decided against Foldkit's principles, read as a checklist on 2026-10-10. Each ho
 
 ### Stability
 
-LightOcean stays private until the architecture above is built and Border runs on it; then its first 0.x versions are published, with changesets from then on.
+Nitida stays private until the architecture above is built and Border runs on it; then its first 0.x versions are published, with changesets from then on.
 
 - Locked: the seven principles and the decisions in this document.
 - May change: names and signatures.
 - A breaking change is marked with `!` in its commit, whose body gives a before-and-after table, and Border is migrated with it.
-- 1.0 means the examples all work, Border runs with no seam where its server takes a client's word, LightOcean has held up in a project outside this repository, and no known flaw in correctness undermines the promise of stability.
+- 1.0 means the examples all work, Border runs with no seam where its server takes a client's word, Nitida has held up in a project outside this repository, and no known flaw in correctness undermines the promise of stability.
 
 ### Positioning
 
-LightOcean is sold by its structure, not its stack: _Your game is data. LightOcean gives every component one owner and every change a step, so your app replays, rewinds, runs on a server, and can be played by an agent._ Three.js, WebGPU, Effect, and Durable Objects come after. Each claim is shown by a running example, or it is not made.
+Nitida is sold by its structure, not its stack: _Your game is data. Nitida gives every component one owner and every change a step, so your app replays, rewinds, runs on a server, and can be played by an agent._ Three.js, WebGPU, Effect, and Durable Objects come after. Each claim is shown by a running example, or it is not made.
 
 - **A strong fit:** real-time 3D applications and games in a browser that need an authoritative server or several players; teams and agents that want shared conventions; developers already on Effect.
 - **Think twice when:** you need React and React Three Fiber's ecosystem; you are building a 3D showcase with nothing to simulate, where plain Three.js does; you need a ready physics engine or high-end graphics, where Unity, Godot, or Unreal fit; you need thousands of entities today, before optimization is measured.
-- Compared honestly: Three.js and React Three Fiber solve rendering and leave the architecture to you; Bevy has the ECS LightOcean follows, but is not made for the web or an authoritative server; Colyseus is a server without an engine; PlayCanvas and Babylon.js are engines with editors scripted imperatively.
+- Compared honestly: Three.js and React Three Fiber solve rendering and leave the architecture to you; Bevy has the ECS Nitida follows, but is not made for the web or an authoritative server; Colyseus is a server without an engine; PlayCanvas and Babylon.js are engines with editors scripted imperatively.
 - A `Viewport` embeds in any page or existing application, and existing Three.js code can live as an imperative island while it moves over.
 - A `Viewport` draws as bare Three.js does unless told otherwise; what more it does is asked for, one thing at a time: ambient occlusion, antialiasing, motion blur, which smears what moves along where it went while a frame's shutter was open, and ray tracing (`RayTracing`), which traces indirect light and reflections through the picture just drawn (`Screen`), or through the scene's own triangles held in two levels of bounding volume hierarchy, as ray-tracing hardware holds a scene (`Scene`). `Scene` shadows the direct light as well, tracing from every surface to every light that no shadow map shadows, past whatever casts a shadow. Browsers do not yet let a page reach the cores made for rays, so `Scene` traces on the shader cores; its layout is the hardware's, so it can move to them once they are reachable.
 
@@ -279,13 +279,13 @@ LightOcean is sold by its structure, not its stack: _Your game is data. LightOce
 - `libraries/client`: the timeline, interpolation, and the drawing; and, as experimental, `Prediction`, a player's own client playing ahead of its host, its demands sent once a step and replayed on the newest state until the host says it took it in, and what is drawn going over to the host's in a few frames when they disagree.
 - `libraries/foldkit`: a game in an application built on Foldkit: `Session`, a player's connection to it, joined in a worker the page starts and held as a Foldkit Managed Resource while the application's Model wants it; and `Stage`, the game shown on a canvas Foldkit keeps, through the game's views, played by a click, and mirrored for the keyboard, while a Subscription runs, with what the application runs beside it, such as serving the canvas to the devtools, or drawn by the page itself on an element of its own, such as with a renderer of its own, its Messages going on to the application (`Stage.run`); `Projection`, what an application shows of a game's state, kept in its Model, told as it is and again only when it changes; and `Styled`, StyleX on Foldkit's elements.
 - `libraries/devtools`: `Recording`, a game as a host played it, in a segment for each version of its code, made from what the host lets be watched; `Version`, which code played: its build and the schema of its state; `Fingerprint`, a state told in a hash per component; `Replay`, which plays a recording again, or beside a host as it plays, and says where it comes apart; `Log`, what each step of a recording did, by which system or rule; `Rewind`, going back in a hosted game from keyframes, showing the past to its clients, and playing on from it; `Reload`, a host kept across new builds of its game; `Inspect`, what an agent or a page asks of a hosted game, answered as data, to a page over the game's own connection; `Debugger`, the past kept beside a host and its clients' questions answered, wherever it runs; and `Bridge` and `Relay`, the way an agent's requests travel from a tool to a host and back.
-- `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__lightocean/mcp`; and a banner saying what is served and where both are reached. `Build` names each build of a game's code, in the module `virtual:lightocean/build`, which a game's worker gives its host.
+- `libraries/vite-plugin`: the development server as the way to a game's hosts for the tools on the machine: a relay on a loopback port of its own, with a token, and a record of where it is; the MCP server over HTTP at `/__nitida/mcp`; and a banner saying what is served and where both are reached. `Build` names each build of a game's code, in the module `virtual:nitida/build`, which a game's worker gives its host.
 - `libraries/devtools-mcp`: a running game as MCP tools for an agent, over stdio or over HTTP at a development server, reaching its hosts through the development server's relay; `.mcp.json` offers it over stdio.
 - `libraries/reflection`: `Inspector`, the annotations and the reading of them that the Details panel is generated from.
-- `skills/`: the agent skills, `lightocean`, `generate-domain`, and `audit-game`.
+- `skills/`: the agent skills, `nitida`, `generate-domain`, and `audit-game`.
 - `applications/editor`: the editor: a document held as a game's state, edited by its editors' actions; played in a worker of its own; and debugged while it plays.
 - `applications/playground`: cubes a player asks for and paints: a game in a worker, drawn on a canvas, with the page around it Foldkit's, and the first application built of the two together.
-- `applications/website`: the engine's website: one page saying what LightOcean is, under an ocean of lights that is a game on the engine, swelling and rippling out from a light clicked, and showing the smallest game's files as the repository has them; and the shell the engine's documentation is drawn in, after Foldkit's own, its pages written in markdown and read at build time by `@foldkit/markdown`.
+- `applications/website`: the engine's website: one page saying what Nitida is, under an ocean of lights that is a game on the engine, swelling and rippling out from a light clicked, and showing the smallest game's files as the repository has them; and the shell the engine's documentation is drawn in, after Foldkit's own, its pages written in markdown and read at build time by `@foldkit/markdown`.
 - `examples/spinning-cube`: the first example, a cube that turns: one component, one system, one domain, one view, told as a story and as a scene, and drawn in a browser from a local server in a worker.
 - `examples/click-to-colour`: cubes a click paints the next colour of a palette: a game played by clicking what is drawn, through the `Pointing` domain the engine gives.
 - `examples/save-score`: a round against the clock whose score is saved: a rule that issues a command, the `Scores` service it needs, a Worker that keeps every score in Cloudflare KV, deployed by Alchemy with the namespace bound to it, and a page on Foldkit that says how the round goes.

@@ -1,5 +1,5 @@
-import { Controls } from '@lightocean/client';
-import { Session, Stage } from '@lightocean/foldkit';
+import { Controls } from '@nitida/client';
+import { Session, Stage } from '@nitida/foldkit';
 import { Effect, Option, Schema } from 'effect';
 import { Command, ManagedResource, type Runtime, type Update } from 'foldkit';
 import { defineMessageUnion } from 'foldkit/message';

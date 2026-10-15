@@ -1,4 +1,4 @@
-import type { Host } from '@lightocean/core';
+import type { Host } from '@nitida/core';
 import { Effect, type Scope, Stream } from 'effect';
 import * as Glance from '#src/glance.ts';
 

@@ -1,5 +1,5 @@
 {
-  "name": "@lightocean/example-figure",
+  "name": "@nitida/example-figure",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.0.0",
-    "@lightocean/client": "*",
-    "@lightocean/core": "*",
+    "@nitida/client": "*",
+    "@nitida/core": "*",
     "effect": "4.0.0",
     "three": "0.186.1"
   },

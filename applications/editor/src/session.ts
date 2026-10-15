@@ -1,7 +1,7 @@
-import { Tab, Viewport } from '@lightocean/client';
-import { Pointing, State } from '@lightocean/core';
-import { Projection, Session, Stage } from '@lightocean/foldkit';
-import { Bridge, Inspect, Log, Page } from '@lightocean/devtools';
+import { Tab, Viewport } from '@nitida/client';
+import { Pointing, State } from '@nitida/core';
+import { Projection, Session, Stage } from '@nitida/foldkit';
+import { Bridge, Inspect, Log, Page } from '@nitida/devtools';
 import { Effect, Option, Schedule, Schema, Stream } from 'effect';
 import { ManagedResource, Mount, Subscription } from 'foldkit';
 import * as Three from 'three/webgpu';

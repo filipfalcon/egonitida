@@ -2,13 +2,13 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from '@effect/vitest';
-import { Relay } from '@lightocean/devtools';
+import { Relay } from '@nitida/devtools';
 import { Effect } from 'effect';
 import * as Discovery from '#src/Discovery.ts';
 
 /** A workspace with a package in it, and a way to keep a relay's record in it. */
 const workspace = Effect.gen(function* () {
-  const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'lightocean-workspace-')));
+  const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-workspace-')));
   const inside = join(root, 'examples', 'horde', 'src');
   const records = join(root, ...Relay.RECORDS);
   yield* Effect.promise(() => mkdir(inside, { recursive: true }));
@@ -41,7 +41,7 @@ describe('finding the relays', () => {
 
   it.effect('finds none outside any workspace that keeps records', () =>
     Effect.gen(function* () {
-      const elsewhere = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'lightocean-none-')));
+      const elsewhere = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'nitida-none-')));
 
       expect(yield* Discovery.relays(elsewhere)).toEqual([]);
     }),

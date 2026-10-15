@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Story, State } from '@lightocean/core';
+import { Story, State } from '@nitida/core';
 import * as Glance from '#src/glance.ts';
 
 const [withViewer, viewer] = Glance.setup.join(Glance.state);

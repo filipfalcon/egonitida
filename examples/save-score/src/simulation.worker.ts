@@ -1,9 +1,9 @@
 import { BrowserWorkerRunner } from '@effect/platform-browser';
-import { Host, WorkerTransport, State } from '@lightocean/core';
-import { Beside } from '@lightocean/devtools';
+import { Host, WorkerTransport, State } from '@nitida/core';
+import { Beside } from '@nitida/devtools';
 import { Effect, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
-import { build } from 'virtual:lightocean/build';
+import { build } from 'virtual:nitida/build';
 import * as Score from '#src/score.ts';
 import * as Scores from '#src/scores.ts';
 

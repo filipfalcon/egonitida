@@ -1,5 +1,5 @@
-import { type Drawing, View } from '@lightocean/client';
-import type { Component } from '@lightocean/core';
+import { type Drawing, View } from '@nitida/client';
+import type { Component } from '@nitida/core';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Glance from '#src/glance.ts';

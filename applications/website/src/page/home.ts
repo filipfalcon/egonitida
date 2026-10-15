@@ -1,4 +1,4 @@
-import { Styled } from '@lightocean/foldkit';
+import { Styled } from '@nitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Option } from 'effect';
 import type { Html, HtmlBuilder } from 'foldkit/html';
@@ -257,10 +257,10 @@ const START: ReadonlyArray<{ readonly text: string; readonly command: string }> 
   { text: 'Install, with Node 24.15 or later and npm 12:', command: 'npm install' },
   { text: 'Format, lint, and type-check everything:', command: 'npm run check' },
   { text: 'Run every test:', command: 'npm test' },
-  { text: 'Serve one example on its own:', command: 'npm run dev -w @lightocean/example-horde' },
+  { text: 'Serve one example on its own:', command: 'npm run dev -w @nitida/example-horde' },
 ];
 
-/** The home page: the ocean with what LightOcean is over it, then a game whole, what its structure buys, what it is built on, when to use something else, and how to start. */
+/** The home page: the ocean with what Nitida is over it, then a game whole, what its structure buys, what it is built on, when to use something else, and how to start. */
 export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
   const external = (href: string, text: string, style: Styled.Style = styles.link) =>
     h.a(
@@ -288,7 +288,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
 
   return h.main(Styled.attributes(h, styles.page), [
     h.header(Styled.attributes(h, styles.bar), [
-      h.span(Styled.attributes(h, styles.wordmark), ['LightOcean']),
+      h.span(Styled.attributes(h, styles.wordmark), ['Nitida']),
       h.nav(
         [h.AriaLabel('Main'), ...Styled.attributes(h, styles.links)],
         [
@@ -323,7 +323,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.div(Styled.attributes(h, styles.heroText), [
         h.h1(Styled.attributes(h, styles.title), ['Build games agents understand.']),
         h.p(Styled.attributes(h, styles.lead), [
-          'LightOcean is an engine for real-time web applications and games. Every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.',
+          'Nitida is an engine for real-time web applications and games. Every component has one owner and every change happens in a step, so a game replays, rewinds, runs on a server, and can be played by an agent.',
         ]),
         h.div(Styled.attributes(h, styles.actions), [
           h.a([h.Href('#start'), ...Styled.attributes(h, styles.primary)], ['Get started']),
@@ -394,7 +394,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
     ]),
     section('start', 'Get started', [
       h.p(Styled.attributes(h, styles.notice), [
-        'LightOcean is not published yet. It stays private until its architecture is built and Border, the first game on it, runs on it. Names and signatures may still change. Until then, it runs from a clone of the repository.',
+        'Nitida is not published yet. It stays private until its architecture is built and Border, the first game on it, runs on it. Names and signatures may still change. Until then, it runs from a clone of the repository.',
       ]),
       ...START.map(({ text, command }) =>
         h.div(Styled.attributes(h, styles.step), [
@@ -409,7 +409,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html => {
       ]),
     ]),
     h.footer(Styled.attributes(h, styles.footer), [
-      h.span([], ['LightOcean is released under the MIT License.']),
+      h.span([], ['Nitida is released under the MIT License.']),
       h.nav(
         [h.AriaLabel('Elsewhere'), ...Styled.attributes(h, styles.links)],
         [

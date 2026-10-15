@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Ragdoll } from '@lightocean/core';
+import { Ragdoll } from '@nitida/core';
 import { Effect } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Ragdolling from '#src/Ragdolling.ts';

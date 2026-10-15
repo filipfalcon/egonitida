@@ -1,5 +1,5 @@
-import type { Component } from '@lightocean/core';
-import { State } from '@lightocean/core';
+import type { Component } from '@nitida/core';
+import { State } from '@nitida/core';
 import { Option } from 'effect';
 import * as Interpolate from '#src/Interpolate.ts';
 

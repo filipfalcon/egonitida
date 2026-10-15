@@ -1,4 +1,4 @@
-import { Controls, type Devices } from '@lightocean/client';
+import { Controls, type Devices } from '@nitida/client';
 import { Option } from 'effect';
 
 /**

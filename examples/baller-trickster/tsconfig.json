@@ -5,10 +5,10 @@
     "lib": ["esnext", "dom", "dom.iterable"],
     "types": [
       "vite/client",
-      "@lightocean/vite-plugin/build",
-      "@lightocean/vite-plugin/bones",
-      "@lightocean/vite-plugin/joints",
-      "@lightocean/vite-plugin/touches"
+      "@nitida/vite-plugin/build",
+      "@nitida/vite-plugin/bones",
+      "@nitida/vite-plugin/joints",
+      "@nitida/vite-plugin/touches"
     ]
   }
 }

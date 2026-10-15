@@ -1,4 +1,4 @@
-import type { Game, State } from '@lightocean/core';
+import type { Game, State } from '@nitida/core';
 import { Option, Schema } from 'effect';
 
 /**

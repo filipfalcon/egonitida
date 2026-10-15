@@ -6,7 +6,7 @@ import type * as Inspect from '#src/Inspect.ts';
  */
 
 /** The name messages travel under on the development server's channel. */
-export const EVENT = 'lightocean:devtools';
+export const EVENT = 'nitida:devtools';
 
 /** What a host or a page that draws one sends a relay: hello, with its id and its game's name, or the host it draws; an answer to a request; or why it refused one. */
 export const FromHost = Schema.Union([

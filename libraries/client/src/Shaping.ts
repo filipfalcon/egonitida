@@ -1,4 +1,4 @@
-import { Shape } from '@lightocean/core';
+import { Shape } from '@nitida/core';
 import { Data, Effect, Option, type Scope } from 'effect';
 import * as Three from 'three/webgpu';
 

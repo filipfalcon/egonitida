@@ -1,4 +1,4 @@
-import { type Stage, Styled } from '@lightocean/foldkit';
+import { type Stage, Styled } from '@nitida/foldkit';
 import * as stylex from '@stylexjs/stylex';
 import { Option } from 'effect';
 import type { Document, HtmlBuilder } from 'foldkit/html';
@@ -67,7 +67,7 @@ export const measuredText = ({ framesPerSecond, latencyMillis }: Stage.Measured)
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
   const withPad = Option.contains(model.maybeInHand, 'Pad');
   return {
-    title: 'LightOcean Playground',
+    title: 'Nitida Playground',
     body: h.main(Styled.attributes(h, styles.playground, withPad && styles.noCursor), [
       // The canvas is in the page while the session is joined, and goes with it.
       ...(model.session._tag === 'Joined'

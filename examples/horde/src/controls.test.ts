@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Controls, Devices } from '@lightocean/client';
+import { Controls, Devices } from '@nitida/client';
 import { Option } from 'effect';
 import * as HordeControls from '#src/controls.ts';
 

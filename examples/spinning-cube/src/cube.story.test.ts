@@ -1,5 +1,5 @@
 import { expect, it } from '@effect/vitest';
-import { Story } from '@lightocean/core';
+import { Story } from '@nitida/core';
 import * as Cube from '#src/cube.ts';
 
 it('turns a cube once every four seconds', () => {

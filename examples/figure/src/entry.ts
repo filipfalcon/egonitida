@@ -1,6 +1,6 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Drawing, Hearing, View, Viewport } from '@lightocean/client';
-import { Client, WorkerTransport } from '@lightocean/core';
+import { Drawing, Hearing, View, Viewport } from '@nitida/client';
+import { Client, WorkerTransport } from '@nitida/core';
 import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as FigureControls from '#src/controls.ts';

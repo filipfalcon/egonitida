@@ -1,5 +1,5 @@
 import { recommended } from '@effect/tsgo/oxlint-presets';
-import lightocean from '@lightocean/oxlint-plugin/recommended.json' with { type: 'json' };
+import nitida from '@nitida/oxlint-plugin/recommended.json' with { type: 'json' };
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
@@ -10,7 +10,7 @@ export default defineConfig({
   },
   lint: {
     // The engine's own conventions come after Effect's, and hold for the engine as for any game on it.
-    extends: [recommended, lightocean],
+    extends: [recommended, nitida],
     options: {
       typeAware: true,
       typeCheck: true,

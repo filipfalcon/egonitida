@@ -1,6 +1,6 @@
 import { expect, it } from '@effect/vitest';
-import { Scene } from '@lightocean/client';
-import { Pointing, Story } from '@lightocean/core';
+import { Scene } from '@nitida/client';
+import { Pointing, Story } from '@nitida/core';
 import { Effect, Option } from 'effect';
 import * as Editing from '#src/editing.ts';
 import * as EditingView from '#src/editing.view.ts';

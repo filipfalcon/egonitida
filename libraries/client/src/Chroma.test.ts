@@ -7,7 +7,7 @@ import * as Chroma from '#src/Chroma.ts';
 const app: Chroma.App = {
   title: 'Horde',
   description: 'Survive the horde.',
-  author: { name: 'LightOcean', contact: 'https://github.com/filipfalcon/lightocean' },
+  author: { name: 'Nitida', contact: 'https://github.com/filipfalcon/nitida' },
   category: 'game',
 };
 
@@ -52,7 +52,7 @@ describe('Chroma', () => {
           body: {
             title: 'Horde',
             description: 'Survive the horde.',
-            author: { name: 'LightOcean', contact: 'https://github.com/filipfalcon/lightocean' },
+            author: { name: 'Nitida', contact: 'https://github.com/filipfalcon/nitida' },
             device_supported: ['keyboard', 'mouse', 'mousepad', 'headset', 'keypad', 'chromalink'],
             category: 'game',
           },

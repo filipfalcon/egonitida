@@ -7,10 +7,10 @@ import { sameMaths } from '#src/rules/sameMaths.ts';
 import { viewsKeepNothing } from '#src/rules/viewsKeepNothing.ts';
 
 /**
- * LightOcean's conventions that a type cannot hold, as Oxlint rules: one rule each, each telling what to do instead. What a type can hold, such as who may write a component, is a type, and needs no rule.
+ * Nitida's conventions that a type cannot hold, as Oxlint rules: one rule each, each telling what to do instead. What a type can hold, such as who may write a component, is a type, and needs no rule.
  */
 export default {
-  meta: { name: 'lightocean' },
+  meta: { name: 'nitida' },
   rules: {
     'pure-steps': pureSteps,
     'no-nullable-components': noNullableComponents,
