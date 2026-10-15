@@ -562,13 +562,19 @@ export class Haired {
   }
 }
 
+/** How a model's hair is drawn: which meshes of it are its hair as cards, not shown, `HairCards` unless named otherwise; and every how many strands are drawn, every one unless told otherwise, as a page drawing on a slower device, or still being worked on, may ask. */
+export interface Options {
+  readonly cards?: ReadonlyArray<string>;
+  readonly every?: number;
+}
+
 /**
- * `model`'s hair, counted and shaded as `hair` says, drawn as its strands after its guides: the lines `HairStrands` placed on the graphics device each frame as their guides swing, lit as hair shaded as the hair says is, never culled, since where they are drawn is not where they were made, each as much of a pixel as it covers, over what is behind it; the lines `HairGuides`, and the meshes `cards` names, its hair as cards, `HairCards` unless named otherwise, not shown. Fails with `Unfitted` if the model has no lines `HairStrands`, or not as many points in them as the hair counts.
+ * `model`'s hair, counted and shaded as `hair` says, drawn as its strands after its guides: the lines `HairStrands` placed on the graphics device each frame as their guides swing, lit as hair shaded as the hair says is, never culled, since where they are drawn is not where they were made, each as much of a pixel as it covers, over what is behind it; the lines `HairGuides`, and its hair as cards, not shown; only every so many strands drawn, each covering as much more, if `options` say so. Fails with `Unfitted` if the model has no lines `HairStrands`, or not as many points in them as the hair counts.
  */
 export const fit = (
   model: Three.Object3D,
   hair: Strands.Hair,
-  cards: ReadonlyArray<string> = ['HairCards'],
+  options: Options = {},
 ): Effect.Effect<Haired, Unfitted> =>
   Effect.suspend(() => {
     const drawn = model.getObjectByName(STRANDS);
@@ -696,13 +702,25 @@ export const fit = (
       .mul(vec4(0, 1, 0, 0))
       .y.mul(screenSize.y)
       .mul(0.5);
-    material.opacityNode = clamp(width.mul(focal).div(positionView.z.negate()), 0, 1);
+    // Drawing only every so many strands, each covers as much more, so the hair is as thick.
+    const every = Math.max(Math.round(options.every ?? 1), 1);
+    material.opacityNode = clamp(width.mul(focal).mul(every).div(positionView.z.negate()), 0, 1);
+    if (every > 1) {
+      drawn.geometry.setIndex(
+        Array.from({ length: Math.ceil(strands / every) }, (_, kept) =>
+          Array.from({ length: hair.drawn.points - 1 }, (__, link) => {
+            const point = kept * every * hair.drawn.points + link;
+            return [point, point + 1];
+          }).flat(),
+        ).flat(),
+      );
+    }
     material.transparent = true;
     material.depthWrite = false;
     drawn.material = material;
     drawn.frustumCulled = false;
     drawn.visible = true;
-    for (const hidden of [GUIDES, ...cards]) {
+    for (const hidden of [GUIDES, ...(options.cards ?? ['HairCards'])]) {
       const shown = model.getObjectByName(hidden);
       if (shown !== undefined) {
         shown.visible = false;

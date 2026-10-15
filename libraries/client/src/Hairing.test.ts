@@ -83,7 +83,7 @@ describe('Hairing.fit', () => {
     () =>
       Effect.gen(function* () {
         const delivered = model();
-        const haired = yield* Hairing.fit(delivered, hair, ['HairCards', 'ponytail']);
+        const haired = yield* Hairing.fit(delivered, hair, { cards: ['HairCards', 'ponytail'] });
 
         const strands = delivered.getObjectByName('HairStrands');
         expect(strands?.visible).toBe(true);
@@ -131,6 +131,18 @@ describe('Hairing.fit', () => {
       expect(Array.from(haired.turnsNow()).slice(0, 4)).toEqual(
         [turn.x, turn.y, turn.z, turn.w].map((value) => Math.fround(value)),
       );
+    }),
+  );
+
+  it.effect('draws only every so many strands, if asked, each covering as much more', () =>
+    Effect.gen(function* () {
+      const delivered = model();
+      yield* Hairing.fit(delivered, hair, { every: 2 });
+
+      const strands = delivered.getObjectByName('HairStrands');
+      const index = strands instanceof Three.LineSegments ? strands.geometry.getIndex() : null;
+      // The first of the two strands, its two links.
+      expect(Array.from(index?.array ?? [])).toEqual([0, 1, 1, 2]);
     }),
   );
 

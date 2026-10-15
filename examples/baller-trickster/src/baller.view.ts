@@ -84,9 +84,9 @@ export const camera = View.rig(
 );
 
 /**
- * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her feet are headed where she stands, looking at the ball, her ponytail swinging, her hair drawn as strands; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
+ * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her feet are headed where she stands, looking at the ball, her ponytail swinging, her hair drawn as strands, every one of them unless `strands` says every how many to draw; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
  */
-export const make = <E>(model: Effect.Effect<Three.Object3D, E>) => {
+export const make = <E>(model: Effect.Effect<Three.Object3D, E>, strands = 1) => {
   const ballers = View.each([Baller.Aim, Baller.Spot, Baller.Hair], {
     acquire: () =>
       Effect.gen(function* () {
@@ -94,7 +94,7 @@ export const make = <E>(model: Effect.Effect<Three.Object3D, E>) => {
         return new Drawn(
           yield* Posing.fit(copy, Body.joints),
           yield* Ragdolling.fit(copy, hair),
-          yield* Hairing.fit(copy, Body.hair, CARDS),
+          yield* Hairing.fit(copy, Body.hair, { cards: CARDS, every: strands }),
         );
       }).pipe(Effect.orDie),
     draw: (drawn, held, frame) => {

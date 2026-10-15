@@ -43,7 +43,8 @@ const main = Effect.gen(function* () {
     orbit: Camera.start,
   };
   const views = yield* View.make(
-    BallerView.make(model).views,
+    // Every fourth strand of her hair while the game is worked on, so the machine working on it keeps up; every one when it is played.
+    BallerView.make(model, import.meta.env.DEV ? 4 : 1).views,
     Option.some({ camera: viewport.camera, player: client.entity }),
     () => played.orbit,
   );
