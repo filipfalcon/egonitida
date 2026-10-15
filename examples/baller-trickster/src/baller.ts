@@ -120,6 +120,21 @@ const degrees = (angle: number) => (angle * Math.PI) / 180;
 /** The spine's joints, from the pelvis up, which spread her trunk's turn, lean, and bend. */
 const SPINE = ['spine_01', 'spine_02', 'spine_03', 'spine_04'];
 
+/** How long her leg is, at full stretch, from hip to ankle, as her model was made, a little short of it, so a reach to it is a reach within it. */
+const LEG = (() => {
+  const apart = (a: string, b: string) => {
+    const from = Body.bones[a]?.at;
+    const to = Body.bones[b]?.at;
+    return from === undefined || to === undefined
+      ? 0
+      : Maths.hypot(from.x - to.x, from.y - to.y, from.z - to.z);
+  };
+  return (apart('thigh_l', 'calf_l') + apart('calf_l', 'foot_l')) * 0.99;
+})();
+
+/** How low she crouches at most, her standing knee bent, to reach low with the other foot, in metres. */
+const CROUCH = 0.25;
+
 /** How far a foot has gone from where it stands, for her to stand over the other: past this, in metres, she stands wholly over it. */
 const SHIFTED_BY = 0.15;
 
@@ -147,7 +162,7 @@ const between = (a: Pose.Pose['at'], b: Pose.Pose['at'], t: number) => ({
 });
 
 /**
- * Her whole body posed as her feet are headed, `aim` says: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed, its knee ahead and its sole to the ground as far as her ankle turns; and, as far as the swinging foot has gone, she stands over the other, as far as the swinging leg still reaches from there.
+ * Her whole body posed as her feet are headed, `aim` says: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed, its knee ahead and its sole to the ground as far as her ankle turns; and, as far as the swinging foot has gone, she stands over the other, as far as the swinging leg still reaches from there, crouching as low as it needs to reach.
  */
 export const poseOf = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
   const away = (foot: 'left' | 'right') => {
@@ -229,7 +244,19 @@ export const poseOf = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
       ? leant.pose
       : leaning(share / 2, tries - 1);
   };
-  return Pose.follow(Body.bones, Body.joints, leaning(lean, 3));
+  const leant = leaning(lean, 3);
+  // Crouched as low as the swinging foot needs to reach where it is headed, her standing knee bending, no lower than she crouches.
+  const hip = Pose.placer(Body.bones, Body.joints, leant)(`thigh_${swinging}`);
+  const to = aim[swinging === 'l' ? 'left' : 'right'];
+  const across = hip === undefined ? 0 : Maths.hypot(hip.at.x - to.x, hip.at.z - to.z);
+  const above = hip === undefined ? 0 : hip.at.y - to.y;
+  const most = across >= LEG ? 0 : Math.sqrt(LEG * LEG - across * across);
+  const drop = Math.min(Math.max(above - most, 0), CROUCH);
+  return Pose.follow(
+    Body.bones,
+    Body.joints,
+    drop === 0 ? leant : legs({ ...leant, at: { ...leant.at, y: leant.at.y - drop } }).pose,
+  );
 };
 
 // RULES
