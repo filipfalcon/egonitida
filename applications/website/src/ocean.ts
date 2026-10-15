@@ -1,4 +1,4 @@
-import { Component, Domain, Game, Pointing, Rule, System, State } from '@lightocean/core';
+import { Component, Domain, Game, Maths, Pointing, Rule, State, System } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 
 /**
@@ -44,8 +44,8 @@ export const Ripple = Component.make(
 
 /** How high the sea alone lifts the light at its place, `seconds` into the game: two waves crossing, so no two places swell alike. */
 const seaAt = (across: number, back: number, seconds: number) =>
-  0.18 * Math.sin(0.7 * across + 1.3 * seconds) +
-  0.14 * Math.sin(0.55 * back - 0.9 * seconds + 1.1);
+  0.18 * Maths.sin(0.7 * across + 1.3 * seconds) +
+  0.14 * Maths.sin(0.55 * back - 0.9 * seconds + 1.1);
 
 /** How high `ripple` lifts the light at its place, `seconds` into the game, `secondsPerStep` a step: most where its crest is, less the longer it has run. */
 const rippleAt = (
@@ -59,8 +59,8 @@ const rippleAt = (
   if (age < 0 || age >= RIPPLE_SECONDS) {
     return 0;
   }
-  const off = Math.hypot(across - ripple.across, back - ripple.back) - RIPPLE_SPEED * age;
-  return RIPPLE_PEAK * (1 - age / RIPPLE_SECONDS) * Math.exp(-(off * off) / RIPPLE_WIDTH);
+  const off = Maths.hypot(across - ripple.across, back - ripple.back) - RIPPLE_SPEED * age;
+  return RIPPLE_PEAK * (1 - age / RIPPLE_SECONDS) * Maths.exp(-(off * off) / RIPPLE_WIDTH);
 };
 
 // RULES

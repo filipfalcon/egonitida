@@ -7,6 +7,7 @@
     "lightocean/no-index-keys": "error",
     "lightocean/no-three-in-domains": "error",
     "lightocean/redacted-command-secrets": "error",
+    "lightocean/same-maths": "error",
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
     "typescript/no-non-null-assertion": "error"

@@ -3,6 +3,7 @@ import { noNullableComponents } from '#src/rules/noNullableComponents.ts';
 import { noThreeInDomains } from '#src/rules/noThreeInDomains.ts';
 import { pureSteps } from '#src/rules/pureSteps.ts';
 import { redactedCommandSecrets } from '#src/rules/redactedCommandSecrets.ts';
+import { sameMaths } from '#src/rules/sameMaths.ts';
 import { viewsKeepNothing } from '#src/rules/viewsKeepNothing.ts';
 
 /**
@@ -17,5 +18,6 @@ export default {
     'no-index-keys': noIndexKeys,
     'no-three-in-domains': noThreeInDomains,
     'redacted-command-secrets': redactedCommandSecrets,
+    'same-maths': sameMaths,
   },
 };

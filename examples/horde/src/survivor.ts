@@ -1,4 +1,4 @@
-import { Action, Component, Domain, Event, Rule, System, State } from '@lightocean/core';
+import { Action, Component, Domain, Event, Maths, Rule, State, System } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 
@@ -127,7 +127,7 @@ const walk = System.make({
   emits: [],
   run: (context) => {
     for (const [survivor, life, stick, position] of context.query(Life, Stick, Body.Position)) {
-      const length = Math.hypot(stick.x, stick.z);
+      const length = Maths.hypot(stick.x, stick.z);
       if (life._tag === 'Alive' && length > 0) {
         const pace = (SPEED * context.time.secondsPerStep) / Math.max(length, 1);
         context.set(survivor, Body.Position, {

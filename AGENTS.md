@@ -22,6 +22,7 @@ A game is one equation: **x′ = f(x, u)**. The state x is the whole game at one
 Most rules below keep f a function of x and u alone:
 
 - randomness and time come only from the step's context, or they would be input hidden outside u;
+- maths beyond the four operations and roots comes from `Maths`, which every JavaScript engine works out alike, or a host, a client predicting it, and a replay in another browser would step the same state apart;
 - systems and rules run no Effect, since work outside the state is output and input, never part of f;
 - a rule that needs something done outside issues a command, and its result returns as an action, through u;
 - a state is never changed, only replaced, so any past state can be stepped again;

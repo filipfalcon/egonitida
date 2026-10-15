@@ -1,4 +1,4 @@
-import { Component, Domain, Game, System, State } from '@lightocean/core';
+import { Component, Domain, Game, Maths, State, System } from '@lightocean/core';
 import { Schema } from 'effect';
 
 /**
@@ -46,7 +46,7 @@ const walk = System.make({
   emits: [],
   run: (context) => {
     for (const [walker, steering, position] of context.query(Steering, Position)) {
-      const length = Math.hypot(steering.x, steering.z);
+      const length = Maths.hypot(steering.x, steering.z);
       if (length > 0) {
         const pace = (SPEED * context.time.secondsPerStep) / Math.max(length, 1);
         context.set(walker, Position, {

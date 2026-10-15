@@ -1,4 +1,4 @@
-import { Component, Domain, System } from '@lightocean/core';
+import { Component, Domain, Maths, System } from '@lightocean/core';
 import { Schema } from 'effect';
 
 /**
@@ -27,7 +27,7 @@ const keepInside = System.make({
   emits: [],
   run: (context) => {
     for (const [body, { x, z }] of context.query(Position)) {
-      const distance = Math.hypot(x, z);
+      const distance = Maths.hypot(x, z);
       if (distance > ARENA_RADIUS) {
         const scale = ARENA_RADIUS / distance;
         context.set(body, Position, { x: x * scale, z: z * scale });

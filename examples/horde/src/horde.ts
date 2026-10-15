@@ -1,4 +1,4 @@
-import { Component, Domain, Rule, System } from '@lightocean/core';
+import { Component, Domain, Maths, Rule, System } from '@lightocean/core';
 import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 import * as Survivor from '#src/survivor.ts';
@@ -97,7 +97,7 @@ const shoot = Rule.on(Survivor.PulledTrigger, {
       stick: context.get(player, Survivor.Stick),
     });
     Option.map(aiming, ({ from, stick }) => {
-      const along = { x: Math.cos(stick.aim), z: Math.sin(stick.aim) };
+      const along = { x: Maths.cos(stick.aim), z: Maths.sin(stick.aim) };
       const hit = context
         .query(Zombie, Body.Position)
         .reduce<
@@ -164,8 +164,8 @@ const rise = System.make({
         const angle = context.random() * Math.PI * 2;
         context.spawn(
           risen({
-            x: Math.cos(angle) * Body.ARENA_RADIUS,
-            z: Math.sin(angle) * Body.ARENA_RADIUS,
+            x: Maths.cos(angle) * Body.ARENA_RADIUS,
+            z: Maths.sin(angle) * Body.ARENA_RADIUS,
             health: 1 + Math.floor(context.random() * 3),
             speed: 0.8 + context.random() * 0.8,
           }),
@@ -196,7 +196,7 @@ const shamble = System.make({
           Option.match(nearest, {
             onNone: () => Option.some(one),
             onSome: (n) =>
-              Math.hypot(one.x - x, one.z - z) < Math.hypot(n.x - x, n.z - z)
+              Maths.hypot(one.x - x, one.z - z) < Maths.hypot(n.x - x, n.z - z)
                 ? Option.some(one)
                 : nearest,
           }),
@@ -205,7 +205,7 @@ const shamble = System.make({
       const pull = Option.match(target, {
         onNone: () => ({ x: 0, z: 0 }),
         onSome: (to) => {
-          const distance = Math.hypot(to.x - x, to.z - z);
+          const distance = Maths.hypot(to.x - x, to.z - z);
           const step = Math.min(speed * context.time.secondsPerStep, Math.max(distance - STOP, 0));
           return distance === 0
             ? { x: 0, z: 0 }
@@ -214,7 +214,7 @@ const shamble = System.make({
       });
       const push = walkers.reduce(
         (sum, [other, , , at]) => {
-          const distance = Math.hypot(x - at.x, z - at.z);
+          const distance = Maths.hypot(x - at.x, z - at.z);
           if (other === zombie || distance >= ELBOW_ROOM || distance === 0) {
             return sum;
           }
@@ -246,7 +246,7 @@ const bite = System.make({
       Jaws,
       Body.Position,
     )) {
-      const reached = survivors.find(([, , at]) => Math.hypot(at.x - x, at.z - z) <= REACH);
+      const reached = survivors.find(([, , at]) => Maths.hypot(at.x - x, at.z - z) <= REACH);
       if (mode._tag === 'Shambling' && tick >= readyAt && reached !== undefined) {
         context.emit({ _tag: 'Bitten', survivor: reached[0], damage: BITE_DAMAGE });
         context.set(zombie, Jaws, { readyAt: tick + Math.round(BITE_SECONDS / secondsPerStep) });
