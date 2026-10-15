@@ -290,3 +290,46 @@ describe('Hairing.lobes', () => {
     expect(sum(dark.reflected)).toBeCloseTo(sum(fair.reflected), 12);
   });
 });
+
+describe('Hairing.density and Hairing.transmittance', () => {
+  /** Strands of two points standing up along +y, a centimetre long, at each of `xs` across, a slab of hair at z = 0. */
+  const slab = (xs: ReadonlyArray<number>, z = 0) => ({
+    at: xs.flatMap((x) => [x, 0, z, x, 0.01, z]),
+    widths: xs.flatMap(() => [0.0001, 0.0001]),
+  });
+  const grid = Hairing.gridAbout([-0.1, -0.1, -0.1, 0.1, 0.1, 0.1], 8);
+  const xs = Array.from({ length: 50 }, (_, at) => -0.05 + at * 0.002);
+
+  it('holds as much hair, its length times its width, as the strands in it hold, over a voxel’s volume', () => {
+    const { at, widths } = slab(xs);
+    const held = Hairing.density(grid, at, widths, 2);
+    const total = held.reduce((sum, value) => sum + value, 0) * grid.voxel ** 3;
+
+    expect(total).toBeCloseTo(xs.length * 0.01 * 0.0001, 12);
+  });
+
+  it('lets all light through where no hair is between a point and the light', () => {
+    const held = Hairing.density(grid, [], [], 2);
+
+    expect(Hairing.transmittance(grid, held, { x: 0, y: 0, z: -0.05 }, { x: 0, y: 0, z: 1 })).toBe(
+      1,
+    );
+  });
+
+  it('lets less light through the more hair lies between a point and the light, and all of it from the other side', () => {
+    const thin = Hairing.density(grid, slab(xs).at, slab(xs).widths, 2);
+    const thick = Hairing.density(
+      grid,
+      [...slab(xs).at, ...slab(xs, 0.001).at, ...slab(xs, 0.002).at],
+      [...slab(xs).widths, ...slab(xs).widths, ...slab(xs).widths],
+      2,
+    );
+    const behind = { x: 0, y: 0, z: -0.05 };
+    const towardSlab = { x: 0, y: 0, z: 1 };
+
+    const throughThin = Hairing.transmittance(grid, thin, behind, towardSlab);
+    expect(throughThin).toBeLessThan(1);
+    expect(Hairing.transmittance(grid, thick, behind, towardSlab)).toBeLessThan(throughThin);
+    expect(Hairing.transmittance(grid, thick, behind, { x: 0, y: 0, z: -1 })).toBe(1);
+  });
+});

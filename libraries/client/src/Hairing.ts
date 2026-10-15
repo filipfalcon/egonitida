@@ -92,6 +92,113 @@ export const absorptionOf = (shading: Strands.Shading): Colour => {
   };
 };
 
+/** A box of voxels about hair, square to the model's axes: its least corner, how wide each voxel is, in metres, and how many voxels it has along each side. */
+export interface Grid {
+  readonly from: Direction;
+  readonly voxel: number;
+  readonly size: number;
+}
+
+/** A cube of `size` voxels a side about every point of `at`, three numbers each, half a voxel and as much as `margin` more on every side; a cube a millimetre wide about the origin if there are none. */
+export const gridAbout = (at: ReadonlyArray<number>, size: number, margin = 0): Grid => {
+  const least = [Infinity, Infinity, Infinity];
+  const most = [-Infinity, -Infinity, -Infinity];
+  for (let value = 0; value < at.length; value++) {
+    const axis = value % 3;
+    least[axis] = Math.min(least[axis] ?? Infinity, at[value] ?? 0);
+    most[axis] = Math.max(most[axis] ?? -Infinity, at[value] ?? 0);
+  }
+  const middle = least.map((low, axis) =>
+    Number.isFinite(low) ? (low + (most[axis] ?? low)) / 2 : 0,
+  );
+  const widest = Math.max(
+    ...least.map((low, axis) => (Number.isFinite(low) ? (most[axis] ?? low) - low : 0)),
+    0.001,
+  );
+  const side = (widest + 2 * margin) * (size / (size - 1));
+  return {
+    from: {
+      x: (middle[0] ?? 0) - side / 2,
+      y: (middle[1] ?? 0) - side / 2,
+      z: (middle[2] ?? 0) - side / 2,
+    },
+    voxel: side / size,
+    size,
+  };
+};
+
+/** The voxel of `grid` the point `x`, `y`, `z` lies in, by its index, x fastest; none outside it. */
+const voxelOf = (grid: Grid, x: number, y: number, z: number): number | undefined => {
+  const across = Math.floor((x - grid.from.x) / grid.voxel);
+  const up = Math.floor((y - grid.from.y) / grid.voxel);
+  const along = Math.floor((z - grid.from.z) / grid.voxel);
+  return across < 0 ||
+    up < 0 ||
+    along < 0 ||
+    across >= grid.size ||
+    up >= grid.size ||
+    along >= grid.size
+    ? undefined
+    : across + grid.size * (up + grid.size * along);
+};
+
+/**
+ * How much hair each voxel of `grid` holds, as the strands of `points` points each, through `at`, three numbers a point, `widths` wide at each, lie in it: each link, from a point to the next of its strand, as long as it is times as wide as the point it starts from, in the voxel that point lies in, over a voxel's volume, so that light going a metre through a voxel crosses as much of a strand's breadth as the voxel holds. The graphics device adds the same up every frame.
+ */
+export const density = (
+  grid: Grid,
+  at: ReadonlyArray<number>,
+  widths: ReadonlyArray<number>,
+  points: number,
+): ReadonlyArray<number> => {
+  const held = Array.from({ length: grid.size ** 3 }, () => 0);
+  const count = at.length / 3;
+  for (let point = 0; point < count; point++) {
+    if (point % points === points - 1) {
+      continue;
+    }
+    const x = at[point * 3] ?? 0;
+    const y = at[point * 3 + 1] ?? 0;
+    const z = at[point * 3 + 2] ?? 0;
+    const voxel = voxelOf(grid, x, y, z);
+    if (voxel === undefined) {
+      continue;
+    }
+    const long = Math.hypot(
+      (at[point * 3 + 3] ?? x) - x,
+      (at[point * 3 + 4] ?? y) - y,
+      (at[point * 3 + 5] ?? z) - z,
+    );
+    held[voxel] = (held[voxel] ?? 0) + (long * (widths[point] ?? 0)) / grid.voxel ** 3;
+  }
+  return held;
+};
+
+/**
+ * How much light from the way `toLight`, of length one, reaches `from` through the hair `held` in `grid`: going a voxel at a time from a voxel beyond `from`, so a strand shades not itself, out of the grid, losing as much of it at each as the hair there covers, exponentially. All of it, where no hair lies between.
+ */
+export const transmittance = (
+  grid: Grid,
+  held: ReadonlyArray<number>,
+  from: Direction,
+  toLight: Direction,
+): number => {
+  let covered = 0;
+  for (let step = 1; step <= grid.size * 2; step++) {
+    const voxel = voxelOf(
+      grid,
+      from.x + toLight.x * grid.voxel * step,
+      from.y + toLight.y * grid.voxel * step,
+      from.z + toLight.z * grid.voxel * step,
+    );
+    if (voxel === undefined) {
+      break;
+    }
+    covered += (held[voxel] ?? 0) * grid.voxel;
+  }
+  return Math.exp(-covered);
+};
+
 /** How much of a pixel a strand `width` wide covers, `distance` from the eye, where a pixel is a metre over `focal` at a metre away: its width over a pixel's there, a whole pixel at most. */
 export const coverage = (width: number, distance: number, focal: number): number =>
   Math.min((width * focal) / distance, 1);
