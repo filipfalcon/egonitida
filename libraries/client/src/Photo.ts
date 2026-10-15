@@ -122,7 +122,8 @@ export const take = (viewport: {
         for (const sun of suns) {
           const lit = dot(facing, sun.toward).toVar();
           If(lit.greaterThan(0), () => {
-            const hidden = SceneTracer.trace(device, at, sun.toward, float(FAR), 'Casting');
+            // In a photograph whatever stands between a surface and a sun shades it, whether or not a game asked it to cast a shadow.
+            const hidden = SceneTracer.trace(device, at, sun.toward, float(FAR));
             If(hidden.y.lessThan(0), () => {
               light.addAssign(carried.mul(colour).mul(sun.irradiance).mul(lit).div(PI));
             });
