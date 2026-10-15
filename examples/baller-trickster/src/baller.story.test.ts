@@ -208,3 +208,76 @@ describe('her ponytail', () => {
     ).toBeGreaterThan(0.001);
   });
 });
+
+describe('walking and juggling', () => {
+  it('walks where she is sent, at a walk’s pace, her feet coming with her', () => {
+    Story.story(
+      Baller.game,
+      standing,
+      Story.demand('baller', Baller.Walk, { x: 0, y: 1 }),
+      Story.seconds(1),
+      Story.expect('baller', Baller.Spot, ({ x, z }) => {
+        expect(z).toBeCloseTo(Baller.WALK_SPEED, 1);
+        expect(x).toBeCloseTo(0, 6);
+      }),
+      Story.demand('baller', Baller.Walk, Baller.still),
+      Story.seconds(0.5),
+      Story.expect('baller', Baller.Aim, (aim) =>
+        expect(
+          apart(aim.left, Baller.standingAt({ x: 0, z: Baller.WALK_SPEED }).left),
+        ).toBeLessThan(0.05),
+      ),
+    );
+  });
+
+  /** Her left foot held where a dropped ball falls: half ahead, as the stick holds it. */
+  const ready = placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead });
+
+  it('drops the ball before her left foot, onto her instep held there, off which it bounces up', () => {
+    const rising: Array<number> = [];
+    Story.story(
+      Baller.game,
+      standing,
+      Story.demand('baller', Baller.Feet, ready),
+      Story.seconds(0.3),
+      Story.act('baller', Baller.DroppedBall, {}),
+      Story.step(),
+      Story.expect('ball', Baller.Ball, ({ at, velocity }) => {
+        expect(at.x).toBeCloseTo(Baller.INSTEP.x, 6);
+        expect(at.z).toBeCloseTo(Baller.INSTEP.z + Baller.DROP_AHEAD, 6);
+        expect(Math.hypot(velocity.x, velocity.z)).toBeLessThan(1e-9);
+      }),
+      // Falling 0.6 m takes about 0.35 s; off her instep it rises again.
+      Story.seconds(0.4),
+      Story.expect('ball', Baller.Ball, ({ velocity }) => rising.push(velocity.y)),
+    );
+
+    expect(rising[0] ?? 0).toBeGreaterThan(0);
+  });
+
+  it('sends a falling ball back up off a foot lifted into it, as a juggle does', () => {
+    const heights: Array<number> = [];
+    Story.story(
+      Baller.game,
+      standing,
+      Story.demand('baller', Baller.Feet, ready),
+      Story.seconds(0.3),
+      Story.act('baller', Baller.DroppedBall, {}),
+      Story.step(),
+      Story.seconds(0.2),
+      // As it comes down, her foot lifted into it a little, and back.
+      Story.demand(
+        'baller',
+        Baller.Feet,
+        placing({ y: Baller.DROP_AHEAD / Baller.REACH.ahead, lift: 0.3 }),
+      ),
+      Story.seconds(0.15),
+      Story.demand('baller', Baller.Feet, ready),
+      Story.seconds(0.2),
+      Story.expect('ball', Baller.Ball, ({ at }) => heights.push(at.y)),
+    );
+
+    // Up off her foot, above it again.
+    expect(heights[0] ?? 0).toBeGreaterThan(Baller.INSTEP.y + 0.2);
+  });
+});

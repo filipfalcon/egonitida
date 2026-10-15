@@ -7,6 +7,7 @@ import {
   Game,
   Maths,
   Pose,
+  Quaternion,
   Reach,
   Rule,
   State,
@@ -17,22 +18,42 @@ import { Option, Schema } from 'effect';
 import * as Body from '#src/body.ts';
 
 /**
- * The seventh example: a baller doing tricks with a ball, her legs worked by the player, one stick each. A stick places its foot, ahead and back, out and in, and a trigger lifts it; her hip, knee, and ankle turn as a leg turns to put it there, never further than a leg turns, and the rest of her goes with it: her trunk turning against the swinging leg, her arms swinging against it, her shoulders following her arms, and her weight over the foot she stands on. The state holds only where her feet are headed, as they go toward where the sticks place them at a foot's pace: her pose is worked out from that, by reaching, in the step as in the view, so a touch of the ball is the simulation's to decide. Whatever part of her boot or leg touches the ball strikes it, as fast as that part moves and gripping it as that part grips, and the ball flies, spins, bounces, and rolls; the player puts it back before her at a press. Her ponytail swings as only her client sees it.
+ * The seventh example: a baller doing tricks with a ball, her legs worked by the player, one stick each. A stick places its foot, ahead and back, out and in, and a trigger lifts it; her hip, knee, and ankle turn as a leg turns to put it there, never further than a leg turns, and the rest of her goes with it: her trunk turning against the swinging leg, her arms swinging against it, her shoulders following her arms, and her weight over the foot she stands on. The state holds only where her feet are headed, as they go toward where the sticks place them at a foot's pace: her pose is worked out from that, by reaching, in the step as in the view, so a touch of the ball is the simulation's to decide. Whatever part of her boot or leg touches the ball strikes it, as fast as that part moves and gripping it as that part grips, and the ball flies, spins, bounces, and rolls; the player puts it back before her at a press, or drops it onto her foot to juggle; and she walks where the player sends her. Her ponytail swings as only her client sees it.
  */
 
 /** How far a stick places its foot from where it stands: ahead or back, and out or in, at a full tilt, and how high a trigger lifts it, in metres. */
 export const REACH = { ahead: 0.45, across: 0.3, lift: 0.45 };
 
-/** How fast a foot goes toward where its stick places it, in metres a second. */
+/** How fast a foot goes toward where its stick places it, in metres a second: as fast as the stick moves, a slow stick touching the ball softly, but no faster than this. */
 export const FOOT_SPEED = 5;
+
+/** How fast she walks, at a full press, in metres a second. */
+export const WALK_SPEED = 1.5;
 
 /** Where each foot stands as she stands still, its ankle over the ground. */
 export const STANDING = Body.standing;
 
-/** Where the ball is put, at rest before her. */
+/** Where the ball is put, at rest before her, from where she stands. */
 export const BALL_START = { x: 0, y: Flight.football.radius, z: 0.5 };
 
+/** Where the top of her left instep is as she stands, from where she stands: what a ball dropped onto her foot falls onto. */
+export const INSTEP = (() => {
+  const instep = Body.touches['instep_l'];
+  const bone =
+    instep === undefined ? undefined : Pose.placer(Body.bones, Body.joints, Pose.rest)(instep.bone);
+  if (instep === undefined || bone === undefined) {
+    return Body.standing.left;
+  }
+  const on = Quaternion.rotate(bone.turn, instep.at);
+  return { x: bone.at.x + on.x, y: bone.at.y + on.y + instep.radius, z: bone.at.z + on.z };
+})();
+
+/** Where over her left instep a ball is dropped, from where she stands: ahead of her standing foot, where a stick held half ahead puts it, clear of her shin and her hand, and how high, in metres. */
+export const DROP_AHEAD = 0.3;
+export const DROP_HEIGHT = 0.6;
+
 const Point = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, z: Schema.Finite });
+const Ground = Schema.Struct({ x: Schema.Finite, z: Schema.Finite });
 const Placing = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, lift: Schema.Finite });
 
 /** Where a stick places a foot: across, right as it grows, and ahead, each from −1 to 1, and how far its trigger lifts it, from nothing to a whole. */
@@ -46,6 +67,15 @@ export const Feet = Component.make('Feet', Schema.Struct({ left: Placing, right:
   network: 'predicted',
 });
 
+/** What the player demands of her walking: which way, across, right as it grows, and ahead, each from −1 to 1. */
+export const Walk = Component.make('Walk', Schema.Struct({ x: Schema.Finite, y: Schema.Finite }), {
+  owner: 'demand',
+  network: 'predicted',
+});
+
+/** Where she stands on the ground, in metres: she walks from here, her feet are placed from here, and her pose stands here. */
+export const Spot = Component.make('Spot', Ground, { owner: 'simulation', network: 'server' });
+
 /** Where each of her feet is headed now, its ankle, in metres: going toward where the sticks place it, at a foot's pace. Her pose is worked out from it. */
 export const Aim = Component.make('Aim', Schema.Struct({ left: Point, right: Point }), {
   owner: 'simulation',
@@ -55,10 +85,13 @@ export const Aim = Component.make('Aim', Schema.Struct({ left: Point, right: Poi
 /** The ball, in flight or at rest. */
 export const Ball = Component.make('Ball', Flight.Ball, { owner: 'simulation', network: 'server' });
 
-/** When the player last put the ball back: never, or at a tick, for the step to put it back then. */
+/** Where the player last put the ball: nowhere yet, or at a point, still, at a tick, for the step to put it there then; above the ground, it falls. */
 export const Kickoff = Component.make(
   'Kickoff',
-  Schema.Union([Schema.TaggedStruct('Never', {}), Schema.TaggedStruct('At', { tick: Schema.Int })]),
+  Schema.Union([
+    Schema.TaggedStruct('Never', {}),
+    Schema.TaggedStruct('Put', { tick: Schema.Int, at: Point }),
+  ]),
   { owner: 'rules', network: 'server' },
 );
 
@@ -86,6 +119,9 @@ export const idle: Component.ValueOf<typeof Feet> = {
 /** The player put the ball back before her. */
 export const ReplacedBall = Action.make('ReplacedBall', {});
 
+/** The player dropped the ball before her left foot, for her to meet it. */
+export const DroppedBall = Action.make('DroppedBall', {});
+
 // POSE
 
 /** Where `placing` places a foot standing at `standing`: right as its stick goes right, which is toward her right, ahead as it goes up, and up as its trigger lifts it. */
@@ -95,11 +131,25 @@ const placed = (standing: Pose.Pose['at'], placing: Placing) => ({
   z: standing.z + placing.y * REACH.ahead,
 });
 
-/** Where `feet` place her feet. */
-export const targetOf = (feet: Component.ValueOf<typeof Feet>): Component.ValueOf<typeof Aim> => ({
-  left: placed(STANDING.left, feet.left),
-  right: placed(STANDING.right, feet.right),
+/** `point` moved to where she stands, `spot`. */
+const from = (spot: typeof Ground.Type, point: Pose.Pose['at']) => ({
+  x: point.x + spot.x,
+  y: point.y,
+  z: point.z + spot.z,
 });
+
+/** Where `feet` place her feet, standing at `spot`, the origin unless given. */
+export const targetOf = (
+  feet: Component.ValueOf<typeof Feet>,
+  spot: typeof Ground.Type = { x: 0, z: 0 },
+): Component.ValueOf<typeof Aim> => ({
+  left: from(spot, placed(STANDING.left, feet.left)),
+  right: from(spot, placed(STANDING.right, feet.right)),
+});
+
+/** Where her feet stand still, standing at `spot`. */
+export const standingAt = (spot: typeof Ground.Type): Component.ValueOf<typeof Aim> =>
+  targetOf(idle, spot);
 
 /** `from` gone toward `to`, `by` at most, stopping on it. */
 const toward = (from: Pose.Pose['at'], to: Pose.Pose['at'], by: number) => {
@@ -162,9 +212,21 @@ const between = (a: Pose.Pose['at'], b: Pose.Pose['at'], t: number) => ({
 });
 
 /**
- * Her whole body posed as her feet are headed, `aim` says: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed, its knee ahead and its sole to the ground as far as her ankle turns; and, as far as the swinging foot has gone, she stands over the other, as far as the swinging leg still reaches from there, crouching as low as it needs to reach.
+ * Her whole body posed as her feet are headed, `where` says, standing at `spot`: the leg whose foot has gone further from where it stands swings, the other stands. Her trunk turns against the swinging leg and leans toward the foot she stands on, spread over her spine; her arms come down by her sides, the one across from the swinging leg swinging forward and the one beside it back and out, her elbows bent as a runner's are, her shoulders following her arms; her hands hang relaxed; each leg reaches where its foot is headed, its knee ahead and its sole to the ground as far as her ankle turns; and, as far as the swinging foot has gone, she stands over the other, as far as the swinging leg still reaches from there, crouching as low as it needs to reach.
  */
-export const poseOf = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
+export const poseOf = (
+  where: Component.ValueOf<typeof Aim>,
+  spot: typeof Ground.Type = { x: 0, z: 0 },
+): Pose.Pose => {
+  const posed = posedAt({
+    left: from({ x: -spot.x, z: -spot.z }, where.left),
+    right: from({ x: -spot.x, z: -spot.z }, where.right),
+  });
+  return { ...posed, at: from(spot, posed.at) };
+};
+
+/** Her whole body posed as `poseOf` poses it, standing at the origin, her feet headed where `aim` says from there. */
+const posedAt = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
   const away = (foot: 'left' | 'right') => {
     const from = STANDING[foot];
     const to = aim[foot];
@@ -261,14 +323,44 @@ export const poseOf = (aim: Component.ValueOf<typeof Aim>): Pose.Pose => {
 
 // RULES
 
-/** A ball put back is put back at this tick, which the step puts at rest before her. */
+/** Where she who acted stands: where she was placed, or the origin. */
+const spotOf = (
+  context: {
+    readonly get: (
+      entity: State.Entity,
+      component: typeof Spot,
+    ) => Option.Option<typeof Ground.Type>;
+  },
+  player: State.Entity,
+) => Option.getOrElse(context.get(player, Spot), () => ({ x: 0, z: 0 }));
+
+/** A ball put back is put at rest before her who put it back, at this tick, which the step puts there. */
 const replaceBall = Rule.on(ReplacedBall, {
-  reads: [],
+  reads: [Spot],
   writes: [Kickoff],
   emits: [],
-  run: (context) => {
+  run: (context, { player }) => {
+    const at = from(spotOf(context, player), BALL_START);
     for (const [ball] of context.query(Kickoff)) {
-      context.set(ball, Kickoff, { _tag: 'At', tick: context.time.tick });
+      context.set(ball, Kickoff, { _tag: 'Put', tick: context.time.tick, at });
+    }
+  },
+});
+
+/** A ball dropped is put ahead of the left instep of her who dropped it, where a stick held half ahead puts her foot, at this tick, which the step lets fall from there. */
+const dropBall = Rule.on(DroppedBall, {
+  reads: [Spot],
+  writes: [Kickoff],
+  emits: [],
+  run: (context, { player }) => {
+    const over = from(spotOf(context, player), INSTEP);
+    const at = {
+      x: over.x,
+      y: over.y + Flight.football.radius + DROP_HEIGHT,
+      z: over.z + DROP_AHEAD,
+    };
+    for (const [ball] of context.query(Kickoff)) {
+      context.set(ball, Kickoff, { _tag: 'Put', tick: context.time.tick, at });
     }
   },
 });
@@ -276,27 +368,36 @@ const replaceBall = Rule.on(ReplacedBall, {
 // SYSTEMS
 
 /**
- * Her feet go toward where the sticks place them, at a foot's pace; a ball put back this tick lies at rest before her; whatever part of her touches the ball, swept from her pose before to her pose now, strikes it, as fast as that part moves and gripping it as that part grips; and the ball flies on.
+ * She walks where she is sent, at a walk's pace; her feet go toward where the sticks place them from where she stands, at a foot's pace; a ball put somewhere this tick is put there, still; whatever part of her touches the ball, swept from her pose before to her pose now, strikes it, as fast as that part moves and gripping it as that part grips; and the ball flies on.
  */
 const play = System.make({
   name: 'play',
-  reads: [Feet, Kickoff],
-  writes: [Aim, Ball],
+  reads: [Feet, Walk, Kickoff],
+  writes: [Spot, Aim, Ball],
   emits: [],
   run: (context) => {
     const seconds = context.time.secondsPerStep;
-    const moved = context.query(Feet, Aim).map(([baller, feet, aim]) => {
-      const target = targetOf(feet);
+    const moved = context.query(Feet, Walk, Spot, Aim).map(([baller, feet, walk, spot, aim]) => {
+      // No faster for a press of two ways at once.
+      const pressed = Math.max(Maths.hypot(walk.x, walk.y), 1);
+      const walked = {
+        x: spot.x - (walk.x / pressed) * WALK_SPEED * seconds,
+        z: spot.z + (walk.y / pressed) * WALK_SPEED * seconds,
+      };
+      const target = targetOf(feet, walked);
       const now = {
         left: toward(aim.left, target.left, FOOT_SPEED * seconds),
         right: toward(aim.right, target.right, FOOT_SPEED * seconds),
       };
+      context.set(baller, Spot, walked);
       context.set(baller, Aim, now);
-      return { before: poseOf(aim), now: poseOf(now) };
+      return { before: poseOf(aim, spot), now: poseOf(now, walked) };
     });
     for (const [ball, kickoff, flown] of context.query(Kickoff, Ball)) {
       const flying =
-        kickoff._tag === 'At' && kickoff.tick === context.time.tick ? Flight.at(BALL_START) : flown;
+        kickoff._tag === 'Put' && kickoff.tick === context.time.tick
+          ? Flight.at(kickoff.at)
+          : flown;
       const struck = moved.reduce(
         (now, { before, now: posed }) =>
           Option.match(
@@ -329,12 +430,12 @@ const play = System.make({
 /** Her ponytail swings from her head as the step poses her: tied to it where it was made, the rest trailing as she moves. */
 const swingHair = System.make({
   name: 'swingHair',
-  reads: [Aim],
+  reads: [Aim, Spot],
   writes: [Hair],
   emits: [],
   run: (context) => {
-    for (const [baller, aim] of context.query(Aim)) {
-      const head = Pose.placer(Body.bones, Body.joints, poseOf(aim))('head');
+    for (const [baller, aim, spot] of context.query(Aim, Spot)) {
+      const head = Pose.placer(Body.bones, Body.joints, poseOf(aim, spot))('head');
       if (head === undefined) {
         continue;
       }
@@ -357,11 +458,11 @@ const swingHair = System.make({
 export const domain = Domain.make({
   name: 'Baller',
   requires: [],
-  components: [Feet, Aim, Ball, Kickoff, Hair],
-  actions: [ReplacedBall],
+  components: [Feet, Walk, Spot, Aim, Ball, Kickoff, Hair],
+  actions: [ReplacedBall, DroppedBall],
   events: [],
   systems: [play],
-  rules: [replaceBall],
+  rules: [replaceBall, dropBall],
   localSystems: [swingHair],
 });
 
@@ -373,5 +474,14 @@ export const [state, ball] = State.spawn(State.empty({ seed: 1 }), [
   Kickoff.of({ _tag: 'Never' }),
 ]);
 
-/** A player joins as a baller, standing, her feet where they stand. */
-export const join = (joined: State.State) => State.spawn(joined, [Feet.of(idle), Aim.of(STANDING)]);
+/** She stands still, sent nowhere. */
+export const still: Component.ValueOf<typeof Walk> = { x: 0, y: 0 };
+
+/** A player joins as a baller, standing where the pitch starts, her feet where they stand, sent nowhere. */
+export const join = (joined: State.State) =>
+  State.spawn(joined, [
+    Feet.of(idle),
+    Walk.of(still),
+    Spot.of({ x: 0, z: 0 }),
+    Aim.of(standingAt({ x: 0, z: 0 })),
+  ]);

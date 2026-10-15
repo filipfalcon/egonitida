@@ -64,6 +64,8 @@ const main = Effect.gen(function* () {
     'triggers or Q and U: lift them',
     'L3 or R3 held, or Shift: the stick turns the camera',
     'Triangle or R: the ball back',
+    'Square or F: the ball dropped onto her foot',
+    'directional pad or arrows: walk',
   ].join('\n');
 
   yield* viewport.loop((seconds) =>
@@ -74,9 +76,15 @@ const main = Effect.gen(function* () {
           played.controls = Controls.read(BallerControls.bindings, hearing.read(), played.controls);
           played.feet = BallerControls.feetOf(played.controls, played.feet);
           played.orbit = Camera.orbit(played.controls, played.orbit, seconds);
-          yield* client.send([Baller.Feet.of(played.feet)]);
+          yield* client.send([
+            Baller.Feet.of(played.feet),
+            Baller.Walk.of(BallerControls.walkOf(played.controls)),
+          ]);
           if (BallerControls.replaced(played.controls)) {
             yield* client.act(Baller.ReplacedBall, {});
+          }
+          if (BallerControls.dropped(played.controls)) {
+            yield* client.act(Baller.DroppedBall, {});
           }
           yield* views.frame(frame);
         }),

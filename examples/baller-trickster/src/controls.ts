@@ -3,7 +3,7 @@ import type { Component } from '@lightocean/core';
 import * as Baller from '#src/baller.ts';
 
 /**
- * How the baller is played, with a pad first: the left stick places her left foot and the right stick her right, ahead and back, out and in; the triggers lift them; and Triangle, or R, puts the ball back. Held in, L3 or R3, a stick turns the camera about her instead, its foot holding where it was. On a keyboard, WASD place her left foot and IJKL her right, Q and U lift them, and the left and right Shift keys turn the camera by them.
+ * How the baller is played, with a pad first: the left stick places her left foot and the right stick her right, ahead and back, out and in; the triggers lift them; Triangle, or R, puts the ball back, and Square, or F, drops it onto her left foot; the directional pad, or the arrow keys, walk her. Held in, L3 or R3, a stick turns the camera about her instead, its foot holding where it was. On a keyboard, WASD place her left foot and IJKL her right, Q and U lift them, and the left and right Shift keys turn the camera by them.
  */
 
 /** Her feet and the ball, as controls. */
@@ -21,6 +21,11 @@ export const bindings = {
   replace: Controls.button({ pad: 'North', key: 'KeyR' }),
   leftCamera: Controls.button({ pad: 'LeftStick', key: 'ShiftLeft' }),
   rightCamera: Controls.button({ pad: 'RightStick', key: 'ShiftRight' }),
+  drop: Controls.button({ pad: 'West', key: 'KeyF' }),
+  walkAhead: Controls.button({ pad: 'Up', key: 'ArrowUp' }),
+  walkBack: Controls.button({ pad: 'Down', key: 'ArrowDown' }),
+  walkLeft: Controls.button({ pad: 'Left', key: 'ArrowLeft' }),
+  walkRight: Controls.button({ pad: 'Right', key: 'ArrowRight' }),
 };
 
 /** The controls as read in a moment. */
@@ -45,3 +50,13 @@ export const feetOf = (
 
 /** Whether `controls` put the ball back: a press, once. */
 export const replaced = (controls: Read): boolean => controls.values.button('replace').pressed;
+
+/** Whether `controls` dropped the ball onto her foot: a press, once. */
+export const dropped = (controls: Read): boolean => controls.values.button('drop').pressed;
+
+/** Where `controls` send her walking: by the directional pad, or the arrow keys, ahead, back, and to either side. */
+export const walkOf = (controls: Read): Component.ValueOf<typeof Baller.Walk> => {
+  const held = (name: 'walkAhead' | 'walkBack' | 'walkLeft' | 'walkRight') =>
+    controls.values.button(name).held ? 1 : 0;
+  return { x: held('walkRight') - held('walkLeft'), y: held('walkAhead') - held('walkBack') };
+};

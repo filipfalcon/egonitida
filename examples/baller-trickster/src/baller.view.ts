@@ -69,29 +69,34 @@ export const balls = View.each([Baller.Ball], {
 export const LOOKS_AT = { x: 0, y: 0.75, z: 0.3 };
 export const DISTANCE = 2.6;
 
-/** The camera, about her where the player turned it: behind her as it starts, around to her left as it turns that way, and up as it rises, always looking at where her feet work the ball. */
-export const camera = View.rig([], (looking, _held, _frame, _drawn, orbit: Camera.Orbit) => {
-  const level = Math.cos(orbit.up) * DISTANCE;
-  looking.position.set(
-    LOOKS_AT.x + Math.sin(orbit.around) * level,
-    LOOKS_AT.y + Math.sin(orbit.up) * DISTANCE,
-    LOOKS_AT.z - Math.cos(orbit.around) * level,
-  );
-  looking.lookAt(LOOKS_AT.x, LOOKS_AT.y, LOOKS_AT.z);
-});
+/** The camera, about the player's baller where the player turned it, following her as she walks: behind her as it starts, around to her left as it turns that way, and up as it rises, always looking at where her feet work the ball. */
+export const camera = View.rig(
+  [Baller.Spot],
+  (looking, held, _frame, _drawn, orbit: Camera.Orbit) => {
+    const spot = held(Baller.Spot);
+    const at = { x: LOOKS_AT.x + spot.x, y: LOOKS_AT.y, z: LOOKS_AT.z + spot.z };
+    const level = Math.cos(orbit.up) * DISTANCE;
+    looking.position.set(
+      at.x + Math.sin(orbit.around) * level,
+      at.y + Math.sin(orbit.up) * DISTANCE,
+      at.z - Math.cos(orbit.around) * level,
+    );
+    looking.lookAt(at.x, at.y, at.z);
+  },
+);
 
 /**
- * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her feet are headed, looking at the ball, her ponytail swinging; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
+ * The views: every baller drawn as the model `model` gives, a copy of her own, posed by her joints as her feet are headed where she stands, looking at the ball, her ponytail swinging; every ball; and the camera. A model that cannot be loaded, or lacks a bone her joints turn, is a fault in what the game was built with.
  */
 export const make = <E>(model: Effect.Effect<Three.Object3D, E>) => {
-  const ballers = View.each([Baller.Aim, Baller.Hair], {
+  const ballers = View.each([Baller.Aim, Baller.Spot, Baller.Hair], {
     acquire: () =>
       Effect.gen(function* () {
         const copy = clone(yield* model);
         return new Drawn(yield* Posing.fit(copy, Body.joints), yield* Ragdolling.fit(copy, hair));
       }).pipe(Effect.orDie),
     draw: (drawn, held, frame) => {
-      const pose = Baller.poseOf(held(Baller.Aim));
+      const pose = Baller.poseOf(held(Baller.Aim), held(Baller.Spot));
       // Her eyes on the ball, and her head after them, as only the drawing needs.
       const looked = Option.match(Array.head(frame.query(Baller.Ball)), {
         onNone: () => pose,
