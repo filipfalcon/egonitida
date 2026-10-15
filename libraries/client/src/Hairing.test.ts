@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Quaternion, Strands } from '@egonitida/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Hairing from '#src/Hairing.ts';
 
@@ -132,6 +132,31 @@ describe('Hairing.fit', () => {
         [turn.x, turn.y, turn.z, turn.w].map((value) => Math.fround(value)),
       );
     }),
+  );
+
+  it.effect(
+    'says where it draws every strand now, how wide, and how it is shaded, for rays to meet',
+    () =>
+      Effect.gen(function* () {
+        const made = model();
+        const swung = guides.at.map((value, index) => value + (index % 3 === 0 ? 0.1 : 0));
+        const drawn = made.getObjectByName('HairStrands');
+        const haired = yield* Hairing.fit(made, hair);
+        haired.draw(swung, [Quaternion.identity, Quaternion.identity]);
+
+        const traced = Option.getOrThrow(Hairing.tracedOf(drawn ?? made));
+
+        expect(traced.perStrand).toBe(3);
+        expect(traced.shading).toEqual(hair.shading);
+        expect(traced.points).toHaveLength(drawnAt.length);
+        traced.points.forEach((value, index) =>
+          expect(value).toBeCloseTo((drawnAt[index] ?? 0) + (index % 3 === 0 ? 0.1 : 0), 5),
+        );
+        expect(Array.from(traced.widths)).toEqual(
+          Array.from({ length: 6 }, () => Math.fround(0.00008)),
+        );
+        expect(Hairing.tracedOf(made)).toEqual(Option.none());
+      }),
   );
 
   it.effect('keeps the grid its hair is added up in about where her guides swing', () =>

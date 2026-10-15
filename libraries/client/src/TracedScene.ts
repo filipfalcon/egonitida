@@ -1,6 +1,7 @@
 import { Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as Bvh from '#src/Bvh.ts';
+import * as Hairing from '#src/Hairing.ts';
 
 /**
  * A scene as rays are traced through it, in two levels, as ray-tracing hardware holds one: each shape's triangles in a hierarchy of its own, built once and kept while the shape stays as it is, and a hierarchy over the placed shapes, built anew each frame from where they stand now, so what moves costs only the small one. Everything lies flat in arrays of four numbers at a time, as a shader reads them, each hierarchy threaded for a walk with no stack, and `trace` walks them here just as the shader does, so what the shader finds can be told against it.
@@ -773,8 +774,13 @@ const versionOf = (geometry: Three.BufferGeometry) =>
     geometry.drawRange.count,
   ].join(':');
 
-/** A gathering of scenes for rays, which keeps the shapes it built while they stay as they are. */
-export const gathering = (): Gathering => {
+/** What a gathering gathers besides meshes: the strands of the hair drawn, if `strands`, where they are drawn now, built anew every time, so best asked for once, as a photograph is. */
+export interface GatheringOptions {
+  readonly strands?: boolean;
+}
+
+/** A gathering of scenes for rays, which keeps the shapes it built while they stay as they are; and gathers the hair drawn too, if `options` ask it to. */
+export const gathering = (options: GatheringOptions = {}): Gathering => {
   const built = new WeakMap<
     Three.BufferGeometry,
     { readonly shape: Triangles; readonly version: string }
@@ -818,6 +824,26 @@ export const gathering = (): Gathering => {
       const pictures: Array<Three.Texture> = [];
       const layers = new Map<Three.Texture, number>();
       scene.traverseVisible((object) => {
+        if (options.strands === true && object.layers.test(camera.layers)) {
+          Option.map(Hairing.tracedOf(object), ({ points, widths, perStrand, shading }) => {
+            const absorption = Hairing.absorptionOf(shading);
+            const colour = Hairing.colourOf(shading);
+            placed.push({
+              shape: shapes.push(strandsOf(points, widths, perStrand)) - 1,
+              matrix: object.matrixWorld.clone(),
+              colour: [colour.r, colour.g, colour.b],
+              emissive: [0, 0, 0],
+              casts: object.castShadow,
+              material: {
+                _tag: 'Hair',
+                absorption: [absorption.r, absorption.g, absorption.b],
+                roughness: shading.roughness,
+                tilt: shading.offset,
+                ior: shading.ior,
+              },
+            });
+          });
+        }
         if (!(object instanceof Three.Mesh) || !object.layers.test(camera.layers)) {
           return;
         }

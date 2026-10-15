@@ -1,6 +1,6 @@
 import { Strands } from '@egonitida/core';
 import type { Quaternion } from '@egonitida/core';
-import { Data, Effect } from 'effect';
+import { Data, Effect, Option } from 'effect';
 import {
   Fn,
   If,
@@ -501,8 +501,17 @@ class HairLighting extends Three.LightingModel {
   }
 }
 
-/** Strands drawn as lines, lit as hair is: by `HairLighting`, facing the eye across each strand for lights that ask which way it faces. */
+/** Where hair draws every strand now, in its lines' own space: each point, three numbers a point, `perStrand` points a strand; how wide the strand is at each, in metres; and how the hair is shaded. What rays meet of it, as a photograph traces them. */
+export interface Traced {
+  readonly points: Float32Array;
+  readonly widths: Float32Array;
+  readonly perStrand: number;
+  readonly shading: Strands.Shading;
+}
+
+/** Strands drawn as lines, lit as hair is: by `HairLighting`, facing the eye across each strand for lights that ask which way it faces; and where it draws them, worked out as the graphics device places them, for rays to meet. */
 class HairMaterial extends Three.LineBasicNodeMaterial {
+  readonly traced: () => Traced;
   readonly #shading: Strands.Shading;
   readonly #tangent: Three.Node<'vec3'>;
   readonly #random: Three.Node<'float'>;
@@ -513,9 +522,11 @@ class HairMaterial extends Three.LineBasicNodeMaterial {
     tangent: Three.Node<'vec3'>,
     random: Three.Node<'float'>,
     shadowed: Shadowed,
+    traced: () => Traced,
   ) {
     super();
     this.lights = true;
+    this.traced = traced;
     this.#shading = shading;
     this.#tangent = tangent;
     this.#random = random;
@@ -531,6 +542,12 @@ class HairMaterial extends Three.LineBasicNodeMaterial {
     return new HairLighting(this.#shading, this.#tangent, this.#random, this.#shadowed);
   }
 }
+
+/** Where `object` draws its strands now, if it is lines a hair was fitted to draw. */
+export const tracedOf = (object: Three.Object3D): Option.Option<Traced> =>
+  object instanceof Three.LineSegments && object.material instanceof HairMaterial
+    ? Option.some(object.material.traced())
+    : Option.none();
 
 /** How many voxels a side the grid hair is added up in has, and how much hair, in square metres of a strand's length times its width, each count of a voxel stands for. */
 const GRID = 64;
@@ -844,7 +861,33 @@ export const fit = (
     };
 
     const colour = colourOf(hair.shading);
-    const material = new HairMaterial(hair.shading, tangent, ownRandom, shadowed);
+    // Where every strand is drawn now, as `placedAt` places it, worked out where rays meet it.
+    const traced = (): Traced => {
+      const now = Array.from(
+        { length: guidePoints * 3 },
+        (_, value) => guidesNow.values[Math.floor(value / 3) * 4 + (value % 3)] ?? 0,
+      );
+      const turned = Array.from({ length: guides.scalp + guides.ponytail }, (_, guide) => ({
+        x: turns.values[guide * 4] ?? 0,
+        y: turns.values[guide * 4 + 1] ?? 0,
+        z: turns.values[guide * 4 + 2] ?? 0,
+        w: turns.values[guide * 4 + 3] ?? 1,
+      }));
+      return {
+        points: new Float32Array(
+          Strands.follow(guides, now, turned, { ...hair.drawn, at: madeAt }, bound),
+        ),
+        widths: new Float32Array(
+          Array.from(
+            { length: position.count },
+            (_, point) => drawnMade.values[point * 4 + 3] ?? 0,
+          ),
+        ),
+        perStrand: hair.drawn.points,
+        shading: hair.shading,
+      };
+    };
+    const material = new HairMaterial(hair.shading, tangent, ownRandom, shadowed, traced);
     material.positionNode = placed;
     material.colorNode = vec3(colour.r, colour.g, colour.b);
     // Thinner than a pixel, each strand is drawn as much of one as it covers, as `coverage` has it, over what is behind it; its hair added up first.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Option } from 'effect';
+import { Quaternion, Strands } from '@egonitida/core';
+import { Effect, Option } from 'effect';
 import * as Three from 'three/webgpu';
+import * as Hairing from '#src/Hairing.ts';
 import * as TracedScene from '#src/TracedScene.ts';
 
 /** A stream of numbers from 0 to 1 that is the same for the same seed. */
@@ -612,4 +614,71 @@ describe('a scene gathered with how its surfaces face and its pictures', () => {
       0.9995,
     );
   });
+
+  it.effect(
+    'gathers the hair a model draws as its strands where they are drawn now, when asked',
+    () =>
+      Effect.gen(function* () {
+        const made = new Three.Group();
+        const geometry = new Three.BufferGeometry();
+        // One strand of three points, hanging from 1.7 m to 1.6 m, five metres ahead.
+        geometry.setAttribute(
+          'position',
+          new Three.Float32BufferAttribute([0, 1.7, -5, 0, 1.65, -5, 0, 1.6, -5], 3),
+        );
+        geometry.setIndex([0, 1, 1, 2]);
+        const strands = new Three.LineSegments(geometry, new Three.LineBasicMaterial());
+        strands.name = 'HairStrands';
+        made.add(strands);
+        const guides: Strands.Strands = {
+          points: 2,
+          scalp: 1,
+          ponytail: 0,
+          at: [0, 1.7, -5, 0, 1.6, -5],
+          width: [0.002, 0.002],
+          stiffness: [1, 0.2],
+          random: [0.5],
+          bones: ['head'],
+          joints: Array.from({ length: 8 }, () => 0),
+          weights: [1, 0, 0, 0, 1, 0, 0, 0],
+        };
+        const shading: Strands.Shading = {
+          melanin: 0.8,
+          melaninRedness: 0.3,
+          tint: [1, 1, 1],
+          roughness: 0.3,
+          radialRoughness: 0.3,
+          coat: 0,
+          ior: 1.55,
+          offset: 0.035,
+          randomColor: 0,
+          randomRoughness: 0,
+        };
+        const haired = yield* Hairing.fit(made, {
+          guides,
+          drawn: { points: 3, scalp: 1, ponytail: 0 },
+          shading,
+        });
+        // Swung a decimetre aside since it was made.
+        haired.draw(
+          guides.at.map((value, index) => value + (index % 3 === 0 ? 0.1 : 0)),
+          [Quaternion.identity],
+        );
+        const scene = new Three.Scene();
+        scene.add(made);
+
+        const asked = TracedScene.gathering({ strands: true }).gather(scene, camera);
+        const hit = Option.getOrThrow(TracedScene.trace(asked, [0.1, 1.65, 0], [0, 0, -1], 100));
+        const plain = TracedScene.gathering().gather(scene, camera);
+        const base = hit.placed * TracedScene.PLACED;
+        const absorption = Hairing.absorptionOf(shading);
+
+        expect(hit.distance).toBeCloseTo(5 - 0.001, 6);
+        // Hair, shaded as the hair is.
+        expect(asked.placed[base + 20]).toBe(1);
+        expect(asked.placed[base + 24]).toBeCloseTo(absorption.r, 5);
+        expect(asked.placed[base + 12]).toBeCloseTo(Hairing.colourOf(shading).r, 5);
+        expect(Option.isNone(TracedScene.trace(plain, [0.1, 1.65, 0], [0, 0, -1], 100))).toBe(true);
+      }),
+  );
 });

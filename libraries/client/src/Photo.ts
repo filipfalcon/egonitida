@@ -142,7 +142,8 @@ export const take = (
     const { renderer, scene, camera } = viewport;
     const developing = developingOf(renderer, told);
     const device = SceneTracer.onDevice();
-    const flat = TracedScene.gathering().gather(scene, camera);
+    // Her hair too, every strand where it is drawn now.
+    const flat = TracedScene.gathering({ strands: true }).gather(scene, camera);
     device.write(flat);
     const lighting = PathTracer.lightingOf(scene);
     const layers = layersOf(flat.pictures);
@@ -200,7 +201,8 @@ export const take = (
         });
         const base = placed.mul(TracedScene.PLACED / 4);
         const painting = device.placed.node.element(base.add(6)).toVar();
-        // Its colour, times its picture's where a picture paints it.
+        // Its colour, times its picture's where a picture paints a surface; hair keeps how much light it takes in there instead.
+        const surface = device.placed.node.element(base.add(5)).x.lessThan(0.5);
         const layer = int(painting.y);
         const place = vec3(uv, float(1));
         const placedUv = vec2(
@@ -210,7 +212,7 @@ export const take = (
         const painted = texture(layers, placedUv).depth(layer).level(int(0)).xyz;
         const colour = device.placed.node
           .element(base.add(3))
-          .xyz.mul(select(painting.x.greaterThan(0.5), painted, vec3(1)))
+          .xyz.mul(select(surface.and(painting.x.greaterThan(0.5)), painted, vec3(1)))
           .toVar();
         const glow = device.placed.node.element(base.add(4)).xyz;
         const facing = normal.toVar();
