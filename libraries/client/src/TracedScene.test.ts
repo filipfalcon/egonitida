@@ -626,6 +626,35 @@ describe('a scene gathered with how its surfaces face and its pictures', () => {
     expect(flat.placed[hit.placed * TracedScene.PLACED + 25]).toBe(0);
   });
 
+  it('gathers the picture a material’s finish is painted with, rough as its green and metal as its blue', () => {
+    const colours = new Three.Texture();
+    const finish = new Three.Texture();
+    const scene = new Three.Scene();
+    const painted = new Three.Mesh(
+      new Three.BoxGeometry(1, 1, 1),
+      new Three.MeshStandardMaterial({ map: colours, roughnessMap: finish, metalnessMap: finish }),
+    );
+    const roughOnly = new Three.Mesh(
+      new Three.BoxGeometry(1, 1, 1),
+      new Three.MeshStandardMaterial({ roughnessMap: finish }),
+    );
+    painted.position.z = -5;
+    roughOnly.position.set(3, 0, -5);
+    scene.add(painted, roughOnly);
+
+    const flat = TracedScene.gathering().gather(scene, camera);
+    const finishOf = (origin: readonly [number, number, number]) => {
+      const hit = Option.getOrThrow(TracedScene.trace(flat, origin, [0, 0, -1], 100));
+      return [26, 27].map((at) => flat.placed[hit.placed * TracedScene.PLACED + at]);
+    };
+
+    expect(flat.pictures).toEqual([colours]);
+    expect(flat.finishes).toEqual([finish]);
+    // Both its roughness and its metalness painted, by the first of the finishes.
+    expect(finishOf([0, 0, 0])).toEqual([3, 0]);
+    expect(finishOf([3, 0, 0])).toEqual([1, 0]);
+  });
+
   it('faces a mesh bent each frame as its corners turn, smoothly between them', () => {
     const geometry = new Three.SphereGeometry(1, 32, 16);
     geometry.morphAttributes['position'] = [

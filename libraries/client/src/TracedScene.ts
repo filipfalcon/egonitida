@@ -10,7 +10,7 @@ import * as Hairing from '#src/Hairing.ts';
 /** How many numbers each triangle, or each link of a strand, takes: a triangle's three corners, four numbers each, the fourth nothing; a link's start, four numbers, the fourth a whole, which tells it from a triangle; its end, four numbers, the fourth how far about the line between them it reaches; and four more of nothing. */
 export const TRIANGLE = 12;
 
-/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0, hair 1, or matte 2, how rough it is, how metal a surface is or how rough hair is about itself, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts, or, for a surface or something matte, whether a picture paints it, 1 or 0, and which of the scene's pictures. */
+/** How many numbers each placed shape takes: the three rows of what turns the scene into its own space, its colour and its hierarchy's root, the light it gives off and whether it casts a shadow, 1 or 0; what it is made of, a surface 0, hair 1, or matte 2, how rough it is, how metal a surface is or how rough hair is about itself, and how it bends light; and, for hair, how much light it takes in, red, green, and blue, and how far its cuticle tilts, or, for a surface or something matte, whether a picture paints it, 1 or 0, and which of the scene's pictures; and, for a surface, whether a finish paints how rough it is, 1, how metal, 2, both, 3, or neither, 0, and which of the scene's finishes. */
 export const PLACED = 28;
 
 /** What a placed shape is made of, as light meets it: a surface, as rough and as metal as it is, from nothing to a whole, shining as Three's standard material does; matte, with no shine at all, as Lambert has it; or hair, taking light in as `absorption` says for every strand's width it goes through, as rough along it and about it as it is, its cuticle tilted as far as `tilt` says, in radians, bending light as `ior` says. */
@@ -105,7 +105,7 @@ export const strandsOf = (
   };
 };
 
-/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, what it is made of, `matte` unless said, and which of the scene's pictures paints its colour, if any, as its corners say where they lie in it. */
+/** A shape placed in the scene: which shape, where, by its matrix from its own space into the scene's, its colour and the light it gives off, in linear colours, whether it casts a shadow, what it is made of, `matte` unless said, which of the scene's pictures paints its colour, if any, as its corners say where they lie in it, and which of its finishes paints how rough and how metal it is, if any. */
 export interface Placed {
   readonly shape: number;
   readonly matrix: Three.Matrix4;
@@ -114,9 +114,17 @@ export interface Placed {
   readonly casts: boolean;
   readonly material?: Material;
   readonly picture?: number;
+  readonly finish?: Finish;
 }
 
-/** The scene laid flat: every shape's hierarchy one after another, their triangles in the order their leaves name them and what their corners say beside them, the placed shapes in the order the top hierarchy's leaves name them, and that hierarchy; and the pictures that paint them. */
+/** Which of a scene's finishes paints a surface, and what of it: how rough it is, times the finish's green, and how metal, times its blue, as Three's standard material reads them. */
+export interface Finish {
+  readonly picture: number;
+  readonly roughness: boolean;
+  readonly metalness: boolean;
+}
+
+/** The scene laid flat: every shape's hierarchy one after another, their triangles in the order their leaves name them and what their corners say beside them, the placed shapes in the order the top hierarchy's leaves name them, and that hierarchy; the pictures that paint their colours, and the finishes that paint how rough and how metal they are, which are not colours. */
 export interface Flat {
   readonly shapeNodes: Float32Array;
   readonly triangles: Float32Array;
@@ -125,6 +133,7 @@ export interface Flat {
   readonly placedNodes: Float32Array;
   readonly placedCount: number;
   readonly pictures: ReadonlyArray<Three.Texture>;
+  readonly finishes: ReadonlyArray<Three.Texture>;
 }
 
 /** Lays `shapes` flat, their nodes naming where their children and triangles lie among all of them. */
@@ -263,7 +272,11 @@ export const flattenPlaced = (
     const material = one.material ?? matte;
     const painted = one.picture === undefined ? [0, 0] : [1, one.picture];
     if (material._tag === 'Surface') {
-      flat.set([0, material.roughness, material.metalness, 0, ...painted, 0, 0], base + 20);
+      const finish =
+        one.finish === undefined
+          ? [0, 0]
+          : [(one.finish.roughness ? 1 : 0) + (one.finish.metalness ? 2 : 0), one.finish.picture];
+      flat.set([0, material.roughness, material.metalness, 0, ...painted, ...finish], base + 20);
     } else if (material._tag === 'Matte') {
       flat.set([2, 1, 0, 0, ...painted, 0, 0], base + 20);
     } else {
@@ -283,11 +296,12 @@ export const flattenPlaced = (
   return { placed: flat, placedNodes: Bvh.threaded(hierarchy), count: kept.length };
 };
 
-/** `shapes` placed as `placed`, painted by `pictures`, laid flat. */
+/** `shapes` placed as `placed`, painted by `pictures` and `finishes`, laid flat. */
 export const flatten = (
   shapes: ReadonlyArray<Shape>,
   placed: ReadonlyArray<Placed>,
   pictures: ReadonlyArray<Three.Texture> = [],
+  finishes: ReadonlyArray<Three.Texture> = [],
 ): Flat => {
   const { shapeNodes, triangles, corners, roots } = flattenShapes(shapes);
   const top = flattenPlaced(shapes, roots, placed);
@@ -299,6 +313,7 @@ export const flatten = (
     placedNodes: top.placedNodes,
     placedCount: top.count,
     pictures,
+    finishes,
   };
 };
 
@@ -791,10 +806,30 @@ const surfaceOf = (material: Three.Material): Material => {
     : matte;
 };
 
-/** The picture `material` paints its colour with, if any. */
-const pictureOf = (material: Three.Material): Option.Option<Three.Texture> => {
-  const map: unknown = Reflect.get(material, 'map');
+/** The picture `material` holds as `key`, if any. */
+const pictureOf = (
+  material: Three.Material,
+  key: 'map' | 'roughnessMap' | 'metalnessMap',
+): Option.Option<Three.Texture> => {
+  const map: unknown = Reflect.get(material, key);
   return map instanceof Three.Texture ? Option.some(map) : Option.none();
+};
+
+/** Numbers pictures as they come, into `list`, the same picture the same number. */
+const numbering = () => {
+  const list: Array<Three.Texture> = [];
+  const known = new Map<Three.Texture, number>();
+  return {
+    list,
+    numberOf: (picture: Three.Texture) => {
+      const number = known.get(picture) ?? list.length;
+      if (number === list.length) {
+        known.set(picture, number);
+        list.push(picture);
+      }
+      return number;
+    },
+  };
 };
 
 /** How bright `material` gives off its light, once if it says not. */
@@ -873,8 +908,8 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
       const shapes: Array<Shape> = [];
       const indices = new Map<Shape, number>();
       const placed: Array<Placed> = [];
-      const pictures: Array<Three.Texture> = [];
-      const layers = new Map<Three.Texture, number>();
+      const pictures = numbering();
+      const finishes = numbering();
       scene.traverseVisible((object) => {
         if (options.strands === true && object.layers.test(camera.layers)) {
           Option.map(Hairing.tracedOf(object), ({ points, widths, perStrand, shading }) => {
@@ -916,14 +951,18 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
           colourOf(material, 'emissive', emissiveIntensityOf(material)),
           () => [0, 0, 0] as const,
         );
-        const painted = Option.map(pictureOf(material), (painting) => {
-          const layer = layers.get(painting) ?? pictures.length;
-          if (layer === pictures.length) {
-            layers.set(painting, layer);
-            pictures.push(painting);
-          }
-          return layer;
-        });
+        const painted = Option.map(pictureOf(material, 'map'), pictures.numberOf);
+        // Three's standard material reads how rough it is and how metal from a picture each, which a model loaded usually makes one.
+        const rough = pictureOf(material, 'roughnessMap');
+        const metal = pictureOf(material, 'metalnessMap');
+        const finished = Option.map(
+          Option.orElse(rough, () => metal),
+          (picture) => ({
+            picture: finishes.numberOf(picture),
+            roughness: Option.contains(rough, picture),
+            metalness: Option.contains(metal, picture),
+          }),
+        );
         const placing = (matrix: Three.Matrix4): Placed => {
           const plain = {
             shape: index,
@@ -933,9 +972,13 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
             casts: object.castShadow,
             material: surfaceOf(material),
           };
-          return Option.match(painted, {
+          const withPicture = Option.match(painted, {
             onNone: () => plain,
             onSome: (picture) => ({ ...plain, picture }),
+          });
+          return Option.match(finished, {
+            onNone: () => withPicture,
+            onSome: (finish) => ({ ...withPicture, finish }),
           });
         };
         if (object instanceof Three.InstancedMesh) {
@@ -965,7 +1008,8 @@ export const gathering = (options: GatheringOptions = {}): Gathering => {
         placed: top.placed,
         placedNodes: top.placedNodes,
         placedCount: top.count,
-        pictures,
+        pictures: pictures.list,
+        finishes: finishes.list,
       };
     },
   };

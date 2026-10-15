@@ -126,8 +126,11 @@ const isDrawable = (image: unknown): image is CanvasImageSource =>
   (typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement) ||
   (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas);
 
-/** `pictures` laid as the layers of one texture, each drawn to the same size, white where a picture holds nothing a canvas can draw, so the colour it paints is left as it is; one white layer where there are none. */
-const layersOf = (pictures: ReadonlyArray<Three.Texture>): Three.DataArrayTexture => {
+/** `pictures` laid as the layers of one texture, read in `colourSpace`, each drawn to the same size, white where a picture holds nothing a canvas can draw, so what it paints is left as it is; one white layer where there are none. */
+const layersOf = (
+  pictures: ReadonlyArray<Three.Texture>,
+  colourSpace: Three.ColorSpace,
+): Three.DataArrayTexture => {
   const count = Math.max(pictures.length, 1);
   const pixels = new Uint8Array(PICTURE * PICTURE * 4 * count).fill(255);
   const canvas = new OffscreenCanvas(PICTURE, PICTURE);
@@ -142,7 +145,7 @@ const layersOf = (pictures: ReadonlyArray<Three.Texture>): Three.DataArrayTextur
     pixels.set(context.getImageData(0, 0, PICTURE, PICTURE).data, index * PICTURE * PICTURE * 4);
   });
   const layers = new Three.DataArrayTexture(pixels, PICTURE, PICTURE, count);
-  layers.colorSpace = Three.SRGBColorSpace;
+  layers.colorSpace = colourSpace;
   layers.wrapS = Three.RepeatWrapping;
   layers.wrapT = Three.RepeatWrapping;
   layers.magFilter = Three.LinearFilter;
@@ -178,13 +181,22 @@ export const take = (
     const flat = TracedScene.gathering({ strands: true }).gather(scene, camera);
     device.write(flat);
     const lighting = PathTracer.lightingOf(scene);
-    const layers = layersOf(flat.pictures);
+    // Pictures of colours, kept as the colours they show; and finishes, how rough and how metal, kept as the numbers they hold.
+    const layers = layersOf(flat.pictures, Three.SRGBColorSpace);
+    const finishLayers = layersOf(flat.finishes, Three.NoColorSpace);
+    // Where places lie in each, the pictures' first and the finishes' after them, in one buffer: a shader may read only so many.
+    const everyPicture = [...flat.pictures, ...flat.finishes];
     const placings = storage(
-      new Three.StorageBufferAttribute(placingsOf(flat.pictures), 4),
+      new Three.StorageBufferAttribute(placingsOf(everyPicture), 4),
       'vec4',
-      Math.max(flat.pictures.length, 1) * (PLACING / 4),
+      Math.max(everyPicture.length, 1) * (PLACING / 4),
     ).toReadOnly();
-    yield* Effect.addFinalizer(() => Effect.sync(() => layers.dispose()));
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        layers.dispose();
+        finishLayers.dispose();
+      }),
+    );
 
     const size = renderer.getDrawingBufferSize(new Three.Vector2());
     const width = Math.max(Math.floor(size.x), 1);
@@ -242,13 +254,22 @@ export const take = (
         // A shining surface 0, hair 1, or something matte 2.
         const shining = finish.x.lessThan(0.5);
         const surface = finish.x.sub(1).abs().greaterThan(0.5);
-        const layer = int(painting.y);
         const place = vec3(uv, float(1));
-        const placedUv = vec2(
-          dot(placings.element(layer.mul(PLACING / 4)).xyz, place),
-          dot(placings.element(layer.mul(PLACING / 4).add(1)).xyz, place),
-        );
-        const painted = texture(layers, placedUv).depth(layer).level(int(0)).xyz;
+        /** Where the uv met lies in the picture placed `at` among them all, as `placingsOf` placed it. */
+        const placedIn = (at: Three.Node<'int'>) =>
+          vec2(
+            dot(placings.element(at.mul(PLACING / 4)).xyz, place),
+            dot(placings.element(at.mul(PLACING / 4).add(1)).xyz, place),
+          );
+        const layer = int(painting.y);
+        const painted = texture(layers, placedIn(layer)).depth(layer).level(int(0)).xyz;
+        // How rough and how metal a surface is, times its finish's green and blue where a finish paints them.
+        const finishLayer = int(painting.w);
+        const finished = texture(finishLayers, placedIn(finishLayer.add(flat.pictures.length)))
+          .depth(finishLayer)
+          .level(int(0));
+        const roughBy = select(painting.z.mod(2).greaterThan(0.5), finished.y, float(1));
+        const metalBy = select(painting.z.greaterThan(1.5), finished.z, float(1));
         const colour = device.placed.node
           .element(base.add(3))
           .xyz.mul(select(surface.and(painting.x.greaterThan(0.5)), painted, vec3(1)))
@@ -314,7 +335,7 @@ export const take = (
           const local = (world: Three.Node<'vec3'>) =>
             vec3(dot(world, first), dot(world, second), dot(world, facing));
           const seenHere = local(way.negate()).toVar();
-          const rough = vec2(finish.y, finish.z);
+          const rough = vec2(finish.y.mul(roughBy), finish.z.mul(metalBy));
           for (const sun of suns) {
             const lit = dot(facing, sun.toward).toVar();
             If(lit.greaterThan(0), () => {
