@@ -12,7 +12,7 @@
     "./experimental": "./src/experimental.ts"
   },
   "dependencies": {
-    "@effect/platform-browser": "4.0.0",
+    "@effect/platform-browser": "4.0.3",
     "@egonitida/core": "*",
     "effect": "4.0.0",
     "three": "0.186.1"

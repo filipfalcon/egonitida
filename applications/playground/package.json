@@ -13,7 +13,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
-    "@effect/platform-browser": "4.0.0",
+    "@effect/platform-browser": "4.0.3",
     "@egonitida/client": "*",
     "@egonitida/core": "*",
     "@egonitida/devtools": "*",
