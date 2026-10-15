@@ -11,8 +11,9 @@ const printed = execFileSync(
 );
 
 describe('create-egonitida', () => {
-  it('says new projects cannot be created until EgoNitida is released', () => {
-    expect(printed).toContain('until EgoNitida is released');
+  it('names EgoNitida as egonitida does', () => {
+    expect(printed).toContain('A real-time 3D engine built on Effect, Three.js, and Foldkit.');
+    expect(printed).not.toContain('released');
   });
 
   it('lists every official channel', () => {
