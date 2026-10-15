@@ -1,9 +1,20 @@
 {
   "name": "create-egonitida",
   "version": "0.0.1",
-  "description": "EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. The create-egonitida command is the official way to create a new project on EgoNitida.",
+  "description": "EgoNitida is a real-time 3D engine built on Effect, Three.js, and Foldkit. The npm create egonitida command is the starting point for new EgoNitida projects.",
   "keywords": [
-    "egonitida"
+    "3d",
+    "agentic",
+    "create",
+    "effect",
+    "egonitida",
+    "engine",
+    "foldkit",
+    "game-engine",
+    "real-time",
+    "scaffold",
+    "three",
+    "webgpu"
   ],
   "homepage": "https://egonitida.com",
   "bugs": {
@@ -20,14 +31,12 @@
     "create-egonitida": "dist/index.mjs"
   },
   "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+    "dist"
   ],
   "type": "module",
   "scripts": {
     "build": "vp pack src/index.ts",
-    "prepack": "vp pack src/index.ts"
+    "prepack": "npm run build"
   },
   "engines": {
     "node": "^24.15.0",
