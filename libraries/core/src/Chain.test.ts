@@ -138,4 +138,46 @@ describe('a chain', () => {
 
     expect(run()).toEqual(run());
   });
+
+  it('places its bones where it swings, each at its point, turned to aim as it was made at the next', () => {
+    // Swung aside, the head turned a quarter about +y and moved.
+    const pin = pinned(0.3, Quaternion.about({ x: 0, y: 1, z: 0 }, Math.PI / 2));
+    const body = swung(Chain.start(ponytail, pinned()), 0.5, (step) =>
+      pinned(
+        step / 50,
+        Quaternion.about({ x: 0, y: 1, z: 0 }, (Math.PI / 2) * Math.min(step / 20, 1)),
+      ),
+    );
+    const placing = Chain.placing(ponytail, body, head, pin);
+    const points = Chain.points(ponytail, body);
+
+    for (const [bone, next] of [
+      ['tail_01', 'tail_02'],
+      ['tail_02', 'tail_03'],
+    ] as const) {
+      const placed = placing(bone);
+      const from = points[bone];
+      const to = points[next];
+      expect(apart(placed?.at, from)).toBeLessThan(1e-12);
+      // Made aiming straight back, along -z; placed, aiming at the next point.
+      const aim = Quaternion.rotate(placed?.turn ?? Quaternion.identity, { x: 0, y: 0, z: -1 });
+      const way =
+        from === undefined || to === undefined
+          ? { x: NaN, y: NaN, z: NaN }
+          : { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
+      const long = Math.hypot(way.x, way.y, way.z);
+      expect(aim.x * way.x + aim.y * way.y + aim.z * way.z).toBeCloseTo(long, 9);
+    }
+    expect(placing('head')).toBeUndefined();
+  });
+
+  it('places its bones as they were made while it hangs as made', () => {
+    const placing = Chain.placing(ponytail, Chain.start(ponytail, pinned()), head, pinned());
+
+    const placed = placing('tail_02');
+    expect(apart(placed?.at, head['tail_02']?.at)).toBeLessThan(1e-12);
+    expect(
+      Math.abs(Quaternion.dot(placed?.turn ?? Quaternion.identity, Quaternion.identity)),
+    ).toBeCloseTo(1, 12);
+  });
 });

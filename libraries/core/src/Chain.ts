@@ -6,7 +6,7 @@ import type * as Ray from '#src/Ray.ts';
 import type * as Shape from '#src/Shape.ts';
 
 /**
- * A chain that swings, as plain data, such as a ponytail: points at the bones of a chain hanging from a posed bone, the first tied to it, the rest falling under their weight, trailing as it moves, each link springing back toward how it hung as made by its stiffness and never further from that than its limit. Only a client draws it, so a game keeps it as a local component, stepped by a local system, as a ragdoll is; `Ragdolling` aims the chain's bones at its points. It is stepped in steps of its own, with `Maths`, the same start swinging the same way every time.
+ * A chain that swings, as plain data, such as a ponytail: points at the bones of a chain hanging from a posed bone, the first tied to it, the rest falling under their weight, trailing as it moves, each link springing back toward how it hung as made by its stiffness and never further from that than its limit. Only a client draws it, so a game keeps it as a local component, stepped by a local system, as a ragdoll is; `Ragdolling` aims the chain's bones at its points as it is drawn, and `placing` places them for a step, to carry what they hold. It is stepped in steps of its own, with `Maths`, the same start swinging the same way every time.
  */
 
 /** A point, or a direction, in metres. */
@@ -170,4 +170,37 @@ export const step = (plan: Plan, body: Body, seconds: number, pin: Pin): Body =>
     now = swungOnce(plan, now, seconds / steps, pin);
   }
   return now;
+};
+
+/**
+ * Where the bones of `plan`'s chain stand and how they are turned as `body` swings, hanging from the bone `pin` places, by name, such as a step needs to carry what those bones hold: each at its point, turned as it was made among `bones`, as far as the bone it hangs from has turned since, and then as far again as takes the way it was made to aim at the next point onto the way to that point now. Nothing, for any other bone.
+ */
+export const placing = (plan: Plan, body: Body, bones: Shape.Bones, pin: Pin): Pose.Placer => {
+  const hung = Option.getOrUndefined(
+    Option.flatMap(plan.from, (name) => Option.fromNullishOr(bones[name])),
+  );
+  const since = Quaternion.multiply(
+    pin.turn,
+    hung === undefined ? Quaternion.identity : Quaternion.invert(hung.turn),
+  );
+  const placed = new Map<string, Pose.Placed>();
+  plan.names.forEach((name, index) => {
+    const bone = bones[name];
+    const madeHere = plan.made[index];
+    const madeNext = plan.made[index + 1];
+    if (bone === undefined || madeHere === undefined || madeNext === undefined) {
+      return;
+    }
+    const at = pointOf(body.now, index);
+    const aimed = Quaternion.rotate(pin.turn, less(madeNext, madeHere));
+    const aiming = less(pointOf(body.now, index + 1), at);
+    placed.set(name, {
+      at,
+      turn: Quaternion.multiply(
+        Quaternion.between(unit(aimed), unit(aiming)),
+        Quaternion.multiply(since, bone.turn),
+      ),
+    });
+  });
+  return (name) => placed.get(name);
 };
