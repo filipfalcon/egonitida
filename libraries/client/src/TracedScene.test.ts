@@ -460,3 +460,60 @@ describe('what a traced scene holds of how its shapes are made', () => {
     expect(materialOf(flat).slice(0, 3)).toEqual([0, 0.2, 0.7].map((value) => Math.fround(value)));
   });
 });
+
+describe('which way what a ray meets faces', () => {
+  const placedAt = (shape: number, matrix = new Three.Matrix4()): TracedScene.Placed => ({
+    shape,
+    matrix,
+    colour: [1, 1, 1],
+    emissive: [0, 0, 0],
+    casts: true,
+  });
+  const normalOf = (
+    flat: TracedScene.Flat,
+    origin: readonly [number, number, number],
+    direction: readonly [number, number, number],
+  ) => Option.map(TracedScene.trace(flat, origin, direction, 100), ({ normal }) => normal);
+  const flatTriangle = TracedScene.shapeOf(new Float32Array([-5, -5, 0, 5, -5, 0, 0, 5, 0]));
+
+  it('faces a triangle back toward the ray, from either side', () => {
+    const flat = TracedScene.flatten([flatTriangle], [placedAt(0)]);
+    const [from, below] = [
+      normalOf(flat, [0, 0, 5], [0, 0, -1]),
+      normalOf(flat, [0, 0, -5], [0, 0, 1]),
+    ];
+
+    expect(
+      Option.map(from, ([x, y, z]) => [x, y, z].map((part) => Math.round(part * 1e6) / 1e6)),
+    ).toEqual(Option.some([0, 0, 1]));
+    expect(Option.map(below, ([, , z]) => z)).toEqual(Option.some(expect.closeTo(-1, 9)));
+  });
+
+  it('turns as the shape is turned where it is placed', () => {
+    // Laid on its back: facing +y.
+    const flat = TracedScene.flatten(
+      [flatTriangle],
+      [placedAt(0, new Three.Matrix4().makeRotationX(-Math.PI / 2))],
+    );
+
+    expect(Option.map(normalOf(flat, [0, 5, 0], [0, -1, 0]), ([, y]) => y)).toEqual(
+      Option.some(expect.closeTo(1, 9)),
+    );
+  });
+
+  it('faces out of a strand where the ray meets it', () => {
+    const strand = TracedScene.strandsOf(
+      new Float32Array([-1, 0, 0, 1, 0, 0]),
+      new Float32Array([0.2, 0.2]),
+      2,
+    );
+    const flat = TracedScene.flatten([strand], [placedAt(0)]);
+
+    expect(Option.map(normalOf(flat, [0, 0, 5], [0, 0, -1]), ([, , z]) => z)).toEqual(
+      Option.some(expect.closeTo(1, 9)),
+    );
+    expect(Option.map(normalOf(flat, [3, 0, 0], [-1, 0, 0]), ([x]) => x)).toEqual(
+      Option.some(expect.closeTo(1, 9)),
+    );
+  });
+});

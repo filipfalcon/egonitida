@@ -377,11 +377,46 @@ const meets = (
   return t > NEAREST ? t : Infinity;
 };
 
-/** What a ray meets first: how far along it, and which placed shape, by its place in the flat scene. */
+/** What a ray meets first: how far along it, which placed shape, by its place in the flat scene, and which way its surface faces there, in the scene, of length one, turned back toward where the ray came from. */
 export interface Hit {
   readonly distance: number;
   readonly placed: number;
+  readonly normal: readonly [number, number, number];
 }
+
+/** Which way the triangle or link at `item` of `triangles` faces at `point`, in its shape's own space, not yet of length one: a triangle square to its sides, a link out from its line. */
+const facingAt = (triangles: Float32Array, item: number, point: ReadonlyArray<number>) => {
+  const at = item * TRIANGLE;
+  const a = [triangles[at] ?? 0, triangles[at + 1] ?? 0, triangles[at + 2] ?? 0];
+  const b = [triangles[at + 4] ?? 0, triangles[at + 5] ?? 0, triangles[at + 6] ?? 0];
+  if ((triangles[at + 3] ?? 0) === 1) {
+    const ba = [0, 1, 2].map((axis) => (b[axis] ?? 0) - (a[axis] ?? 0));
+    const pa = [0, 1, 2].map((axis) => (point[axis] ?? 0) - (a[axis] ?? 0));
+    const long = (ba[0] ?? 0) ** 2 + (ba[1] ?? 0) ** 2 + (ba[2] ?? 0) ** 2;
+    const share =
+      long === 0
+        ? 0
+        : Math.min(
+            Math.max(
+              ((pa[0] ?? 0) * (ba[0] ?? 0) +
+                (pa[1] ?? 0) * (ba[1] ?? 0) +
+                (pa[2] ?? 0) * (ba[2] ?? 0)) /
+                long,
+              0,
+            ),
+            1,
+          );
+    return [0, 1, 2].map((axis) => (pa[axis] ?? 0) - (ba[axis] ?? 0) * share);
+  }
+  const c = [triangles[at + 8] ?? 0, triangles[at + 9] ?? 0, triangles[at + 10] ?? 0];
+  const e1 = [0, 1, 2].map((axis) => (b[axis] ?? 0) - (a[axis] ?? 0));
+  const e2 = [0, 1, 2].map((axis) => (c[axis] ?? 0) - (a[axis] ?? 0));
+  return [
+    (e1[1] ?? 0) * (e2[2] ?? 0) - (e1[2] ?? 0) * (e2[1] ?? 0),
+    (e1[2] ?? 0) * (e2[0] ?? 0) - (e1[0] ?? 0) * (e2[2] ?? 0),
+    (e1[0] ?? 0) * (e2[1] ?? 0) - (e1[1] ?? 0) * (e2[0] ?? 0),
+  ];
+};
 
 /** What a ray meets: anything placed, or, traced for a shadow, only what casts one. */
 export type Meets = 'Anything' | 'Casting';
@@ -399,7 +434,13 @@ export const trace = (
   if (flat.placedCount === 0) {
     return Option.none();
   }
-  const found = { distance: far, placed: -1 };
+  const found = {
+    distance: far,
+    placed: -1,
+    item: 0,
+    localOrigin: [0, 0, 0],
+    localDirection: [0, 0, 0],
+  };
   const invert = inverted(direction);
   let node = 0;
   while (node !== -1) {
@@ -451,6 +492,9 @@ export const trace = (
           if (distance < found.distance) {
             found.distance = distance;
             found.placed = placed;
+            found.item = triangle;
+            found.localOrigin = [...localOrigin];
+            found.localDirection = [...localDirection];
           }
         }
         shapeNode = shapeAfter;
@@ -458,9 +502,38 @@ export const trace = (
     }
     node = after;
   }
-  return found.placed === -1
-    ? Option.none()
-    : Option.some({ distance: found.distance, placed: found.placed });
+  if (found.placed === -1) {
+    return Option.none();
+  }
+  const point = [0, 1, 2].map(
+    (axis) => (found.localOrigin[axis] ?? 0) + (found.localDirection[axis] ?? 0) * found.distance,
+  );
+  const local = facingAt(flat.triangles, found.item, point);
+  // Into the scene by the transpose of the rows that turn the scene into the shape's space, as a surface's facing is turned.
+  const base = found.placed * PLACED;
+  const turned = [0, 1, 2].map(
+    (axis) =>
+      (flat.placed[base + axis] ?? 0) * (local[0] ?? 0) +
+      (flat.placed[base + 4 + axis] ?? 0) * (local[1] ?? 0) +
+      (flat.placed[base + 8 + axis] ?? 0) * (local[2] ?? 0),
+  );
+  const long = Math.hypot(turned[0] ?? 0, turned[1] ?? 0, turned[2] ?? 0) || 1;
+  const back =
+    (turned[0] ?? 0) * direction[0] +
+      (turned[1] ?? 0) * direction[1] +
+      (turned[2] ?? 0) * direction[2] >
+    0
+      ? -1
+      : 1;
+  return Option.some({
+    distance: found.distance,
+    placed: found.placed,
+    normal: [
+      ((turned[0] ?? 0) / long) * back,
+      ((turned[1] ?? 0) / long) * back,
+      ((turned[2] ?? 0) / long) * back,
+    ],
+  });
 };
 
 /** Gathers a scene as Three.js draws it into a scene for rays, frame after frame: each shape built once and kept while its geometry stays as it is, posed anew each frame where its bones or morphs bend it. */
