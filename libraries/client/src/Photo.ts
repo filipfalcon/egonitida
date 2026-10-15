@@ -31,6 +31,7 @@ import * as Three from 'three/webgpu';
 import * as HairTracer from '#src/HairTracer.ts';
 import * as PathTracer from '#src/PathTracer.ts';
 import * as SceneTracer from '#src/SceneTracer.ts';
+import * as SurfaceTracer from '#src/SurfaceTracer.ts';
 import * as TracedScene from '#src/TracedScene.ts';
 
 /**
@@ -237,7 +238,10 @@ export const take = (
         const base = placed.mul(TracedScene.PLACED / 4);
         const painting = device.placed.node.element(base.add(6)).toVar();
         // Its colour, times its picture's where a picture paints a surface; hair keeps how much light it takes in there instead.
-        const surface = device.placed.node.element(base.add(5)).x.lessThan(0.5);
+        const finish = device.placed.node.element(base.add(5)).toVar();
+        // A shining surface 0, hair 1, or something matte 2.
+        const shining = finish.x.lessThan(0.5);
+        const surface = finish.x.sub(1).abs().greaterThan(0.5);
         const layer = int(painting.y);
         const place = vec3(uv, float(1));
         const placedUv = vec2(
@@ -303,33 +307,66 @@ export const take = (
         }).Else(() => {
           const facing = normal.toVar();
           const at = point.add(facing.mul(AWAY)).toVar();
+          // The surface's own frame: two ways square to the way it faces, and that way.
+          const helper = select(facing.x.abs().greaterThan(0.9), vec3(0, 1, 0), vec3(1, 0, 0));
+          const first = normalize(cross(helper, facing)).toVar();
+          const second = cross(facing, first).toVar();
+          const local = (world: Three.Node<'vec3'>) =>
+            vec3(dot(world, first), dot(world, second), dot(world, facing));
+          const seenHere = local(way.negate()).toVar();
+          const rough = vec2(finish.y, finish.z);
           for (const sun of suns) {
             const lit = dot(facing, sun.toward).toVar();
             If(lit.greaterThan(0), () => {
               // In a photograph whatever stands between a surface and a sun shades it, whether or not a game asked it to cast a shadow.
               const hidden = SceneTracer.trace(device, at, sun.toward, float(FAR));
               If(hidden.y.lessThan(0), () => {
-                light.addAssign(carried.mul(colour).mul(sun.irradiance).mul(lit).div(PI));
+                // A shining surface as `SurfaceScattering` has it; something matte as Lambert has it.
+                const sent = select(
+                  shining,
+                  SurfaceTracer.scattered(seenHere, local(sun.toward), colour, rough),
+                  colour.mul(lit).div(PI),
+                );
+                light.addAssign(carried.mul(sent).mul(sun.irradiance));
               });
             });
           }
-          carried.mulAssign(colour);
-          // The next way as likely as its cosine to the surface, as a matte surface scatters light.
-          const angle = next().mul(2 * Math.PI);
-          const rise = next();
-          const helper = select(facing.x.abs().greaterThan(0.9), vec3(0, 1, 0), vec3(1, 0, 0));
-          const first = normalize(cross(helper, facing));
-          const second = cross(facing, first);
-          const out = sqrt(float(1).sub(rise));
           from.assign(at);
-          way.assign(
-            normalize(
-              first
-                .mul(cos(angle).mul(out))
-                .add(second.mul(sin(angle).mul(out)))
-                .add(facing.mul(sqrt(rise))),
-            ),
-          );
+          If(shining, () => {
+            const chosenHere = SurfaceTracer.chosen(
+              seenHere,
+              vec3(next(), next(), next()),
+              colour,
+              rough,
+            ).toVar();
+            const likely = SurfaceTracer.likelihood(seenHere, chosenHere, colour, rough);
+            carried.mulAssign(
+              select(
+                likely.greaterThan(0),
+                SurfaceTracer.scattered(seenHere, chosenHere, colour, rough).div(likely),
+                vec3(0),
+              ),
+            );
+            way.assign(
+              normalize(
+                first.mul(chosenHere.x).add(second.mul(chosenHere.y)).add(facing.mul(chosenHere.z)),
+              ),
+            );
+          }).Else(() => {
+            carried.mulAssign(colour);
+            // The next way as likely as its cosine to the surface, as a matte surface scatters light.
+            const angle = next().mul(2 * Math.PI);
+            const rise = next();
+            const out = sqrt(float(1).sub(rise));
+            way.assign(
+              normalize(
+                first
+                  .mul(cos(angle).mul(out))
+                  .add(second.mul(sin(angle).mul(out)))
+                  .add(facing.mul(sqrt(rise))),
+              ),
+            );
+          });
         });
         // From the fourth bounce a path fades as likely as it is dark, what remains of it carried on as much brighter, so no light is lost on average.
         If(int(i).greaterThanEqual(FADING), () => {

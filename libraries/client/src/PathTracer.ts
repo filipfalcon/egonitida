@@ -1,10 +1,11 @@
 import { Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as HairScattering from '#src/HairScattering.ts';
+import * as SurfaceScattering from '#src/SurfaceScattering.ts';
 import * as TracedScene from '#src/TracedScene.ts';
 
 /**
- * Light worked out by following paths, as light travels back from the eye: each path bounces off what it meets, as much of the light as each surface sends back carried on, until it leaves for the sky, glows, or fades. At every bounce each sun is asked for directly, a ray toward it telling whether it is hidden, and the next bounce is chosen as a matte surface scatters light, so a path's every sample is as likely as the light it carries. A photograph made of many such paths, averaged, is what the scene looks like; `radiance` follows one, here as the graphics device follows one for every pixel, so what the device finds can be told against it.
+ * Light worked out by following paths, as light travels back from the eye: each path bounces off what it meets, as much of the light as each surface sends back carried on, until it leaves for the sky, glows, or fades. At every bounce each sun is asked for directly, a ray toward it telling whether it is hidden, and the next bounce is chosen as the surface scatters light, so a path's every sample is about as likely as the light it carries. A photograph made of many such paths, averaged, is what the scene looks like; `radiance` follows one, here as the graphics device follows one for every pixel, so what the device finds can be told against it.
  */
 
 /** A colour, or an amount of light, red, green, and blue. */
@@ -75,6 +76,36 @@ const scattered = (normal: Point, random: () => number): Point => {
   ];
 };
 
+/** Two ways square to `normal` and to each other, and how a way turns into the frame they make with it, z along `normal`, and back. */
+const frameAbout = (normal: Point) => {
+  const helper: Point = Math.abs(normal[0]) > 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const firstRaw: Point = [
+    helper[1] * normal[2] - helper[2] * normal[1],
+    helper[2] * normal[0] - helper[0] * normal[2],
+    helper[0] * normal[1] - helper[1] * normal[0],
+  ];
+  const firstLong = Math.hypot(...firstRaw);
+  const first: Point = [firstRaw[0] / firstLong, firstRaw[1] / firstLong, firstRaw[2] / firstLong];
+  const second: Point = [
+    normal[1] * first[2] - normal[2] * first[1],
+    normal[2] * first[0] - normal[0] * first[2],
+    normal[0] * first[1] - normal[1] * first[0],
+  ];
+  const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  return {
+    local: (world: Point): SurfaceScattering.Way => [
+      dot(world, first),
+      dot(world, second),
+      dot(world, normal),
+    ],
+    world: (inFrame: SurfaceScattering.Way): Point => [
+      first[0] * inFrame[0] + second[0] * inFrame[1] + normal[0] * inFrame[2],
+      first[1] * inFrame[0] + second[1] * inFrame[1] + normal[1] * inFrame[2],
+      first[2] * inFrame[0] + second[2] * inFrame[1] + normal[2] * inFrame[2],
+    ],
+  };
+};
+
 /** A strand of hair met by a ray going `way`, at the placed shape whose numbers start at `base`, running `along`, its surface facing `normal`: the strand ready to scatter light, the way it is seen from in its own frame, and how a way turns into that frame and back. */
 const fibreAt = (flat: TracedScene.Flat, base: number, along: Point, normal: Point, way: Point) => {
   const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -125,7 +156,7 @@ const fibreAt = (flat: TracedScene.Flat, base: number, along: Point, normal: Poi
 };
 
 /**
- * How much light reaches `origin` from the way `direction`, of length one, through `flat` lit by `lighting`, along one path whose bounces `random` chooses: what each surface met gives off, each sun it sees, matte, as much as Lambert has it, and the sky where the path leaves the scene, each carried back as much as the surfaces between send it on. From the fourth bounce a path fades as likely as it is dark, what remains of it carried on as much brighter, so no light is lost on average.
+ * How much light reaches `origin` from the way `direction`, of length one, through `flat` lit by `lighting`, along one path whose bounces `random` chooses: what each surface met gives off, each sun it sees, as each surface scatters light, a shining one as `SurfaceScattering` has it, something matte as Lambert has it, hair as `HairScattering` has it, and the sky where the path leaves the scene, each carried back as much as the surfaces between send it on. From the fourth bounce a path fades as likely as it is dark, what remains of it carried on as much brighter, so no light is lost on average.
  */
 export const radiance = (
   flat: TracedScene.Flat,
@@ -213,25 +244,52 @@ export const radiance = (
     for (let part = 0; part < 3; part++) {
       light[part] = (light[part] ?? 0) + (carried[part] ?? 0) * (glow[part] ?? 0);
     }
+    // A surface shines as Three's standard material does; something matte, as Lambert has it.
+    const shining = (flat.placed[base + 20] ?? 0) === 0;
+    const frame = frameAbout(normal);
+    const surface = SurfaceScattering.prepare({
+      colour,
+      roughness: shining ? (flat.placed[base + 21] ?? 1) : 1,
+      metalness: shining ? (flat.placed[base + 22] ?? 0) : 0,
+    });
+    const seen = frame.local([-way[0], -way[1], -way[2]]);
     for (const sun of lighting.suns) {
-      const facing =
-        normal[0] * sun.toward[0] + normal[1] * sun.toward[1] + normal[2] * sun.toward[2];
-      if (facing <= 0 || Option.isSome(TracedScene.trace(flat, at, sun.toward, FAR, 'Casting'))) {
+      if (
+        sun.toward[0] * normal[0] + sun.toward[1] * normal[1] + sun.toward[2] * normal[2] <= 0 ||
+        Option.isSome(TracedScene.trace(flat, at, sun.toward, FAR, 'Casting'))
+      ) {
         continue;
       }
+      const lit = frame.local(sun.toward);
+      const sent: Colour = shining
+        ? SurfaceScattering.scattered(surface, seen, lit)
+        : [
+            (colour[0] * lit[2]) / Math.PI,
+            (colour[1] * lit[2]) / Math.PI,
+            (colour[2] * lit[2]) / Math.PI,
+          ];
       for (let part = 0; part < 3; part++) {
         light[part] =
           (light[part] ?? 0) +
-          ((carried[part] ?? 0) * (colour[part] ?? 0) * (sun.irradiance[part] ?? 0) * facing) /
-            Math.PI;
+          (carried[part] ?? 0) * (sent[part] ?? 0) * (sun.irradiance[part] ?? 0);
       }
     }
-    // Scattered as a matte surface scatters light: its cosine and the chance of choosing it cancel, leaving its colour.
-    for (let part = 0; part < 3; part++) {
-      carried[part] = (carried[part] ?? 0) * (colour[part] ?? 0);
+    if (shining) {
+      const chosen = SurfaceScattering.sample(surface, seen, [random(), random(), random()]);
+      for (let part = 0; part < 3; part++) {
+        carried[part] = (carried[part] ?? 0) * (chosen.carried[part] ?? 0);
+      }
+      way = frame.world(chosen.way);
+    } else {
+      // Scattered as a matte surface scatters light: its cosine and the chance of choosing it cancel, leaving its colour.
+      for (let part = 0; part < 3; part++) {
+        carried[part] = (carried[part] ?? 0) * (colour[part] ?? 0);
+      }
+      way = scattered(normal, random);
     }
     if (bounce >= FADING) {
-      const keep = Math.max(carried[0] ?? 0, carried[1] ?? 0, carried[2] ?? 0);
+      // A path carrying more than it met, as one off a shine may, never fades.
+      const keep = Math.min(Math.max(carried[0] ?? 0, carried[1] ?? 0, carried[2] ?? 0), 1);
       if (random() >= keep) {
         break;
       }
@@ -240,7 +298,6 @@ export const radiance = (
       }
     }
     from = at;
-    way = scattered(normal, random);
   }
   return [light[0] ?? 0, light[1] ?? 0, light[2] ?? 0];
 };

@@ -465,6 +465,17 @@ describe('what a traced scene holds of how its shapes are made', () => {
 
     expect(materialOf(flat).slice(0, 3)).toEqual([0, 0.2, 0.7].map((value) => Math.fround(value)));
   });
+
+  it('gathers a mesh whose material says nothing of how rough it is as matte, with no shine, as Lambert has it', () => {
+    const scene = new Three.Scene();
+    const plain = new Three.Mesh(new Three.BoxGeometry(1, 1, 1), new Three.MeshLambertMaterial());
+    plain.position.z = -5;
+    scene.add(plain);
+
+    const flat = TracedScene.gathering().gather(scene, new Three.PerspectiveCamera());
+
+    expect(materialOf(flat)[0]).toBe(2);
+  });
 });
 
 describe('which way what a ray meets faces', () => {

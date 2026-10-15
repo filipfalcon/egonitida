@@ -116,6 +116,27 @@ describe('PathTracer.radiance', () => {
     expect(sum / count).toBeLessThan(5.15);
   });
 
+  it('shines off a smooth floor where a sun glances off it toward the eye, more than off a matte one', () => {
+    const lighting: PathTracer.Lighting = {
+      up: [0, 0, 0],
+      down: [0, 0, 0],
+      suns: [{ toward: [0, 1, 0], irradiance: [1, 1, 1] }],
+    };
+    const smooth = TracedScene.flatten(
+      [floor],
+      [
+        {
+          ...placed(0, [0.5, 0.5, 0.5]),
+          material: { _tag: 'Surface', roughness: 0.2, metalness: 0 },
+        },
+      ],
+    );
+
+    const [shine] = PathTracer.radiance(smooth, above, down, lighting, numbers(3));
+
+    expect(shine).toBeGreaterThan(2 * (0.5 / Math.PI));
+  });
+
   it('gives off the light of what glows', () => {
     const lighting: PathTracer.Lighting = { up: [0, 0, 0], down: [0, 0, 0], suns: [] };
     const flat = TracedScene.flatten([floor], [placed(0, [0, 0, 0], { emissive: [2, 1, 0.5] })]);
