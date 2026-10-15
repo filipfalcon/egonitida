@@ -20,20 +20,45 @@ export interface Sun {
   readonly irradiance: Colour;
 }
 
-/** The light about a scene: the sky's, as bright as `up` straight up and `down` straight down, and between them as far up as a way looks, as Three's hemisphere light has it; and each sun's. */
+/** A picture all round a scene, as Three's equirectangular environment is: `width` by `height` pixels, four numbers each, red, green, blue, and nothing, each as bright as a way it shows is, times `intensity`. */
+export interface Environment {
+  readonly width: number;
+  readonly height: number;
+  readonly data: Float32Array;
+  readonly intensity: number;
+}
+
+/** The light about a scene: the sky's, as bright as `up` straight up and `down` straight down, and between them as far up as a way looks, as Three's hemisphere light has it, and as its environment shows each way, if it has one; and each sun's. */
 export interface Lighting {
   readonly up: Colour;
   readonly down: Colour;
+  readonly environment: Option.Option<Environment>;
   readonly suns: ReadonlyArray<Sun>;
 }
 
-/** How bright the sky of `lighting` is, looked at the way `way`, of length one. */
+/** Where a way lies in an equirectangular picture, from 0 to 1 across and up, as Three's `equirectUV` has it. */
+export const equirectangular = (way: Point): readonly [number, number] => [
+  Math.atan2(way[2], way[0]) / (2 * Math.PI) + 0.5,
+  Math.asin(Math.min(Math.max(way[1], -1), 1)) / Math.PI + 0.5,
+];
+
+/** How bright the sky of `lighting` is, looked at the way `way`, of length one: its hemisphere's and its environment's, the nearest pixel of it. */
 export const skyAt = (lighting: Lighting, way: Point): Colour => {
   const share = 0.5 + 0.5 * way[1];
+  const shown = Option.match(lighting.environment, {
+    onNone: () => [0, 0, 0],
+    onSome: ({ width, height, data, intensity }) => {
+      const [across, up] = equirectangular(way);
+      const column = Math.min(Math.floor(across * width), width - 1);
+      const row = Math.min(Math.floor(up * height), height - 1);
+      const at = (row * width + column) * 4;
+      return [0, 1, 2].map((part) => (data[at + part] ?? 0) * intensity);
+    },
+  });
   return [
-    lighting.down[0] + (lighting.up[0] - lighting.down[0]) * share,
-    lighting.down[1] + (lighting.up[1] - lighting.down[1]) * share,
-    lighting.down[2] + (lighting.up[2] - lighting.down[2]) * share,
+    lighting.down[0] + (lighting.up[0] - lighting.down[0]) * share + (shown[0] ?? 0),
+    lighting.down[1] + (lighting.up[1] - lighting.down[1]) * share + (shown[1] ?? 0),
+    lighting.down[2] + (lighting.up[2] - lighting.down[2]) * share + (shown[2] ?? 0),
   ];
 };
 
@@ -302,7 +327,7 @@ export const radiance = (
   return [light[0] ?? 0, light[1] ?? 0, light[2] ?? 0];
 };
 
-/** The light `scene` is lit by, as Three lights it, for a path: each hemisphere light its sky, as bright as its colour times its intensity over π, the radiance a surface's irradiance from it comes of; and each directional light a sun, toward where it stands from where it points, as much light on a surface square to it as its colour times its intensity. */
+/** The light `scene` is lit by, as Three lights it, for a path: its environment, if it is a picture of numbers all round it, such as `Sky.gradient` makes; each hemisphere light its sky, as bright as its colour times its intensity over π, the radiance a surface's irradiance from it comes of; and each directional light a sun, toward where it stands from where it points, as much light on a surface square to it as its colour times its intensity. */
 export const lightingOf = (scene: Three.Scene): Lighting => {
   const up = [0, 0, 0];
   const down = [0, 0, 0];
@@ -332,9 +357,21 @@ export const lightingOf = (scene: Three.Scene): Lighting => {
       });
     }
   });
+  const environment = scene.environment;
   return {
     up: [up[0] ?? 0, up[1] ?? 0, up[2] ?? 0],
     down: [down[0] ?? 0, down[1] ?? 0, down[2] ?? 0],
+    environment:
+      environment instanceof Three.DataTexture &&
+      environment.mapping === Three.EquirectangularReflectionMapping &&
+      environment.image.data instanceof Float32Array
+        ? Option.some({
+            width: environment.image.width,
+            height: environment.image.height,
+            data: environment.image.data,
+            intensity: scene.environmentIntensity,
+          })
+        : Option.none(),
     suns,
   };
 };

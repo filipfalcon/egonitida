@@ -23,6 +23,7 @@ export * as Ragdolling from '#src/Ragdolling.ts';
 export * as RayTracing from '#src/RayTracing.ts';
 export * as Scene from '#src/Scene.ts';
 export * as Shaping from '#src/Shaping.ts';
+export * as Sky from '#src/Sky.ts';
 export * as Tab from '#src/Tab.ts';
 export * as Timeline from '#src/Timeline.ts';
 export * as View from '#src/View.ts';

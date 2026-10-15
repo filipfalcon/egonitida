@@ -347,18 +347,26 @@ const asVec3 = (node: Three.Node) => new Three.ConvertNode<'vec3'>(node, 'vec3')
 /** `node` is a node of the graphics device's. */
 const isNode = (node: unknown): node is Three.Node => node instanceof Three.Node;
 
-/** The light about a strand as a material's lighting has it, where the light coming from everywhere at once is added up: what falls on it, and what it gives back. */
+/** The light about a strand as a material's lighting has it, where the light coming from everywhere at once is added up: what falls on it from lights such as the sky's, and from the scene's environment, and what it gives back. */
 const ambientOf = (context: unknown) => {
   if (typeof context !== 'object' || context === null) {
     return undefined;
   }
   const irradiance = 'irradiance' in context ? context.irradiance : undefined;
+  const environment = 'iblIrradiance' in context ? context.iblIrradiance : undefined;
   const reflected = 'reflectedLight' in context ? context.reflectedLight : undefined;
   const diffuse =
     typeof reflected === 'object' && reflected !== null && 'indirectDiffuse' in reflected
       ? reflected.indirectDiffuse
       : undefined;
-  return isNode(irradiance) && isNode(diffuse) ? { irradiance, diffuse } : undefined;
+  return isNode(irradiance) && isNode(diffuse)
+    ? {
+        irradiance: isNode(environment)
+          ? asVec3(irradiance).add(asVec3(environment))
+          : asVec3(irradiance),
+        diffuse,
+      }
+    : undefined;
 };
 
 /** A strand of hair shaded as `shading` on the graphics device, varied by its own random number `random` as `varied` varies it: how much light it takes in, how wide its lobes spread, and its colour seen through twice. */
@@ -539,6 +547,14 @@ class HairMaterial extends Three.LineBasicNodeMaterial {
 
   override setupLightingModel(): Three.LightingModel {
     return new HairLighting(this.#shading, this.#tangent, this.#random, this.#shadowed);
+  }
+
+  /** Lit by the scene's environment too, as a standard material is, which a line's material is not. */
+  override setupEnvironment(builder: Three.NodeBuilder): Three.Node | null {
+    // The scene's environment, as the builder holds it, which Three's types do not tell of.
+    const scenes: unknown = Reflect.get(builder, 'environmentNode');
+    const given = super.setupEnvironment(builder) ?? (isNode(scenes) ? scenes : null);
+    return given === null ? null : new Three.EnvironmentNode(given);
   }
 }
 

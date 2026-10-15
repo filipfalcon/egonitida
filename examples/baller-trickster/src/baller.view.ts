@@ -40,17 +40,18 @@ class Drawn extends Three.Group {
 /** A ball's look: white, as a ball under lights is. */
 const BALL_COLOUR = 0xf2f2f2;
 
-/** Every ball, a sphere as round as a football, where it is. */
+/** Every ball, a sphere as round as a football, where it is, casting its shadow. */
 export const balls = View.each([Baller.Ball], {
   acquire: () =>
     Effect.acquireRelease(
-      Effect.sync(
-        () =>
-          new Three.Mesh(
-            new Three.SphereGeometry(Ball.football.radius, 32, 16),
-            new Three.MeshStandardNodeMaterial({ color: BALL_COLOUR, roughness: 0.5 }),
-          ),
-      ),
+      Effect.sync(() => {
+        const ball = new Three.Mesh(
+          new Three.SphereGeometry(Ball.football.radius, 32, 16),
+          new Three.MeshStandardNodeMaterial({ color: BALL_COLOUR, roughness: 0.5 }),
+        );
+        ball.castShadow = true;
+        return ball;
+      }),
       (mesh) =>
         Effect.sync(() => {
           mesh.geometry.dispose();
@@ -104,6 +105,13 @@ export const make = <E>(model: Effect.Effect<Three.Object3D, E>, strands = 1) =>
     acquire: () =>
       Effect.gen(function* () {
         const copy = clone(yield* model);
+        // Her body casts its shadow, and takes the shadows on it.
+        copy.traverse((part) => {
+          if (part instanceof Three.Mesh) {
+            part.castShadow = true;
+            part.receiveShadow = true;
+          }
+        });
         return new Drawn(
           yield* Posing.fit(copy, Body.joints),
           yield* Ragdolling.fit(copy, hair),

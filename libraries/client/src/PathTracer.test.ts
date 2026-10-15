@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
+import { Option } from 'effect';
 import * as Three from 'three/webgpu';
 import * as PathTracer from '#src/PathTracer.ts';
 import * as TracedScene from '#src/TracedScene.ts';
@@ -45,7 +46,12 @@ const above: readonly [number, number, number] = [0.3, 2, 0.2];
 
 describe('PathTracer.skyAt', () => {
   it('is as bright as the sky straight up, as the ground straight down, and between them halfway at the horizon', () => {
-    const lighting: PathTracer.Lighting = { up: [1, 1, 1], down: [0, 0, 0], suns: [] };
+    const lighting: PathTracer.Lighting = {
+      up: [1, 1, 1],
+      down: [0, 0, 0],
+      environment: Option.none(),
+      suns: [],
+    };
 
     expect(PathTracer.skyAt(lighting, [0, 1, 0])).toEqual([1, 1, 1]);
     expect(PathTracer.skyAt(lighting, [0, -1, 0])).toEqual([0, 0, 0]);
@@ -55,7 +61,12 @@ describe('PathTracer.skyAt', () => {
 
 describe('PathTracer.radiance', () => {
   it('is the sky where a ray meets nothing', () => {
-    const lighting: PathTracer.Lighting = { up: [0.2, 0.4, 0.8], down: [0.2, 0.4, 0.8], suns: [] };
+    const lighting: PathTracer.Lighting = {
+      up: [0.2, 0.4, 0.8],
+      down: [0.2, 0.4, 0.8],
+      environment: Option.none(),
+      suns: [],
+    };
     const empty = TracedScene.flatten([], []);
 
     expect(PathTracer.radiance(empty, [0, 0, 0], [0, 0, -1], lighting, numbers(1))).toEqual([
@@ -64,7 +75,12 @@ describe('PathTracer.radiance', () => {
   });
 
   it('is a matte floor’s colour times the sky above it, however its light is sampled', () => {
-    const lighting: PathTracer.Lighting = { up: [1, 1, 1], down: [1, 1, 1], suns: [] };
+    const lighting: PathTracer.Lighting = {
+      up: [1, 1, 1],
+      down: [1, 1, 1],
+      environment: Option.none(),
+      suns: [],
+    };
     const flat = TracedScene.flatten([floor], [placed(0, [0.5, 0.5, 0.5])]);
 
     for (let seed = 1; seed <= 20; seed++) {
@@ -77,6 +93,7 @@ describe('PathTracer.radiance', () => {
     const lighting: PathTracer.Lighting = {
       up: [0, 0, 0],
       down: [0, 0, 0],
+      environment: Option.none(),
       suns: [{ toward: [0, 1, 0], irradiance: [1, 1, 1] }],
     };
     const flat = TracedScene.flatten(
@@ -91,7 +108,12 @@ describe('PathTracer.radiance', () => {
   });
 
   it('carries light through as many bounces as it takes, inside a closed box glowing as much as it sends back', () => {
-    const lighting: PathTracer.Lighting = { up: [0, 0, 0], down: [0, 0, 0], suns: [] };
+    const lighting: PathTracer.Lighting = {
+      up: [0, 0, 0],
+      down: [0, 0, 0],
+      environment: Option.none(),
+      suns: [],
+    };
     // Each wall gives off 1 and sends on 0.8 of what reaches it: 1 + 0.8 + 0.64 + … = 5 in all.
     const flat = TracedScene.flatten(
       [box],
@@ -120,6 +142,7 @@ describe('PathTracer.radiance', () => {
     const lighting: PathTracer.Lighting = {
       up: [0, 0, 0],
       down: [0, 0, 0],
+      environment: Option.none(),
       suns: [{ toward: [0, 1, 0], irradiance: [1, 1, 1] }],
     };
     const smooth = TracedScene.flatten(
@@ -138,7 +161,12 @@ describe('PathTracer.radiance', () => {
   });
 
   it('gives off the light of what glows', () => {
-    const lighting: PathTracer.Lighting = { up: [0, 0, 0], down: [0, 0, 0], suns: [] };
+    const lighting: PathTracer.Lighting = {
+      up: [0, 0, 0],
+      down: [0, 0, 0],
+      environment: Option.none(),
+      suns: [],
+    };
     const flat = TracedScene.flatten([floor], [placed(0, [0, 0, 0], { emissive: [2, 1, 0.5] })]);
 
     expect(PathTracer.radiance(flat, above, down, lighting, numbers(5))).toEqual([2, 1, 0.5]);
@@ -155,6 +183,7 @@ describe('PathTracer.radiance through hair', () => {
   const sunAbove: PathTracer.Lighting = {
     up: [0, 0, 0],
     down: [0, 0, 0],
+    environment: Option.none(),
     suns: [{ toward: [0, 1, 0], irradiance: [1, 1, 1] }],
   };
   const madeOf = (material: TracedScene.Material): TracedScene.Placed => ({

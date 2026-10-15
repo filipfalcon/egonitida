@@ -9,6 +9,7 @@ import {
   cos,
   cross,
   dot,
+  equirectUV,
   float,
   floatBitsToUint,
   instanceIndex,
@@ -248,6 +249,12 @@ export const take = (
     const firstPixel = uniform(0, 'uint');
     const up = vec3(...lighting.up);
     const down = vec3(...lighting.down);
+    // What the scene's environment shows the way a path leaves it, as `PathTracer.skyAt` reads it.
+    const environment = scene.environment;
+    const shownAround = (way: Three.Node<'vec3'>): Three.Node<'vec3'> =>
+      Option.isSome(lighting.environment) && environment instanceof Three.Texture
+        ? texture(environment, equirectUV(way)).level(int(0)).xyz.mul(scene.environmentIntensity)
+        : vec3(0);
     const suns = Array.from({ length: SUNS }, (_, index) => {
       const sun = lighting.suns[index];
       return {
@@ -288,7 +295,9 @@ export const take = (
         } = SceneTracer.traceFacing(device, from, way, float(FAR));
         const placed = int(met.y).toVar();
         If(placed.lessThan(0), () => {
-          light.addAssign(carried.mul(mix(down, up, way.y.mul(0.5).add(0.5))));
+          light.addAssign(
+            carried.mul(mix(down, up, way.y.mul(0.5).add(0.5)).add(shownAround(way))),
+          );
           Break();
         });
         const base = placed.mul(TracedScene.PLACED / 4);

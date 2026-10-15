@@ -1,5 +1,5 @@
 import { BrowserWorker } from '@effect/platform-browser';
-import { Controls, Drawing, Hearing, Photo, Tab, View, Viewport } from '@egonitida/client';
+import { Controls, Drawing, Hearing, Photo, Sky, Tab, View, Viewport } from '@egonitida/client';
 import { Client, WorkerTransport } from '@egonitida/core';
 import { Bridge, Page } from '@egonitida/devtools';
 import { Effect, Exit, Option, Scope } from 'effect';
@@ -88,9 +88,28 @@ const main = Effect.gen(function* () {
     new Three.MeshStandardNodeMaterial({ color: 0x2f6b34, roughness: 1 }),
   );
   ground.rotation.x = -Math.PI / 2;
-  viewport.scene.add(views.root, ground, new Three.HemisphereLight(0xdde6f0, 0x2b2f33, 2));
+  ground.receiveShadow = true;
+  // Lit as a photograph of her is: by the sky all round, which what shines reflects and the photograph's paths leave for, and by the sun, which casts her shadow; developed on a neutral curve, so what the sun lights brightest keeps its colour.
+  const sky = Sky.gradient(new Three.Color(0xdde6f0), new Three.Color(0x2b2f33), 2);
+  viewport.scene.environment = sky;
+  viewport.scene.background = sky;
+  viewport.scene.add(views.root, ground);
+  viewport.renderer.toneMapping = Three.NeutralToneMapping;
+  viewport.renderer.shadowMap.enabled = true;
+  viewport.renderer.shadowMap.type = Three.PCFSoftShadowMap;
   const sun = new Three.DirectionalLight(0xffffff, 1.5);
   sun.position.set(2, 4, -3);
+  sun.castShadow = true;
+  // Her shadow sharp wherever she plays about the middle of the pitch.
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -4;
+  sun.shadow.camera.right = 4;
+  sun.shadow.camera.top = 4;
+  sun.shadow.camera.bottom = -4;
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 15;
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.02;
   viewport.scene.add(sun);
   const help = [
     'left stick or WASD: left foot',
@@ -151,13 +170,9 @@ const main = Effect.gen(function* () {
               onNone: () =>
                 Effect.gen(function* () {
                   const scope = yield* Scope.make();
-                  // Developed on a neutral curve, so what the sun lights brightest keeps its colour rather than clipping to white, its noise smoothed away, and done after so many samples.
+                  // Developed as the game is drawn, its noise smoothed away, and done after so many samples.
                   const photo = yield* Scope.provide(
-                    Photo.take(viewport, {
-                      toneMapping: Three.NeutralToneMapping,
-                      denoised: true,
-                      samples: SAMPLES,
-                    }),
+                    Photo.take(viewport, { denoised: true, samples: SAMPLES }),
                     scope,
                   );
                   // Floating from where the camera stands, looking where it looks.
