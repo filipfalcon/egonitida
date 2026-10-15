@@ -15,7 +15,7 @@
 <h3 align="center">Build games agents understand.</h3>
 
 <p align="center">
-  <a href="docs/architecture.md"><strong>Architecture</strong></a> · <a href="examples"><strong>Examples</strong></a> · <a href="AGENTS.md"><strong>Rules</strong></a> · <a href="#running-it"><strong>Running it</strong></a> · <a href="https://discord.gg/F3YkynckH"><strong>Discord</strong></a>
+  <a href="docs/architecture.md"><strong>Architecture</strong></a> · <a href="examples"><strong>Examples</strong></a> · <a href="AGENTS.md"><strong>Rules</strong></a> · <a href="#running-it"><strong>Running it</strong></a> · <a href="https://discord.gg/6zsggGTGZf"><strong>Discord</strong></a>
 </p>
 
 ---
