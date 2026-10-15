@@ -118,6 +118,17 @@ describe('Photo.viewOf', () => {
     expect(Photo.moved(seen, turned)).toBe(true);
     expect(Photo.moved(seen, zoomed)).toBe(true);
   });
+
+  it('is not moved by its camera shifted less than a pixel, as temporal antialiasing shifts it every frame', () => {
+    const camera = new Three.PerspectiveCamera(50, 1.5, 0.1, 100);
+    camera.updateMatrixWorld();
+    const seen = Photo.viewOf(camera);
+
+    camera.setViewOffset(1500, 1000, 0.3, -0.2, 1500, 1000);
+    camera.updateMatrixWorld();
+
+    expect(Photo.moved(seen, Photo.viewOf(camera))).toBe(false);
+  });
 });
 
 describe('Photo.smoothsAfter', () => {

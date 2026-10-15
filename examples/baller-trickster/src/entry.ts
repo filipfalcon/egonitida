@@ -26,7 +26,11 @@ const main = Effect.gen(function* () {
   const connection = yield* WorkerTransport.connect;
   const client = yield* Client.connect(connection, { game: Baller.game });
   const drawing = yield* Drawing.make(client, { keepSeconds: 1 });
-  const viewport = yield* Viewport.make(canvas, Viewport.sharp);
+  // Grounded as a photograph of her is: shaded where little of the sky reaches, such as under her feet and in her kit's folds.
+  const viewport = yield* Viewport.make(canvas, {
+    ...Viewport.sharp,
+    occlusion: Option.some(Viewport.occlusion({ radius: 0.4 })),
+  });
   const model = yield* Effect.cached(Model.load);
   // A photograph being developed, the scope it is let go of with, and the moment it is of, drawn still meanwhile so the camera can move about it, while one is.
   const photographing: {

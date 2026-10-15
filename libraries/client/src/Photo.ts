@@ -64,11 +64,23 @@ export interface Photo {
 /** How long, in milliseconds, a camera stays still before a photograph starts anew from where it looks: while it moves, and until the first pass from there is followed, the viewport draws instead. */
 export const SETTLING = 200;
 
-/** Where `camera` looks from and how: its place and turn in the scene, and its lens, as sixteen numbers each. */
-export const viewOf = (camera: Three.Camera): ReadonlyArray<number> => [
+/** Where `camera` looks from and how: its place and turn in the scene, as sixteen numbers, and its lens, how wide, how wide across to high, how near and far it sees, and how far it is zoomed; never how it is shifted less than a pixel, as temporal antialiasing shifts it every frame. */
+export const viewOf = (camera: Three.PerspectiveCamera): ReadonlyArray<number> => [
   ...camera.matrixWorld.elements,
-  ...camera.projectionMatrix.elements,
+  camera.fov,
+  camera.aspect,
+  camera.near,
+  camera.far,
+  camera.zoom,
 ];
+
+/** What turns a point of `camera`'s picture into one of its own space: the inverse of its projection as its lens makes it, never shifted. */
+const unshiftedInverse = (camera: Three.PerspectiveCamera) => {
+  const lens = camera.clone();
+  lens.clearViewOffset();
+  lens.updateProjectionMatrix();
+  return lens.projectionMatrixInverse.clone();
+};
 
 /** Whether a camera looks from `now` other than from `before`, as `viewOf` gives them. */
 export const moved = (before: ReadonlyArray<number>, now: ReadonlyArray<number>): boolean =>
@@ -244,7 +256,7 @@ export const take = (
 
     camera.updateMatrixWorld();
     const cameraWorld = uniform(camera.matrixWorld.clone());
-    const projectionInverse = uniform(camera.projectionMatrixInverse.clone());
+    const projectionInverse = uniform(unshiftedInverse(camera));
     const frame = uniform(0, 'uint');
     const firstPixel = uniform(0, 'uint');
     const up = vec3(...lighting.up);
@@ -550,7 +562,7 @@ export const take = (
       kept.smoothing = false;
       smoothed.value = 0;
       cameraWorld.value.copy(camera.matrixWorld);
-      projectionInverse.value.copy(camera.projectionMatrixInverse);
+      projectionInverse.value.copy(unshiftedInverse(camera));
     };
     /** Follows the next batch, once the last is followed, and draws the photograph, once a whole pass is: whether it drew it. */
     const developOnce = Effect.sync(() => {
