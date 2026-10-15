@@ -106,6 +106,18 @@ describe('Pose.place', () => {
   });
 });
 
+describe('Pose.points', () => {
+  it('stands each bone where the pose places it, as a ragdoll starts from where she is', () => {
+    const bent = posed({ calf: turned(90) });
+
+    const points = Pose.points(leg, joints, bent);
+
+    const placed = Pose.place(leg, joints, bent);
+    expect(points['foot']).toEqual(placed['foot']?.at);
+    expect(Object.keys(points)).toEqual(['thigh', 'calf', 'foot']);
+  });
+});
+
 describe('Pose.clamp', () => {
   it('bends a knee no further than it bends', () => {
     const clamped = Pose.clamp(joints, posed({ calf: turned(170) }));

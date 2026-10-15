@@ -130,6 +130,16 @@ export const place = (
   );
 };
 
+/** Where every one of `bones` stands, posed as `pose` says, by name: as a ragdoll starts from the pose she is in, through `Ragdoll.among`, rather than from how her model was made. */
+export const points = (
+  bones: Shape.Bones,
+  joints: Joint.Joints,
+  pose: Pose,
+): Readonly<Record<string, Ray.Point>> =>
+  Object.fromEntries(
+    Object.entries(place(bones, joints, pose)).map(([name, { at }]) => [name, at]),
+  );
+
 /** `value` within `range`. */
 const within = (value: number, [min, max]: Joint.Range) => Math.min(Math.max(value, min), max);
 
