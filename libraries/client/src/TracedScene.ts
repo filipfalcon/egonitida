@@ -29,10 +29,20 @@ export const matte: Material = { _tag: 'Surface', roughness: 1, metalness: 0 };
 /** A shape rays meet, in its own space, with its hierarchy: of triangles, such as a body's skin, or of strands, such as its hair. */
 export type Shape = Triangles | Strands;
 
-/** A shape of triangles: three corners of three numbers each a triangle. */
+/** How many numbers what each triangle's corners say takes, beside it: which way each corner faces, three numbers each, where each lies in its picture, two numbers each, and whether they say it, a whole, or nothing. */
+export const CORNERS = 16;
+
+/** What a triangle's corners say: which way each faces, three numbers a corner, and where each lies in the shape's picture, two numbers a corner. */
+export interface Corners {
+  readonly normals: Float32Array;
+  readonly uvs: Float32Array;
+}
+
+/** A shape of triangles: three corners of three numbers each a triangle, and what their corners say, if anything. */
 export interface Triangles {
   readonly _tag: 'Triangles';
   readonly positions: Float32Array;
+  readonly corners: Option.Option<Corners>;
   readonly hierarchy: Bvh.Hierarchy;
 }
 
@@ -47,18 +57,19 @@ export interface Strands {
 export const countOf = (shape: Shape): number =>
   shape._tag === 'Triangles' ? shape.positions.length / 9 : shape.segments.length / 7;
 
-/** A shape's triangles, three corners of three numbers each a triangle, in its own space, with their hierarchy built over them. */
-export const shapeOf = (positions: Float32Array): Triangles => ({
+/** A shape's triangles, three corners of three numbers each a triangle, in its own space, and what their corners say, if anything, with their hierarchy built over them. */
+export const shapeOf = (positions: Float32Array, corners?: Corners): Triangles => ({
   _tag: 'Triangles',
   positions,
+  corners: Option.fromNullishOr(corners),
   hierarchy: Bvh.build(Bvh.trianglesBoxes(positions), positions.length / 9),
 });
 
-/** Moves a shape's triangles to `positions`, its hierarchy refitted rather than built anew: for a shape whose triangles moved but stay together, such as a body bent by its bones. */
-export const moved = (shape: Triangles, positions: Float32Array): Triangles => {
+/** Moves a shape's triangles to `positions`, what their corners say now `corners`, if anything, its hierarchy refitted rather than built anew: for a shape whose triangles moved but stay together, such as a body bent by its bones. */
+export const moved = (shape: Triangles, positions: Float32Array, corners?: Corners): Triangles => {
   const hierarchy = { nodes: shape.hierarchy.nodes.slice(), order: shape.hierarchy.order };
   Bvh.refit(hierarchy, Bvh.trianglesBoxes(positions));
-  return { _tag: 'Triangles', positions, hierarchy };
+  return { _tag: 'Triangles', positions, corners: Option.fromNullishOr(corners), hierarchy };
 };
 
 /** Strands through `points`, three numbers a point, `points` of them each, as wide at each point as `widths` says, in their own space, each link from a point to the next as wide as the two ends are on average, with their hierarchy built over them. */
@@ -105,6 +116,7 @@ export interface Placed {
 export interface Flat {
   readonly shapeNodes: Float32Array;
   readonly triangles: Float32Array;
+  readonly corners: Float32Array;
   readonly placed: Float32Array;
   readonly placedNodes: Float32Array;
   readonly placedCount: number;
@@ -116,6 +128,7 @@ export const flattenShapes = (
 ): {
   readonly shapeNodes: Float32Array;
   readonly triangles: Float32Array;
+  readonly corners: Float32Array;
   readonly roots: ReadonlyArray<number>;
 } => {
   const threads = shapes.map(({ hierarchy }) => Bvh.threaded(hierarchy));
@@ -123,6 +136,7 @@ export const flattenShapes = (
   const triangleCount = shapes.reduce((sum, shape) => sum + countOf(shape), 0);
   const shapeNodes = new Float32Array(nodeCount);
   const triangles = new Float32Array(triangleCount * TRIANGLE);
+  const corners = new Float32Array(triangleCount * CORNERS);
   const roots: Array<number> = [];
   let nodeAt = 0;
   let triangleAt = 0;
@@ -156,11 +170,28 @@ export const flattenShapes = (
           triangles[base + corner * 4 + axis] = shape.positions[item * 9 + corner * 3 + axis] ?? 0;
         }
       }
+      if (Option.isSome(shape.corners)) {
+        const { normals, uvs } = shape.corners.value;
+        const said = (triangleAt + at) * CORNERS;
+        for (let corner = 0; corner < 3; corner += 1) {
+          for (let axis = 0; axis < 3; axis += 1) {
+            corners[said + corner * 4 + axis] = normals[item * 9 + corner * 3 + axis] ?? 0;
+          }
+        }
+        // The six numbers of where the corners lie in the picture, in the fourth of each corner's facing and the last group.
+        corners[said + 3] = uvs[item * 6] ?? 0;
+        corners[said + 7] = uvs[item * 6 + 1] ?? 0;
+        corners[said + 11] = uvs[item * 6 + 2] ?? 0;
+        corners[said + 12] = uvs[item * 6 + 3] ?? 0;
+        corners[said + 13] = uvs[item * 6 + 4] ?? 0;
+        corners[said + 14] = uvs[item * 6 + 5] ?? 0;
+        corners[said + 15] = 1;
+      }
     }
     nodeAt += thread.length;
     triangleAt += hierarchy.order.length;
   });
-  return { shapeNodes, triangles, roots };
+  return { shapeNodes, triangles, corners, roots };
 };
 
 const corner = new Three.Vector3();
@@ -239,11 +270,12 @@ export const flattenPlaced = (
 
 /** `shapes` placed as `placed`, laid flat. */
 export const flatten = (shapes: ReadonlyArray<Shape>, placed: ReadonlyArray<Placed>): Flat => {
-  const { shapeNodes, triangles, roots } = flattenShapes(shapes);
+  const { shapeNodes, triangles, corners, roots } = flattenShapes(shapes);
   const top = flattenPlaced(shapes, roots, placed);
   return {
     shapeNodes,
     triangles,
+    corners,
     placed: top.placed,
     placedNodes: top.placedNodes,
     placedCount: top.count,
@@ -382,7 +414,32 @@ export interface Hit {
   readonly distance: number;
   readonly placed: number;
   readonly normal: readonly [number, number, number];
+  readonly uv: readonly [number, number];
 }
+
+/** How much each corner of the triangle at `item` of `triangles` weighs at `point`, which lies in its plane: its barycentric weights, adding up to a whole. */
+const weightsAt = (triangles: Float32Array, item: number, point: ReadonlyArray<number>) => {
+  const at = item * TRIANGLE;
+  const corner = (index: number) => [0, 1, 2].map((axis) => triangles[at + index * 4 + axis] ?? 0);
+  const [a, b, c] = [corner(0), corner(1), corner(2)];
+  const v0 = [0, 1, 2].map((axis) => (b[axis] ?? 0) - (a[axis] ?? 0));
+  const v1 = [0, 1, 2].map((axis) => (c[axis] ?? 0) - (a[axis] ?? 0));
+  const v2 = [0, 1, 2].map((axis) => (point[axis] ?? 0) - (a[axis] ?? 0));
+  const dot = (u: ReadonlyArray<number>, v: ReadonlyArray<number>) =>
+    (u[0] ?? 0) * (v[0] ?? 0) + (u[1] ?? 0) * (v[1] ?? 0) + (u[2] ?? 0) * (v[2] ?? 0);
+  const d00 = dot(v0, v0);
+  const d01 = dot(v0, v1);
+  const d11 = dot(v1, v1);
+  const d20 = dot(v2, v0);
+  const d21 = dot(v2, v1);
+  const below = d00 * d11 - d01 * d01;
+  if (below === 0) {
+    return [1, 0, 0];
+  }
+  const second = (d11 * d20 - d01 * d21) / below;
+  const third = (d00 * d21 - d01 * d20) / below;
+  return [1 - second - third, second, third];
+};
 
 /** Which way the triangle or link at `item` of `triangles` faces at `point`, in its shape's own space, not yet of length one: a triangle square to its sides, a link out from its line. */
 const facingAt = (triangles: Float32Array, item: number, point: ReadonlyArray<number>) => {
@@ -508,7 +565,28 @@ export const trace = (
   const point = [0, 1, 2].map(
     (axis) => (found.localOrigin[axis] ?? 0) + (found.localDirection[axis] ?? 0) * found.distance,
   );
-  const local = facingAt(flat.triangles, found.item, point);
+  const said = found.item * CORNERS;
+  const smooth =
+    (flat.corners[said + 15] ?? 0) === 1 && (flat.triangles[found.item * TRIANGLE + 3] ?? 0) !== 1;
+  const weights = smooth ? weightsAt(flat.triangles, found.item, point) : [1, 0, 0];
+  const local = smooth
+    ? [0, 1, 2].map(
+        (axis) =>
+          (weights[0] ?? 0) * (flat.corners[said + axis] ?? 0) +
+          (weights[1] ?? 0) * (flat.corners[said + 4 + axis] ?? 0) +
+          (weights[2] ?? 0) * (flat.corners[said + 8 + axis] ?? 0),
+      )
+    : facingAt(flat.triangles, found.item, point);
+  const uv: readonly [number, number] = smooth
+    ? [
+        (weights[0] ?? 0) * (flat.corners[said + 3] ?? 0) +
+          (weights[1] ?? 0) * (flat.corners[said + 11] ?? 0) +
+          (weights[2] ?? 0) * (flat.corners[said + 13] ?? 0),
+        (weights[0] ?? 0) * (flat.corners[said + 7] ?? 0) +
+          (weights[1] ?? 0) * (flat.corners[said + 12] ?? 0) +
+          (weights[2] ?? 0) * (flat.corners[said + 14] ?? 0),
+      ]
+    : [0, 0];
   // Into the scene by the transpose of the rows that turn the scene into the shape's space, as a surface's facing is turned.
   const base = found.placed * PLACED;
   const turned = [0, 1, 2].map(
@@ -533,6 +611,7 @@ export const trace = (
       ((turned[1] ?? 0) / long) * back,
       ((turned[2] ?? 0) / long) * back,
     ],
+    uv,
   });
 };
 
@@ -712,6 +791,7 @@ export const gathering = (): Gathering => {
       return {
         shapeNodes: laid.flat.shapeNodes,
         triangles: laid.flat.triangles,
+        corners: laid.flat.corners,
         placed: top.placed,
         placedNodes: top.placedNodes,
         placedCount: top.count,

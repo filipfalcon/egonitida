@@ -85,7 +85,10 @@ describe('a scene as rays are traced through it', () => {
       emissive: [0, 0, 0] as const,
       casts: true,
     }));
-    const flat = TracedScene.flatten(shapes.map(TracedScene.shapeOf), placed);
+    const flat = TracedScene.flatten(
+      shapes.map((positions) => TracedScene.shapeOf(positions)),
+      placed,
+    );
 
     for (let ray = 0; ray < 400; ray += 1) {
       const origin = new Three.Vector3(next() * 16 - 8, next() * 16 - 8, next() * 16 - 8);
@@ -515,5 +518,48 @@ describe('which way what a ray meets faces', () => {
     expect(Option.map(normalOf(flat, [3, 0, 0], [-1, 0, 0]), ([x]) => x)).toEqual(
       Option.some(expect.closeTo(1, 9)),
     );
+  });
+});
+
+describe('a triangle’s corners as a ray meets it between them', () => {
+  const placedAt = (shape: number): TracedScene.Placed => ({
+    shape,
+    matrix: new Three.Matrix4(),
+    colour: [1, 1, 1],
+    emissive: [0, 0, 0],
+    casts: true,
+  });
+  /** A triangle lying flat facing +z, its corners' faces leaning out, and its corners at three corners of a picture. */
+  const leaning = TracedScene.shapeOf(new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0]), {
+    normals: new Float32Array([-0.6, 0, 0.8, 0.6, 0, 0.8, 0, 0.6, 0.8]),
+    uvs: new Float32Array([0, 0, 1, 0, 0.5, 1]),
+  });
+  const flat = TracedScene.flatten([leaning], [placedAt(0)]);
+  const hitAt = (x: number, y: number) =>
+    Option.getOrThrow(TracedScene.trace(flat, [x, y, 5], [0, 0, -1], 100));
+
+  it('faces as its corners face, weighted by how near each is', () => {
+    const middle = hitAt(0, -1 / 3);
+    const nearLeft = hitAt(-0.9, -0.95);
+
+    expect(middle.normal[0]).toBeCloseTo(0, 6);
+    expect(middle.normal[2]).toBeCloseTo(1, 1);
+    expect(nearLeft.normal[0]).toBeLessThan(-0.4);
+  });
+
+  it('lies where its corners lie in their picture, weighted alike', () => {
+    expect(hitAt(0, -1 / 3).uv[0]).toBeCloseTo(0.5, 6);
+    expect(hitAt(0, -1 / 3).uv[1]).toBeCloseTo(1 / 3, 6);
+  });
+
+  it('faces as the triangle does, and lies at the picture’s corner, where its corners say nothing', () => {
+    const bare = TracedScene.flatten(
+      [TracedScene.shapeOf(new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0]))],
+      [placedAt(0)],
+    );
+    const hit = Option.getOrThrow(TracedScene.trace(bare, [0, -0.3, 5], [0, 0, -1], 100));
+
+    expect(hit.normal[2]).toBeCloseTo(1, 9);
+    expect(hit.uv).toEqual([0, 0]);
   });
 });
