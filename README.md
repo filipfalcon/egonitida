@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/Splash.png" alt="A silver-haired warrior with a pearl crown and wings of water, against an ocean of waterfalls and clifftop castles.">
+  <img src="docs/Splash.png" alt="Nitida, a real-time 3D engine: a dark-haired woman in a laurel crown and red silk looks back over her shoulder at a torchlit Roman festival of roses beneath a full moon.">
 </p>
 
 <p align="center">
