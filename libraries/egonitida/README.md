@@ -28,4 +28,4 @@ npx egonitida
 
 ## License
 
-[MIT](LICENSE)
+EgoNitida is licensed under [MIT](LICENSE).
