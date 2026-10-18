@@ -15,7 +15,7 @@
     "@egonitida/client": "*",
     "@egonitida/core": "*",
     "@egonitida/devtools": "*",
-    "effect": "4.0.0",
+    "effect": "4.0.5",
     "three": "0.186.1"
   },
   "devDependencies": {
