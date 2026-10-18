@@ -12,7 +12,7 @@
     "./internal": "./src/internal.ts"
   },
   "dependencies": {
-    "@effect/platform-browser": "4.0.0",
+    "@effect/platform-browser": "4.0.5",
     "@egonitida/client": "*",
     "@egonitida/core": "*",
     "@stylexjs/stylex": "0.19.1",
