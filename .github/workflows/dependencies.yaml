@@ -61,7 +61,7 @@ jobs:
       - name: Set up Vite+, Node, and npm, and install the dependencies
         uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
       - name: Run Claude
-        uses: anthropics/claude-code-action@dcb57747bfceeaa1fa72638cae52295d1d853d4a # v1.0.199
+        uses: anthropics/claude-code-action@ae68417a745a5df4b2124873632bd73a2255e6f6 # v1.0.259
         with:
           trigger_phrase: '/update-dependency'
           prompt: ${{ github.event_name == 'pull_request' && '/update-dependency' || '' }}
